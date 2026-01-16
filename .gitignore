@@ -1,0 +1,79 @@
+# Build directories
+build/
+out/
+cmake-build-*/
+.cache/
+
+# CMake generated files
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+*.cmake
+!CMakeLists.txt
+!**/CMakeLists.txt
+
+# Visual Studio files
+*.vcxproj
+*.vcxproj.filters
+*.vcxproj.user
+*.sln
+*.slnx
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+.vs/
+.vscode/
+*.VC.db
+*.VC.VC.opendb
+
+# Compiled binaries and object files
+*.exe
+*.dll
+*.lib
+*.a
+*.so
+*.dylib
+*.obj
+*.o
+*.ilk
+*.pdb
+*.exp
+*.idb
+*.ipdb
+*.tlog
+*.lastbuildstate
+*.recipe
+
+# JUCE Framework is tracked as a git submodule
+# JUCE/
+
+# JUCE generated files
+JuceLibraryCode/
+*.jucer
+
+# IDE files
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# Compile commands (often auto-generated)
+compile_commands.json
+
+# Temporary files
+*.tmp
+*.temp
+*.log
+*.cache
+
+# OS-specific
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Desktop.ini
