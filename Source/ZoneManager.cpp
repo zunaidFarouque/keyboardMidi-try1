@@ -32,6 +32,10 @@ void ZoneManager::addZone(std::shared_ptr<Zone> zone) {
     zone->zoneColor = colorPalette[zoneIndex % (sizeof(colorPalette) / sizeof(colorPalette[0]))];
   }
   
+  // Rebuild cache for the zone
+  std::vector<int> intervals = scaleLibrary.getIntervals(zone->scaleName);
+  zone->rebuildCache(intervals);
+  
   juce::ScopedWriteLock lock(zoneLock);
   zones.push_back(zone);
   sendChangeMessage();
@@ -73,6 +77,10 @@ std::shared_ptr<Zone> ZoneManager::createDefaultZone() {
   
   zone->zoneColor = colorPalette[zoneIndex % (sizeof(colorPalette) / sizeof(colorPalette[0]))];
   
+  // Rebuild cache for new zone
+  std::vector<int> intervals = scaleLibrary.getIntervals(zone->scaleName);
+  zone->rebuildCache(intervals);
+  
   juce::ScopedWriteLock lock(zoneLock);
   zones.push_back(zone);
   sendChangeMessage();
@@ -85,9 +93,7 @@ std::optional<MidiAction> ZoneManager::handleInput(InputID input) {
 
   // Iterate through zones and return the first valid result
   for (const auto &zone : zones) {
-    // Look up scale intervals from ScaleLibrary
-    std::vector<int> intervals = scaleLibrary.getIntervals(zone->scaleName);
-    auto action = zone->processKey(input, intervals, globalChromaticTranspose, globalDegreeTranspose);
+    auto action = zone->processKey(input, globalChromaticTranspose, globalDegreeTranspose);
     if (action.has_value()) {
       return action;
     }
@@ -101,9 +107,7 @@ std::pair<std::optional<MidiAction>, juce::String> ZoneManager::handleInputWithN
 
   // Iterate through zones and return the first valid result with zone name
   for (const auto &zone : zones) {
-    // Look up scale intervals from ScaleLibrary
-    std::vector<int> intervals = scaleLibrary.getIntervals(zone->scaleName);
-    auto action = zone->processKey(input, intervals, globalChromaticTranspose, globalDegreeTranspose);
+    auto action = zone->processKey(input, globalChromaticTranspose, globalDegreeTranspose);
     if (action.has_value()) {
       return {action, zone->name};
     }
@@ -127,9 +131,7 @@ std::optional<MidiAction> ZoneManager::simulateInput(int keyCode, uintptr_t alia
 
   // Iterate through zones and return the first valid result
   for (const auto &zone : zones) {
-    // Look up scale intervals from ScaleLibrary
-    std::vector<int> intervals = scaleLibrary.getIntervals(zone->scaleName);
-    auto action = zone->processKey(input, intervals, globalChromaticTranspose, globalDegreeTranspose);
+    auto action = zone->processKey(input, globalChromaticTranspose, globalDegreeTranspose);
     if (action.has_value()) {
       return action;
     }
@@ -196,6 +198,9 @@ void ZoneManager::restoreFromValueTree(const juce::ValueTree& vt) {
     if (zoneVT.hasType("Zone")) {
       auto zone = Zone::fromValueTree(zoneVT);
       if (zone) {
+        // Rebuild cache for restored zone
+        std::vector<int> intervals = scaleLibrary.getIntervals(zone->scaleName);
+        zone->rebuildCache(intervals);
         zones.push_back(zone);
       }
     }

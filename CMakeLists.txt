@@ -66,6 +66,7 @@ target_compile_definitions(OmniKey PRIVATE
 target_link_libraries(OmniKey PRIVATE
     juce::juce_core
     juce::juce_gui_basics
+    juce::juce_gui_extra   # Required for ColourSelector
     juce::juce_graphics
     juce::juce_events
     user32

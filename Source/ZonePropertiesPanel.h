@@ -8,6 +8,7 @@
 #include <JuceHeader.h>
 #include <memory>
 
+class ZoneManager;
 class ScaleLibrary;
 class ScaleEditorComponent;
 
@@ -15,7 +16,7 @@ class ZonePropertiesPanel : public juce::Component,
                            public RawInputManager::Listener,
                            public juce::ChangeListener {
 public:
-  ZonePropertiesPanel(DeviceManager *deviceMgr, RawInputManager *rawInputMgr, ScaleLibrary *scaleLib);
+  ZonePropertiesPanel(ZoneManager *zoneMgr, DeviceManager *deviceMgr, RawInputManager *rawInputMgr, ScaleLibrary *scaleLib);
   ~ZonePropertiesPanel() override;
 
   void paint(juce::Graphics &) override;
@@ -35,6 +36,7 @@ public:
   void handleAxisEvent(uintptr_t deviceHandle, int inputCode, float value) override;
 
 private:
+  ZoneManager *zoneManager;
   DeviceManager *deviceManager;
   RawInputManager *rawInputManager;
   ScaleLibrary *scaleLibrary;
@@ -60,6 +62,11 @@ private:
   juce::ComboBox strategySelector;
   juce::Label gridIntervalLabel;
   juce::Slider gridIntervalSlider;
+  juce::Label pianoHelpLabel;
+  juce::Label channelLabel;
+  juce::Slider channelSlider;
+  juce::Label colorLabel;
+  juce::TextButton colorButton;
   KeyChipList chipList;
 
   void refreshAliasSelector();

@@ -143,10 +143,10 @@ void VisualizerComponent::paint(juce::Graphics &g) {
 
     // --- 4. Render Layers ---
     
-    // Layer 1: Underlay (Zone Color)
+    // Layer 1: Underlay (Zone Color) - Sharp rectangle
     if (!underlayColor.isTransparent()) {
       g.setColour(underlayColor.withAlpha(0.6f));
-      g.fillRoundedRectangle(fullBounds, 4.0f);
+      g.fillRect(fullBounds);
     }
 
     // Layer 2: Key Body

@@ -2,6 +2,8 @@
 #include <JuceHeader.h>
 #include <cstdint>
 #include <memory>
+#include <map>
+#include <set>
 
 // Forward declaration
 class PointerInputManager;
@@ -28,6 +30,9 @@ public:
   void addListener(Listener *listener);
   void removeListener(Listener *listener);
 
+  // State management for anti-ghosting and autorepeat filtering
+  void resetState();
+
   static juce::String getKeyName(int virtualKey);
 
 private:
@@ -39,6 +44,9 @@ private:
   // Forward declaration for helper class (defined in .cpp)
   class PointerEventForwarder;
   std::unique_ptr<PointerEventForwarder> pointerEventForwarder;
+  
+  // Anti-ghosting and autorepeat filtering: Track pressed keys per device
+  std::map<uintptr_t, std::set<int>> deviceKeyStates;
 
   // Static WNDPROC wrapper
   static int64_t __stdcall rawInputWndProc(void *hwnd, unsigned int msg,

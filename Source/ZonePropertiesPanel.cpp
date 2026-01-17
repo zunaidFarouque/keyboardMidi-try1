@@ -1,4 +1,5 @@
 #include "ZonePropertiesPanel.h"
+#include "ZoneManager.h"
 #include "ScaleLibrary.h"
 #include "ScaleEditorComponent.h"
 #include <algorithm>
@@ -21,8 +22,8 @@ static juce::String aliasHashToName(uintptr_t hash, DeviceManager *deviceMgr) {
   return "Unknown";
 }
 
-ZonePropertiesPanel::ZonePropertiesPanel(DeviceManager *deviceMgr, RawInputManager *rawInputMgr, ScaleLibrary *scaleLib)
-    : deviceManager(deviceMgr), rawInputManager(rawInputMgr), scaleLibrary(scaleLib) {
+ZonePropertiesPanel::ZonePropertiesPanel(ZoneManager *zoneMgr, DeviceManager *deviceMgr, RawInputManager *rawInputMgr, ScaleLibrary *scaleLib)
+    : zoneManager(zoneMgr), deviceManager(deviceMgr), rawInputManager(rawInputMgr), scaleLibrary(scaleLib) {
   
   // Labels
   addAndMakeVisible(aliasLabel);
@@ -64,6 +65,12 @@ ZonePropertiesPanel::ZonePropertiesPanel(DeviceManager *deviceMgr, RawInputManag
       if (selected >= 0) {
         juce::String scaleName = scaleSelector.getItemText(selected);
         currentZone->scaleName = scaleName;
+        // Rebuild cache when scale changes
+        if (zoneManager) {
+          std::vector<int> intervals = scaleLibrary->getIntervals(scaleName);
+          currentZone->rebuildCache(intervals);
+          zoneManager->sendChangeMessage();
+        }
       }
     }
   };
@@ -110,8 +117,12 @@ ZonePropertiesPanel::ZonePropertiesPanel(DeviceManager *deviceMgr, RawInputManag
     return static_cast<double>(MidiNoteUtilities::getMidiNoteFromText(text));
   };
   rootSlider.onValueChange = [this] {
-    if (currentZone) {
+    if (currentZone && scaleLibrary && zoneManager) {
       currentZone->rootNote = static_cast<int>(rootSlider.getValue());
+      // Rebuild cache when root note changes
+      std::vector<int> intervals = scaleLibrary->getIntervals(currentZone->scaleName);
+      currentZone->rebuildCache(intervals);
+      zoneManager->sendChangeMessage();
     }
   };
 
@@ -131,6 +142,7 @@ ZonePropertiesPanel::ZonePropertiesPanel(DeviceManager *deviceMgr, RawInputManag
   chromaticOffsetSlider.onValueChange = [this] {
     if (currentZone) {
       currentZone->chromaticOffset = static_cast<int>(chromaticOffsetSlider.getValue());
+      // Note: chromaticOffset is applied in processKey, no need to rebuild cache
     }
   };
 
@@ -148,8 +160,12 @@ ZonePropertiesPanel::ZonePropertiesPanel(DeviceManager *deviceMgr, RawInputManag
     return juce::String(v);
   };
   degreeOffsetSlider.onValueChange = [this] {
-    if (currentZone) {
+    if (currentZone && scaleLibrary && zoneManager) {
       currentZone->degreeOffset = static_cast<int>(degreeOffsetSlider.getValue());
+      // Rebuild cache when degree offset changes
+      std::vector<int> intervals = scaleLibrary->getIntervals(currentZone->scaleName);
+      currentZone->rebuildCache(intervals);
+      zoneManager->sendChangeMessage();
     }
   };
 
@@ -172,6 +188,7 @@ ZonePropertiesPanel::ZonePropertiesPanel(DeviceManager *deviceMgr, RawInputManag
   addAndMakeVisible(strategySelector);
   strategySelector.addItem("Linear", 1);
   strategySelector.addItem("Grid", 2);
+  strategySelector.addItem("Piano", 3);
   strategySelector.onChange = [this] {
     if (currentZone) {
       int selected = strategySelector.getSelectedItemIndex();
@@ -179,9 +196,21 @@ ZonePropertiesPanel::ZonePropertiesPanel(DeviceManager *deviceMgr, RawInputManag
         currentZone->layoutStrategy = Zone::LayoutStrategy::Linear;
       } else if (selected == 1) {
         currentZone->layoutStrategy = Zone::LayoutStrategy::Grid;
+      } else if (selected == 2) {
+        currentZone->layoutStrategy = Zone::LayoutStrategy::Piano;
       }
       // Enable/disable grid interval slider based on strategy
       gridIntervalSlider.setEnabled(currentZone->layoutStrategy == Zone::LayoutStrategy::Grid);
+      // Enable/disable scale selector based on strategy (Piano ignores scale)
+      scaleSelector.setEnabled(currentZone->layoutStrategy != Zone::LayoutStrategy::Piano);
+      editScaleButton.setEnabled(currentZone->layoutStrategy != Zone::LayoutStrategy::Piano);
+      
+      // Rebuild cache when strategy changes
+      if (zoneManager && scaleLibrary) {
+        std::vector<int> intervals = scaleLibrary->getIntervals(currentZone->scaleName);
+        currentZone->rebuildCache(intervals);
+        zoneManager->sendChangeMessage();
+      }
     }
   };
 
@@ -205,12 +234,91 @@ ZonePropertiesPanel::ZonePropertiesPanel(DeviceManager *deviceMgr, RawInputManag
   };
   gridIntervalSlider.setEnabled(false); // Initially disabled (defaults to Linear)
 
+  addAndMakeVisible(pianoHelpLabel);
+  pianoHelpLabel.setText("Requires 2 rows of keys", juce::dontSendNotification);
+  pianoHelpLabel.setColour(juce::Label::textColourId, juce::Colours::grey);
+  pianoHelpLabel.setVisible(false); // Initially hidden
+
+  addAndMakeVisible(channelLabel);
+  channelLabel.setText("MIDI Channel:", juce::dontSendNotification);
+  channelLabel.attachToComponent(&channelSlider, true);
+
+  addAndMakeVisible(channelSlider);
+  channelSlider.setRange(1, 16, 1);
+  channelSlider.setValue(1);
+  channelSlider.textFromValueFunction = [](double value) {
+    return juce::String(static_cast<int>(value));
+  };
+  channelSlider.onValueChange = [this] {
+    if (currentZone) {
+      currentZone->midiChannel = static_cast<int>(channelSlider.getValue());
+    }
+  };
+
+  addAndMakeVisible(colorLabel);
+  colorLabel.setText("Zone Color:", juce::dontSendNotification);
+  colorLabel.attachToComponent(&colorButton, true);
+
+  addAndMakeVisible(colorButton);
+  colorButton.setButtonText("Color");
+  colorButton.onClick = [this] {
+    if (!currentZone)
+      return;
+    
+    // Create ColourSelector with options
+    int flags = juce::ColourSelector::showColourspace | 
+                juce::ColourSelector::showSliders | 
+                juce::ColourSelector::showColourAtTop;
+    auto* colourSelector = new juce::ColourSelector(flags);
+    colourSelector->setName("Zone Color");
+    colourSelector->setCurrentColour(currentZone->zoneColor);
+    colourSelector->setSize(400, 300);
+    
+    // Create a listener to update color when it changes
+    class ColourChangeListener : public juce::ChangeListener {
+    public:
+      ColourChangeListener(ZonePropertiesPanel* panel, juce::ColourSelector* selector, std::shared_ptr<Zone> zone, ZoneManager* zm)
+        : panel_(panel), selector_(selector), zone_(zone), zoneManager_(zm) {}
+      
+      void changeListenerCallback(juce::ChangeBroadcaster* source) override {
+        if (source == selector_ && zone_) {
+          zone_->zoneColor = selector_->getCurrentColour();
+          panel_->colorButton.setColour(juce::TextButton::buttonColourId, zone_->zoneColor);
+          panel_->colorButton.repaint();
+          
+          // Notify ZoneManager to refresh Visualizer
+          if (zoneManager_) {
+            zoneManager_->sendChangeMessage();
+          }
+        }
+      }
+      
+    private:
+      ZonePropertiesPanel* panel_;
+      juce::ColourSelector* selector_;
+      std::shared_ptr<Zone> zone_;
+      ZoneManager* zoneManager_;
+    };
+    
+    auto* listener = new ColourChangeListener(this, colourSelector, currentZone, zoneManager);
+    colourSelector->addChangeListener(listener);
+    
+    // Show in CallOutBox attached to the button
+    juce::CallOutBox::launchAsynchronously(std::unique_ptr<juce::Component>(colourSelector),
+                                           colorButton.getScreenBounds(),
+                                           this);
+  };
+
   addAndMakeVisible(chipList);
   chipList.onKeyRemoved = [this](int keyCode) {
-    if (currentZone) {
+    if (currentZone && scaleLibrary && zoneManager) {
       currentZone->removeKey(keyCode);
       chipList.setKeys(currentZone->inputKeyCodes);
       updateKeysAssignedLabel();
+      // Rebuild cache when keys are removed
+      std::vector<int> intervals = scaleLibrary->getIntervals(currentZone->scaleName);
+      currentZone->rebuildCache(intervals);
+      zoneManager->sendChangeMessage();
       // Notify parent that resize is needed
       if (onResizeRequested) {
         onResizeRequested();
@@ -300,6 +408,20 @@ void ZonePropertiesPanel::resized() {
   gridIntervalSlider.setBounds(leftMargin, y, width, rowHeight);
   y += rowHeight + spacing;
 
+  // Piano Help Label (only visible when Piano strategy is selected)
+  pianoHelpLabel.setBounds(leftMargin, y, width, rowHeight);
+  if (currentZone && currentZone->layoutStrategy == Zone::LayoutStrategy::Piano) {
+    y += rowHeight + spacing;
+  }
+
+  // MIDI Channel
+  channelSlider.setBounds(leftMargin, y, width, rowHeight);
+  y += rowHeight + spacing;
+
+  // Zone Color
+  colorButton.setBounds(leftMargin, y, width, rowHeight);
+  y += rowHeight + spacing;
+
   // Key Chip List (dynamic height based on number of chips)
   int chipListHeight = juce::jmax(120, static_cast<int>((currentZone ? currentZone->inputKeyCodes.size() : 0) * 28 + 16));
   chipList.setBounds(leftMargin + 4, y, width - 8, chipListHeight);
@@ -316,7 +438,11 @@ int ZonePropertiesPanel::getRequiredHeight() const {
   int bottomPadding = 8;
   
   // Count number of rows
-  int numRows = 10; // Alias, Name, Scale, Root, Chromatic, Degree, Lock, Capture, Strategy, Grid
+  int numRows = 12; // Alias, Name, Scale, Root, Chromatic, Degree, Lock, Capture, Strategy, Grid, Channel, Color
+  // Add one more row if Piano help label is visible
+  if (currentZone && currentZone->layoutStrategy == Zone::LayoutStrategy::Piano) {
+    numRows++;
+  }
   
   // Calculate chip list height dynamically
   int chipListHeight = juce::jmax(120, static_cast<int>((currentZone ? currentZone->inputKeyCodes.size() : 0) * 28 + 16));
@@ -342,6 +468,8 @@ void ZonePropertiesPanel::updateControlsFromZone() {
     captureKeysButton.setEnabled(false);
     strategySelector.setEnabled(false);
     gridIntervalSlider.setEnabled(false);
+    channelSlider.setEnabled(false);
+    colorButton.setEnabled(false);
     chipList.setEnabled(false);
     chipList.setKeys({});
     return;
@@ -358,6 +486,8 @@ void ZonePropertiesPanel::updateControlsFromZone() {
   captureKeysButton.setEnabled(true);
   strategySelector.setEnabled(true);
   gridIntervalSlider.setEnabled(currentZone->layoutStrategy == Zone::LayoutStrategy::Grid);
+  channelSlider.setEnabled(true);
+  colorButton.setEnabled(true);
 
   // Update values
   nameEditor.setText(currentZone->name, juce::dontSendNotification);
@@ -396,15 +526,42 @@ void ZonePropertiesPanel::updateControlsFromZone() {
   transposeLockButton.setToggleState(currentZone->isTransposeLocked, juce::dontSendNotification);
 
   // Set strategy
-  int strategyIndex = (currentZone->layoutStrategy == Zone::LayoutStrategy::Linear) ? 0 : 1;
+  int strategyIndex = 0;
+  if (currentZone->layoutStrategy == Zone::LayoutStrategy::Linear) {
+    strategyIndex = 0;
+  } else if (currentZone->layoutStrategy == Zone::LayoutStrategy::Grid) {
+    strategyIndex = 1;
+  } else if (currentZone->layoutStrategy == Zone::LayoutStrategy::Piano) {
+    strategyIndex = 2;
+  }
   strategySelector.setSelectedItemIndex(strategyIndex, juce::dontSendNotification);
   
   // Set grid interval
   gridIntervalSlider.setValue(currentZone->gridInterval, juce::dontSendNotification);
   gridIntervalSlider.setEnabled(currentZone->layoutStrategy == Zone::LayoutStrategy::Grid);
+  
+  // Show/hide piano help label
+  pianoHelpLabel.setVisible(currentZone->layoutStrategy == Zone::LayoutStrategy::Piano);
+  
+  // Enable/disable scale selector based on strategy
+  scaleSelector.setEnabled(currentZone->layoutStrategy != Zone::LayoutStrategy::Piano);
+  editScaleButton.setEnabled(currentZone->layoutStrategy != Zone::LayoutStrategy::Piano);
+
+  // Set MIDI channel
+  channelSlider.setValue(currentZone->midiChannel, juce::dontSendNotification);
+
+  // Set zone color button
+  colorButton.setColour(juce::TextButton::buttonColourId, currentZone->zoneColor);
+  colorButton.repaint();
 
   // Update chip list
   chipList.setKeys(currentZone->inputKeyCodes);
+  
+  // Rebuild cache when zone is set (in case it wasn't rebuilt before)
+  if (scaleLibrary && zoneManager) {
+    std::vector<int> intervals = scaleLibrary->getIntervals(currentZone->scaleName);
+    currentZone->rebuildCache(intervals);
+  }
   
   updateKeysAssignedLabel();
   
@@ -463,6 +620,12 @@ void ZonePropertiesPanel::handleRawKeyEvent(uintptr_t deviceHandle, int keyCode,
     juce::MessageManager::callAsync([this] {
       chipList.setKeys(currentZone->inputKeyCodes);
       updateKeysAssignedLabel();
+      // Rebuild cache when keys are added
+      if (scaleLibrary && zoneManager) {
+        std::vector<int> intervals = scaleLibrary->getIntervals(currentZone->scaleName);
+        currentZone->rebuildCache(intervals);
+        zoneManager->sendChangeMessage();
+      }
       // Notify parent that resize is needed
       if (onResizeRequested) {
         onResizeRequested();

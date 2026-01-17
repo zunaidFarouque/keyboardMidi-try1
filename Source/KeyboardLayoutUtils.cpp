@@ -39,7 +39,7 @@ static std::map<int, KeyGeometry> createKeyboardLayout() {
 
   // Row 1: Tab (Width 1.5), Q through ], \ (Width 1.5)
   // Tab Q W E R T Y U I O P [ ] Backslash
-  layout[0x09] = KeyGeometry(1, 0.0f, 1.5f, "Tab");  // Tab
+  layout[0x09] = KeyGeometry(1, 0.0f, 1.5f, "Tab"); // Tab
   const int row1Codes[] = {0x51, 0x57, 0x45, 0x52, 0x54, 0x59,
                            0x55, 0x49, 0x4F, 0x50, 0xDB, 0xDD};
   const char *row1Labels[] = {"Q", "W", "E", "R", "T", "Y",

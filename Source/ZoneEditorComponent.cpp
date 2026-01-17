@@ -6,7 +6,7 @@ ZoneEditorComponent::ZoneEditorComponent(ZoneManager *zoneMgr, DeviceManager *de
       rawInputManager(rawInputMgr),
       globalPanel(zoneMgr),
       listPanel(zoneMgr),
-      propertiesPanel(deviceMgr, rawInputMgr, scaleLib) {
+      propertiesPanel(zoneMgr, deviceMgr, rawInputMgr, scaleLib) {
   
   addAndMakeVisible(globalPanel);
   addAndMakeVisible(listPanel);

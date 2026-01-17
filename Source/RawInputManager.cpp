@@ -74,6 +74,13 @@ void RawInputManager::shutdown() {
     SetWindowLongPtr(hwnd, GWLP_WNDPROC, (LONG_PTR)originalWndProc);
     isInitialized = false;
   }
+  
+  // Clear device key states
+  deviceKeyStates.clear();
+}
+
+void RawInputManager::resetState() {
+  deviceKeyStates.clear();
 }
 
 void RawInputManager::addListener(Listener *listener) {
@@ -105,10 +112,41 @@ int64_t __stdcall RawInputManager::rawInputWndProc(void *hwnd, unsigned int msg,
 
           if (globalManagerInstance) {
             uintptr_t handle = reinterpret_cast<uintptr_t>(deviceHandle);
-            globalManagerInstance->listeners.call(
-                [handle, vKey, isDown](Listener &l) {
-                  l.handleRawKeyEvent(handle, vKey, isDown);
-                });
+            
+            // Anti-ghosting and autorepeat filtering
+            auto& stateSet = globalManagerInstance->deviceKeyStates[handle];
+            
+            if (isDown) {
+              // Key Down event
+              if (stateSet.find(vKey) != stateSet.end()) {
+                // Key is already in the set - this is an autorepeat, IGNORE
+                // Do not broadcast
+              } else {
+                // Fresh press - add to set and broadcast
+                stateSet.insert(vKey);
+                globalManagerInstance->listeners.call(
+                    [handle, vKey, isDown](Listener &l) {
+                      l.handleRawKeyEvent(handle, vKey, isDown);
+                    });
+              }
+            } else {
+              // Key Up event
+              if (stateSet.find(vKey) != stateSet.end()) {
+                // Valid release - remove from set and broadcast
+                stateSet.erase(vKey);
+                globalManagerInstance->listeners.call(
+                    [handle, vKey, isDown](Listener &l) {
+                      l.handleRawKeyEvent(handle, vKey, isDown);
+                    });
+              } else {
+                // Edge case: Key not in set (maybe app started with key held)
+                // Broadcast anyway to ensure NoteOff is sent
+                globalManagerInstance->listeners.call(
+                    [handle, vKey, isDown](Listener &l) {
+                      l.handleRawKeyEvent(handle, vKey, isDown);
+                    });
+              }
+            }
           }
         } else if (raw->header.dwType == RIM_TYPEMOUSE) {
           HANDLE deviceHandle = raw->header.hDevice;
