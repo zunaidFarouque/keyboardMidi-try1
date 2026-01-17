@@ -37,6 +37,9 @@ public:
   // Simulate input (for visualization) - takes explicit arguments
   std::optional<MidiAction> simulateInput(int keyCode, uintptr_t aliasHash);
 
+  // Get zone color for a specific key (for visualization)
+  std::optional<juce::Colour> getZoneColorForKey(int keyCode, uintptr_t aliasHash);
+
   // Set global transpose values
   void setGlobalTranspose(int chromatic, int degree);
 

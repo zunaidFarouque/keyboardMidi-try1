@@ -12,7 +12,8 @@ Zone::Zone()
       degreeOffset(0),
       isTransposeLocked(false),
       layoutStrategy(LayoutStrategy::Linear),
-      gridInterval(5) {
+      gridInterval(5),
+      zoneColor(juce::Colours::transparentBlack) {
 }
 
 std::optional<MidiAction> Zone::processKey(InputID input, const std::vector<int>& intervals, int globalChromTrans, int globalDegTrans) {
@@ -98,6 +99,7 @@ juce::ValueTree Zone::toValueTree() const {
   
   vt.setProperty("name", name, nullptr);
   vt.setProperty("targetAliasHash", static_cast<int64>(targetAliasHash), nullptr);
+  vt.setProperty("zoneColor", zoneColor.toString(), nullptr);
   vt.setProperty("rootNote", rootNote, nullptr);
   vt.setProperty("scaleName", scaleName, nullptr);
   vt.setProperty("chromaticOffset", chromaticOffset, nullptr);
@@ -146,6 +148,14 @@ std::shared_ptr<Zone> Zone::fromValueTree(const juce::ValueTree& vt) {
   zone->isTransposeLocked = vt.getProperty("isTransposeLocked", false);
   zone->layoutStrategy = static_cast<LayoutStrategy>(vt.getProperty("layoutStrategy", static_cast<int>(LayoutStrategy::Linear)).operator int());
   zone->gridInterval = vt.getProperty("gridInterval", 5);
+  
+  // Load zone color (default to transparent if not found)
+  juce::String colorStr = vt.getProperty("zoneColor", "").toString();
+  if (colorStr.isNotEmpty()) {
+    zone->zoneColor = juce::Colour::fromString(colorStr);
+  } else {
+    zone->zoneColor = juce::Colours::transparentBlack;
+  }
   
   // Deserialize inputKeyCodes from comma-separated string
   juce::String keyCodesStr = vt.getProperty("inputKeyCodes", "").toString();

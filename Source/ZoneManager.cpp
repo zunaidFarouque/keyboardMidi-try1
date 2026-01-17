@@ -9,6 +9,29 @@ ZoneManager::~ZoneManager() {
 }
 
 void ZoneManager::addZone(std::shared_ptr<Zone> zone) {
+  // Auto-assign color if zone has default/transparent color
+  if (zone->zoneColor == juce::Colours::transparentBlack || 
+      zone->zoneColor.getAlpha() == 0) {
+    static const juce::Colour colorPalette[] = {
+      juce::Colour(0xff00CED1), // Teal
+      juce::Colour(0xffFF8C00), // Orange
+      juce::Colour(0xff9370DB), // Purple
+      juce::Colour(0xff32CD32), // Green
+      juce::Colour(0xffFF6347), // Red
+      juce::Colour(0xff1E90FF), // Blue
+      juce::Colour(0xffFFD700), // Gold
+      juce::Colour(0xffFF69B4)  // Pink
+    };
+    
+    int zoneIndex;
+    {
+      juce::ScopedReadLock readLock(zoneLock);
+      zoneIndex = static_cast<int>(zones.size());
+    }
+    
+    zone->zoneColor = colorPalette[zoneIndex % (sizeof(colorPalette) / sizeof(colorPalette[0]))];
+  }
+  
   juce::ScopedWriteLock lock(zoneLock);
   zones.push_back(zone);
   sendChangeMessage();
@@ -29,6 +52,26 @@ std::shared_ptr<Zone> ZoneManager::createDefaultZone() {
   zone->chromaticOffset = 0;
   zone->degreeOffset = 0;
   zone->isTransposeLocked = false;
+  
+  // Auto-assign color from palette
+  static const juce::Colour colorPalette[] = {
+    juce::Colour(0xff00CED1), // Teal
+    juce::Colour(0xffFF8C00), // Orange
+    juce::Colour(0xff9370DB), // Purple
+    juce::Colour(0xff32CD32), // Green
+    juce::Colour(0xffFF6347), // Red
+    juce::Colour(0xff1E90FF), // Blue
+    juce::Colour(0xffFFD700), // Gold
+    juce::Colour(0xffFF69B4)  // Pink
+  };
+  
+  int zoneIndex;
+  {
+    juce::ScopedReadLock readLock(zoneLock);
+    zoneIndex = static_cast<int>(zones.size());
+  }
+  
+  zone->zoneColor = colorPalette[zoneIndex % (sizeof(colorPalette) / sizeof(colorPalette[0]))];
   
   juce::ScopedWriteLock lock(zoneLock);
   zones.push_back(zone);
@@ -89,6 +132,28 @@ std::optional<MidiAction> ZoneManager::simulateInput(int keyCode, uintptr_t alia
     auto action = zone->processKey(input, intervals, globalChromaticTranspose, globalDegreeTranspose);
     if (action.has_value()) {
       return action;
+    }
+  }
+
+  return std::nullopt;
+}
+
+std::optional<juce::Colour> ZoneManager::getZoneColorForKey(int keyCode, uintptr_t aliasHash) {
+  juce::ScopedReadLock lock(zoneLock);
+
+  // Iterate through zones to find one that contains this key
+  for (const auto &zone : zones) {
+    if (zone->targetAliasHash != aliasHash)
+      continue;
+
+    // Check if key is in this zone's inputKeyCodes
+    auto it = std::find(zone->inputKeyCodes.begin(), zone->inputKeyCodes.end(), keyCode);
+    if (it != zone->inputKeyCodes.end()) {
+      // Found a zone containing this key
+      if (zone->zoneColor != juce::Colours::transparentBlack && 
+          zone->zoneColor.getAlpha() > 0) {
+        return zone->zoneColor;
+      }
     }
   }
 

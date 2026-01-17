@@ -25,6 +25,7 @@ public:
   bool isTransposeLocked; // If true, ignore global transpose
   LayoutStrategy layoutStrategy = LayoutStrategy::Linear; // Layout calculation method
   int gridInterval = 5; // For Grid mode: semitones per row (default 5 = perfect 4th)
+  juce::Colour zoneColor; // Visual color for this zone
 
   // Process a key input and return MIDI action if this zone matches
   // Intervals are provided by ZoneManager (looked up from ScaleLibrary)
