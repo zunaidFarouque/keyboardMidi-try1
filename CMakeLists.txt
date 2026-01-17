@@ -31,8 +31,10 @@ target_sources(OmniKey PRIVATE
     Source/InputProcessor.cpp
     Source/PresetManager.cpp
     Source/MappingEditorComponent.cpp
+    Source/MappingInspector.cpp
     Source/LogComponent.cpp
     Source/KeyNameUtilities.cpp
+    Source/PointerInputManager.cpp
 )
 
 # 5. Definitions (Fixes Macro Hell globally)

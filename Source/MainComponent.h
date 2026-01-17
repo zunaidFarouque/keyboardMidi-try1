@@ -10,6 +10,7 @@
 
 class MainComponent : public juce::Component,
                       public juce::Timer,
+                      public juce::ApplicationCommandTarget,
                       public RawInputManager::Listener {
 public:
   MainComponent();
@@ -23,6 +24,15 @@ public:
   // RawInputManager::Listener implementation
   void handleRawKeyEvent(uintptr_t deviceHandle, int keyCode,
                          bool isDown) override;
+  void handleAxisEvent(uintptr_t deviceHandle, int inputCode,
+                       float value) override;
+
+  // ApplicationCommandTarget implementation
+  void getAllCommands(juce::Array<juce::CommandID> &commands) override;
+  void getCommandInfo(juce::CommandID commandID,
+                      juce::ApplicationCommandInfo &result) override;
+  bool perform(const InvocationInfo &info) override;
+  juce::ApplicationCommandTarget *getNextCommandTarget() override;
 
 private:
   MidiEngine midiEngine;
@@ -41,6 +51,10 @@ private:
   juce::ComboBox midiSelector;
   juce::TextButton saveButton;
   juce::TextButton loadButton;
+  juce::ToggleButton performanceModeButton;
+
+  // Command Manager for Undo/Redo
+  juce::ApplicationCommandManager commandManager;
 
   // Helper to format the beautiful log string
   void logEvent(uintptr_t device, int keyCode, bool isDown);

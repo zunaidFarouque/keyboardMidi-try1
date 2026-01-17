@@ -1,4 +1,5 @@
 #pragma once
+#include "MappingInspector.h"
 #include "PresetManager.h"
 #include "RawInputManager.h"
 #include <JuceHeader.h>
@@ -13,9 +14,14 @@ public:
   MappingEditorComponent(PresetManager &pm, RawInputManager &rawInputMgr);
   ~MappingEditorComponent() override;
 
+  // Get undo manager for command handling
+  juce::UndoManager &getUndoManager() { return undoManager; }
+
   // RawInputManager::Listener implementation
   void handleRawKeyEvent(uintptr_t deviceHandle, int keyCode,
                          bool isDown) override;
+  void handleAxisEvent(uintptr_t deviceHandle, int inputCode,
+                       float value) override;
 
   void paint(juce::Graphics &) override;
   void resized() override;
@@ -26,6 +32,7 @@ public:
                           int height, bool rowIsSelected) override;
   void paintCell(juce::Graphics &, int rowNumber, int columnId, int width,
                  int height, bool rowIsSelected) override;
+  void selectedRowsChanged(int lastRowSelected) override;
 
   // ValueTree::Listener methods (Updates UI when data changes)
 
@@ -43,6 +50,8 @@ private:
   juce::TableListBox table;
   juce::TextButton addButton;
   juce::ToggleButton learnButton;
+  juce::UndoManager undoManager;
+  MappingInspector inspector;
 
   JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(MappingEditorComponent)
 };

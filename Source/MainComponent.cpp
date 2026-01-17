@@ -1,10 +1,17 @@
 #include "MainComponent.h"
+#include "KeyNameUtilities.h"
+#include "MappingTypes.h"
 
-// No Windows headers needed!
+// Windows header needed for cursor locking
+#include <windows.h>
 
 MainComponent::MainComponent()
     : voiceManager(midiEngine), inputProcessor(voiceManager, presetManager),
       mappingEditor(presetManager, rawInputManager) {
+  // Setup Command Manager for Undo/Redo
+  commandManager.registerAllCommandsForTarget(this);
+  commandManager.setFirstCommandTarget(this);
+
   // --- Header Controls ---
   addAndMakeVisible(midiSelector);
   midiSelector.setTextWhenNoChoicesAvailable("No MIDI Devices");
@@ -61,6 +68,42 @@ MainComponent::MainComponent()
   clearButton.setButtonText("Clear Log");
   clearButton.onClick = [this] { logComponent.clear(); };
 
+  addAndMakeVisible(performanceModeButton);
+  performanceModeButton.setButtonText("Performance Mode");
+  performanceModeButton.setClickingTogglesState(true);
+  performanceModeButton.onClick = [this] {
+    bool enabled = performanceModeButton.getToggleState();
+    if (enabled) {
+      // Smart Locking: Only lock if preset has pointer mappings
+      if (!inputProcessor.hasPointerMappings()) {
+        performanceModeButton.setToggleState(false, juce::dontSendNotification);
+        juce::AlertWindow::showMessageBoxAsync(
+            juce::AlertWindow::WarningIcon, "Performance Mode",
+            "No Trackpad mappings found in this preset.\n\n"
+            "Add Trackpad X or Y mappings to use Performance Mode.");
+        return;
+      }
+
+      // Lock cursor: hide and clip to window
+      ::ShowCursor(FALSE);
+      if (auto *peer = getPeer()) {
+        void *hwnd = peer->getNativeHandle();
+        if (hwnd != nullptr) {
+          RECT rect;
+          if (GetWindowRect(static_cast<HWND>(hwnd), &rect)) {
+            ClipCursor(&rect);
+          }
+        }
+      }
+      performanceModeButton.setButtonText("Unlock Cursor (Esc)");
+    } else {
+      // Unlock cursor: show and release clip
+      ::ShowCursor(TRUE);
+      ClipCursor(nullptr);
+      performanceModeButton.setButtonText("Performance Mode");
+    }
+  };
+
   setSize(800, 600);
 
   // --- Input Logic ---
@@ -73,6 +116,12 @@ MainComponent::~MainComponent() {
   stopTimer();
   rawInputManager.removeListener(this);
   rawInputManager.shutdown();
+  
+  // Ensure cursor is unlocked on exit
+  if (performanceModeButton.getToggleState()) {
+    ::ShowCursor(TRUE);
+    ClipCursor(nullptr);
+  }
 }
 
 // --- LOGGING LOGIC ---
@@ -82,8 +131,13 @@ void MainComponent::logEvent(uintptr_t device, int keyCode, bool isDown) {
   juce::String devStr =
       "Dev: " + juce::String::toHexString((juce::int64)device).toUpperCase();
 
-  // "DOWN" or "UP  " (Padded)
-  juce::String stateStr = isDown ? "DOWN" : "UP  ";
+  // "DOWN" or "UP  " or "VAL" for axis events
+  juce::String stateStr;
+  if (keyCode == 0x2000 || keyCode == 0x2001) {
+    stateStr = "VAL "; // Value for axis events
+  } else {
+    stateStr = isDown ? "DOWN" : "UP  ";
+  }
 
   // "( 81) Q"
   juce::String keyName = RawInputManager::getKeyName(keyCode);
@@ -120,14 +174,103 @@ void MainComponent::logEvent(uintptr_t device, int keyCode, bool isDown) {
   logComponent.addEntry(logLine);
 }
 
+// ApplicationCommandTarget implementation
+void MainComponent::getAllCommands(juce::Array<juce::CommandID> &commands) {
+  commands.add(juce::StandardApplicationCommandIDs::undo);
+  commands.add(juce::StandardApplicationCommandIDs::redo);
+}
+
+void MainComponent::getCommandInfo(juce::CommandID commandID,
+                                    juce::ApplicationCommandInfo &result) {
+  if (commandID == juce::StandardApplicationCommandIDs::undo) {
+    result.setInfo("Undo", "Undo last action", "Edit", 0);
+    result.addDefaultKeypress('Z', juce::ModifierKeys::ctrlModifier);
+    result.setActive(mappingEditor.getUndoManager().canUndo());
+  } else if (commandID == juce::StandardApplicationCommandIDs::redo) {
+    result.setInfo("Redo", "Redo last undone action", "Edit", 0);
+    result.addDefaultKeypress('Y', juce::ModifierKeys::ctrlModifier);
+    result.setActive(mappingEditor.getUndoManager().canRedo());
+  }
+}
+
+bool MainComponent::perform(const InvocationInfo &info) {
+  if (info.commandID == juce::StandardApplicationCommandIDs::undo) {
+    mappingEditor.getUndoManager().undo();
+    commandManager.commandStatusChanged();
+    return true;
+  } else if (info.commandID == juce::StandardApplicationCommandIDs::redo) {
+    mappingEditor.getUndoManager().redo();
+    commandManager.commandStatusChanged();
+    return true;
+  }
+  return false;
+}
+
+juce::ApplicationCommandTarget *MainComponent::getNextCommandTarget() {
+  return nullptr;
+}
+
 void MainComponent::handleRawKeyEvent(uintptr_t deviceHandle, int keyCode,
                                       bool isDown) {
+  // Safety: Check for Escape key to unlock cursor
+  if (isDown && keyCode == VK_ESCAPE && performanceModeButton.getToggleState()) {
+    performanceModeButton.setToggleState(false, juce::dontSendNotification);
+    ::ShowCursor(TRUE);
+    ClipCursor(nullptr);
+    performanceModeButton.setButtonText("Performance Mode");
+    return;
+  }
+
+  // Check if this is a scroll event
+  bool isScrollEvent = (keyCode == InputTypes::ScrollUp || keyCode == InputTypes::ScrollDown);
+  
+  // For scroll events, only process if there's a mapping
+  if (isScrollEvent) {
+    InputID id = {deviceHandle, keyCode};
+    const MidiAction *action = inputProcessor.getMappingForInput(id);
+    
+    // Only log and process if mapping exists
+    if (action != nullptr) {
+      logEvent(deviceHandle, keyCode, isDown);
+      inputProcessor.processEvent(id, isDown);
+    }
+    return;
+  }
+
+  // For regular keys, always log and process
   // 1. Log Visuals
   logEvent(deviceHandle, keyCode, isDown);
 
   // 2. Process Logic
   InputID id = {deviceHandle, keyCode};
   inputProcessor.processEvent(id, isDown);
+}
+
+void MainComponent::handleAxisEvent(uintptr_t deviceHandle, int inputCode,
+                                    float value) {
+  // Log axis events with value information
+  juce::String devStr =
+      "Dev: " + juce::String::toHexString((juce::int64)deviceHandle).toUpperCase();
+  juce::String keyName = KeyNameUtilities::getKeyName(inputCode);
+  juce::String keyInfo = "(" + juce::String::toHexString(inputCode).toUpperCase() + ") " + keyName;
+  keyInfo = keyInfo.paddedRight(' ', 20);
+  
+  juce::String logLine = devStr + " | VAL  | " + keyInfo + " | val: " + 
+                         juce::String(value, 3);
+  
+  // Check for MIDI mapping
+  InputID id = {deviceHandle, inputCode};
+  const MidiAction *action = inputProcessor.getMappingForInput(id);
+  
+  if (action != nullptr && action->type == ActionType::CC) {
+    logLine += " -> [MIDI] CC " + juce::String(action->data1) + 
+               " | ch: " + juce::String(action->channel);
+  }
+  
+  logComponent.addEntry(logLine);
+
+  // Forward axis events to InputProcessor
+  inputProcessor.handleAxisEvent(deviceHandle, inputCode, value);
 }
 
 juce::String MainComponent::getNoteName(int noteNumber) {
@@ -154,6 +297,8 @@ void MainComponent::resized() {
   saveButton.setBounds(header.removeFromLeft(100));
   header.removeFromLeft(10);
   loadButton.setBounds(header.removeFromLeft(100));
+  header.removeFromLeft(10);
+  performanceModeButton.setBounds(header.removeFromLeft(140));
 
   area.removeFromTop(4);
 

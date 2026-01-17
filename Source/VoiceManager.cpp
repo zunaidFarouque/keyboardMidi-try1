@@ -25,6 +25,10 @@ void VoiceManager::handleKeyUp(InputID source) {
   activeNotes.erase(range.first, range.second);
 }
 
+void VoiceManager::sendCC(int channel, int controller, int value) {
+  midiEngine.sendCC(channel, controller, value);
+}
+
 void VoiceManager::panic() {
   // Send allNotesOff on all 16 MIDI channels (standard MIDI command)
   for (int channel = 1; channel <= 16; ++channel) {

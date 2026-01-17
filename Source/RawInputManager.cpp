@@ -1,4 +1,6 @@
 #include "RawInputManager.h"
+#include "PointerInputManager.h"
+#include "MappingTypes.h"
 
 // 1. Windows Header Only
 // (We removed the #defines because CMake already sets them)
@@ -8,7 +10,27 @@
 void *RawInputManager::originalWndProc = nullptr;
 RawInputManager *RawInputManager::globalManagerInstance = nullptr;
 
-RawInputManager::RawInputManager() { globalManagerInstance = this; }
+// Helper class to forward pointer events to RawInputManager listeners
+class RawInputManager::PointerEventForwarder : public PointerInputManager::Listener {
+public:
+  explicit PointerEventForwarder(RawInputManager *manager) : manager(manager) {}
+  void onPointerEvent(uintptr_t device, int axisID, float value) override {
+    if (manager) {
+      manager->listeners.call([device, axisID, value](RawInputManager::Listener &l) {
+        l.handleAxisEvent(device, axisID, value);
+      });
+    }
+  }
+private:
+  RawInputManager *manager;
+};
+
+RawInputManager::RawInputManager()
+    : pointerInputManager(std::make_unique<PointerInputManager>()),
+      pointerEventForwarder(std::make_unique<PointerEventForwarder>(this)) {
+  globalManagerInstance = this;
+  pointerInputManager->addListener(pointerEventForwarder.get());
+}
 
 RawInputManager::~RawInputManager() { shutdown(); }
 
@@ -19,14 +41,20 @@ void RawInputManager::initialize(void *nativeWindowHandle) {
   HWND hwnd = static_cast<HWND>(nativeWindowHandle);
   targetHwnd = nativeWindowHandle;
 
-  // Standard Raw Input Registration (Keyboard)
-  RAWINPUTDEVICE rid[1];
+  // Raw Input Registration (Keyboard + Mouse)
+  RAWINPUTDEVICE rid[2];
+  // Keyboard
   rid[0].usUsagePage = 0x01; // Generic Desktop
   rid[0].usUsage = 0x06;     // Keyboard
   rid[0].dwFlags = RIDEV_INPUTSINK;
   rid[0].hwndTarget = hwnd;
+  // Mouse
+  rid[1].usUsagePage = 0x01; // Generic Desktop
+  rid[1].usUsage = 0x02;     // Mouse
+  rid[1].dwFlags = RIDEV_INPUTSINK;
+  rid[1].hwndTarget = hwnd;
 
-  if (RegisterRawInputDevices(rid, 1, sizeof(rid[0])) == FALSE) {
+  if (RegisterRawInputDevices(rid, 2, sizeof(rid[0])) == FALSE) {
     DBG("Failed to register raw input device.");
     return;
   }
@@ -82,9 +110,42 @@ int64_t __stdcall RawInputManager::rawInputWndProc(void *hwnd, unsigned int msg,
                   l.handleRawKeyEvent(handle, vKey, isDown);
                 });
           }
+        } else if (raw->header.dwType == RIM_TYPEMOUSE) {
+          HANDLE deviceHandle = raw->header.hDevice;
+          USHORT buttonFlags = raw->data.mouse.usButtonFlags;
+
+          if (buttonFlags & RI_MOUSE_WHEEL) {
+            SHORT wheelDelta = (SHORT)raw->data.mouse.usButtonData;
+
+            if (globalManagerInstance) {
+              uintptr_t handle = reinterpret_cast<uintptr_t>(deviceHandle);
+              
+              // Split scroll into discrete up/down events
+              if (wheelDelta > 0) {
+                // Scroll Up - treat as key press
+                globalManagerInstance->listeners.call(
+                    [handle](Listener &l) {
+                      l.handleRawKeyEvent(handle, InputTypes::ScrollUp, true);
+                      l.handleRawKeyEvent(handle, InputTypes::ScrollUp, false);
+                    });
+              } else if (wheelDelta < 0) {
+                // Scroll Down - treat as key press
+                globalManagerInstance->listeners.call(
+                    [handle](Listener &l) {
+                      l.handleRawKeyEvent(handle, InputTypes::ScrollDown, true);
+                      l.handleRawKeyEvent(handle, InputTypes::ScrollDown, false);
+                    });
+              }
+            }
+          }
         }
       }
       delete[] lpb;
+    }
+  } else if (msg == WM_POINTERUPDATE) {
+    if (globalManagerInstance && globalManagerInstance->pointerInputManager) {
+      globalManagerInstance->pointerInputManager->processPointerMessage(
+          wParam, lParam, hwnd);
     }
   }
 

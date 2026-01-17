@@ -15,6 +15,7 @@ public:
   // MIDI Action methods
   void sendNoteOn(int channel, int note, float velocity);
   void sendNoteOff(int channel, int note);
+  void sendCC(int channel, int controller, int value);
 
 private:
   std::unique_ptr<juce::MidiOutput> currentOutput;

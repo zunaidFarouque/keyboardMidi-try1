@@ -17,6 +17,9 @@ public:
   // Send all NoteOff messages for a given input and remove from map
   void handleKeyUp(InputID source);
 
+  // Send MIDI CC message
+  void sendCC(int channel, int controller, int value);
+
   // Emergency: Send allNotesOff on all channels and clear map
   void panic();
 

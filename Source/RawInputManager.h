@@ -1,14 +1,20 @@
 #pragma once
 #include <JuceHeader.h>
 #include <cstdint>
+#include <memory>
+
+// Forward declaration
+class PointerInputManager;
 
 class RawInputManager {
 public:
-  // Listener interface for raw key events
+  // Listener interface for raw input events
   struct Listener {
     virtual ~Listener() = default;
     virtual void handleRawKeyEvent(uintptr_t deviceHandle, int keyCode,
                                    bool isDown) = 0;
+    virtual void handleAxisEvent(uintptr_t deviceHandle, int inputCode,
+                                 float value) = 0;
   };
 
   RawInputManager();
@@ -28,6 +34,11 @@ private:
   void *targetHwnd = nullptr;
   juce::ListenerList<Listener> listeners;
   bool isInitialized = false;
+  std::unique_ptr<PointerInputManager> pointerInputManager;
+  
+  // Forward declaration for helper class (defined in .cpp)
+  class PointerEventForwarder;
+  std::unique_ptr<PointerEventForwarder> pointerEventForwarder;
 
   // Static WNDPROC wrapper
   static int64_t __stdcall rawInputWndProc(void *hwnd, unsigned int msg,

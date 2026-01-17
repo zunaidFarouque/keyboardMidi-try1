@@ -1,9 +1,21 @@
 #include "KeyNameUtilities.h"
+#include "MappingTypes.h"
 
 // Windows header must be included first
 #include <windows.h>
 
 juce::String KeyNameUtilities::getKeyName(int virtualKeyCode) {
+  // Check for pseudo-codes first
+  if (virtualKeyCode == InputTypes::ScrollUp)
+    return "Scroll Up";
+  if (virtualKeyCode == InputTypes::ScrollDown)
+    return "Scroll Down";
+  if (virtualKeyCode == InputTypes::PointerX)
+    return "Trackpad X";
+  if (virtualKeyCode == InputTypes::PointerY)
+    return "Trackpad Y";
+
+  // Standard key lookup
   int scanCode = MapVirtualKeyA(virtualKeyCode, MAPVK_VK_TO_VSC);
   char name[128] = {0};
   if (GetKeyNameTextA(scanCode << 16, name, 128) > 0)

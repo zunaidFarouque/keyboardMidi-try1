@@ -9,6 +9,14 @@ enum class ActionType {
   Macro // Future: Custom macro actions
 };
 
+// Pseudo-codes for non-keyboard inputs (Mouse/Trackpad)
+namespace InputTypes {
+  constexpr int ScrollUp   = 0x1001;
+  constexpr int ScrollDown = 0x1002;
+  constexpr int PointerX   = 0x2000;
+  constexpr int PointerY   = 0x2001;
+}
+
 // Represents a MIDI action to be performed
 struct MidiAction {
   ActionType type;

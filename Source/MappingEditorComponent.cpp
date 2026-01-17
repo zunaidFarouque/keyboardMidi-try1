@@ -3,7 +3,7 @@
 
 MappingEditorComponent::MappingEditorComponent(PresetManager &pm,
                                                RawInputManager &rawInputMgr)
-    : presetManager(pm), rawInputManager(rawInputMgr) {
+    : presetManager(pm), rawInputManager(rawInputMgr), inspector(&undoManager) {
   // Setup Headers
   table.getHeader().addColumn("Key", 1, 50);
   table.getHeader().addColumn("Device", 2, 70);
@@ -13,30 +13,71 @@ MappingEditorComponent::MappingEditorComponent(PresetManager &pm,
   table.getHeader().addColumn("Ch", 6, 30);
 
   table.setModel(this);
+  table.setMultipleSelectionEnabled(true);
   addAndMakeVisible(table);
+  addAndMakeVisible(inspector);
 
-  // Setup Add Button
+  // Setup Add Button with Popup Menu
   addButton.setButtonText("+");
   addButton.onClick = [this] {
-    // Create new mapping
-    juce::ValueTree newMapping("Mapping");
-    newMapping.setProperty("inputKey", 81, nullptr); // Default Q
-    newMapping.setProperty("deviceHash", "0", nullptr);
-    newMapping.setProperty("type", "Note", nullptr);
-    newMapping.setProperty("channel", 1, nullptr);
-    newMapping.setProperty("data1", 60, nullptr); // Middle C
-    newMapping.setProperty("data2", 127, nullptr);
+    juce::PopupMenu menu;
+    menu.addItem(1, "Add Key Mapping");
+    menu.addItem(2, "Add Scroll Mapping");
+    menu.addItem(3, "Add Trackpad X");
+    menu.addItem(4, "Add Trackpad Y");
 
-    // Add to the Mappings node
-    auto mappingsNode = presetManager.getMappingsNode();
-    if (mappingsNode.isValid()) {
-      mappingsNode.addChild(newMapping, -1, nullptr);
-      // Force update immediately
-      table.updateContent();
-      table.repaint();
-    } else {
-      DBG("Error: Mappings node is invalid!");
-    }
+    menu.showMenuAsync(
+        juce::PopupMenu::Options().withTargetComponent(&addButton),
+        [this](int result) {
+          juce::ValueTree newMapping("Mapping");
+          auto mappingsNode = presetManager.getMappingsNode();
+
+          if (!mappingsNode.isValid()) {
+            DBG("Error: Mappings node is invalid!");
+            return;
+          }
+
+          switch (result) {
+          case 1: // Key Mapping
+            newMapping.setProperty("inputKey", 81, nullptr); // Default Q
+            newMapping.setProperty("deviceHash", "0", nullptr);
+            newMapping.setProperty("type", "Note", nullptr);
+            newMapping.setProperty("channel", 1, nullptr);
+            newMapping.setProperty("data1", 60, nullptr); // Middle C
+            newMapping.setProperty("data2", 127, nullptr);
+            break;
+          case 2: // Scroll Mapping (Scroll Up)
+            newMapping.setProperty("inputKey", 0x1001, nullptr);
+            newMapping.setProperty("deviceHash", "0", nullptr);
+            newMapping.setProperty("type", "CC", nullptr);
+            newMapping.setProperty("channel", 1, nullptr);
+            newMapping.setProperty("data1", 1, nullptr);
+            newMapping.setProperty("data2", 64, nullptr);
+            break;
+          case 3: // Trackpad X
+            newMapping.setProperty("inputKey", 0x2000, nullptr);
+            newMapping.setProperty("deviceHash", "0", nullptr);
+            newMapping.setProperty("type", "CC", nullptr);
+            newMapping.setProperty("channel", 1, nullptr);
+            newMapping.setProperty("data1", 10, nullptr);
+            newMapping.setProperty("data2", 64, nullptr);
+            break;
+          case 4: // Trackpad Y
+            newMapping.setProperty("inputKey", 0x2001, nullptr);
+            newMapping.setProperty("deviceHash", "0", nullptr);
+            newMapping.setProperty("type", "CC", nullptr);
+            newMapping.setProperty("channel", 1, nullptr);
+            newMapping.setProperty("data1", 11, nullptr);
+            newMapping.setProperty("data2", 64, nullptr);
+            break;
+          default:
+            return; // User cancelled
+          }
+
+          mappingsNode.addChild(newMapping, -1, &undoManager);
+          table.updateContent();
+          table.repaint();
+        });
   };
   addAndMakeVisible(addButton);
 
@@ -76,6 +117,11 @@ void MappingEditorComponent::resized() {
   addButton.setBounds(header.removeFromRight(30));
   header.removeFromRight(4);
   learnButton.setBounds(header.removeFromRight(60));
+  
+  // Side-by-side layout: Table on left, Inspector on right
+  auto inspectorWidth = 250;
+  inspector.setBounds(area.removeFromRight(inspectorWidth));
+  area.removeFromRight(4); // Gap
   table.setBounds(area);
 }
 
@@ -168,6 +214,28 @@ void MappingEditorComponent::valueTreeParentChanged(juce::ValueTree &child) {
     table.updateContent();
 }
 
+void MappingEditorComponent::selectedRowsChanged(int lastRowSelected) {
+  // Get selected rows from table
+  int numSelected = table.getNumSelectedRows();
+  
+  // Build vector of selected ValueTrees
+  std::vector<juce::ValueTree> selectedTrees;
+  auto mappingsNode = presetManager.getMappingsNode();
+  
+  // Iterate over selected rows
+  for (int i = 0; i < numSelected; ++i) {
+    int row = table.getSelectedRow(i);
+    if (row >= 0) {
+      auto child = mappingsNode.getChild(row);
+      if (child.isValid())
+        selectedTrees.push_back(child);
+    }
+  }
+  
+  // Update inspector with selection
+  inspector.setSelection(selectedTrees);
+}
+
 void MappingEditorComponent::handleRawKeyEvent(uintptr_t deviceHandle,
                                                 int keyCode, bool isDown) {
   // Check if learn mode is active
@@ -205,6 +273,89 @@ void MappingEditorComponent::handleRawKeyEvent(uintptr_t deviceHandle,
     juce::String deviceName =
         KeyNameUtilities::getFriendlyDeviceName(deviceHandle);
     juce::String keyName = KeyNameUtilities::getKeyName(keyCode);
+    juce::String displayName = deviceName + " - " + keyName;
+    mappingNode.setProperty("displayName", displayName, nullptr);
+
+    // Turn off learn mode
+    learnButton.setToggleState(false, juce::dontSendNotification);
+
+    // Refresh the table
+    table.repaint();
+  });
+}
+
+void MappingEditorComponent::handleAxisEvent(uintptr_t deviceHandle, int inputCode,
+                                             float value) {
+  // Check if learn mode is active
+  if (!learnButton.getToggleState())
+    return;
+
+  // Jitter Filter: Calculate deviation from center (0.0-1.0 range)
+  float deviation = std::abs(value - 0.5f);
+  
+  // Threshold: Only trigger if deviation is significant (user is swiping, not just touching)
+  const float threshold = 0.2f; // 20% deviation threshold
+  if (deviation < threshold)
+    return;
+
+  // Track which axis has the maximum deviation (first to cross threshold wins)
+  static float maxDeviation = 0.0f;
+  static int learnedAxisID = -1;
+  static uintptr_t learnedDevice = 0;
+
+  // Reset if device changed or learn button was toggled off/on
+  if (learnedDevice != deviceHandle) {
+    maxDeviation = 0.0f;
+    learnedAxisID = -1;
+    learnedDevice = deviceHandle;
+  }
+
+  // Only learn the axis with maximum deviation
+  if (deviation > maxDeviation) {
+    maxDeviation = deviation;
+    learnedAxisID = inputCode;
+  } else if (learnedAxisID != inputCode) {
+    // Another axis is winning, ignore this one
+    return;
+  }
+
+  // Store values in local variables for lambda capture
+  int axisToLearn = learnedAxisID;
+  uintptr_t deviceToUse = deviceHandle;
+
+  // Reset learning state before async call
+  maxDeviation = 0.0f;
+  learnedAxisID = -1;
+  learnedDevice = 0;
+
+  // Thread safety: wrap UI updates in callAsync
+  juce::MessageManager::callAsync([this, deviceToUse, axisToLearn] {
+    // Get selected row
+    int selectedRow = table.getSelectedRow();
+    if (selectedRow < 0)
+      return;
+
+    // Get the ValueTree for the selected row
+    auto mappingsNode = presetManager.getMappingsNode();
+    if (!mappingsNode.isValid())
+      return;
+
+    auto mappingNode = mappingsNode.getChild(selectedRow);
+    if (!mappingNode.isValid())
+      return;
+
+    // Update the mapping properties
+    mappingNode.setProperty("inputKey", axisToLearn, nullptr);
+    mappingNode.setProperty("deviceHash",
+                            juce::String::toHexString((juce::int64)deviceToUse)
+                                .toUpperCase(),
+                            nullptr);
+    mappingNode.setProperty("type", "CC", nullptr); // Ensure type is CC
+
+    // Create display name using KeyNameUtilities
+    juce::String deviceName =
+        KeyNameUtilities::getFriendlyDeviceName(deviceToUse);
+    juce::String keyName = KeyNameUtilities::getKeyName(axisToLearn);
     juce::String displayName = deviceName + " - " + keyName;
     mappingNode.setProperty("displayName", displayName, nullptr);
 

@@ -169,3 +169,49 @@ void InputProcessor::processEvent(InputID input, bool isDown) {
     voiceManager.handleKeyUp(input);
   }
 }
+
+void InputProcessor::handleAxisEvent(uintptr_t deviceHandle, int inputCode,
+                                     float value) {
+  juce::ScopedWriteLock lock(mapLock);
+
+  InputID input = {deviceHandle, inputCode};
+  const MidiAction *action = findMapping(input);
+
+  if (action == nullptr || action->type != ActionType::CC)
+    return;
+
+  float currentVal = 0.0f;
+  // Note: Scroll is now handled as discrete key events (ScrollUp/ScrollDown)
+  // so this method only handles pointer X/Y axis events
+  bool isRelative = false; // Pointer events are absolute
+
+  if (isRelative) {
+    // Relative (Scroll): accumulate value
+    auto it = currentCCValues.find(input);
+    if (it != currentCCValues.end()) {
+      currentVal = it->second;
+    }
+    // Sensitivity multiplier (adjust as needed)
+    const float sensitivity = 1.0f;
+    currentVal = std::clamp(currentVal + (value * sensitivity), 0.0f, 127.0f);
+    currentCCValues[input] = currentVal;
+  } else {
+    // Absolute (Pointer): map 0.0-1.0 to 0-127
+    currentVal = value * 127.0f;
+  }
+
+  int ccValue = static_cast<int>(std::round(std::clamp(currentVal, 0.0f, 127.0f)));
+
+  // Send MIDI CC message
+  voiceManager.sendCC(action->channel, action->data1, ccValue);
+}
+
+bool InputProcessor::hasPointerMappings() {
+  juce::ScopedReadLock lock(mapLock);
+  for (const auto &pair : keyMapping) {
+    int keyCode = pair.first.keyCode;
+    if (keyCode == 0x2000 || keyCode == 0x2001) // PointerX or PointerY
+      return true;
+  }
+  return false;
+}
