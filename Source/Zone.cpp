@@ -7,7 +7,7 @@ Zone::Zone()
     : name("Untitled Zone"),
       targetAliasHash(0),
       rootNote(60),
-      scale(ScaleUtilities::ScaleType::Major),
+      scaleName("Major"),
       chromaticOffset(0),
       degreeOffset(0),
       isTransposeLocked(false),
@@ -15,7 +15,7 @@ Zone::Zone()
       gridInterval(5) {
 }
 
-std::optional<MidiAction> Zone::processKey(InputID input, int globalChromTrans, int globalDegTrans) {
+std::optional<MidiAction> Zone::processKey(InputID input, const std::vector<int>& intervals, int globalChromTrans, int globalDegTrans) {
   // Check 1: Does input.deviceHandle match targetAliasHash?
   if (input.deviceHandle != targetAliasHash)
     return std::nullopt;
@@ -70,7 +70,7 @@ std::optional<MidiAction> Zone::processKey(InputID input, int globalChromTrans, 
 
   // Calculate final degree and note
   int finalDegree = degree + degreeOffset + effDegTrans;
-  int baseNote = ScaleUtilities::calculateMidiNote(rootNote, scale, finalDegree);
+  int baseNote = ScaleUtilities::calculateMidiNote(rootNote, intervals, finalDegree);
   int finalNote = baseNote + chromaticOffset + effChromTrans;
 
   // Clamp to valid MIDI range
@@ -99,7 +99,7 @@ juce::ValueTree Zone::toValueTree() const {
   vt.setProperty("name", name, nullptr);
   vt.setProperty("targetAliasHash", static_cast<int64>(targetAliasHash), nullptr);
   vt.setProperty("rootNote", rootNote, nullptr);
-  vt.setProperty("scale", static_cast<int>(scale), nullptr);
+  vt.setProperty("scaleName", scaleName, nullptr);
   vt.setProperty("chromaticOffset", chromaticOffset, nullptr);
   vt.setProperty("degreeOffset", degreeOffset, nullptr);
   vt.setProperty("isTransposeLocked", isTransposeLocked, nullptr);
@@ -125,7 +125,22 @@ std::shared_ptr<Zone> Zone::fromValueTree(const juce::ValueTree& vt) {
   zone->name = vt.getProperty("name", "Untitled Zone").toString();
   zone->targetAliasHash = static_cast<uintptr_t>(vt.getProperty("targetAliasHash", 0).operator int64());
   zone->rootNote = vt.getProperty("rootNote", 60);
-  zone->scale = static_cast<ScaleUtilities::ScaleType>(vt.getProperty("scale", static_cast<int>(ScaleUtilities::ScaleType::Major)).operator int());
+  // Handle migration: if old "scale" property exists, convert to scaleName
+  if (vt.hasProperty("scale")) {
+    // Migrate old enum to scale name
+    int scaleEnum = vt.getProperty("scale", static_cast<int>(1)); // 1 = Major
+    switch (scaleEnum) {
+      case 0: zone->scaleName = "Chromatic"; break;
+      case 1: zone->scaleName = "Major"; break;
+      case 2: zone->scaleName = "Minor"; break;
+      case 3: zone->scaleName = "Pentatonic Major"; break;
+      case 4: zone->scaleName = "Pentatonic Minor"; break;
+      case 5: zone->scaleName = "Blues"; break;
+      default: zone->scaleName = "Major"; break;
+    }
+  } else {
+    zone->scaleName = vt.getProperty("scaleName", "Major").toString();
+  }
   zone->chromaticOffset = vt.getProperty("chromaticOffset", 0);
   zone->degreeOffset = vt.getProperty("degreeOffset", 0);
   zone->isTransposeLocked = vt.getProperty("isTransposeLocked", false);

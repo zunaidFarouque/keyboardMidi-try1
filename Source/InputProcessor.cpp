@@ -1,7 +1,8 @@
 #include "InputProcessor.h"
+#include "ScaleLibrary.h"
 
-InputProcessor::InputProcessor(VoiceManager &voiceMgr, PresetManager &presetMgr, DeviceManager &deviceMgr)
-    : voiceManager(voiceMgr), presetManager(presetMgr), deviceManager(deviceMgr) {
+InputProcessor::InputProcessor(VoiceManager &voiceMgr, PresetManager &presetMgr, DeviceManager &deviceMgr, ScaleLibrary &scaleLib)
+    : voiceManager(voiceMgr), presetManager(presetMgr), deviceManager(deviceMgr), zoneManager(scaleLib) {
   // Add listeners
   presetManager.getRootNode().addListener(this);
   deviceManager.addChangeListener(this);

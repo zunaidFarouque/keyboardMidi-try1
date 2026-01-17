@@ -6,9 +6,11 @@
 #include "ZoneManager.h"
 #include <JuceHeader.h>
 
+class ScaleLibrary;
+
 class InputProcessor : public juce::ValueTree::Listener, public juce::ChangeListener {
 public:
-  InputProcessor(VoiceManager &voiceMgr, PresetManager &presetMgr, DeviceManager &deviceMgr);
+  InputProcessor(VoiceManager &voiceMgr, PresetManager &presetMgr, DeviceManager &deviceMgr, ScaleLibrary &scaleLib);
   ~InputProcessor() override;
 
   // The main entry point for key events

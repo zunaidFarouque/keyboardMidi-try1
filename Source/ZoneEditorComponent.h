@@ -5,11 +5,12 @@
 #include "ZoneManager.h"
 #include "DeviceManager.h"
 #include "RawInputManager.h"
+#include "ScaleLibrary.h"
 #include <JuceHeader.h>
 
 class ZoneEditorComponent : public juce::Component {
 public:
-  ZoneEditorComponent(ZoneManager *zoneMgr, DeviceManager *deviceMgr, RawInputManager *rawInputMgr);
+  ZoneEditorComponent(ZoneManager *zoneMgr, DeviceManager *deviceMgr, RawInputManager *rawInputMgr, ScaleLibrary *scaleLib);
   ~ZoneEditorComponent() override;
 
   void paint(juce::Graphics &) override;
@@ -23,6 +24,7 @@ private:
   GlobalPerformancePanel globalPanel;
   ZoneListPanel listPanel;
   ZonePropertiesPanel propertiesPanel;
+  juce::Viewport propertiesViewport;
 
   JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(ZoneEditorComponent)
 };

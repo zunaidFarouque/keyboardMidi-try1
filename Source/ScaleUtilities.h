@@ -1,21 +1,11 @@
 #pragma once
 #include <JuceHeader.h>
+#include <vector>
 
 class ScaleUtilities {
 public:
-  enum class ScaleType {
-    Chromatic,
-    Major,
-    Minor,
-    PentatonicMajor,
-    PentatonicMinor,
-    Blues
-  };
-
-  // Calculate MIDI note from root note, scale type, and degree index
-  static int calculateMidiNote(int rootNote, ScaleType scale, int degreeIndex);
-
-private:
-  // Get scale intervals for a given scale type
-  static const std::vector<int> &getScaleIntervals(ScaleType scale);
+  // Calculate MIDI note from root note, scale intervals, and degree index
+  // Intervals are semitone offsets from root (e.g., Major = {0, 2, 4, 5, 7, 9, 11})
+  // Degree index can be negative (moving down octaves)
+  static int calculateMidiNote(int rootNote, const std::vector<int>& intervals, int degreeIndex);
 };

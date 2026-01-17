@@ -39,6 +39,9 @@ target_sources(OmniKey PRIVATE
     Source/DeviceManager.cpp
     Source/DeviceSetupComponent.cpp
     Source/ScaleUtilities.cpp
+    Source/ScaleLibrary.cpp
+    Source/ScaleEditorComponent.cpp
+    Source/MusicalKeyboardComponent.cpp
     Source/Zone.cpp
     Source/ZoneManager.cpp
     Source/ZoneListPanel.cpp

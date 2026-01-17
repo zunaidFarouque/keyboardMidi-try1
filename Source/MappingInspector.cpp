@@ -205,20 +205,41 @@ void MappingInspector::resized() {
   int labelWidth = 80;
   int controlHeight = 25;
   int spacing = 10;
+  int topPadding = 10;
+  int leftMargin = area.getX() + labelWidth;
+  int width = area.getWidth() - labelWidth;
 
-  typeSelector.setBounds(area.removeFromTop(controlHeight));
-  area.removeFromTop(spacing);
+  int y = topPadding;
 
-  channelSlider.setBounds(area.removeFromTop(controlHeight));
-  area.removeFromTop(spacing);
+  typeSelector.setBounds(leftMargin, y, width, controlHeight);
+  y += controlHeight + spacing;
 
-  aliasSelector.setBounds(area.removeFromTop(controlHeight));
-  area.removeFromTop(spacing);
+  channelSlider.setBounds(leftMargin, y, width, controlHeight);
+  y += controlHeight + spacing;
 
-  data1Slider.setBounds(area.removeFromTop(controlHeight));
-  area.removeFromTop(spacing);
+  aliasSelector.setBounds(leftMargin, y, width, controlHeight);
+  y += controlHeight + spacing;
 
-  data2Slider.setBounds(area.removeFromTop(controlHeight));
+  data1Slider.setBounds(leftMargin, y, width, controlHeight);
+  y += controlHeight + spacing;
+
+  data2Slider.setBounds(leftMargin, y, width, controlHeight);
+  y += controlHeight + 10; // Bottom padding
+
+  // Set component size based on calculated height
+  setSize(getWidth(), y);
+}
+
+int MappingInspector::getRequiredHeight() const {
+  int controlHeight = 25;
+  int spacing = 10;
+  int topPadding = 10;
+  int bottomPadding = 10;
+  
+  // 5 controls: Type, Channel, Alias, Data1, Data2
+  int numControls = 5;
+  
+  return topPadding + (numControls * (controlHeight + spacing)) + bottomPadding;
 }
 
 void MappingInspector::setSelection(const std::vector<juce::ValueTree> &selection) {

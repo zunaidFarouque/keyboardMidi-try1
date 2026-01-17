@@ -115,7 +115,7 @@ void StartupManager::createFactoryDefault() {
     mainZone->name = "Main Keys";
     mainZone->targetAliasHash = 0; // "Any / Master"
     mainZone->rootNote = 60; // C4
-    mainZone->scale = ScaleUtilities::ScaleType::Major;
+    mainZone->scaleName = "Major";
     mainZone->chromaticOffset = 0;
     mainZone->degreeOffset = 0;
     mainZone->isTransposeLocked = false;

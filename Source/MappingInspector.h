@@ -17,6 +17,9 @@ public:
   // Main entry point: update UI based on selection
   void setSelection(const std::vector<juce::ValueTree> &selection);
 
+  // Get required height for self-sizing
+  int getRequiredHeight() const;
+
   // ValueTree::Listener implementation
   void valueTreePropertyChanged(juce::ValueTree &tree,
                                 const juce::Identifier &property) override;

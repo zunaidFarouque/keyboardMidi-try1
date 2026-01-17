@@ -10,6 +10,7 @@
 #include "RawInputManager.h"
 #include "DeviceManager.h"
 #include "StartupManager.h"
+#include "ScaleLibrary.h"
 
 #include <JuceHeader.h>
 
@@ -44,6 +45,7 @@ private:
   MidiEngine midiEngine;
   DeviceManager deviceManager; // Must be before presetManager and inputProcessor
   PresetManager presetManager;
+  ScaleLibrary scaleLibrary; // Must be before ZoneManager/InputProcessor
   VoiceManager voiceManager;
   InputProcessor inputProcessor;
   StartupManager startupManager; // Must be after all managers it references

@@ -8,11 +8,14 @@
 #include <JuceHeader.h>
 #include <memory>
 
+class ScaleLibrary;
+class ScaleEditorComponent;
+
 class ZonePropertiesPanel : public juce::Component,
                            public RawInputManager::Listener,
                            public juce::ChangeListener {
 public:
-  ZonePropertiesPanel(DeviceManager *deviceMgr, RawInputManager *rawInputMgr);
+  ZonePropertiesPanel(DeviceManager *deviceMgr, RawInputManager *rawInputMgr, ScaleLibrary *scaleLib);
   ~ZonePropertiesPanel() override;
 
   void paint(juce::Graphics &) override;
@@ -21,6 +24,12 @@ public:
   // Set the zone to edit
   void setZone(std::shared_ptr<Zone> zone);
 
+  // Get required height for self-sizing
+  int getRequiredHeight() const;
+
+  // Callback when resize is requested (e.g., chip list changes)
+  std::function<void()> onResizeRequested;
+
   // RawInputManager::Listener implementation
   void handleRawKeyEvent(uintptr_t deviceHandle, int keyCode, bool isDown) override;
   void handleAxisEvent(uintptr_t deviceHandle, int inputCode, float value) override;
@@ -28,6 +37,7 @@ public:
 private:
   DeviceManager *deviceManager;
   RawInputManager *rawInputManager;
+  ScaleLibrary *scaleLibrary;
   std::shared_ptr<Zone> currentZone;
 
   // UI Controls
@@ -37,6 +47,7 @@ private:
   juce::TextEditor nameEditor;
   juce::Label scaleLabel;
   juce::ComboBox scaleSelector;
+  juce::TextButton editScaleButton;
   juce::Label rootLabel;
   juce::Slider rootSlider;
   juce::Label chromaticOffsetLabel;
@@ -52,6 +63,7 @@ private:
   KeyChipList chipList;
 
   void refreshAliasSelector();
+  void refreshScaleSelector();
   void updateControlsFromZone();
   void updateKeysAssignedLabel();
 

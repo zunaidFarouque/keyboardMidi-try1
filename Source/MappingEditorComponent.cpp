@@ -23,7 +23,11 @@ MappingEditorComponent::MappingEditorComponent(PresetManager &pm,
   table.setModel(this);
   table.setMultipleSelectionEnabled(true);
   addAndMakeVisible(table);
-  addAndMakeVisible(inspector);
+  
+  // Setup viewport for inspector
+  addAndMakeVisible(inspectorViewport);
+  inspectorViewport.setViewedComponent(&inspector, false);
+  inspectorViewport.setScrollBarsShown(true, false); // Vertical only
 
   // Setup Add Button with Popup Menu
   addButton.setButtonText("+");
@@ -126,10 +130,19 @@ void MappingEditorComponent::resized() {
   header.removeFromRight(4);
   learnButton.setBounds(header.removeFromRight(60));
   
-  // Side-by-side layout: Table on left, Inspector on right
+  // Side-by-side layout: Table on left, Inspector viewport on right
   auto inspectorWidth = 250;
-  inspector.setBounds(area.removeFromRight(inspectorWidth));
+  auto inspectorArea = area.removeFromRight(inspectorWidth);
   area.removeFromRight(4); // Gap
+  
+  // Set viewport bounds
+  inspectorViewport.setBounds(inspectorArea);
+  
+  // Set inspector content bounds (accounting for scrollbar width of 15px)
+  int contentWidth = inspectorViewport.getWidth() - 15;
+  int contentHeight = inspector.getRequiredHeight();
+  inspector.setBounds(0, 0, contentWidth, contentHeight);
+  
   table.setBounds(area);
 }
 

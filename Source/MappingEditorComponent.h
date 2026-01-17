@@ -54,6 +54,7 @@ private:
   juce::ToggleButton learnButton;
   juce::UndoManager undoManager;
   MappingInspector inspector;
+  juce::Viewport inspectorViewport;
 
   JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(MappingEditorComponent)
 };

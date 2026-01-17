@@ -6,9 +6,11 @@
 #include <memory>
 #include <optional>
 
+class ScaleLibrary;
+
 class ZoneManager : public juce::ChangeBroadcaster {
 public:
-  ZoneManager();
+  ZoneManager(ScaleLibrary& scaleLib);
   ~ZoneManager() override;
 
   // Add a zone to the collection
@@ -47,6 +49,7 @@ public:
   void restoreFromValueTree(const juce::ValueTree& vt);
 
 private:
+  ScaleLibrary& scaleLibrary;
   mutable juce::ReadWriteLock zoneLock;
   std::vector<std::shared_ptr<Zone>> zones;
   int globalChromaticTranspose = 0;

@@ -11,11 +11,11 @@
 
 MainComponent::MainComponent()
     : voiceManager(midiEngine), 
-      inputProcessor(voiceManager, presetManager, deviceManager),
+      inputProcessor(voiceManager, presetManager, deviceManager, scaleLibrary),
       startupManager(&presetManager, &deviceManager, &inputProcessor.getZoneManager()),
       mappingEditor(presetManager, rawInputManager, deviceManager),
       mainTabs(juce::TabbedButtonBar::TabsAtTop),
-      zoneEditor(&inputProcessor.getZoneManager(), &deviceManager, &rawInputManager),
+      zoneEditor(&inputProcessor.getZoneManager(), &deviceManager, &rawInputManager, &scaleLibrary),
       visualizer(&inputProcessor.getZoneManager(), &deviceManager),
       visualizerContainer("Visualizer", visualizer),
       editorContainer("Mapping / Zones", mainTabs),

@@ -1,7 +1,8 @@
 #include "ZoneManager.h"
 #include "Zone.h"
+#include "ScaleLibrary.h"
 
-ZoneManager::ZoneManager() {
+ZoneManager::ZoneManager(ScaleLibrary& scaleLib) : scaleLibrary(scaleLib) {
 }
 
 ZoneManager::~ZoneManager() {
@@ -24,7 +25,7 @@ std::shared_ptr<Zone> ZoneManager::createDefaultZone() {
   zone->name = "New Zone";
   zone->targetAliasHash = 0; // "Any / Master"
   zone->rootNote = 60; // C4
-  zone->scale = ScaleUtilities::ScaleType::Major;
+  zone->scaleName = "Major";
   zone->chromaticOffset = 0;
   zone->degreeOffset = 0;
   zone->isTransposeLocked = false;
@@ -41,7 +42,9 @@ std::optional<MidiAction> ZoneManager::handleInput(InputID input) {
 
   // Iterate through zones and return the first valid result
   for (const auto &zone : zones) {
-    auto action = zone->processKey(input, globalChromaticTranspose, globalDegreeTranspose);
+    // Look up scale intervals from ScaleLibrary
+    std::vector<int> intervals = scaleLibrary.getIntervals(zone->scaleName);
+    auto action = zone->processKey(input, intervals, globalChromaticTranspose, globalDegreeTranspose);
     if (action.has_value()) {
       return action;
     }
@@ -55,7 +58,9 @@ std::pair<std::optional<MidiAction>, juce::String> ZoneManager::handleInputWithN
 
   // Iterate through zones and return the first valid result with zone name
   for (const auto &zone : zones) {
-    auto action = zone->processKey(input, globalChromaticTranspose, globalDegreeTranspose);
+    // Look up scale intervals from ScaleLibrary
+    std::vector<int> intervals = scaleLibrary.getIntervals(zone->scaleName);
+    auto action = zone->processKey(input, intervals, globalChromaticTranspose, globalDegreeTranspose);
     if (action.has_value()) {
       return {action, zone->name};
     }
@@ -79,7 +84,9 @@ std::optional<MidiAction> ZoneManager::simulateInput(int keyCode, uintptr_t alia
 
   // Iterate through zones and return the first valid result
   for (const auto &zone : zones) {
-    auto action = zone->processKey(input, globalChromaticTranspose, globalDegreeTranspose);
+    // Look up scale intervals from ScaleLibrary
+    std::vector<int> intervals = scaleLibrary.getIntervals(zone->scaleName);
+    auto action = zone->processKey(input, intervals, globalChromaticTranspose, globalDegreeTranspose);
     if (action.has_value()) {
       return action;
     }

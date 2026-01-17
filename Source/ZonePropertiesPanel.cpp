@@ -1,4 +1,6 @@
 #include "ZonePropertiesPanel.h"
+#include "ScaleLibrary.h"
+#include "ScaleEditorComponent.h"
 #include <algorithm>
 
 // Helper to convert alias name to hash (same as in InputProcessor)
@@ -19,8 +21,8 @@ static juce::String aliasHashToName(uintptr_t hash, DeviceManager *deviceMgr) {
   return "Unknown";
 }
 
-ZonePropertiesPanel::ZonePropertiesPanel(DeviceManager *deviceMgr, RawInputManager *rawInputMgr)
-    : deviceManager(deviceMgr), rawInputManager(rawInputMgr) {
+ZonePropertiesPanel::ZonePropertiesPanel(DeviceManager *deviceMgr, RawInputManager *rawInputMgr, ScaleLibrary *scaleLib)
+    : deviceManager(deviceMgr), rawInputManager(rawInputMgr), scaleLibrary(scaleLib) {
   
   // Labels
   addAndMakeVisible(aliasLabel);
@@ -55,25 +57,42 @@ ZonePropertiesPanel::ZonePropertiesPanel(DeviceManager *deviceMgr, RawInputManag
   scaleLabel.attachToComponent(&scaleSelector, true);
 
   addAndMakeVisible(scaleSelector);
-  scaleSelector.addItem("Chromatic", 1);
-  scaleSelector.addItem("Major", 2);
-  scaleSelector.addItem("Minor", 3);
-  scaleSelector.addItem("Pentatonic Major", 4);
-  scaleSelector.addItem("Pentatonic Minor", 5);
-  scaleSelector.addItem("Blues", 6);
+  refreshScaleSelector();
   scaleSelector.onChange = [this] {
-    if (currentZone) {
+    if (currentZone && scaleLibrary) {
       int selected = scaleSelector.getSelectedItemIndex();
-      switch (selected) {
-      case 0: currentZone->scale = ScaleUtilities::ScaleType::Chromatic; break;
-      case 1: currentZone->scale = ScaleUtilities::ScaleType::Major; break;
-      case 2: currentZone->scale = ScaleUtilities::ScaleType::Minor; break;
-      case 3: currentZone->scale = ScaleUtilities::ScaleType::PentatonicMajor; break;
-      case 4: currentZone->scale = ScaleUtilities::ScaleType::PentatonicMinor; break;
-      case 5: currentZone->scale = ScaleUtilities::ScaleType::Blues; break;
-      default: currentZone->scale = ScaleUtilities::ScaleType::Major; break;
+      if (selected >= 0) {
+        juce::String scaleName = scaleSelector.getItemText(selected);
+        currentZone->scaleName = scaleName;
       }
     }
+  };
+
+  addAndMakeVisible(editScaleButton);
+  editScaleButton.setButtonText("Edit...");
+  editScaleButton.onClick = [this] {
+    if (!scaleLibrary)
+      return;
+      
+    // Create editor component
+    auto* editor = new ScaleEditorComponent(scaleLibrary);
+    
+    // CRITICAL: Set size BEFORE adding to dialog
+    editor->setSize(600, 400);
+    
+    // Setup dialog options
+    juce::DialogWindow::LaunchOptions options;
+    options.content.setOwned(editor);
+    options.dialogTitle = "Scale Editor";
+    options.dialogBackgroundColour = juce::Colour(0xff222222);
+    options.escapeKeyTriggersCloseButton = true;
+    options.useNativeTitleBar = false;
+    options.resizable = true;
+    options.useBottomRightCornerResizer = true;
+    options.componentToCentreAround = this;
+    
+    // Launch dialog - this returns a DialogWindow* that manages its own lifetime
+    options.launchAsync();
   };
 
   addAndMakeVisible(rootLabel);
@@ -192,6 +211,10 @@ ZonePropertiesPanel::ZonePropertiesPanel(DeviceManager *deviceMgr, RawInputManag
       currentZone->removeKey(keyCode);
       chipList.setKeys(currentZone->inputKeyCodes);
       updateKeysAssignedLabel();
+      // Notify parent that resize is needed
+      if (onResizeRequested) {
+        onResizeRequested();
+      }
     }
   };
 
@@ -202,6 +225,10 @@ ZonePropertiesPanel::ZonePropertiesPanel(DeviceManager *deviceMgr, RawInputManag
   if (deviceManager) {
     deviceManager->addChangeListener(this);
   }
+
+  if (scaleLibrary) {
+    scaleLibrary->addChangeListener(this);
+  }
 }
 
 ZonePropertiesPanel::~ZonePropertiesPanel() {
@@ -210,6 +237,10 @@ ZonePropertiesPanel::~ZonePropertiesPanel() {
   }
   if (deviceManager) {
     deviceManager->removeChangeListener(this);
+  }
+
+  if (scaleLibrary) {
+    scaleLibrary->removeChangeListener(this);
   }
 }
 
@@ -222,62 +253,75 @@ void ZonePropertiesPanel::resized() {
   int labelWidth = 120;
   int rowHeight = 28;
   int spacing = 4;
+  int leftMargin = area.getX() + labelWidth;
+  int width = area.getWidth() - labelWidth;
 
-  int y = 0;
+  int y = 8; // Start at top padding
 
   // Alias
-  aliasSelector.setBounds(area.removeFromTop(rowHeight).withTrimmedLeft(labelWidth));
-  area.removeFromTop(spacing);
+  aliasSelector.setBounds(leftMargin, y, width, rowHeight);
   y += rowHeight + spacing;
 
   // Name
-  nameEditor.setBounds(area.removeFromTop(rowHeight).withTrimmedLeft(labelWidth));
-  area.removeFromTop(spacing);
+  nameEditor.setBounds(leftMargin, y, width, rowHeight);
   y += rowHeight + spacing;
 
-  // Scale
-  scaleSelector.setBounds(area.removeFromTop(rowHeight).withTrimmedLeft(labelWidth));
-  area.removeFromTop(spacing);
+  // Scale (selector + edit button)
+  auto scaleArea = juce::Rectangle<int>(leftMargin, y, width, rowHeight);
+  editScaleButton.setBounds(scaleArea.removeFromRight(60).reduced(2));
+  scaleSelector.setBounds(scaleArea);
   y += rowHeight + spacing;
 
   // Root Note
-  rootSlider.setBounds(area.removeFromTop(rowHeight).withTrimmedLeft(labelWidth));
-  area.removeFromTop(spacing);
+  rootSlider.setBounds(leftMargin, y, width, rowHeight);
   y += rowHeight + spacing;
 
   // Chromatic Offset
-  chromaticOffsetSlider.setBounds(area.removeFromTop(rowHeight).withTrimmedLeft(labelWidth));
-  area.removeFromTop(spacing);
+  chromaticOffsetSlider.setBounds(leftMargin, y, width, rowHeight);
   y += rowHeight + spacing;
 
   // Degree Offset
-  degreeOffsetSlider.setBounds(area.removeFromTop(rowHeight).withTrimmedLeft(labelWidth));
-  area.removeFromTop(spacing);
+  degreeOffsetSlider.setBounds(leftMargin, y, width, rowHeight);
   y += rowHeight + spacing;
 
   // Lock Transpose
-  transposeLockButton.setBounds(area.removeFromTop(rowHeight).withTrimmedLeft(labelWidth));
-  area.removeFromTop(spacing);
+  transposeLockButton.setBounds(leftMargin, y, width, rowHeight);
   y += rowHeight + spacing;
 
   // Capture Keys
-  captureKeysButton.setBounds(area.removeFromTop(rowHeight).withTrimmedLeft(labelWidth));
-  area.removeFromTop(spacing);
+  captureKeysButton.setBounds(leftMargin, y, width, rowHeight);
   y += rowHeight + spacing;
 
   // Strategy
-  strategySelector.setBounds(area.removeFromTop(rowHeight).withTrimmedLeft(labelWidth));
-  area.removeFromTop(spacing);
+  strategySelector.setBounds(leftMargin, y, width, rowHeight);
   y += rowHeight + spacing;
 
   // Grid Interval
-  gridIntervalSlider.setBounds(area.removeFromTop(rowHeight).withTrimmedLeft(labelWidth));
-  area.removeFromTop(spacing);
+  gridIntervalSlider.setBounds(leftMargin, y, width, rowHeight);
   y += rowHeight + spacing;
 
-  // Key Chip List
-  auto chipListArea = area.removeFromTop(120);
-  chipList.setBounds(chipListArea.withTrimmedLeft(labelWidth).reduced(4));
+  // Key Chip List (dynamic height based on number of chips)
+  int chipListHeight = juce::jmax(120, static_cast<int>((currentZone ? currentZone->inputKeyCodes.size() : 0) * 28 + 16));
+  chipList.setBounds(leftMargin + 4, y, width - 8, chipListHeight);
+  y += chipListHeight + spacing;
+
+  // Set component size based on calculated height
+  setSize(getWidth(), y + 8); // Bottom padding
+}
+
+int ZonePropertiesPanel::getRequiredHeight() const {
+  int rowHeight = 28;
+  int spacing = 4;
+  int topPadding = 8;
+  int bottomPadding = 8;
+  
+  // Count number of rows
+  int numRows = 10; // Alias, Name, Scale, Root, Chromatic, Degree, Lock, Capture, Strategy, Grid
+  
+  // Calculate chip list height dynamically
+  int chipListHeight = juce::jmax(120, static_cast<int>((currentZone ? currentZone->inputKeyCodes.size() : 0) * 28 + 16));
+  
+  return topPadding + (numRows * (rowHeight + spacing)) + chipListHeight + bottomPadding;
 }
 
 void ZonePropertiesPanel::setZone(std::shared_ptr<Zone> zone) {
@@ -333,17 +377,18 @@ void ZonePropertiesPanel::updateControlsFromZone() {
   }
   aliasSelector.setSelectedItemIndex(aliasIndex, juce::dontSendNotification);
 
-  // Set scale
-  int scaleIndex = 1; // Default to Major
-  switch (currentZone->scale) {
-  case ScaleUtilities::ScaleType::Chromatic: scaleIndex = 0; break;
-  case ScaleUtilities::ScaleType::Major: scaleIndex = 1; break;
-  case ScaleUtilities::ScaleType::Minor: scaleIndex = 2; break;
-  case ScaleUtilities::ScaleType::PentatonicMajor: scaleIndex = 3; break;
-  case ScaleUtilities::ScaleType::PentatonicMinor: scaleIndex = 4; break;
-  case ScaleUtilities::ScaleType::Blues: scaleIndex = 5; break;
+  // Set scale selector to match current zone's scale name
+  if (scaleLibrary) {
+    auto scaleNames = scaleLibrary->getScaleNames();
+    int scaleIndex = -1;
+    for (int i = 0; i < scaleNames.size(); ++i) {
+      if (scaleNames[i] == currentZone->scaleName) {
+        scaleIndex = i;
+        break;
+      }
+    }
+    scaleSelector.setSelectedItemIndex(scaleIndex >= 0 ? scaleIndex : 0, juce::dontSendNotification);
   }
-  scaleSelector.setSelectedItemIndex(scaleIndex, juce::dontSendNotification);
 
   rootSlider.setValue(currentZone->rootNote, juce::dontSendNotification);
   chromaticOffsetSlider.setValue(currentZone->chromaticOffset, juce::dontSendNotification);
@@ -362,6 +407,11 @@ void ZonePropertiesPanel::updateControlsFromZone() {
   chipList.setKeys(currentZone->inputKeyCodes);
   
   updateKeysAssignedLabel();
+  
+  // Notify parent that resize might be needed
+  if (onResizeRequested) {
+    onResizeRequested();
+  }
 }
 
 void ZonePropertiesPanel::updateKeysAssignedLabel() {
@@ -382,6 +432,20 @@ void ZonePropertiesPanel::refreshAliasSelector() {
   aliasSelector.setSelectedItemIndex(0, juce::dontSendNotification);
 }
 
+void ZonePropertiesPanel::refreshScaleSelector() {
+  scaleSelector.clear();
+  
+  if (scaleLibrary) {
+    auto scaleNames = scaleLibrary->getScaleNames();
+    for (int i = 0; i < scaleNames.size(); ++i) {
+      scaleSelector.addItem(scaleNames[i], i + 1);
+    }
+  } else {
+    // Fallback if no ScaleLibrary
+    scaleSelector.addItem("Major", 1);
+  }
+}
+
 void ZonePropertiesPanel::handleRawKeyEvent(uintptr_t deviceHandle, int keyCode, bool isDown) {
   // Only process if capture mode is active
   if (!captureKeysButton.getToggleState() || !currentZone)
@@ -399,6 +463,10 @@ void ZonePropertiesPanel::handleRawKeyEvent(uintptr_t deviceHandle, int keyCode,
     juce::MessageManager::callAsync([this] {
       chipList.setKeys(currentZone->inputKeyCodes);
       updateKeysAssignedLabel();
+      // Notify parent that resize is needed
+      if (onResizeRequested) {
+        onResizeRequested();
+      }
     });
   }
 }
@@ -411,6 +479,13 @@ void ZonePropertiesPanel::changeListenerCallback(juce::ChangeBroadcaster *source
   if (source == deviceManager) {
     juce::MessageManager::callAsync([this] {
       refreshAliasSelector();
+      if (currentZone) {
+        updateControlsFromZone();
+      }
+    });
+  } else if (source == scaleLibrary) {
+    juce::MessageManager::callAsync([this] {
+      refreshScaleSelector();
       if (currentZone) {
         updateControlsFromZone();
       }
