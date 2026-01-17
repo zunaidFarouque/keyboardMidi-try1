@@ -38,6 +38,10 @@ ZonePropertiesPanel::ZonePropertiesPanel(ZoneManager *zoneMgr, DeviceManager *de
       if (selected >= 0) {
         juce::String aliasName = aliasSelector.getItemText(selected);
         currentZone->targetAliasHash = aliasNameToHash(aliasName);
+        // Rebuild lookup table when alias changes
+        if (zoneManager) {
+          zoneManager->rebuildLookupTable();
+        }
       }
     }
   };
@@ -180,6 +184,22 @@ ZonePropertiesPanel::ZonePropertiesPanel(ZoneManager *zoneMgr, DeviceManager *de
   addAndMakeVisible(captureKeysButton);
   captureKeysButton.setButtonText("Assign Keys");
   captureKeysButton.setClickingTogglesState(true);
+  captureKeysButton.onClick = [this] {
+    if (captureKeysButton.getToggleState()) {
+      // If Assign Keys is checked, uncheck Remove Keys
+      removeKeysButton.setToggleState(false, juce::dontSendNotification);
+    }
+  };
+
+  addAndMakeVisible(removeKeysButton);
+  removeKeysButton.setButtonText("Remove Keys");
+  removeKeysButton.setClickingTogglesState(true);
+  removeKeysButton.onClick = [this] {
+    if (removeKeysButton.getToggleState()) {
+      // If Remove Keys is checked, uncheck Assign Keys
+      captureKeysButton.setToggleState(false, juce::dontSendNotification);
+    }
+  };
 
   addAndMakeVisible(strategyLabel);
   strategyLabel.setText("Layout Strategy:", juce::dontSendNotification);
@@ -205,11 +225,20 @@ ZonePropertiesPanel::ZonePropertiesPanel(ZoneManager *zoneMgr, DeviceManager *de
       scaleSelector.setEnabled(currentZone->layoutStrategy != Zone::LayoutStrategy::Piano);
       editScaleButton.setEnabled(currentZone->layoutStrategy != Zone::LayoutStrategy::Piano);
       
+      // Show/hide piano help label based on strategy
+      pianoHelpLabel.setVisible(currentZone->layoutStrategy == Zone::LayoutStrategy::Piano);
+      
       // Rebuild cache when strategy changes
       if (zoneManager && scaleLibrary) {
         std::vector<int> intervals = scaleLibrary->getIntervals(currentZone->scaleName);
         currentZone->rebuildCache(intervals);
+        zoneManager->rebuildLookupTable(); // Rebuild lookup table (keys might be reorganized)
         zoneManager->sendChangeMessage();
+      }
+      
+      // Notify parent that resize might be needed (label visibility changed)
+      if (onResizeRequested) {
+        onResizeRequested();
       }
     }
   };
@@ -238,6 +267,111 @@ ZonePropertiesPanel::ZonePropertiesPanel(ZoneManager *zoneMgr, DeviceManager *de
   pianoHelpLabel.setText("Requires 2 rows of keys", juce::dontSendNotification);
   pianoHelpLabel.setColour(juce::Label::textColourId, juce::Colours::grey);
   pianoHelpLabel.setVisible(false); // Initially hidden
+
+  addAndMakeVisible(chordTypeLabel);
+  chordTypeLabel.setText("Chord Type:", juce::dontSendNotification);
+  chordTypeLabel.attachToComponent(&chordTypeSelector, true);
+
+  addAndMakeVisible(chordTypeSelector);
+  chordTypeSelector.addItem("Off", 1);
+  chordTypeSelector.addItem("Triad", 2);
+  chordTypeSelector.addItem("Seventh", 3);
+  chordTypeSelector.addItem("Ninth", 4);
+  chordTypeSelector.addItem("Power5", 5);
+  chordTypeSelector.onChange = [this] {
+    if (currentZone) {
+      int selected = chordTypeSelector.getSelectedItemIndex();
+      if (selected >= 0) {
+        // Map combo box index to enum (0 = Off/None, 1 = Triad, etc.)
+        if (selected == 0) {
+          currentZone->chordType = ChordUtilities::ChordType::None;
+        } else if (selected == 1) {
+          currentZone->chordType = ChordUtilities::ChordType::Triad;
+        } else if (selected == 2) {
+          currentZone->chordType = ChordUtilities::ChordType::Seventh;
+        } else if (selected == 3) {
+          currentZone->chordType = ChordUtilities::ChordType::Ninth;
+        } else if (selected == 4) {
+          currentZone->chordType = ChordUtilities::ChordType::Power5;
+        }
+        // Rebuild cache when chord type changes (config-time compilation)
+        if (zoneManager && scaleLibrary) {
+          std::vector<int> intervals = scaleLibrary->getIntervals(currentZone->scaleName);
+          currentZone->rebuildCache(intervals);
+          zoneManager->sendChangeMessage();
+        }
+      }
+    }
+  };
+
+  addAndMakeVisible(voicingLabel);
+  voicingLabel.setText("Voicing:", juce::dontSendNotification);
+  voicingLabel.attachToComponent(&voicingSelector, true);
+
+  addAndMakeVisible(voicingSelector);
+  voicingSelector.addItem("Close", 1);
+  voicingSelector.addItem("Open", 2);
+  voicingSelector.addItem("Guitar", 3);
+  voicingSelector.onChange = [this] {
+    if (currentZone) {
+      int selected = voicingSelector.getSelectedItemIndex();
+      if (selected >= 0) {
+        if (selected == 0) {
+          currentZone->voicing = ChordUtilities::Voicing::Close;
+        } else if (selected == 1) {
+          currentZone->voicing = ChordUtilities::Voicing::Open;
+        } else if (selected == 2) {
+          currentZone->voicing = ChordUtilities::Voicing::Guitar;
+        }
+        // Rebuild cache when voicing changes
+        if (zoneManager && scaleLibrary) {
+          std::vector<int> intervals = scaleLibrary->getIntervals(currentZone->scaleName);
+          currentZone->rebuildCache(intervals);
+          zoneManager->sendChangeMessage();
+        }
+      }
+    }
+  };
+
+  addAndMakeVisible(playModeLabel);
+  playModeLabel.setText("Play Mode:", juce::dontSendNotification);
+  playModeLabel.attachToComponent(&playModeSelector, true);
+
+  addAndMakeVisible(playModeSelector);
+  playModeSelector.addItem("Direct", 1);
+  playModeSelector.addItem("Strum Buffer", 2);
+  playModeSelector.onChange = [this] {
+    if (currentZone) {
+      int selected = playModeSelector.getSelectedItemIndex();
+      if (selected >= 0) {
+        if (selected == 0) {
+          currentZone->playMode = Zone::PlayMode::Direct;
+        } else if (selected == 1) {
+          currentZone->playMode = Zone::PlayMode::Strum;
+        }
+        if (zoneManager) {
+          zoneManager->sendChangeMessage();
+        }
+      }
+    }
+  };
+
+  addAndMakeVisible(strumSpeedLabel);
+  strumSpeedLabel.setText("Strum Speed:", juce::dontSendNotification);
+  strumSpeedLabel.attachToComponent(&strumSpeedSlider, true);
+
+  addAndMakeVisible(strumSpeedSlider);
+  strumSpeedSlider.setRange(0, 500, 1);
+  strumSpeedSlider.setValue(0);
+  strumSpeedSlider.setTextValueSuffix(" ms");
+  strumSpeedSlider.onValueChange = [this] {
+    if (currentZone) {
+      currentZone->strumSpeedMs = static_cast<int>(strumSpeedSlider.getValue());
+      if (zoneManager) {
+        zoneManager->sendChangeMessage();
+      }
+    }
+  };
 
   addAndMakeVisible(channelLabel);
   channelLabel.setText("MIDI Channel:", juce::dontSendNotification);
@@ -318,6 +452,7 @@ ZonePropertiesPanel::ZonePropertiesPanel(ZoneManager *zoneMgr, DeviceManager *de
       // Rebuild cache when keys are removed
       std::vector<int> intervals = scaleLibrary->getIntervals(currentZone->scaleName);
       currentZone->rebuildCache(intervals);
+      zoneManager->rebuildLookupTable(); // Rebuild lookup table when keys change
       zoneManager->sendChangeMessage();
       // Notify parent that resize is needed
       if (onResizeRequested) {
@@ -396,8 +531,26 @@ void ZonePropertiesPanel::resized() {
   transposeLockButton.setBounds(leftMargin, y, width, rowHeight);
   y += rowHeight + spacing;
 
-  // Capture Keys
-  captureKeysButton.setBounds(leftMargin, y, width, rowHeight);
+  // Chord Type
+  chordTypeSelector.setBounds(leftMargin, y, width, rowHeight);
+  y += rowHeight + spacing;
+
+  // Voicing
+  voicingSelector.setBounds(leftMargin, y, width, rowHeight);
+  y += rowHeight + spacing;
+
+  // Play Mode
+  playModeSelector.setBounds(leftMargin, y, width, rowHeight);
+  y += rowHeight + spacing;
+
+  // Strum Speed
+  strumSpeedSlider.setBounds(leftMargin, y, width, rowHeight);
+  y += rowHeight + spacing;
+
+  // Capture Keys and Remove Keys (side by side)
+  auto keyButtonsArea = juce::Rectangle<int>(leftMargin, y, width, rowHeight);
+  removeKeysButton.setBounds(keyButtonsArea.removeFromRight(width / 2).reduced(2, 0));
+  captureKeysButton.setBounds(keyButtonsArea.reduced(2, 0));
   y += rowHeight + spacing;
 
   // Strategy
@@ -438,7 +591,7 @@ int ZonePropertiesPanel::getRequiredHeight() const {
   int bottomPadding = 8;
   
   // Count number of rows
-  int numRows = 12; // Alias, Name, Scale, Root, Chromatic, Degree, Lock, Capture, Strategy, Grid, Channel, Color
+  int numRows = 16; // Alias, Name, Scale, Root, Chromatic, Degree, Lock, ChordType, Voicing, PlayMode, StrumSpeed, Capture/Remove, Strategy, Grid, Channel, Color
   // Add one more row if Piano help label is visible
   if (currentZone && currentZone->layoutStrategy == Zone::LayoutStrategy::Piano) {
     numRows++;
@@ -466,8 +619,13 @@ void ZonePropertiesPanel::updateControlsFromZone() {
     degreeOffsetSlider.setEnabled(false);
     transposeLockButton.setEnabled(false);
     captureKeysButton.setEnabled(false);
+    removeKeysButton.setEnabled(false);
     strategySelector.setEnabled(false);
     gridIntervalSlider.setEnabled(false);
+    chordTypeSelector.setEnabled(false);
+    voicingSelector.setEnabled(false);
+    playModeSelector.setEnabled(false);
+    strumSpeedSlider.setEnabled(false);
     channelSlider.setEnabled(false);
     colorButton.setEnabled(false);
     chipList.setEnabled(false);
@@ -484,8 +642,13 @@ void ZonePropertiesPanel::updateControlsFromZone() {
   degreeOffsetSlider.setEnabled(true);
   transposeLockButton.setEnabled(true);
   captureKeysButton.setEnabled(true);
+  removeKeysButton.setEnabled(true);
   strategySelector.setEnabled(true);
   gridIntervalSlider.setEnabled(currentZone->layoutStrategy == Zone::LayoutStrategy::Grid);
+  chordTypeSelector.setEnabled(true);
+  voicingSelector.setEnabled(true);
+  playModeSelector.setEnabled(true);
+  strumSpeedSlider.setEnabled(true);
   channelSlider.setEnabled(true);
   colorButton.setEnabled(true);
 
@@ -554,6 +717,33 @@ void ZonePropertiesPanel::updateControlsFromZone() {
   colorButton.setColour(juce::TextButton::buttonColourId, currentZone->zoneColor);
   colorButton.repaint();
 
+  // Set chord type
+  int chordTypeIndex = 0;
+  switch (currentZone->chordType) {
+    case ChordUtilities::ChordType::None: chordTypeIndex = 0; break;
+    case ChordUtilities::ChordType::Triad: chordTypeIndex = 1; break;
+    case ChordUtilities::ChordType::Seventh: chordTypeIndex = 2; break;
+    case ChordUtilities::ChordType::Ninth: chordTypeIndex = 3; break;
+    case ChordUtilities::ChordType::Power5: chordTypeIndex = 4; break;
+  }
+  chordTypeSelector.setSelectedItemIndex(chordTypeIndex, juce::dontSendNotification);
+
+  // Set voicing
+  int voicingIndex = 0;
+  switch (currentZone->voicing) {
+    case ChordUtilities::Voicing::Close: voicingIndex = 0; break;
+    case ChordUtilities::Voicing::Open: voicingIndex = 1; break;
+    case ChordUtilities::Voicing::Guitar: voicingIndex = 2; break;
+  }
+  voicingSelector.setSelectedItemIndex(voicingIndex, juce::dontSendNotification);
+
+  // Set play mode
+  int playModeIndex = (currentZone->playMode == Zone::PlayMode::Direct) ? 0 : 1;
+  playModeSelector.setSelectedItemIndex(playModeIndex, juce::dontSendNotification);
+
+  // Set strum speed
+  strumSpeedSlider.setValue(currentZone->strumSpeedMs, juce::dontSendNotification);
+
   // Update chip list
   chipList.setKeys(currentZone->inputKeyCodes);
   
@@ -604,33 +794,64 @@ void ZonePropertiesPanel::refreshScaleSelector() {
 }
 
 void ZonePropertiesPanel::handleRawKeyEvent(uintptr_t deviceHandle, int keyCode, bool isDown) {
-  // Only process if capture mode is active
-  if (!captureKeysButton.getToggleState() || !currentZone)
+  if (!currentZone)
     return;
 
   // Only process key down events
   if (!isDown)
     return;
 
-  // Add key code if unique
-  auto &keys = currentZone->inputKeyCodes;
-  if (std::find(keys.begin(), keys.end(), keyCode) == keys.end()) {
-    keys.push_back(keyCode);
-    // Update chip list on message thread
-    juce::MessageManager::callAsync([this] {
-      chipList.setKeys(currentZone->inputKeyCodes);
-      updateKeysAssignedLabel();
-      // Rebuild cache when keys are added
-      if (scaleLibrary && zoneManager) {
-        std::vector<int> intervals = scaleLibrary->getIntervals(currentZone->scaleName);
-        currentZone->rebuildCache(intervals);
-        zoneManager->sendChangeMessage();
-      }
-      // Notify parent that resize is needed
-      if (onResizeRequested) {
-        onResizeRequested();
-      }
-    });
+  // Assign Keys mode
+  if (captureKeysButton.getToggleState()) {
+    // Add key code if unique
+    auto &keys = currentZone->inputKeyCodes;
+    if (std::find(keys.begin(), keys.end(), keyCode) == keys.end()) {
+      keys.push_back(keyCode);
+      // Update chip list on message thread
+      juce::MessageManager::callAsync([this] {
+        chipList.setKeys(currentZone->inputKeyCodes);
+        updateKeysAssignedLabel();
+        // Rebuild cache when keys are added
+        if (scaleLibrary && zoneManager) {
+          std::vector<int> intervals = scaleLibrary->getIntervals(currentZone->scaleName);
+          currentZone->rebuildCache(intervals);
+          zoneManager->rebuildLookupTable(); // Rebuild lookup table when keys change
+          zoneManager->sendChangeMessage();
+        }
+        // Notify parent that resize is needed
+        if (onResizeRequested) {
+          onResizeRequested();
+        }
+      });
+    }
+    return;
+  }
+
+  // Remove Keys mode
+  if (removeKeysButton.getToggleState()) {
+    // Remove key code if it exists
+    auto &keys = currentZone->inputKeyCodes;
+    auto it = std::find(keys.begin(), keys.end(), keyCode);
+    if (it != keys.end()) {
+      currentZone->removeKey(keyCode);
+      // Update chip list on message thread
+      juce::MessageManager::callAsync([this] {
+        chipList.setKeys(currentZone->inputKeyCodes);
+        updateKeysAssignedLabel();
+        // Rebuild cache when keys are removed
+        if (scaleLibrary && zoneManager) {
+          std::vector<int> intervals = scaleLibrary->getIntervals(currentZone->scaleName);
+          currentZone->rebuildCache(intervals);
+          zoneManager->rebuildLookupTable(); // Rebuild lookup table when keys change
+          zoneManager->sendChangeMessage();
+        }
+        // Notify parent that resize is needed
+        if (onResizeRequested) {
+          onResizeRequested();
+        }
+      });
+    }
+    return;
   }
 }
 

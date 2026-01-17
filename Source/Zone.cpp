@@ -21,7 +21,11 @@ Zone::Zone()
 }
 
 void Zone::rebuildCache(const std::vector<int>& intervals) {
-  keyToNoteCache.clear();
+  keyToChordCache.clear();
+  
+  // Compilation: chord generation (ChordUtilities::generateChord, ScaleUtilities) runs only here.
+  // Disable chords in Piano mode (Piano mode ignores scales)
+  bool useChords = (layoutStrategy != LayoutStrategy::Piano) && (chordType != ChordUtilities::ChordType::None);
 
   if (inputKeyCodes.empty())
     return;
@@ -32,8 +36,18 @@ void Zone::rebuildCache(const std::vector<int>& intervals) {
       int keyCode = inputKeyCodes[i];
       int degree = static_cast<int>(i) + degreeOffset;
       int baseNote = ScaleUtilities::calculateMidiNote(rootNote, intervals, degree);
-      int relativeNote = baseNote - rootNote; // Store relative to root for transpose
-      keyToNoteCache[keyCode] = relativeNote;
+      
+      if (useChords) {
+        std::vector<int> chordNotes = ChordUtilities::generateChord(
+          rootNote, intervals, degree, chordType, voicing
+        );
+        std::vector<int> relativeChord;
+        for (int note : chordNotes)
+          relativeChord.push_back(note - rootNote);
+        keyToChordCache[keyCode] = relativeChord;
+      } else {
+        keyToChordCache[keyCode] = {baseNote - rootNote};
+      }
     }
   } else if (layoutStrategy == LayoutStrategy::Grid) {
     // Grid mode: Calculate based on keyboard geometry
@@ -64,8 +78,18 @@ void Zone::rebuildCache(const std::vector<int>& intervals) {
       // Degree = deltaCol + (deltaRow * gridInterval)
       int degree = deltaCol + (deltaRow * gridInterval) + degreeOffset;
       int baseNote = ScaleUtilities::calculateMidiNote(rootNote, intervals, degree);
-      int relativeNote = baseNote - rootNote; // Store relative to root for transpose
-      keyToNoteCache[keyCode] = relativeNote;
+      
+      if (useChords) {
+        std::vector<int> chordNotes = ChordUtilities::generateChord(
+          rootNote, intervals, degree, chordType, voicing
+        );
+        std::vector<int> relativeChord;
+        for (int note : chordNotes)
+          relativeChord.push_back(note - rootNote);
+        keyToChordCache[keyCode] = relativeChord;
+      } else {
+        keyToChordCache[keyCode] = {baseNote - rootNote};
+      }
     }
   } else if (layoutStrategy == LayoutStrategy::Piano) {
     // Piano mode: Force Chromatic scale (Major scale intervals for white keys)
@@ -125,7 +149,8 @@ void Zone::rebuildCache(const std::vector<int>& intervals) {
       int degree = diatonicIndex;
       int baseNote = ScaleUtilities::calculateMidiNote(rootNote, majorIntervals, degree);
       int relativeNote = baseNote - rootNote;
-      keyToNoteCache[whiteKeyCode] = relativeNote;
+      // Piano mode: Store single note only (chords disabled in Piano mode)
+      keyToChordCache[whiteKeyCode] = {relativeNote};
 
       // Check for black key above this white key
       // Black keys are positioned between white keys (roughly col + 0.5)
@@ -143,7 +168,9 @@ void Zone::rebuildCache(const std::vector<int>& intervals) {
           float expectedCol = whiteCol + 0.5f;
           if (std::abs(blackCol - expectedCol) < 0.3f) {
             // Map black key to sharp (white note + 1 semitone)
-            keyToNoteCache[blackKeyCode] = relativeNote + 1;
+            // Piano mode: Store single note only
+            int whiteRelativeNote = baseNote - rootNote;
+            keyToChordCache[blackKeyCode] = {whiteRelativeNote + 1};
             break; // One black key per white key
           }
         }
@@ -155,37 +182,40 @@ void Zone::rebuildCache(const std::vector<int>& intervals) {
   }
 }
 
+// Play-time: O(1) hash lookup + O(k) transpose apply (k = chord size, typically 3–5).
+// Chords are pre-compiled in rebuildCache; no ChordUtilities or ScaleUtilities here.
+std::optional<std::vector<int>> Zone::getNotesForKey(int keyCode, int globalChromTrans, int globalDegTrans) {
+  auto it = keyToChordCache.find(keyCode);
+  if (it == keyToChordCache.end())
+    return std::nullopt;
+
+  const std::vector<int>& relativeNotes = it->second;
+  int effChromTrans = isTransposeLocked ? 0 : globalChromTrans;
+
+  std::vector<int> finalNotes;
+  finalNotes.reserve(relativeNotes.size());
+  for (int relativeNote : relativeNotes) {
+    int finalNote = rootNote + relativeNote + chromaticOffset + effChromTrans;
+    finalNotes.push_back(juce::jlimit(0, 127, finalNote));
+  }
+  return finalNotes;
+}
+
 std::optional<MidiAction> Zone::processKey(InputID input, int globalChromTrans, int globalDegTrans) {
   // Check 1: Does input.deviceHandle match targetAliasHash?
   if (input.deviceHandle != targetAliasHash)
     return std::nullopt;
 
-  // Lookup in cache
-  auto it = keyToNoteCache.find(input.keyCode);
-  if (it == keyToNoteCache.end())
-    return std::nullopt; // Key not in cache
+  // Get notes for this key
+  auto notes = getNotesForKey(input.keyCode, globalChromTrans, globalDegTrans);
+  if (!notes.has_value() || notes->empty())
+    return std::nullopt;
 
-  // Get relative note from cache
-  int relativeNote = it->second;
-
-  // Calculate effective transposition (respect isTransposeLocked)
-  int effDegTrans = isTransposeLocked ? 0 : globalDegTrans;
-  int effChromTrans = isTransposeLocked ? 0 : globalChromTrans;
-
-  // Calculate final note: root + relative + offsets + transpose
-  // For degree transpose, we need to convert it to semitones
-  // This is a simplification - in Piano mode, degree transpose doesn't make much sense
-  // but we'll apply it as chromatic transpose for consistency
-  int finalNote = rootNote + relativeNote + chromaticOffset + effChromTrans;
-
-  // Clamp to valid MIDI range
-  finalNote = juce::jlimit(0, 127, finalNote);
-
-  // Return MIDI action (Type: Note, Channel: this->midiChannel, Data1: finalNote, Data2: 100)
+  // Return MIDI action with first note (for backward compatibility)
   MidiAction action;
   action.type = ActionType::Note;
   action.channel = this->midiChannel;
-  action.data1 = finalNote;
+  action.data1 = notes->front(); // First note of chord
   action.data2 = 100;
 
   return action;
@@ -212,6 +242,10 @@ juce::ValueTree Zone::toValueTree() const {
   vt.setProperty("isTransposeLocked", isTransposeLocked, nullptr);
   vt.setProperty("layoutStrategy", static_cast<int>(layoutStrategy), nullptr);
   vt.setProperty("gridInterval", gridInterval, nullptr);
+  vt.setProperty("chordType", static_cast<int>(chordType), nullptr);
+  vt.setProperty("voicing", static_cast<int>(voicing), nullptr);
+  vt.setProperty("strumSpeedMs", strumSpeedMs, nullptr);
+  vt.setProperty("playMode", static_cast<int>(playMode), nullptr);
   
   // Serialize inputKeyCodes as comma-separated string
   juce::StringArray keyCodesArray;
@@ -254,6 +288,10 @@ std::shared_ptr<Zone> Zone::fromValueTree(const juce::ValueTree& vt) {
   zone->isTransposeLocked = vt.getProperty("isTransposeLocked", false);
   zone->layoutStrategy = static_cast<LayoutStrategy>(vt.getProperty("layoutStrategy", static_cast<int>(LayoutStrategy::Linear)).operator int());
   zone->gridInterval = vt.getProperty("gridInterval", 5);
+  zone->chordType = static_cast<ChordUtilities::ChordType>(vt.getProperty("chordType", static_cast<int>(ChordUtilities::ChordType::None)).operator int());
+  zone->voicing = static_cast<ChordUtilities::Voicing>(vt.getProperty("voicing", static_cast<int>(ChordUtilities::Voicing::Close)).operator int());
+  zone->strumSpeedMs = vt.getProperty("strumSpeedMs", 0);
+  zone->playMode = static_cast<PlayMode>(vt.getProperty("playMode", static_cast<int>(PlayMode::Direct)).operator int());
   
   // Load zone color (default to transparent if not found)
   juce::String colorStr = vt.getProperty("zoneColor", "").toString();

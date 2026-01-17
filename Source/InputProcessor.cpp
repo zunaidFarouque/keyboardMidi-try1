@@ -1,8 +1,9 @@
 #include "InputProcessor.h"
 #include "ScaleLibrary.h"
+#include "ChordUtilities.h"
 
 InputProcessor::InputProcessor(VoiceManager &voiceMgr, PresetManager &presetMgr, DeviceManager &deviceMgr, ScaleLibrary &scaleLib)
-    : voiceManager(voiceMgr), presetManager(presetMgr), deviceManager(deviceMgr), zoneManager(scaleLib) {
+    : voiceManager(voiceMgr), presetManager(presetMgr), deviceManager(deviceMgr), zoneManager(scaleLib), scaleLibrary(scaleLib) {
   // Add listeners
   presetManager.getRootNode().addListener(this);
   deviceManager.addChangeListener(this);
@@ -277,9 +278,56 @@ std::pair<std::optional<MidiAction>, juce::String> InputProcessor::lookupAction(
   return {std::nullopt, ""};
 }
 
+// Resolve zone using same InputID as lookupAction: zoneLookupTable is keyed by
+// (targetAliasHash, keyCode), not (deviceHandle, keyCode). For "Any" zones
+// targetAliasHash=0. We must try (aliasHash, keyCode) and (0, keyCode).
+std::shared_ptr<Zone> InputProcessor::getZoneForInputResolved(InputID input) {
+  juce::String aliasName = deviceManager.getAliasForHardware(input.deviceHandle);
+  uintptr_t aliasHash = (aliasName != "Unassigned" && !aliasName.isEmpty())
+      ? aliasNameToHash(aliasName) : 0;
+  if (aliasHash != 0) {
+    auto z = zoneManager.getZoneForInput(InputID{aliasHash, input.keyCode});
+    if (z) return z;
+  }
+  return zoneManager.getZoneForInput(InputID{0, input.keyCode});
+}
+
 void InputProcessor::processEvent(InputID input, bool isDown) {
+  // Check triggers first (Spacebar and Shift)
+  constexpr int SPACEBAR = 0x20;
+  constexpr int SHIFT = 0x10;
+  
+  if (isDown) {
+    if (input.keyCode == SPACEBAR) {
+      // Strum down (forward)
+      juce::ScopedReadLock lock(bufferLock);
+      if (!noteBuffer.empty()) {
+        voiceManager.strumNotes(noteBuffer, bufferedStrumSpeedMs, true);
+      }
+      return;
+    } else if (input.keyCode == SHIFT) {
+      // Strum up (reverse)
+      juce::ScopedReadLock lock(bufferLock);
+      if (!noteBuffer.empty()) {
+        voiceManager.strumNotes(noteBuffer, bufferedStrumSpeedMs, false);
+      }
+      return;
+    }
+  }
+
   if (!isDown) {
-    // Key up - just handle note off
+    // Key up - handle note off or buffer clearing
+    // Check if this key belongs to a zone in Strum mode
+    auto [action, source] = lookupAction(input.deviceHandle, input.keyCode);
+    if (action.has_value() && source.startsWith("Zone: ")) {
+      auto zone = getZoneForInputResolved(input);
+      if (zone && zone->playMode == Zone::PlayMode::Strum) {
+        // Clear buffer when zone key is released (requires holding keys)
+        juce::ScopedWriteLock lock(bufferLock);
+        noteBuffer.clear();
+        bufferedStrumSpeedMs = 50; // Reset to default
+      }
+    }
     voiceManager.handleKeyUp(input);
     return;
   }
@@ -290,9 +338,61 @@ void InputProcessor::processEvent(InputID input, bool isDown) {
   if (action.has_value()) {
     const auto &midiAction = action.value();
     if (midiAction.type == ActionType::Note) {
-      voiceManager.noteOn(input, midiAction.data1, midiAction.data2, midiAction.channel);
+      // Check if this is from a zone (for chord support)
+      if (source.startsWith("Zone: ")) {
+        // Get the zone to check play mode (use resolved InputID: table is keyed by aliasHash/0, not deviceHandle)
+        auto zone = getZoneForInputResolved(input);
+        if (zone) {
+          // O(1): getNotesForKey = keyToChordCache.find + O(k) transpose (k=chord size).
+          // Chords are pre-compiled in rebuildCache at config-time.
+          auto notes = zone->getNotesForKey(input.keyCode, 
+                                            zoneManager.getGlobalChromaticTranspose(),
+                                            zoneManager.getGlobalDegreeTranspose());
+          
+          if (notes.has_value() && !notes->empty()) {
+            // Check play mode
+            if (zone->playMode == Zone::PlayMode::Direct) {
+              // Direct mode - play immediately
+              if (notes->size() > 1) {
+                voiceManager.noteOn(input, *notes, midiAction.data2, midiAction.channel, zone->strumSpeedMs);
+              } else {
+                voiceManager.noteOn(input, notes->front(), midiAction.data2, midiAction.channel);
+              }
+            } else if (zone->playMode == Zone::PlayMode::Strum) {
+              // Strum mode - buffer the notes
+              juce::ScopedWriteLock bufferWriteLock(bufferLock);
+              noteBuffer = *notes; // Replace buffer with new chord
+              bufferedStrumSpeedMs = zone->strumSpeedMs > 0 ? zone->strumSpeedMs : 50; // Use zone's strum speed or default
+              // Do NOT call voiceManager.noteOn - wait for trigger
+            }
+          } else {
+            // No notes found - fallback to single note
+            voiceManager.noteOn(input, midiAction.data1, midiAction.data2, midiAction.channel);
+          }
+        } else {
+          // Zone not found - single note, direct mode
+          voiceManager.noteOn(input, midiAction.data1, midiAction.data2, midiAction.channel);
+        }
+      } else {
+        // Manual mapping - single note, direct mode
+        voiceManager.noteOn(input, midiAction.data1, midiAction.data2, midiAction.channel);
+      }
     }
   }
+}
+
+std::vector<int> InputProcessor::getBufferedNotes() {
+  juce::ScopedReadLock lock(bufferLock);
+  return noteBuffer;
+}
+
+bool InputProcessor::hasManualMappingForKey(int keyCode) {
+  juce::ScopedReadLock lock(mapLock);
+  for (const auto& p : keyMapping) {
+    if (p.first.keyCode == keyCode)
+      return true;
+  }
+  return false;
 }
 
 std::pair<std::optional<MidiAction>, juce::String> InputProcessor::simulateInput(uintptr_t deviceHandle, int keyCode) {

@@ -58,6 +58,7 @@ private:
   juce::Slider degreeOffsetSlider;
   juce::ToggleButton transposeLockButton;
   juce::ToggleButton captureKeysButton;
+  juce::ToggleButton removeKeysButton;
   juce::Label strategyLabel;
   juce::ComboBox strategySelector;
   juce::Label gridIntervalLabel;
@@ -67,6 +68,14 @@ private:
   juce::Slider channelSlider;
   juce::Label colorLabel;
   juce::TextButton colorButton;
+  juce::Label chordTypeLabel;
+  juce::ComboBox chordTypeSelector;
+  juce::Label voicingLabel;
+  juce::ComboBox voicingSelector;
+  juce::Label playModeLabel;
+  juce::ComboBox playModeSelector;
+  juce::Label strumSpeedLabel;
+  juce::Slider strumSpeedSlider;
   KeyChipList chipList;
 
   void refreshAliasSelector();

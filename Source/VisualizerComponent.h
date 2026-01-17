@@ -8,11 +8,13 @@
 #include <JuceHeader.h>
 #include <set>
 
+class InputProcessor;
+
 class VisualizerComponent : public juce::Component,
                             public RawInputManager::Listener,
                             public juce::ChangeListener {
 public:
-  VisualizerComponent(ZoneManager *zoneMgr, DeviceManager *deviceMgr);
+  VisualizerComponent(ZoneManager *zoneMgr, DeviceManager *deviceMgr, InputProcessor *inputProc = nullptr);
   ~VisualizerComponent() override;
 
   void paint(juce::Graphics &) override;
@@ -28,6 +30,7 @@ public:
 private:
   ZoneManager *zoneManager;
   DeviceManager *deviceManager;
+  InputProcessor *inputProcessor;
   std::set<int> activeKeys;
 
   // Helper to check if a key belongs to any zone

@@ -5,6 +5,7 @@
 #include <vector>
 #include <memory>
 #include <optional>
+#include <unordered_map>
 
 class ScaleLibrary;
 
@@ -34,11 +35,17 @@ public:
   // Handle input and return MIDI action with zone name if a zone matches
   std::pair<std::optional<MidiAction>, juce::String> handleInputWithName(InputID input);
 
+  // Get the zone that matches an input (for accessing zone properties like chordType)
+  std::shared_ptr<Zone> getZoneForInput(InputID input);
+
   // Simulate input (for visualization) - takes explicit arguments
   std::optional<MidiAction> simulateInput(int keyCode, uintptr_t aliasHash);
 
   // Get zone color for a specific key (for visualization)
   std::optional<juce::Colour> getZoneColorForKey(int keyCode, uintptr_t aliasHash);
+
+  // Number of zones that contain this key (for conflict detection in visualizer)
+  int getZoneCountForKey(int keyCode) const;
 
   // Set global transpose values
   void setGlobalTranspose(int chromatic, int degree);
@@ -46,6 +53,9 @@ public:
   // Get global transpose values
   int getGlobalChromaticTranspose() const { return globalChromaticTranspose; }
   int getGlobalDegreeTranspose() const { return globalDegreeTranspose; }
+
+  // Rebuild the lookup table (call when zones or their keys change)
+  void rebuildLookupTable();
 
   // Serialization
   juce::ValueTree toValueTree() const;
@@ -57,4 +67,7 @@ private:
   std::vector<std::shared_ptr<Zone>> zones;
   int globalChromaticTranspose = 0;
   int globalDegreeTranspose = 0;
+  
+  // Master lookup table: InputID -> Zone* for instant access
+  std::unordered_map<InputID, Zone*> zoneLookupTable;
 };

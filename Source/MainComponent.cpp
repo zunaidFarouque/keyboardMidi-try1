@@ -16,7 +16,7 @@ MainComponent::MainComponent()
       mappingEditor(presetManager, rawInputManager, deviceManager),
       mainTabs(juce::TabbedButtonBar::TabsAtTop),
       zoneEditor(&inputProcessor.getZoneManager(), &deviceManager, &rawInputManager, &scaleLibrary),
-      visualizer(&inputProcessor.getZoneManager(), &deviceManager),
+      visualizer(&inputProcessor.getZoneManager(), &deviceManager, &inputProcessor),
       visualizerContainer("Visualizer", visualizer),
       editorContainer("Mapping / Zones", mainTabs),
       logContainer("Log", logComponent),

@@ -8,6 +8,23 @@ ZoneManager::ZoneManager(ScaleLibrary& scaleLib) : scaleLibrary(scaleLib) {
 ZoneManager::~ZoneManager() {
 }
 
+void ZoneManager::rebuildLookupTable() {
+  juce::ScopedWriteLock lock(zoneLock);
+  
+  // Clear existing lookup table
+  zoneLookupTable.clear();
+  
+  // Build lookup table from all zones
+  for (const auto& zone : zones) {
+    const auto& keyCodes = zone->getInputKeyCodes();
+    for (int keyCode : keyCodes) {
+      InputID id{zone->targetAliasHash, keyCode};
+      // Overwrites previous entries, giving priority to later zones
+      zoneLookupTable[id] = zone.get();
+    }
+  }
+}
+
 void ZoneManager::addZone(std::shared_ptr<Zone> zone) {
   // Auto-assign color if zone has default/transparent color
   if (zone->zoneColor == juce::Colours::transparentBlack || 
@@ -38,12 +55,14 @@ void ZoneManager::addZone(std::shared_ptr<Zone> zone) {
   
   juce::ScopedWriteLock lock(zoneLock);
   zones.push_back(zone);
+  rebuildLookupTable(); // Rebuild lookup table after adding zone
   sendChangeMessage();
 }
 
 void ZoneManager::removeZone(std::shared_ptr<Zone> zone) {
   juce::ScopedWriteLock lock(zoneLock);
   zones.erase(std::remove(zones.begin(), zones.end(), zone), zones.end());
+  rebuildLookupTable(); // Rebuild lookup table after removing zone
   sendChangeMessage();
 }
 
@@ -83,6 +102,7 @@ std::shared_ptr<Zone> ZoneManager::createDefaultZone() {
   
   juce::ScopedWriteLock lock(zoneLock);
   zones.push_back(zone);
+  rebuildLookupTable(); // Rebuild lookup table after adding zone
   sendChangeMessage();
   
   return zone;
@@ -91,26 +111,29 @@ std::shared_ptr<Zone> ZoneManager::createDefaultZone() {
 std::optional<MidiAction> ZoneManager::handleInput(InputID input) {
   juce::ScopedReadLock lock(zoneLock);
 
-  // Iterate through zones and return the first valid result
-  for (const auto &zone : zones) {
-    auto action = zone->processKey(input, globalChromaticTranspose, globalDegreeTranspose);
-    if (action.has_value()) {
-      return action;
-    }
+  // Use lookup table for instant access
+  auto it = zoneLookupTable.find(input);
+  if (it == zoneLookupTable.end()) {
+    return std::nullopt;
   }
 
-  return std::nullopt;
+  Zone* zone = it->second;
+  return zone->processKey(input, globalChromaticTranspose, globalDegreeTranspose);
 }
 
 std::pair<std::optional<MidiAction>, juce::String> ZoneManager::handleInputWithName(InputID input) {
   juce::ScopedReadLock lock(zoneLock);
 
-  // Iterate through zones and return the first valid result with zone name
-  for (const auto &zone : zones) {
-    auto action = zone->processKey(input, globalChromaticTranspose, globalDegreeTranspose);
-    if (action.has_value()) {
-      return {action, zone->name};
-    }
+  // Use lookup table for instant access
+  auto it = zoneLookupTable.find(input);
+  if (it == zoneLookupTable.end()) {
+    return {std::nullopt, ""};
+  }
+
+  Zone* zone = it->second;
+  auto action = zone->processKey(input, globalChromaticTranspose, globalDegreeTranspose);
+  if (action.has_value()) {
+    return {action, zone->name};
   }
 
   return {std::nullopt, ""};
@@ -129,15 +152,35 @@ std::optional<MidiAction> ZoneManager::simulateInput(int keyCode, uintptr_t alia
   // Create InputID from explicit arguments
   InputID input = {aliasHash, keyCode};
 
-  // Iterate through zones and return the first valid result
-  for (const auto &zone : zones) {
-    auto action = zone->processKey(input, globalChromaticTranspose, globalDegreeTranspose);
-    if (action.has_value()) {
-      return action;
-    }
+  // Use lookup table for instant access
+  auto it = zoneLookupTable.find(input);
+  if (it == zoneLookupTable.end()) {
+    return std::nullopt;
   }
 
-  return std::nullopt;
+  Zone* zone = it->second;
+  return zone->processKey(input, globalChromaticTranspose, globalDegreeTranspose);
+}
+
+std::shared_ptr<Zone> ZoneManager::getZoneForInput(InputID input) {
+  juce::ScopedReadLock lock(zoneLock);
+
+  // Use lookup table for instant access
+  auto it = zoneLookupTable.find(input);
+  if (it == zoneLookupTable.end()) {
+    return nullptr;
+  }
+
+  Zone* zone = it->second;
+  
+  // Find the shared_ptr in zones vector
+  for (const auto& zonePtr : zones) {
+    if (zonePtr.get() == zone) {
+      return zonePtr;
+    }
+  }
+  
+  return nullptr;
 }
 
 std::optional<juce::Colour> ZoneManager::getZoneColorForKey(int keyCode, uintptr_t aliasHash) {
@@ -160,6 +203,16 @@ std::optional<juce::Colour> ZoneManager::getZoneColorForKey(int keyCode, uintptr
   }
 
   return std::nullopt;
+}
+
+int ZoneManager::getZoneCountForKey(int keyCode) const {
+  juce::ScopedReadLock lock(zoneLock);
+  int n = 0;
+  for (const auto& z : zones) {
+    if (std::find(z->inputKeyCodes.begin(), z->inputKeyCodes.end(), keyCode) != z->inputKeyCodes.end())
+      ++n;
+  }
+  return n;
 }
 
 juce::ValueTree ZoneManager::toValueTree() const {
@@ -206,5 +259,6 @@ void ZoneManager::restoreFromValueTree(const juce::ValueTree& vt) {
     }
   }
   
+  rebuildLookupTable(); // Rebuild lookup table after restoring zones
   sendChangeMessage();
 }

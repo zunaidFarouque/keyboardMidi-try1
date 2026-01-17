@@ -53,6 +53,8 @@ target_sources(OmniKey PRIVATE
     Source/DetachableContainer.cpp
     Source/KeyChipList.cpp
     Source/StartupManager.cpp
+    Source/ChordUtilities.cpp
+    Source/StrumEngine.cpp
 )
 
 # 5. Definitions (Fixes Macro Hell globally)

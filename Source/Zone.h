@@ -1,6 +1,7 @@
 #pragma once
 #include "MappingTypes.h"
 #include "ScaleUtilities.h"
+#include "ChordUtilities.h"
 #include <JuceHeader.h>
 #include <vector>
 #include <optional>
@@ -12,6 +13,11 @@ public:
     Linear,
     Grid,
     Piano
+  };
+
+  enum class PlayMode {
+    Direct,  // Play immediately on key press
+    Strum    // Buffer notes, play on trigger key
   };
 
   Zone();
@@ -29,19 +35,31 @@ public:
   int gridInterval = 5; // For Grid mode: semitones per row (default 5 = perfect 4th)
   juce::Colour zoneColor; // Visual color for this zone
   int midiChannel = 1; // MIDI output channel (1-16)
+  ChordUtilities::ChordType chordType = ChordUtilities::ChordType::None; // Chord type (None = single note)
+  ChordUtilities::Voicing voicing = ChordUtilities::Voicing::Close; // Chord voicing
+  int strumSpeedMs = 0; // Strum speed in milliseconds (0 = no strum, all notes at once)
+  PlayMode playMode = PlayMode::Direct; // Play mode (Direct = immediate, Strum = buffered)
 
-  // Performance cache: Pre-compiled key-to-note mappings
-  std::unordered_map<int, int> keyToNoteCache; // Key Code -> Relative Note Number (before transpose)
+  // Performance cache: Pre-compiled key-to-chord mappings (compilation strategy).
+  // Config-time: rebuildCache() runs ChordUtilities::generateChord, ScaleUtilities; fills this map.
+  // Play-time: getNotesForKey() does O(1) find + O(k) transpose (k = chord size). No chord/scale math.
+  std::unordered_map<int, std::vector<int>> keyToChordCache; // keyCode -> relative notes (to root)
 
-  // Rebuild the cache when zone properties change
+  // Config-time: (re)build keyToChordCache when zone/scale/chord/keys change.
   void rebuildCache(const std::vector<int>& intervals);
 
+  // Play-time: O(1) lookup + O(k) transpose. Returns final MIDI notes or nullopt if not in zone.
+  std::optional<std::vector<int>> getNotesForKey(int keyCode, int globalChromTrans, int globalDegTrans);
+
   // Process a key input and return MIDI action if this zone matches
-  // Note: Intervals are now used only during rebuildCache, not during processKey
+  // Note: Returns first note of chord for backward compatibility
   std::optional<MidiAction> processKey(InputID input, int globalChromTrans, int globalDegTrans);
 
   // Remove a key from inputKeyCodes
   void removeKey(int keyCode);
+
+  // Get input key codes (for ZoneManager lookup table)
+  const std::vector<int>& getInputKeyCodes() const { return inputKeyCodes; }
 
   // Serialization
   juce::ValueTree toValueTree() const;

@@ -1,4 +1,5 @@
 #include "VisualizerComponent.h"
+#include "InputProcessor.h"
 #include "Zone.h"
 #include <algorithm>
 
@@ -9,8 +10,8 @@ static uintptr_t aliasNameToHash(const juce::String &aliasName) {
   return static_cast<uintptr_t>(std::hash<juce::String>{}(aliasName));
 }
 
-VisualizerComponent::VisualizerComponent(ZoneManager *zoneMgr, DeviceManager *deviceMgr)
-    : zoneManager(zoneMgr), deviceManager(deviceMgr) {
+VisualizerComponent::VisualizerComponent(ZoneManager *zoneMgr, DeviceManager *deviceMgr, InputProcessor *inputProc)
+    : zoneManager(zoneMgr), deviceManager(deviceMgr), inputProcessor(inputProc) {
   if (zoneManager) {
     zoneManager->addChangeListener(this);
   }
@@ -89,21 +90,29 @@ void VisualizerComponent::paint(juce::Graphics &g) {
     auto keyBounds = fullBounds.reduced(padding);
 
     // --- 3. Get Data from Engine ---
-    // A. Zone Underlay Color
+    // Conflict: key in multiple zones, or in a zone and also in a manual mapping
+    int zoneCount = zoneManager->getZoneCountForKey(keyCode);
+    bool hasManual = inputProcessor && inputProcessor->hasManualMappingForKey(keyCode);
+    bool isConflict = (zoneCount >= 2) || (zoneCount >= 1 && hasManual);
+
+    // A. Zone Underlay Color (or red if conflict)
     juce::Colour underlayColor = juce::Colours::transparentBlack;
-    // Check master alias (hash 0) first, then device aliases
-    auto zoneColor = zoneManager->getZoneColorForKey(keyCode, 0);
-    if (zoneColor.has_value()) {
-      underlayColor = zoneColor.value();
-    } else if (deviceManager) {
-      // Try other aliases
-      auto aliases = deviceManager->getAllAliasNames();
-      for (const auto &aliasName : aliases) {
-        uintptr_t aliasHash = aliasNameToHash(aliasName);
-        zoneColor = zoneManager->getZoneColorForKey(keyCode, aliasHash);
-        if (zoneColor.has_value()) {
-          underlayColor = zoneColor.value();
-          break;
+    if (isConflict) {
+      underlayColor = juce::Colours::red.withAlpha(0.7f);
+    } else {
+      // Check master alias (hash 0) first, then device aliases
+      auto zoneColor = zoneManager->getZoneColorForKey(keyCode, 0);
+      if (zoneColor.has_value()) {
+        underlayColor = zoneColor.value();
+      } else if (deviceManager) {
+        auto aliases = deviceManager->getAllAliasNames();
+        for (const auto &aliasName : aliases) {
+          uintptr_t aliasHash = aliasNameToHash(aliasName);
+          zoneColor = zoneManager->getZoneColorForKey(keyCode, aliasHash);
+          if (zoneColor.has_value()) {
+            underlayColor = zoneColor.value();
+            break;
+          }
         }
       }
     }
@@ -141,7 +150,39 @@ void VisualizerComponent::paint(juce::Graphics &g) {
       }
     }
 
-    // --- 4. Render Layers ---
+    // --- 4. Get Buffered Notes (for Strum mode visualization) ---
+    std::vector<int> bufferedNotes;
+    bool isBuffered = false;
+    
+    if (inputProcessor && zoneInfo.first) {
+      // Check if zone is in Strum mode
+      if (zoneInfo.first->playMode == Zone::PlayMode::Strum) {
+        bufferedNotes = inputProcessor->getBufferedNotes();
+        
+        if (!bufferedNotes.empty()) {
+          // Check if any note in the chord matches this key's note
+          // For chords, we need to check all notes in the chord
+          uintptr_t aliasHash = zoneInfo.first->targetAliasHash;
+          auto action = zoneManager->simulateInput(keyCode, aliasHash);
+          if (action.has_value() && action->type == ActionType::Note) {
+            int baseNote = action->data1;
+            
+            // Check if base note is in buffer (for single notes)
+            isBuffered = std::find(bufferedNotes.begin(), bufferedNotes.end(), baseNote) != bufferedNotes.end();
+            
+            // Also check if this key would generate a chord that overlaps with buffer
+            // (This handles the case where the key generates a chord)
+            if (!isBuffered && zoneInfo.first->chordType != ChordUtilities::ChordType::None) {
+              // The key generates a chord - check if any note in the buffer matches any note in the chord
+              // For simplicity, we'll just check if the base note is in the buffer
+              // In a full implementation, we'd generate the full chord and check overlap
+            }
+          }
+        }
+      }
+    }
+
+    // --- 5. Render Layers ---
     
     // Layer 1: Underlay (Zone Color) - Sharp rectangle
     if (!underlayColor.isTransparent()) {
@@ -150,15 +191,25 @@ void VisualizerComponent::paint(juce::Graphics &g) {
     }
 
     // Layer 2: Key Body
-    g.setColour(isPressed ? juce::Colours::yellow : juce::Colour(0xff333333));
+    juce::Colour bodyColor;
+    if (isPressed) {
+      bodyColor = juce::Colours::yellow; // Playing
+    } else if (isBuffered) {
+      bodyColor = juce::Colours::lightblue; // Buffered (waiting)
+    } else {
+      bodyColor = juce::Colour(0xff333333); // Default
+    }
+    g.setColour(bodyColor);
     g.fillRoundedRectangle(keyBounds, 6.0f);
 
     // Layer 3: Border
     g.setColour(juce::Colours::grey);
     g.drawRoundedRectangle(keyBounds, 6.0f, 2.0f);
 
-    // Layer 4: Text
-    g.setColour(isPressed ? juce::Colours::black : juce::Colours::white);
+    // Layer 4: Text (red if conflict, else black when pressed, white otherwise)
+    juce::Colour textColor = isConflict ? juce::Colours::red
+        : (isPressed ? juce::Colours::black : juce::Colours::white);
+    g.setColour(textColor);
     g.setFont(keySize * 0.4f); // Dynamic font size
     g.drawText(labelText, keyBounds, juce::Justification::centred, false);
   }

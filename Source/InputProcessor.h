@@ -31,6 +31,12 @@ public:
   // Zone management
   ZoneManager &getZoneManager() { return zoneManager; }
 
+  // Get buffered notes (for visualizer - thread safe)
+  std::vector<int> getBufferedNotes();
+
+  // True if any manual mapping exists for this keyCode (for conflict highlight in visualizer)
+  bool hasManualMappingForKey(int keyCode);
+
   // ChangeListener implementation
   void changeListenerCallback(juce::ChangeBroadcaster *source) override;
 
@@ -38,13 +44,19 @@ private:
   VoiceManager &voiceManager;
   PresetManager &presetManager;
   DeviceManager &deviceManager;
+  ScaleLibrary &scaleLibrary;
   ZoneManager zoneManager;
 
   // Thread Safety
   juce::ReadWriteLock mapLock;
+  juce::ReadWriteLock bufferLock;
 
   // The Fast Lookup Cache
   std::unordered_map<InputID, MidiAction> keyMapping;
+
+  // Note buffer for Strum mode (stores MIDI note numbers)
+  std::vector<int> noteBuffer;
+  int bufferedStrumSpeedMs = 50; // Strum speed for buffered notes (default 50ms)
 
   // Current CC values for relative inputs (scroll)
   std::unordered_map<InputID, float> currentCCValues;
@@ -65,4 +77,7 @@ private:
   
   // Shared lookup logic (used by both processEvent and simulateInput)
   std::pair<std::optional<MidiAction>, juce::String> lookupAction(uintptr_t deviceHandle, int keyCode);
+
+  // Resolve zone using same InputID as lookupAction (alias hash or 0 for "Any")
+  std::shared_ptr<Zone> getZoneForInputResolved(InputID input);
 };

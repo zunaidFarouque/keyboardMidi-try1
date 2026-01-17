@@ -1,6 +1,9 @@
 #include "LogComponent.h"
 
+LogComponent *LogComponent::s_instance = nullptr;
+
 LogComponent::LogComponent() {
+  s_instance = this; // Set static instance
   console.setMultiLine(true);
   console.setReadOnly(true);
   console.setFont(juce::Font("Consolas", 14.0f, juce::Font::plain));
