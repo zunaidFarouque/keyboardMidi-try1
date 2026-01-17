@@ -45,8 +45,10 @@ cmake_install.cmake
 *.lastbuildstate
 *.recipe
 
-# JUCE Framework is tracked as a git submodule
-# JUCE/
+# JUCE Framework (unmodified third-party code)
+# Note: If you want to track JUCE as a git submodule instead, remove this line
+# and use: git submodule add https://github.com/juce-framework/JUCE.git JUCE
+JUCE/
 
 # JUCE generated files
 JuceLibraryCode/
