@@ -1,13 +1,18 @@
 #include "MainComponent.h"
 #include "KeyNameUtilities.h"
 #include "MappingTypes.h"
+#include "DeviceSetupComponent.h"
 
 // Windows header needed for cursor locking
 #include <windows.h>
 
 MainComponent::MainComponent()
-    : voiceManager(midiEngine), inputProcessor(voiceManager, presetManager),
-      mappingEditor(presetManager, rawInputManager) {
+    : voiceManager(midiEngine), 
+      inputProcessor(voiceManager, presetManager, deviceManager),
+      mappingEditor(presetManager, rawInputManager, deviceManager) {
+  // Load DeviceManager config BEFORE loading preset (if any)
+  // This ensures aliases are available when preset loads
+  
   // Setup Command Manager for Undo/Redo
   commandManager.registerAllCommandsForTarget(this);
   commandManager.setFirstCommandTarget(this);
@@ -58,6 +63,19 @@ MainComponent::MainComponent()
                                               result.getFileName());
                       }
                     });
+  };
+
+  addAndMakeVisible(deviceSetupButton);
+  deviceSetupButton.setButtonText("Device Setup");
+  deviceSetupButton.onClick = [this] {
+    juce::DialogWindow::LaunchOptions options;
+    auto* setupComponent = new DeviceSetupComponent(deviceManager, rawInputManager);
+    options.content.setOwned(setupComponent);
+    options.content->setSize(600, 400);
+    options.dialogTitle = "Rig Configuration";
+    options.resizable = true;
+    options.useNativeTitleBar = true;
+    options.launchAsync();
   };
 
   // --- Editors ---
@@ -293,11 +311,13 @@ void MainComponent::resized() {
   // Header (Buttons)
   auto header = area.removeFromTop(30);
   midiSelector.setBounds(header.removeFromLeft(250));
-  header.removeFromLeft(10);
+  header.removeFromLeft(4);
   saveButton.setBounds(header.removeFromLeft(100));
-  header.removeFromLeft(10);
+  header.removeFromLeft(4);
   loadButton.setBounds(header.removeFromLeft(100));
-  header.removeFromLeft(10);
+  header.removeFromLeft(4);
+  deviceSetupButton.setBounds(header.removeFromLeft(110));
+  header.removeFromLeft(4);
   performanceModeButton.setBounds(header.removeFromLeft(140));
 
   area.removeFromTop(4);

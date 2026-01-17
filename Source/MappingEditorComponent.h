@@ -2,6 +2,7 @@
 #include "MappingInspector.h"
 #include "PresetManager.h"
 #include "RawInputManager.h"
+#include "DeviceManager.h"
 #include <JuceHeader.h>
 
 class MappingEditorComponent
@@ -11,7 +12,7 @@ class MappingEditorComponent
       public RawInputManager::Listener // <--- ADD LISTENER
 {
 public:
-  MappingEditorComponent(PresetManager &pm, RawInputManager &rawInputMgr);
+  MappingEditorComponent(PresetManager &pm, RawInputManager &rawInputMgr, DeviceManager &deviceMgr);
   ~MappingEditorComponent() override;
 
   // Get undo manager for command handling
@@ -47,6 +48,7 @@ public:
 private:
   PresetManager &presetManager;
   RawInputManager &rawInputManager;
+  DeviceManager &deviceManager;
   juce::TableListBox table;
   juce::TextButton addButton;
   juce::ToggleButton learnButton;

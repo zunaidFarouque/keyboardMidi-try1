@@ -36,6 +36,8 @@ target_sources(OmniKey PRIVATE
     Source/KeyNameUtilities.cpp
     Source/MidiNoteUtilities.cpp
     Source/PointerInputManager.cpp
+    Source/DeviceManager.cpp
+    Source/DeviceSetupComponent.cpp
 )
 
 # 5. Definitions (Fixes Macro Hell globally)

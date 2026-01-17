@@ -1,8 +1,9 @@
 #include "MappingInspector.h"
 #include "MidiNoteUtilities.h"
+#include "DeviceManager.h"
 
-MappingInspector::MappingInspector(juce::UndoManager *undoMgr)
-    : undoManager(undoMgr) {
+MappingInspector::MappingInspector(juce::UndoManager *undoMgr, DeviceManager *deviceMgr)
+    : undoManager(undoMgr), deviceManager(deviceMgr) {
   // Setup Labels
   typeLabel.setText("Type:", juce::dontSendNotification);
   typeLabel.attachToComponent(&typeSelector, true);
@@ -23,6 +24,43 @@ MappingInspector::MappingInspector(juce::UndoManager *undoMgr)
   data2Label.attachToComponent(&data2Slider, true);
   addAndMakeVisible(data2Label);
   addAndMakeVisible(data2Slider);
+
+  aliasLabel.setText("Alias:", juce::dontSendNotification);
+  aliasLabel.attachToComponent(&aliasSelector, true);
+  addAndMakeVisible(aliasLabel);
+  addAndMakeVisible(aliasSelector);
+
+  // Setup Alias Selector
+  refreshAliasSelector();
+  aliasSelector.onChange = [this] {
+    if (selectedTrees.empty())
+      return;
+    
+    // Don't update if showing mixed value (no selection or multiple different values)
+    if (aliasSelector.getSelectedId() == -1)
+      return;
+
+    juce::String aliasName = aliasSelector.getText();
+    
+    // Special case: "Any / Master" means empty or hash 0
+    if (aliasName == "Any / Master")
+      aliasName = "";
+
+    undoManager->beginNewTransaction("Change Alias");
+    for (auto &tree : selectedTrees) {
+      if (tree.isValid()) {
+        if (aliasName.isEmpty()) {
+          // Set both inputAlias (empty) and deviceHash (0) for legacy compatibility
+          tree.setProperty("inputAlias", "", undoManager);
+          tree.setProperty("deviceHash", "0", undoManager);
+        } else {
+          tree.setProperty("inputAlias", aliasName, undoManager);
+          // Also update deviceHash to 0 for legacy compatibility (or remove it)
+          // Actually, let's keep deviceHash for backward compatibility
+        }
+      }
+    }
+  };
 
   // Setup Type Selector
   typeSelector.addItem("Note", 1);
@@ -112,11 +150,44 @@ MappingInspector::MappingInspector(juce::UndoManager *undoMgr)
     // Transaction ends automatically when next beginNewTransaction() is called
   };
 
+  // Register with DeviceManager for changes
+  if (deviceManager != nullptr) {
+    deviceManager->addChangeListener(this);
+  }
+
   // Initially disable all controls
   enableControls(false);
 }
 
-MappingInspector::~MappingInspector() {}
+MappingInspector::~MappingInspector() {
+  if (deviceManager != nullptr) {
+    deviceManager->removeChangeListener(this);
+  }
+}
+
+void MappingInspector::changeListenerCallback(juce::ChangeBroadcaster *source) {
+  if (source == deviceManager) {
+    // Device alias configuration changed, refresh the selector
+    refreshAliasSelector();
+    updateControlsFromSelection();
+  }
+}
+
+void MappingInspector::refreshAliasSelector() {
+  aliasSelector.clear(juce::dontSendNotification);
+  
+  if (deviceManager == nullptr)
+    return;
+
+  // Add "Any / Master" option (hash 0)
+  aliasSelector.addItem("Any / Master", 1);
+  
+  // Add all aliases
+  auto aliases = deviceManager->getAllAliasNames();
+  for (int i = 0; i < aliases.size(); ++i) {
+    aliasSelector.addItem(aliases[i], i + 2); // Start IDs from 2
+  }
+}
 
 void MappingInspector::paint(juce::Graphics &g) {
   g.fillAll(juce::Colour(0xff2a2a2a));
@@ -139,6 +210,9 @@ void MappingInspector::resized() {
   area.removeFromTop(spacing);
 
   channelSlider.setBounds(area.removeFromTop(controlHeight));
+  area.removeFromTop(spacing);
+
+  aliasSelector.setBounds(area.removeFromTop(controlHeight));
   area.removeFromTop(spacing);
 
   data1Slider.setBounds(area.removeFromTop(controlHeight));
@@ -237,6 +311,57 @@ void MappingInspector::updateControlsFromSelection() {
     channelSlider.setTextValueSuffix(" (---)");
   }
 
+  // Update Alias Selector
+  if (deviceManager != nullptr) {
+    juce::String aliasName;
+    
+    // Try to get alias from inputAlias property first
+    if (allTreesHaveSameValue("inputAlias")) {
+      aliasName = getCommonValue("inputAlias").toString();
+      if (aliasName.isEmpty()) {
+        aliasName = "Any / Master";
+      }
+    } else {
+      // Try legacy deviceHash property
+      if (allTreesHaveSameValue("deviceHash")) {
+        uintptr_t deviceHash = 0;
+        juce::var hashVar = getCommonValue("deviceHash");
+        if (hashVar.isString()) {
+          deviceHash = static_cast<uintptr_t>(hashVar.toString().getHexValue64());
+        } else if (hashVar.isInt()) {
+          deviceHash = static_cast<uintptr_t>(static_cast<juce::int64>(hashVar));
+        }
+        
+        if (deviceHash == 0) {
+          aliasName = "Any / Master";
+        } else {
+          aliasName = deviceManager->getAliasName(deviceHash);
+        }
+      } else {
+        // Mixed values - clear selection
+        aliasSelector.setSelectedId(-1, juce::dontSendNotification);
+      }
+    }
+    
+    // Set selection if we found a single alias
+    if (!aliasName.isEmpty() && aliasName != "Unknown") {
+      // Find the ID for this alias name
+      if (aliasName == "Any / Master") {
+        aliasSelector.setSelectedId(1, juce::dontSendNotification);
+      } else {
+        auto aliases = deviceManager->getAllAliasNames();
+        int index = aliases.indexOf(aliasName);
+        if (index >= 0) {
+          aliasSelector.setSelectedId(index + 2, juce::dontSendNotification); // IDs start at 2
+        } else {
+          aliasSelector.setSelectedId(-1, juce::dontSendNotification);
+        }
+      }
+    } else if (aliasName == "Unknown" || aliasSelector.getSelectedId() == -1) {
+      aliasSelector.setSelectedId(-1, juce::dontSendNotification);
+    }
+  }
+
   // Update Data1 Slider
   if (allTreesHaveSameValue("data1")) {
     int data1 = static_cast<int>(getCommonValue("data1"));
@@ -263,6 +388,7 @@ void MappingInspector::updateControlsFromSelection() {
 void MappingInspector::enableControls(bool enabled) {
   typeSelector.setEnabled(enabled);
   channelSlider.setEnabled(enabled);
+  aliasSelector.setEnabled(enabled);
   data1Slider.setEnabled(enabled);
   data2Slider.setEnabled(enabled);
 }
@@ -289,7 +415,8 @@ void MappingInspector::valueTreePropertyChanged(juce::ValueTree &tree,
                                                  const juce::Identifier &property) {
   // Update UI if the changed property is one we're displaying
   if (property == juce::Identifier("type") || property == juce::Identifier("channel") ||
-      property == juce::Identifier("data1") || property == juce::Identifier("data2")) {
+      property == juce::Identifier("data1") || property == juce::Identifier("data2") ||
+      property == juce::Identifier("inputAlias") || property == juce::Identifier("deviceHash")) {
     updateControlsFromSelection();
   }
 }

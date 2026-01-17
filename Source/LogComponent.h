@@ -18,7 +18,7 @@ private:
 
   // The efficient buffer
   std::deque<juce::String> logBuffer;
-  const size_t maxLines = 50; // Keep it snappy
+  const size_t maxLines = 10; // Keep it snappy
 
   JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(LogComponent)
 };

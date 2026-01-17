@@ -1,71 +1,73 @@
-# 🤖 Cursor Prompt: Phase 8 - Smart Note Input & Text Parsing
+# 🤖 Cursor Prompt: Phase 9 - Device Aliases (The Optimization Strategy)
 
-**Role:** Expert C++ Audio Developer (JUCE Framework).
+**Role:** Expert C++ Audio Developer (Real-time Systems).
 
 **Context:**
-We are building "OmniKey".
-*   **Current State:** Phase 7 Complete (Inspector Panel).
-*   **Phase Goal:** Replace "Blind Numbers" in the Inspector with musical context. "Note 60" should appear as "C4". Users should be able to type "C#3" to set the value.
+*   **Current State:** Phase 8 Complete.
+*   **Phase Goal:** Implement Device Aliases ("Main Keys" -> Hardware ID), but **optimize for zero-latency lookups**.
 
 **Strict Constraints:**
-1.  **Architecture:** `MidiNoteUtilities` must be a standalone helper class.
-2.  **UX:** The slider text behavior must change dynamically. If the user selects a "CC" mapping, they should see numbers. If "Note", they should see Note Names.
-3.  **CMake:** Provide the snippet to add `MidiNoteUtilities.cpp`.
+1.  **Zero Overhead:** `processEvent` must NOT loop through aliases. It must use a direct `unordered_map` lookup (O(1)).
+2.  **The "Compiler":** `InputProcessor` must rebuild its flat map whenever `DeviceManager` or `PresetManager` changes.
 
 ---
 
-### Step 1: `MidiNoteUtilities` (`Source/MidiNoteUtilities.h/cpp`)
-Create a static helper class for musical conversions.
+### Step 1: `DeviceManager` (`Source/DeviceManager.h/cpp`)
+Manage the configuration.
 
 **Requirements:**
-1.  `static juce::String getMidiNoteName(int noteNumber)`:
-    *   Use `juce::MidiMessage::getMidiNoteName(noteNumber, true, true, 4)`.
-    *   *Note:* The `4` argument ensures Middle C (60) is displayed as "C4".
-2.  `static int getMidiNoteFromText(const juce::String& text)`:
-    *   **Logic:**
-        *   First, try to parse as a raw integer (`text.getIntValue()`). If the string contains only digits, return that number (clamped 0-127).
-        *   If it contains letters, parse as Note Name.
-        *   Find the Note Letter (A-G).
-        *   Find Accidental (# or b).
-        *   Find Octave number (e.g., -2 to 8).
-        *   Calculate: `(Octave + 1) * 12 + NoteIndex`.
-        *   *Validation:* Clamp result between 0 and 127.
+1.  **Storage:** `juce::ValueTree globalConfig { "OmniKeyConfig" };`
+    *   XML Structure: `<Alias name="Main Keys"><Hardware id="12345"/><Hardware id="67890"/></Alias>`
+2.  **API:**
+    *   `void createAlias(String name);`
+    *   `void assignHardware(String alias, uintptr_t hardwareId);`
+    *   `Array<uintptr_t> getHardwareForAlias(String aliasName);`
+    *   `String getAliasForHardware(uintptr_t hardwareId);` (For UI display).
+3.  **Persistence:** Save/Load `OmniKeyConfig.xml` to `juce::File::getSpecialLocation(userApplicationDataDirectory)`.
+4.  **Broadcasting:** Inherit `juce::ChangeBroadcaster`. Broadcast when config changes.
 
-### Step 2: Update `MappingInspector` (`Source/MappingInspector.cpp`)
-We need to configure the sliders and update them dynamically based on the selection.
+### Step 2: `InputProcessor` (The Compiler)
+Update the `rebuildMapFromTree` function to "flatten" the abstract aliases into concrete hardware IDs.
 
-**Constructor Updates:**
-1.  **Channel Slider:** `setRange(1, 16, 1)`.
-2.  **Data 1/2 Sliders:** `setRange(0, 127, 1)`.
-3.  **Text Box:** Ensure sliders allow text entry (`setTextBoxStyle`).
+**Logic Update (`rebuildMapFromTree`):**
+1.  Clear `keyMapping`.
+2.  Iterate through all Mappings in `PresetManager`.
+3.  For each Mapping:
+    *   Get `aliasName` (String) from the mapping.
+    *   Call `deviceManager.getHardwareForAlias(aliasName)` -> Returns list of IDs (e.g., `[ID_A, ID_B]`).
+    *   **The Loop:** For each `hardwareID` in that list:
+        *   Create `InputID { hardwareID, key }`.
+        *   Insert `Action` into `keyMapping`.
+4.  *Result:* The map now contains direct links for every connected device. `processEvent` remains O(1).
 
-**`setSelection` Updates (The Context Logic):**
-When selection changes, check the `type` property of the first selected tree.
+**Listener Updates:**
+*   Inherit `juce::ChangeListener`.
+*   Register with `DeviceManager`.
+*   In `changeListenerCallback`: Call `rebuildMapFromTree()` (because if hardware assignment changes, the compiled map is stale).
 
-1.  **If Type == "Note" (or 0):**
-    *   Set `data1Label` text to "Note".
-    *   **Install Smart Lambda:**
-        ```cpp
-        data1Slider.textFromValueFunction = [](double val) { return MidiNoteUtilities::getMidiNoteName((int)val); };
-        data1Slider.valueFromTextFunction = [](juce::String text) { return MidiNoteUtilities::getMidiNoteFromText(text); };
-        ```
-    *   Call `data1Slider.updateText()` to refresh the view immediately.
+### Step 3: `MappingEditorComponent`
+Update the UI to work with Aliases.
 
-2.  **If Type == "CC" (or 1):**
-    *   Set `data1Label` text to "CC Number".
-    *   **Remove Smart Lambda (Revert to default):**
-        ```cpp
-        data1Slider.textFromValueFunction = nullptr;
-        data1Slider.valueFromTextFunction = nullptr;
-        ```
-    *   Call `data1Slider.updateText()`.
+1.  **Learn Mode:**
+    *   When key pressed: Call `deviceManager.getAliasForHardware(id)`.
+    *   Save the **Alias Name** to the ValueTree (property `inputAlias`), NOT the Hardware ID.
+    *   If hardware has no alias, show alert or default to "Unassigned".
+2.  **Display:** Show the Alias Name in the "Device" column.
 
-3.  **If Type == "Macro" (or 2):**
-    *   Disable/Hide `data1Slider` (or label it "Macro ID").
+### Step 4: `DeviceSetupComponent`
+The UI to manage the Rig.
 
-### Step 3: Update `CMakeLists.txt`
-Add `Source/MidiNoteUtilities.cpp` to `target_sources`.
+**UI Elements:**
+1.  **Left Panel:** List of Aliases ("Main Keys", "Pad", "Global").
+2.  **Right Panel:** List of Connected Hardware IDs assigned to selected Alias.
+3.  **"Scan/Add" Button:** Press a key on a controller -> Adds its ID to the selected Alias.
+    *   *Note:* Trigger `deviceManager.sendChangeMessage()` to force `InputProcessor` to recompile.
+
+### Step 5: Integration
+1.  Update `MainComponent` to hold `DeviceManager`.
+2.  Pass `DeviceManager` to `InputProcessor` and Editors.
+3.  Load `DeviceManager` config on startup **before** loading the Preset.
 
 ---
 
-**Generate code for: `MidiNoteUtilities`, updated `MappingInspector`, and the `CMakeLists.txt` snippet.**
+**Generate code for: `DeviceManager`, `DeviceSetupComponent`, updated `InputProcessor`, updated `MappingEditorComponent`, and `MainComponent`.**

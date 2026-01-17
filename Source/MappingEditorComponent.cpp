@@ -1,9 +1,17 @@
 #include "MappingEditorComponent.h"
 #include "KeyNameUtilities.h"
 
+// Helper to parse Hex strings from XML correctly
+static uintptr_t parseDeviceHash(const juce::var &var) {
+  if (var.isString())
+    return (uintptr_t)var.toString().getHexValue64();
+  return (uintptr_t)static_cast<juce::int64>(var);
+}
+
 MappingEditorComponent::MappingEditorComponent(PresetManager &pm,
-                                               RawInputManager &rawInputMgr)
-    : presetManager(pm), rawInputManager(rawInputMgr), inspector(&undoManager) {
+                                               RawInputManager &rawInputMgr,
+                                               DeviceManager &deviceMgr)
+    : presetManager(pm), rawInputManager(rawInputMgr), deviceManager(deviceMgr), inspector(&undoManager, &deviceManager) {
   // Setup Headers
   table.getHeader().addColumn("Key", 1, 50);
   table.getHeader().addColumn("Device", 2, 70);
@@ -164,7 +172,14 @@ void MappingEditorComponent::paintCell(juce::Graphics &g, int rowNumber,
     }
     break;
   case 2:
-    text = getHex(node.getProperty("deviceHash"));
+    // Show alias name if available, otherwise convert deviceHash to alias name
+    if (node.hasProperty("inputAlias")) {
+      text = node.getProperty("inputAlias").toString();
+    } else {
+      // Legacy: convert deviceHash (hardware ID) to alias name
+      uintptr_t deviceHash = parseDeviceHash(node.getProperty("deviceHash"));
+      text = deviceManager.getAliasName(deviceHash);
+    }
     break;
   case 3:
     text = node.getProperty("type").toString();
@@ -264,16 +279,32 @@ void MappingEditorComponent::handleRawKeyEvent(uintptr_t deviceHandle,
 
     // Update the mapping properties
     mappingNode.setProperty("inputKey", keyCode, nullptr);
+    
+    // Get alias name for this hardware ID
+    juce::String aliasName = deviceManager.getAliasForHardware(deviceHandle);
+    
+    // If no alias exists, show alert and use "Unassigned"
+    if (aliasName == "Unassigned") {
+      juce::AlertWindow::showMessageBoxAsync(
+          juce::AlertWindow::WarningIcon,
+          "Device Not Assigned",
+          "This device is not assigned to an alias. Please assign it in Device Setup first.",
+          "OK");
+      aliasName = "Unassigned";
+    }
+    
+    // Save alias name instead of hardware ID
+    mappingNode.setProperty("inputAlias", aliasName, nullptr);
+    
+    // Also keep deviceHash for backward compatibility (legacy support)
     mappingNode.setProperty("deviceHash",
                             juce::String::toHexString((juce::int64)deviceHandle)
                                 .toUpperCase(),
                             nullptr);
 
     // Create display name using KeyNameUtilities
-    juce::String deviceName =
-        KeyNameUtilities::getFriendlyDeviceName(deviceHandle);
     juce::String keyName = KeyNameUtilities::getKeyName(keyCode);
-    juce::String displayName = deviceName + " - " + keyName;
+    juce::String displayName = aliasName + " - " + keyName;
     mappingNode.setProperty("displayName", displayName, nullptr);
 
     // Turn off learn mode
@@ -346,6 +377,22 @@ void MappingEditorComponent::handleAxisEvent(uintptr_t deviceHandle, int inputCo
 
     // Update the mapping properties
     mappingNode.setProperty("inputKey", axisToLearn, nullptr);
+    
+    // Get alias name for this hardware ID
+    juce::String aliasName = deviceManager.getAliasForHardware(deviceToUse);
+    if (aliasName == "Unassigned") {
+      juce::AlertWindow::showMessageBoxAsync(
+          juce::AlertWindow::WarningIcon,
+          "Device Not Assigned",
+          "This device is not assigned to an alias. Please assign it in Device Setup first.",
+          "OK");
+      aliasName = "Unassigned";
+    }
+    
+    // Save alias name instead of hardware ID
+    mappingNode.setProperty("inputAlias", aliasName, nullptr);
+    
+    // Also keep deviceHash for backward compatibility
     mappingNode.setProperty("deviceHash",
                             juce::String::toHexString((juce::int64)deviceToUse)
                                 .toUpperCase(),

@@ -5,6 +5,7 @@
 #include "MidiEngine.h"
 #include "PresetManager.h"
 #include "RawInputManager.h"
+#include "DeviceManager.h"
 
 #include <JuceHeader.h>
 
@@ -36,6 +37,7 @@ public:
 
 private:
   MidiEngine midiEngine;
+  DeviceManager deviceManager; // Must be before presetManager and inputProcessor
   PresetManager presetManager;
   VoiceManager voiceManager;
   InputProcessor inputProcessor;
@@ -51,6 +53,7 @@ private:
   juce::ComboBox midiSelector;
   juce::TextButton saveButton;
   juce::TextButton loadButton;
+  juce::TextButton deviceSetupButton;
   juce::ToggleButton performanceModeButton;
 
   // Command Manager for Undo/Redo

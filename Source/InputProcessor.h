@@ -2,11 +2,12 @@
 #include "MappingTypes.h"
 #include "PresetManager.h"
 #include "VoiceManager.h"
+#include "DeviceManager.h"
 #include <JuceHeader.h>
 
-class InputProcessor : public juce::ValueTree::Listener {
+class InputProcessor : public juce::ValueTree::Listener, public juce::ChangeListener {
 public:
-  InputProcessor(VoiceManager &voiceMgr, PresetManager &presetMgr);
+  InputProcessor(VoiceManager &voiceMgr, PresetManager &presetMgr, DeviceManager &deviceMgr);
   ~InputProcessor() override;
 
   // The main entry point for key events
@@ -21,9 +22,13 @@ public:
   // NEW: Helper for the Logger to peek at what will happen
   const MidiAction *getMappingForInput(InputID input);
 
+  // ChangeListener implementation
+  void changeListenerCallback(juce::ChangeBroadcaster *source) override;
+
 private:
   VoiceManager &voiceManager;
   PresetManager &presetManager;
+  DeviceManager &deviceManager;
 
   // Thread Safety
   juce::ReadWriteLock mapLock;

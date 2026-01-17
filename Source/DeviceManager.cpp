@@ -1,0 +1,215 @@
+#include "DeviceManager.h"
+
+DeviceManager::DeviceManager() {
+  loadConfig();
+}
+
+DeviceManager::~DeviceManager() {
+  saveConfig();
+}
+
+void DeviceManager::createAlias(const juce::String &name) {
+  if (name.isEmpty() || aliasExists(name))
+    return;
+
+  juce::ValueTree aliasNode("Alias");
+  aliasNode.setProperty("name", name, nullptr);
+  globalConfig.addChild(aliasNode, -1, nullptr);
+
+  sendChangeMessage();
+  saveConfig();
+}
+
+void DeviceManager::assignHardware(const juce::String &aliasName, uintptr_t hardwareId) {
+  if (!aliasExists(aliasName))
+    createAlias(aliasName);
+
+  juce::ValueTree aliasNode = findOrCreateAliasNode(aliasName);
+
+  // Check if hardware already assigned
+  for (int i = 0; i < aliasNode.getNumChildren(); ++i) {
+    auto hardwareNode = aliasNode.getChild(i);
+    if (hardwareNode.hasType("Hardware")) {
+      uintptr_t existingId = static_cast<uintptr_t>(
+          hardwareNode.getProperty("id").toString().getHexValue64());
+      if (existingId == hardwareId)
+        return; // Already assigned
+    }
+  }
+
+  // Add new hardware node
+  juce::ValueTree hardwareNode("Hardware");
+  hardwareNode.setProperty("id", juce::String::toHexString((juce::int64)hardwareId).toUpperCase(), nullptr);
+  aliasNode.addChild(hardwareNode, -1, nullptr);
+
+  sendChangeMessage();
+  saveConfig();
+}
+
+void DeviceManager::removeHardware(const juce::String &aliasName, uintptr_t hardwareId) {
+  if (!aliasExists(aliasName))
+    return;
+
+  juce::ValueTree aliasNode = findOrCreateAliasNode(aliasName);
+
+  for (int i = aliasNode.getNumChildren() - 1; i >= 0; --i) {
+    auto hardwareNode = aliasNode.getChild(i);
+    if (hardwareNode.hasType("Hardware")) {
+      uintptr_t existingId = static_cast<uintptr_t>(
+          hardwareNode.getProperty("id").toString().getHexValue64());
+      if (existingId == hardwareId) {
+        aliasNode.removeChild(hardwareNode, nullptr);
+        sendChangeMessage();
+        saveConfig();
+        return;
+      }
+    }
+  }
+}
+
+void DeviceManager::deleteAlias(const juce::String &aliasName) {
+  if (!aliasExists(aliasName))
+    return;
+
+  // Find and remove the alias node
+  for (int i = globalConfig.getNumChildren() - 1; i >= 0; --i) {
+    auto aliasNode = globalConfig.getChild(i);
+    if (aliasNode.hasType("Alias") && 
+        aliasNode.getProperty("name").toString() == aliasName) {
+      globalConfig.removeChild(aliasNode, nullptr);
+      sendChangeMessage();
+      saveConfig();
+      return;
+    }
+  }
+}
+
+juce::Array<uintptr_t> DeviceManager::getHardwareForAlias(const juce::String &aliasName) const {
+  juce::Array<uintptr_t> result;
+
+  for (int i = 0; i < globalConfig.getNumChildren(); ++i) {
+    auto aliasNode = globalConfig.getChild(i);
+    if (aliasNode.hasType("Alias") && 
+        aliasNode.getProperty("name").toString() == aliasName) {
+      // Found the alias, collect all hardware IDs
+      for (int j = 0; j < aliasNode.getNumChildren(); ++j) {
+        auto hardwareNode = aliasNode.getChild(j);
+        if (hardwareNode.hasType("Hardware")) {
+          uintptr_t id = static_cast<uintptr_t>(
+              hardwareNode.getProperty("id").toString().getHexValue64());
+          result.add(id);
+        }
+      }
+      break;
+    }
+  }
+
+  return result;
+}
+
+juce::String DeviceManager::getAliasForHardware(uintptr_t hardwareId) const {
+  for (int i = 0; i < globalConfig.getNumChildren(); ++i) {
+    auto aliasNode = globalConfig.getChild(i);
+    if (aliasNode.hasType("Alias")) {
+      for (int j = 0; j < aliasNode.getNumChildren(); ++j) {
+        auto hardwareNode = aliasNode.getChild(j);
+        if (hardwareNode.hasType("Hardware")) {
+          uintptr_t id = static_cast<uintptr_t>(
+              hardwareNode.getProperty("id").toString().getHexValue64());
+          if (id == hardwareId) {
+            return aliasNode.getProperty("name").toString();
+          }
+        }
+      }
+    }
+  }
+
+  return "Unassigned";
+}
+
+juce::StringArray DeviceManager::getAllAliases() const {
+  juce::StringArray result;
+
+  for (int i = 0; i < globalConfig.getNumChildren(); ++i) {
+    auto aliasNode = globalConfig.getChild(i);
+    if (aliasNode.hasType("Alias")) {
+      result.add(aliasNode.getProperty("name").toString());
+    }
+  }
+
+  return result;
+}
+
+juce::String DeviceManager::getAliasName(uintptr_t hardwareHash) const {
+  // Edge case: hash is 0 means "Any / Master"
+  if (hardwareHash == 0)
+    return "Any / Master";
+
+  // Look up which alias this hardware ID belongs to
+  juce::String alias = getAliasForHardware(hardwareHash);
+  
+  if (alias == "Unassigned")
+    return "Unknown";
+  
+  return alias;
+}
+
+juce::StringArray DeviceManager::getAllAliasNames() const {
+  // Alias for getAllAliases for consistency
+  return getAllAliases();
+}
+
+bool DeviceManager::aliasExists(const juce::String &aliasName) const {
+  for (int i = 0; i < globalConfig.getNumChildren(); ++i) {
+    auto aliasNode = globalConfig.getChild(i);
+    if (aliasNode.hasType("Alias") && 
+        aliasNode.getProperty("name").toString() == aliasName) {
+      return true;
+    }
+  }
+  return false;
+}
+
+void DeviceManager::saveConfig() {
+  auto file = getConfigFile();
+  if (auto xml = globalConfig.createXml()) {
+    xml->writeTo(file);
+  }
+}
+
+void DeviceManager::loadConfig() {
+  auto file = getConfigFile();
+  if (file.existsAsFile()) {
+    if (auto xml = juce::parseXML(file)) {
+      globalConfig = juce::ValueTree::fromXml(*xml);
+      if (!globalConfig.isValid()) {
+        globalConfig = juce::ValueTree("OmniKeyConfig");
+      }
+    }
+  } else {
+    globalConfig = juce::ValueTree("OmniKeyConfig");
+  }
+}
+
+juce::ValueTree DeviceManager::findOrCreateAliasNode(const juce::String &aliasName) {
+  for (int i = 0; i < globalConfig.getNumChildren(); ++i) {
+    auto aliasNode = globalConfig.getChild(i);
+    if (aliasNode.hasType("Alias") && 
+        aliasNode.getProperty("name").toString() == aliasName) {
+      return aliasNode;
+    }
+  }
+
+  // Create new alias node
+  juce::ValueTree aliasNode("Alias");
+  aliasNode.setProperty("name", aliasName, nullptr);
+  globalConfig.addChild(aliasNode, -1, nullptr);
+  return aliasNode;
+}
+
+juce::File DeviceManager::getConfigFile() const {
+  auto dir = juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory)
+                 .getChildFile("OmniKey");
+  dir.createDirectory();
+  return dir.getChildFile("OmniKeyConfig.xml");
+}

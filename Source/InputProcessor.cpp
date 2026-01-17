@@ -1,17 +1,26 @@
 #include "InputProcessor.h"
 
-InputProcessor::InputProcessor(VoiceManager &voiceMgr, PresetManager &presetMgr)
-    : voiceManager(voiceMgr), presetManager(presetMgr) {
-  // Add listener to the root node
+InputProcessor::InputProcessor(VoiceManager &voiceMgr, PresetManager &presetMgr, DeviceManager &deviceMgr)
+    : voiceManager(voiceMgr), presetManager(presetMgr), deviceManager(deviceMgr) {
+  // Add listeners
   presetManager.getRootNode().addListener(this);
+  deviceManager.addChangeListener(this);
 
   // Populate map from existing tree
   rebuildMapFromTree();
 }
 
 InputProcessor::~InputProcessor() {
-  // Remove listener
+  // Remove listeners
   presetManager.getRootNode().removeListener(this);
+  deviceManager.removeChangeListener(this);
+}
+
+void InputProcessor::changeListenerCallback(juce::ChangeBroadcaster *source) {
+  if (source == &deviceManager) {
+    // Device alias configuration changed, rebuild the map
+    rebuildMapFromTree();
+  }
 }
 
 void InputProcessor::rebuildMapFromTree() {
@@ -36,8 +45,10 @@ void InputProcessor::addMappingFromTree(juce::ValueTree mappingNode) {
     return;
 
   int inputKey = mappingNode.getProperty("inputKey", 0);
-  uintptr_t deviceHash = parseDeviceHash(mappingNode.getProperty("deviceHash"));
-
+  
+  // Get alias name from mapping (new approach)
+  juce::String aliasName = mappingNode.getProperty("inputAlias", "").toString();
+  
   // Parse Type
   juce::var typeVar = mappingNode.getProperty("type");
   ActionType actionType = ActionType::Note;
@@ -60,10 +71,52 @@ void InputProcessor::addMappingFromTree(juce::ValueTree mappingNode) {
   int data1 = mappingNode.getProperty("data1", 60);
   int data2 = mappingNode.getProperty("data2", 127);
 
-  InputID inputId = {deviceHash, inputKey};
   MidiAction action = {actionType, channel, data1, data2};
 
-  keyMapping[inputId] = action;
+  // Compile alias into hardware IDs
+  if (!aliasName.isEmpty()) {
+    juce::Array<uintptr_t> hardwareIds = deviceManager.getHardwareForAlias(aliasName);
+    
+    // For each hardware ID in the alias, create a mapping entry
+    for (uintptr_t hardwareId : hardwareIds) {
+      InputID inputId = {hardwareId, inputKey};
+      keyMapping[inputId] = action;
+    }
+  } else {
+    // Fallback: support legacy deviceHash property for backward compatibility
+    // Check if deviceHash exists (legacy preset)
+    juce::var deviceHashVar = mappingNode.getProperty("deviceHash");
+    if (!deviceHashVar.isVoid() && !deviceHashVar.toString().isEmpty()) {
+      uintptr_t deviceHash = parseDeviceHash(deviceHashVar);
+      
+      // Try to find an alias for this hardware ID
+      juce::String foundAlias = deviceManager.getAliasForHardware(deviceHash);
+      
+      if (foundAlias != "Unassigned") {
+        // Hardware is already assigned to an alias, use that alias
+        juce::Array<uintptr_t> hardwareIds = deviceManager.getHardwareForAlias(foundAlias);
+        for (uintptr_t hardwareId : hardwareIds) {
+          InputID inputId = {hardwareId, inputKey};
+          keyMapping[inputId] = action;
+        }
+      } else {
+        // Legacy preset: hardware not assigned to any alias
+        // Create a "Master Input" alias if it doesn't exist and assign this hardware
+        if (!deviceManager.aliasExists("Master Input")) {
+          deviceManager.createAlias("Master Input");
+        }
+        deviceManager.assignHardware("Master Input", deviceHash);
+        
+        // Now use the alias
+        juce::Array<uintptr_t> hardwareIds = deviceManager.getHardwareForAlias("Master Input");
+        for (uintptr_t hardwareId : hardwareIds) {
+          InputID inputId = {hardwareId, inputKey};
+          keyMapping[inputId] = action;
+        }
+      }
+    }
+    // If neither aliasName nor deviceHash exists, the mapping is invalid and will be silently dropped
+  }
 }
 
 void InputProcessor::removeMappingFromTree(juce::ValueTree mappingNode) {
@@ -71,10 +124,22 @@ void InputProcessor::removeMappingFromTree(juce::ValueTree mappingNode) {
     return;
 
   int inputKey = mappingNode.getProperty("inputKey", 0);
-  uintptr_t deviceHash = parseDeviceHash(mappingNode.getProperty("deviceHash"));
-
-  InputID inputId = {deviceHash, inputKey};
-  keyMapping.erase(inputId);
+  
+  // Remove all entries for this mapping (could be multiple if alias has multiple hardware IDs)
+  juce::String aliasName = mappingNode.getProperty("inputAlias", "").toString();
+  
+  if (!aliasName.isEmpty()) {
+    juce::Array<uintptr_t> hardwareIds = deviceManager.getHardwareForAlias(aliasName);
+    for (uintptr_t hardwareId : hardwareIds) {
+      InputID inputId = {hardwareId, inputKey};
+      keyMapping.erase(inputId);
+    }
+  } else {
+    // Fallback: legacy deviceHash
+    uintptr_t deviceHash = parseDeviceHash(mappingNode.getProperty("deviceHash"));
+    InputID inputId = {deviceHash, inputKey};
+    keyMapping.erase(inputId);
+  }
 }
 
 void InputProcessor::valueTreeChildAdded(
