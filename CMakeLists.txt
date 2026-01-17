@@ -34,6 +34,7 @@ target_sources(OmniKey PRIVATE
     Source/MappingInspector.cpp
     Source/LogComponent.cpp
     Source/KeyNameUtilities.cpp
+    Source/MidiNoteUtilities.cpp
     Source/PointerInputManager.cpp
 )
 

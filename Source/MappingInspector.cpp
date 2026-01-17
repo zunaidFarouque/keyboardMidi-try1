@@ -1,4 +1,5 @@
 #include "MappingInspector.h"
+#include "MidiNoteUtilities.h"
 
 MappingInspector::MappingInspector(juce::UndoManager *undoMgr)
     : undoManager(undoMgr) {
@@ -73,6 +74,7 @@ MappingInspector::MappingInspector(juce::UndoManager *undoMgr)
   // Setup Data1 Slider
   data1Slider.setRange(0, 127, 1);
   data1Slider.setTextValueSuffix("");
+  data1Slider.setTextBoxStyle(juce::Slider::TextBoxLeft, false, 80, 20);
   data1Slider.onValueChange = [this] {
     if (selectedTrees.empty())
       return;
@@ -173,9 +175,10 @@ void MappingInspector::updateControlsFromSelection() {
 
   enableControls(true);
 
-  // Update Type Selector
+  // Update Type Selector and configure Data1 slider based on type
+  juce::String typeStr;
   if (allTreesHaveSameValue("type")) {
-    juce::String typeStr = getCommonValue("type").toString();
+    typeStr = getCommonValue("type").toString();
     if (typeStr == "Note")
       typeSelector.setSelectedId(1, juce::dontSendNotification);
     else if (typeStr == "CC")
@@ -186,6 +189,41 @@ void MappingInspector::updateControlsFromSelection() {
       typeSelector.setSelectedId(-1, juce::dontSendNotification);
   } else {
     typeSelector.setSelectedId(-1, juce::dontSendNotification);
+    typeStr = ""; // Mixed types
+  }
+
+  // Configure Data1 slider based on type
+  if (typeStr == "Note") {
+    data1Label.setText("Note:", juce::dontSendNotification);
+    data1Slider.setEnabled(true);
+    // Install smart lambda for note names
+    data1Slider.textFromValueFunction = [](double val) {
+      return MidiNoteUtilities::getMidiNoteName(static_cast<int>(val));
+    };
+    data1Slider.valueFromTextFunction = [](const juce::String &text) {
+      return static_cast<double>(MidiNoteUtilities::getMidiNoteFromText(text));
+    };
+    data1Slider.updateText();
+  } else if (typeStr == "CC") {
+    data1Label.setText("CC Number:", juce::dontSendNotification);
+    data1Slider.setEnabled(true);
+    // Remove smart lambda, revert to default numeric display
+    data1Slider.textFromValueFunction = nullptr;
+    data1Slider.valueFromTextFunction = nullptr;
+    data1Slider.updateText();
+  } else if (typeStr == "Macro") {
+    data1Label.setText("Macro ID:", juce::dontSendNotification);
+    data1Slider.setEnabled(true);
+    // Use default numeric display for macros
+    data1Slider.textFromValueFunction = nullptr;
+    data1Slider.valueFromTextFunction = nullptr;
+    data1Slider.updateText();
+  } else {
+    // Mixed or unknown type - disable smart functions
+    data1Label.setText("Data1:", juce::dontSendNotification);
+    data1Slider.textFromValueFunction = nullptr;
+    data1Slider.valueFromTextFunction = nullptr;
+    data1Slider.updateText();
   }
 
   // Update Channel Slider
