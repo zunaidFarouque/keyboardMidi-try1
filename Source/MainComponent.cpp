@@ -4,7 +4,7 @@
 
 MainComponent::MainComponent()
     : voiceManager(midiEngine), inputProcessor(voiceManager, presetManager),
-      mappingEditor(presetManager) {
+      mappingEditor(presetManager, rawInputManager) {
   // --- Header Controls ---
   addAndMakeVisible(midiSelector);
   midiSelector.setTextWhenNoChoicesAvailable("No MIDI Devices");
@@ -64,26 +64,15 @@ MainComponent::MainComponent()
   setSize(800, 600);
 
   // --- Input Logic ---
-  rawInputManager = std::make_unique<RawInputManager>();
-
-  rawInputManager->setCallback([this](void *dev, int key, bool down) {
-    // 1. Cast handle safely
-    uintptr_t handle = (uintptr_t)dev;
-
-    // 2. Log Visuals
-    logEvent(handle, key, down);
-
-    // 3. Process Logic
-    InputID id = {handle, key};
-    inputProcessor.processEvent(id, down);
-  });
+  rawInputManager.addListener(this);
 
   startTimer(100);
 }
 
 MainComponent::~MainComponent() {
   stopTimer();
-  rawInputManager->shutdown();
+  rawInputManager.removeListener(this);
+  rawInputManager.shutdown();
 }
 
 // --- LOGGING LOGIC ---
@@ -129,6 +118,16 @@ void MainComponent::logEvent(uintptr_t device, int keyCode, bool isDown) {
   }
 
   logComponent.addEntry(logLine);
+}
+
+void MainComponent::handleRawKeyEvent(uintptr_t deviceHandle, int keyCode,
+                                      bool isDown) {
+  // 1. Log Visuals
+  logEvent(deviceHandle, keyCode, isDown);
+
+  // 2. Process Logic
+  InputID id = {deviceHandle, keyCode};
+  inputProcessor.processEvent(id, isDown);
 }
 
 juce::String MainComponent::getNoteName(int noteNumber) {
@@ -177,7 +176,7 @@ void MainComponent::timerCallback() {
     if (auto *peer = getPeer()) {
       void *hwnd = peer->getNativeHandle();
       if (hwnd != nullptr) {
-        rawInputManager->initialize(hwnd);
+        rawInputManager.initialize(hwnd);
         isInputInitialized = true;
         logComponent.addEntry("--- SYSTEM: Raw Input Hooked Successfully ---");
         stopTimer();

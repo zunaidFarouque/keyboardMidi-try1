@@ -1,7 +1,9 @@
 #include "MappingEditorComponent.h"
+#include "KeyNameUtilities.h"
 
-MappingEditorComponent::MappingEditorComponent(PresetManager &pm)
-    : presetManager(pm) {
+MappingEditorComponent::MappingEditorComponent(PresetManager &pm,
+                                               RawInputManager &rawInputMgr)
+    : presetManager(pm), rawInputManager(rawInputMgr) {
   // Setup Headers
   table.getHeader().addColumn("Key", 1, 50);
   table.getHeader().addColumn("Device", 2, 70);
@@ -38,8 +40,14 @@ MappingEditorComponent::MappingEditorComponent(PresetManager &pm)
   };
   addAndMakeVisible(addButton);
 
-  // Attach listener
+  // Setup Learn Button
+  learnButton.setButtonText("Learn");
+  learnButton.setClickingTogglesState(true);
+  addAndMakeVisible(learnButton);
+
+  // Attach listeners
   presetManager.getRootNode().addListener(this);
+  rawInputManager.addListener(this);
 
   // Initial update
   table.updateContent();
@@ -47,6 +55,7 @@ MappingEditorComponent::MappingEditorComponent(PresetManager &pm)
 
 MappingEditorComponent::~MappingEditorComponent() {
   presetManager.getRootNode().removeListener(this);
+  rawInputManager.removeListener(this);
 }
 
 void MappingEditorComponent::paint(juce::Graphics &g) {
@@ -65,6 +74,8 @@ void MappingEditorComponent::resized() {
   auto area = getLocalBounds();
   auto header = area.removeFromTop(24);
   addButton.setBounds(header.removeFromRight(30));
+  header.removeFromRight(4);
+  learnButton.setBounds(header.removeFromRight(60));
   table.setBounds(area);
 }
 
@@ -99,7 +110,12 @@ void MappingEditorComponent::paintCell(juce::Graphics &g, int rowNumber,
 
   switch (columnId) {
   case 1:
-    text = node.getProperty("inputKey").toString();
+    // Check for displayName first, otherwise show inputKey
+    if (node.hasProperty("displayName")) {
+      text = node.getProperty("displayName").toString();
+    } else {
+      text = node.getProperty("inputKey").toString();
+    }
     break;
   case 2:
     text = getHex(node.getProperty("deviceHash"));
@@ -150,4 +166,52 @@ void MappingEditorComponent::valueTreePropertyChanged(
 void MappingEditorComponent::valueTreeParentChanged(juce::ValueTree &child) {
   if (child.hasType("Mappings"))
     table.updateContent();
+}
+
+void MappingEditorComponent::handleRawKeyEvent(uintptr_t deviceHandle,
+                                                int keyCode, bool isDown) {
+  // Check if learn mode is active
+  if (!learnButton.getToggleState())
+    return;
+
+  // Only learn on key down
+  if (!isDown)
+    return;
+
+  // Thread safety: wrap UI updates in callAsync
+  juce::MessageManager::callAsync([this, deviceHandle, keyCode] {
+    // Get selected row
+    int selectedRow = table.getSelectedRow();
+    if (selectedRow < 0)
+      return;
+
+    // Get the ValueTree for the selected row
+    auto mappingsNode = presetManager.getMappingsNode();
+    if (!mappingsNode.isValid())
+      return;
+
+    auto mappingNode = mappingsNode.getChild(selectedRow);
+    if (!mappingNode.isValid())
+      return;
+
+    // Update the mapping properties
+    mappingNode.setProperty("inputKey", keyCode, nullptr);
+    mappingNode.setProperty("deviceHash",
+                            juce::String::toHexString((juce::int64)deviceHandle)
+                                .toUpperCase(),
+                            nullptr);
+
+    // Create display name using KeyNameUtilities
+    juce::String deviceName =
+        KeyNameUtilities::getFriendlyDeviceName(deviceHandle);
+    juce::String keyName = KeyNameUtilities::getKeyName(keyCode);
+    juce::String displayName = deviceName + " - " + keyName;
+    mappingNode.setProperty("displayName", displayName, nullptr);
+
+    // Turn off learn mode
+    learnButton.setToggleState(false, juce::dontSendNotification);
+
+    // Refresh the table
+    table.repaint();
+  });
 }

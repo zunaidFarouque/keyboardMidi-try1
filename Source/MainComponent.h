@@ -8,7 +8,9 @@
 
 #include <JuceHeader.h>
 
-class MainComponent : public juce::Component, public juce::Timer {
+class MainComponent : public juce::Component,
+                      public juce::Timer,
+                      public RawInputManager::Listener {
 public:
   MainComponent();
   ~MainComponent() override;
@@ -18,11 +20,19 @@ public:
 
   void timerCallback() override;
 
+  // RawInputManager::Listener implementation
+  void handleRawKeyEvent(uintptr_t deviceHandle, int keyCode,
+                         bool isDown) override;
+
 private:
   MidiEngine midiEngine;
   PresetManager presetManager;
   VoiceManager voiceManager;
   InputProcessor inputProcessor;
+
+  // Logic (must be before UI elements that reference it)
+  RawInputManager rawInputManager;
+  bool isInputInitialized = false;
 
   // UI Elements
   MappingEditorComponent mappingEditor;
@@ -31,10 +41,6 @@ private:
   juce::ComboBox midiSelector;
   juce::TextButton saveButton;
   juce::TextButton loadButton;
-
-  // Logic
-  std::unique_ptr<RawInputManager> rawInputManager;
-  bool isInputInitialized = false;
 
   // Helper to format the beautiful log string
   void logEvent(uintptr_t device, int keyCode, bool isDown);

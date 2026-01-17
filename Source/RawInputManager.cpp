@@ -48,7 +48,13 @@ void RawInputManager::shutdown() {
   }
 }
 
-void RawInputManager::setCallback(RawInputCallback cb) { callback = cb; }
+void RawInputManager::addListener(Listener *listener) {
+  listeners.add(listener);
+}
+
+void RawInputManager::removeListener(Listener *listener) {
+  listeners.remove(listener);
+}
 
 int64_t __stdcall RawInputManager::rawInputWndProc(void *hwnd, unsigned int msg,
                                                    uint64_t wParam,
@@ -69,8 +75,12 @@ int64_t __stdcall RawInputManager::rawInputWndProc(void *hwnd, unsigned int msg,
           int vKey = raw->data.keyboard.VKey;
           bool isDown = (raw->data.keyboard.Flags & RI_KEY_BREAK) == 0;
 
-          if (globalManagerInstance && globalManagerInstance->callback) {
-            globalManagerInstance->callback(deviceHandle, vKey, isDown);
+          if (globalManagerInstance) {
+            uintptr_t handle = reinterpret_cast<uintptr_t>(deviceHandle);
+            globalManagerInstance->listeners.call(
+                [handle, vKey, isDown](Listener &l) {
+                  l.handleRawKeyEvent(handle, vKey, isDown);
+                });
           }
         }
       }

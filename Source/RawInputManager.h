@@ -1,26 +1,32 @@
 #pragma once
 #include <JuceHeader.h>
-#include <functional>
-
-// Standard callback definition
-using RawInputCallback =
-    std::function<void(void *deviceHandle, int keyCode, bool isDown)>;
+#include <cstdint>
 
 class RawInputManager {
 public:
+  // Listener interface for raw key events
+  struct Listener {
+    virtual ~Listener() = default;
+    virtual void handleRawKeyEvent(uintptr_t deviceHandle, int keyCode,
+                                   bool isDown) = 0;
+  };
+
   RawInputManager();
   ~RawInputManager();
 
   // Uses void* to avoid including <windows.h> in the header
   void initialize(void *nativeWindowHandle);
   void shutdown();
-  void setCallback(RawInputCallback cb);
+
+  // Listener management
+  void addListener(Listener *listener);
+  void removeListener(Listener *listener);
 
   static juce::String getKeyName(int virtualKey);
 
 private:
   void *targetHwnd = nullptr;
-  RawInputCallback callback;
+  juce::ListenerList<Listener> listeners;
   bool isInitialized = false;
 
   // Static WNDPROC wrapper
