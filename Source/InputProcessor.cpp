@@ -293,28 +293,6 @@ std::shared_ptr<Zone> InputProcessor::getZoneForInputResolved(InputID input) {
 }
 
 void InputProcessor::processEvent(InputID input, bool isDown) {
-  // Check triggers first (Spacebar and Shift)
-  constexpr int SPACEBAR = 0x20;
-  constexpr int SHIFT = 0x10;
-  
-  if (isDown) {
-    if (input.keyCode == SPACEBAR) {
-      // Strum down (forward)
-      juce::ScopedReadLock lock(bufferLock);
-      if (!noteBuffer.empty()) {
-        voiceManager.strumNotes(noteBuffer, bufferedStrumSpeedMs, true);
-      }
-      return;
-    } else if (input.keyCode == SHIFT) {
-      // Strum up (reverse)
-      juce::ScopedReadLock lock(bufferLock);
-      if (!noteBuffer.empty()) {
-        voiceManager.strumNotes(noteBuffer, bufferedStrumSpeedMs, false);
-      }
-      return;
-    }
-  }
-
   if (!isDown) {
     // Key up - handle note off or buffer clearing
     // Check if this key belongs to a zone in Strum mode
@@ -359,11 +337,17 @@ void InputProcessor::processEvent(InputID input, bool isDown) {
                 voiceManager.noteOn(input, notes->front(), midiAction.data2, midiAction.channel);
               }
             } else if (zone->playMode == Zone::PlayMode::Strum) {
-              // Strum mode - buffer the notes
-              juce::ScopedWriteLock bufferWriteLock(bufferLock);
-              noteBuffer = *notes; // Replace buffer with new chord
-              bufferedStrumSpeedMs = zone->strumSpeedMs > 0 ? zone->strumSpeedMs : 50; // Use zone's strum speed or default
-              // Do NOT call voiceManager.noteOn - wait for trigger
+              // Strum mode: auto-strum on key press (bottom to top). If user plays another
+              // chord before this finishes, cancel pending + note-off previous, then strum new.
+              int strumMs = (zone->strumSpeedMs > 0) ? zone->strumSpeedMs : 50;
+              voiceManager.handleKeyUp(lastStrumSource);
+              voiceManager.noteOn(input, *notes, midiAction.data2, midiAction.channel, strumMs);
+              lastStrumSource = input;
+              {
+                juce::ScopedWriteLock bufferWriteLock(bufferLock);
+                noteBuffer = *notes;
+                bufferedStrumSpeedMs = strumMs;
+              }
             }
           } else {
             // No notes found - fallback to single note

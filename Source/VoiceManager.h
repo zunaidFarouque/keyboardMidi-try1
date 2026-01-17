@@ -36,6 +36,6 @@ private:
   MidiEngine &midiEngine;
   StrumEngine strumEngine;
 
-  // Maps InputID to MIDI note numbers (for chords: one input can have multiple notes)
-  std::unordered_multimap<InputID, int> activeNoteNumbers;
+  // Maps InputID to (note, channel) for correct note-off
+  std::unordered_multimap<InputID, std::pair<int, int>> activeNoteNumbers;
 };

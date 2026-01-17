@@ -54,9 +54,12 @@ private:
   // The Fast Lookup Cache
   std::unordered_map<InputID, MidiAction> keyMapping;
 
-  // Note buffer for Strum mode (stores MIDI note numbers)
+  // Note buffer for Strum mode (for visualizer; strum is triggered on key press)
   std::vector<int> noteBuffer;
-  int bufferedStrumSpeedMs = 50; // Strum speed for buffered notes (default 50ms)
+  int bufferedStrumSpeedMs = 50;
+
+  // Last zone key that triggered a strum (for cancel-on-new-chord)
+  InputID lastStrumSource{0, 0};
 
   // Current CC values for relative inputs (scroll)
   std::unordered_map<InputID, float> currentCCValues;
