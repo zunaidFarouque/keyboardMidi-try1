@@ -1,60 +1,83 @@
 #include "MainComponent.h"
-#include "RawInputManager.h"
 
-// Note: No Windows headers here. We use raw hex codes for keys.
+// No Windows headers needed!
 
-MainComponent::MainComponent() {
-  // --- MIDI Selector Setup ---
+MainComponent::MainComponent()
+    : voiceManager(midiEngine), inputProcessor(voiceManager, presetManager),
+      mappingEditor(presetManager) {
+  // --- Header Controls ---
   addAndMakeVisible(midiSelector);
   midiSelector.setTextWhenNoChoicesAvailable("No MIDI Devices");
   midiSelector.addItemList(midiEngine.getDeviceNames(), 1);
-
   midiSelector.onChange = [this] {
-    // -1 because ComboBox IDs start at 1, but our engine expects 0-indexed list
-    int index = midiSelector.getSelectedItemIndex();
-    midiEngine.setOutputDevice(index);
-
-    // Log selection
-    log("MIDI Output set to: " + midiSelector.getText());
+    midiEngine.setOutputDevice(midiSelector.getSelectedItemIndex());
   };
-
-  // Auto-select first device if available
   if (midiSelector.getNumItems() > 0)
     midiSelector.setSelectedItemIndex(0);
 
-  // --- Log Console Setup ---
-  logConsole.setMultiLine(true);
-  logConsole.setReadOnly(true);
-  logConsole.setFont({"Consolas", 14.0f, 0});
-  logConsole.setColour(juce::TextEditor::backgroundColourId,
-                       juce::Colour(0xff202020));
-  logConsole.setColour(juce::TextEditor::textColourId,
-                       juce::Colours::lightgreen);
-  addAndMakeVisible(logConsole);
+  addAndMakeVisible(saveButton);
+  saveButton.setButtonText("Save Preset");
+  saveButton.onClick = [this] {
+    auto fc = std::make_shared<juce::FileChooser>(
+        "Save Preset",
+        juce::File::getSpecialLocation(juce::File::userHomeDirectory), "*.xml");
 
-  // --- Clear Button Setup ---
-  clearButton.setButtonText("Clear Log");
-  clearButton.onClick = [this] { logConsole.clear(); };
+    fc->launchAsync(juce::FileBrowserComponent::saveMode |
+                        juce::FileBrowserComponent::canSelectFiles,
+                    [this, fc](const juce::FileChooser &chooser) {
+                      auto result = chooser.getResult();
+                      // If the user didn't cancel (file is valid)
+                      if (result != juce::File()) {
+                        presetManager.saveToFile(result);
+                        logComponent.addEntry("Saved: " + result.getFileName());
+                      }
+                    });
+  };
+
+  addAndMakeVisible(loadButton);
+  loadButton.setButtonText("Load Preset");
+  loadButton.onClick = [this] {
+    auto fc = std::make_shared<juce::FileChooser>(
+        "Load Preset",
+        juce::File::getSpecialLocation(juce::File::userHomeDirectory), "*.xml");
+
+    fc->launchAsync(juce::FileBrowserComponent::openMode |
+                        juce::FileBrowserComponent::canSelectFiles,
+                    [this, fc](const juce::FileChooser &chooser) {
+                      auto result = chooser.getResult();
+                      if (result.exists()) {
+                        presetManager.loadFromFile(result);
+                        logComponent.addEntry("Loaded: " +
+                                              result.getFileName());
+                      }
+                    });
+  };
+
+  // --- Editors ---
+  addAndMakeVisible(mappingEditor);
+  addAndMakeVisible(logComponent); // NEW LOG COMPONENT
+
   addAndMakeVisible(clearButton);
+  clearButton.setButtonText("Clear Log");
+  clearButton.onClick = [this] { logComponent.clear(); };
 
-  setSize(600, 500); // Made slightly taller for the dropdown
+  setSize(800, 600);
 
-  // --- Raw Input Logic ---
+  // --- Input Logic ---
   rawInputManager = std::make_unique<RawInputManager>();
 
   rawInputManager->setCallback([this](void *dev, int key, bool down) {
-    // 1. Log to screen
-    juce::String state = down ? "DOWN" : "UP  ";
-    juce::String ptrStr = juce::String::toHexString((juce::int64)dev);
-    juce::String keyName = RawInputManager::getKeyName(key);
+    // 1. Cast handle safely
+    uintptr_t handle = (uintptr_t)dev;
 
-    log("Dev: " + ptrStr + " | " + state + " | " + keyName);
+    // 2. Log Visuals
+    logEvent(handle, key, down);
 
-    // 2. Trigger MIDI
-    handleMidiTrigger(key, down);
+    // 3. Process Logic
+    InputID id = {handle, key};
+    inputProcessor.processEvent(id, down);
   });
 
-  // Start checking for window handle
   startTimer(100);
 }
 
@@ -63,45 +86,90 @@ MainComponent::~MainComponent() {
   rawInputManager->shutdown();
 }
 
-void MainComponent::handleMidiTrigger(int keyCode, bool isDown) {
-  // Hardcoded mapping for Phase 2 testing
-  // 0x51 = 'Q' Key
-  // 0x57 = 'W' Key
+// --- LOGGING LOGIC ---
+void MainComponent::logEvent(uintptr_t device, int keyCode, bool isDown) {
+  // 1. Format Input Columns
+  // "Dev: [HANDLE]"
+  juce::String devStr =
+      "Dev: " + juce::String::toHexString((juce::int64)device).toUpperCase();
 
-  int noteNumber = -1;
+  // "DOWN" or "UP  " (Padded)
+  juce::String stateStr = isDown ? "DOWN" : "UP  ";
 
-  switch (keyCode) {
-  case 0x51:
-    noteNumber = 60;
-    break; // Middle C
-  case 0x57:
-    noteNumber = 62;
-    break; // D
+  // "( 81) Q"
+  juce::String keyName = RawInputManager::getKeyName(keyCode);
+  juce::String keyInfo =
+      "(" + juce::String(keyCode).paddedLeft(' ', 3) + ") " + keyName;
+
+  // Pad the Key info so arrows align
+  keyInfo = keyInfo.paddedRight(' ', 12);
+
+  juce::String logLine = devStr + " | " + stateStr + " | " + keyInfo;
+
+  // 2. Check for MIDI Mapping (Peek into Processor)
+  InputID id = {device, keyCode};
+  const MidiAction *action = inputProcessor.getMappingForInput(id);
+
+  if (action != nullptr) {
+    logLine += " -> [MIDI] ";
+
+    if (action->type == ActionType::Note) {
+      juce::String noteState = isDown ? "Note On " : "Note Off";
+      juce::String noteName = getNoteName(action->data1); // e.g., "C 4"
+      juce::String vel = "vel: " + juce::String(action->data2);
+      juce::String ch = "ch: " + juce::String(action->channel);
+
+      // Format: "Note On | 60 (C 4) | vel: 127 | ch: 1"
+      logLine += noteState + " | " + juce::String(action->data1) + " (" +
+                 noteName + ") | " + vel + " | " + ch;
+    } else if (action->type == ActionType::CC) {
+      logLine += "CC " + juce::String(action->data1) +
+                 " | val: " + juce::String(action->data2);
+    }
   }
 
-  if (noteNumber != -1) {
-    if (isDown)
-      midiEngine.sendNoteOn(1, noteNumber, 1.0f); // Channel 1, Velocity Max
-    else
-      midiEngine.sendNoteOff(1, noteNumber);
-  }
+  logComponent.addEntry(logLine);
+}
+
+juce::String MainComponent::getNoteName(int noteNumber) {
+  // Simple converter: 60 -> C4
+  const char *notes[] = {"C",  "C#", "D",  "D#", "E",  "F",
+                         "F#", "G",  "G#", "A",  "A#", "B"};
+  int octave = (noteNumber / 12) - 1; // MIDI standard: 60 is C4
+  int noteIndex = noteNumber % 12;
+
+  return juce::String(notes[noteIndex]) + " " + juce::String(octave);
 }
 
 void MainComponent::paint(juce::Graphics &g) {
-  g.fillAll(juce::Colours::black);
+  g.fillAll(juce::Colour(0xff222222));
 }
 
 void MainComponent::resized() {
-  auto area = getLocalBounds();
+  auto area = getLocalBounds().reduced(4);
 
-  // Top: MIDI Selector
-  midiSelector.setBounds(area.removeFromTop(40).reduced(5));
+  // Header (Buttons)
+  auto header = area.removeFromTop(30);
+  midiSelector.setBounds(header.removeFromLeft(250));
+  header.removeFromLeft(10);
+  saveButton.setBounds(header.removeFromLeft(100));
+  header.removeFromLeft(10);
+  loadButton.setBounds(header.removeFromLeft(100));
 
-  // Bottom: Clear Button
-  clearButton.setBounds(area.removeFromBottom(40).reduced(5));
+  area.removeFromTop(4);
 
-  // Center: Log
-  logConsole.setBounds(area.reduced(5));
+  // Split remaining vertical space
+  // Top 50% = Mapping Editor
+  // Bottom 50% = Log
+
+  auto topArea = area.removeFromTop(area.getHeight() / 2);
+  mappingEditor.setBounds(topArea);
+
+  area.removeFromTop(4); // Gap
+
+  // Log Section
+  clearButton.setBounds(area.removeFromBottom(30));
+  logComponent.setBounds(area);
 }
 
 void MainComponent::timerCallback() {
@@ -111,16 +179,9 @@ void MainComponent::timerCallback() {
       if (hwnd != nullptr) {
         rawInputManager->initialize(hwnd);
         isInputInitialized = true;
-        log("--- SYSTEM: Raw Input Hooked Successfully ---");
+        logComponent.addEntry("--- SYSTEM: Raw Input Hooked Successfully ---");
         stopTimer();
       }
     }
   }
-}
-
-void MainComponent::log(const juce::String &text) {
-  juce::MessageManager::callAsync([this, text]() {
-    logConsole.moveCaretToEnd();
-    logConsole.insertTextAtCaret(text + "\n");
-  });
 }

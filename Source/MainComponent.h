@@ -1,8 +1,12 @@
 #pragma once
-#include "MidiEngine.h" // <--- NEW
+#include "InputProcessor.h"
+#include "LogComponent.h" // <--- NEW
+#include "MappingEditorComponent.h"
+#include "MidiEngine.h"
+#include "PresetManager.h"
 #include "RawInputManager.h"
-#include <JuceHeader.h>
 
+#include <JuceHeader.h>
 
 class MainComponent : public juce::Component, public juce::Timer {
 public:
@@ -15,19 +19,26 @@ public:
   void timerCallback() override;
 
 private:
-  std::unique_ptr<RawInputManager> rawInputManager;
-  MidiEngine midiEngine; // <--- NEW: The MIDI Logic
+  MidiEngine midiEngine;
+  PresetManager presetManager;
+  VoiceManager voiceManager;
+  InputProcessor inputProcessor;
 
-  juce::TextEditor logConsole;
+  // UI Elements
+  MappingEditorComponent mappingEditor;
+  LogComponent logComponent; // <--- REPLACED TextEditor
   juce::TextButton clearButton;
-  juce::ComboBox midiSelector; // <--- NEW: The Dropdown
+  juce::ComboBox midiSelector;
+  juce::TextButton saveButton;
+  juce::TextButton loadButton;
 
+  // Logic
+  std::unique_ptr<RawInputManager> rawInputManager;
   bool isInputInitialized = false;
 
-  void log(const juce::String &text);
-
-  // Helper to separate MIDI logic from logging logic
-  void handleMidiTrigger(int keyCode, bool isDown);
+  // Helper to format the beautiful log string
+  void logEvent(uintptr_t device, int keyCode, bool isDown);
+  juce::String getNoteName(int noteNumber);
 
   JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(MainComponent)
 };
