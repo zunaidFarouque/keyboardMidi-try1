@@ -3,6 +3,7 @@
 #include "PresetManager.h"
 #include "VoiceManager.h"
 #include "DeviceManager.h"
+#include "ZoneManager.h"
 #include <JuceHeader.h>
 
 class InputProcessor : public juce::ValueTree::Listener, public juce::ChangeListener {
@@ -22,6 +23,9 @@ public:
   // NEW: Helper for the Logger to peek at what will happen
   const MidiAction *getMappingForInput(InputID input);
 
+  // Zone management
+  ZoneManager &getZoneManager() { return zoneManager; }
+
   // ChangeListener implementation
   void changeListenerCallback(juce::ChangeBroadcaster *source) override;
 
@@ -29,6 +33,7 @@ private:
   VoiceManager &voiceManager;
   PresetManager &presetManager;
   DeviceManager &deviceManager;
+  ZoneManager zoneManager;
 
   // Thread Safety
   juce::ReadWriteLock mapLock;

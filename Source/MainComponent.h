@@ -2,6 +2,7 @@
 #include "InputProcessor.h"
 #include "LogComponent.h" // <--- NEW
 #include "MappingEditorComponent.h"
+#include "ZoneEditorComponent.h"
 #include "MidiEngine.h"
 #include "PresetManager.h"
 #include "RawInputManager.h"
@@ -47,7 +48,9 @@ private:
   bool isInputInitialized = false;
 
   // UI Elements
+  juce::TabbedComponent mainTabs;
   MappingEditorComponent mappingEditor;
+  ZoneEditorComponent zoneEditor;
   LogComponent logComponent; // <--- REPLACED TextEditor
   juce::TextButton clearButton;
   juce::ComboBox midiSelector;

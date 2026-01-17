@@ -38,6 +38,13 @@ target_sources(OmniKey PRIVATE
     Source/PointerInputManager.cpp
     Source/DeviceManager.cpp
     Source/DeviceSetupComponent.cpp
+    Source/ScaleUtilities.cpp
+    Source/Zone.cpp
+    Source/ZoneManager.cpp
+    Source/ZoneListPanel.cpp
+    Source/ZonePropertiesPanel.cpp
+    Source/GlobalPerformancePanel.cpp
+    Source/ZoneEditorComponent.cpp
 )
 
 # 5. Definitions (Fixes Macro Hell globally)

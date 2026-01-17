@@ -219,19 +219,53 @@ const MidiAction *InputProcessor::getMappingForInput(InputID input) {
 }
 // -------------------------------------------------------------
 
-void InputProcessor::processEvent(InputID input, bool isDown) {
-  juce::ScopedReadLock lock(mapLock);
+// Helper to convert alias name to hash (simple string hash)
+static uintptr_t aliasNameToHash(const juce::String &aliasName) {
+  if (aliasName.isEmpty() || aliasName == "Any / Master" || aliasName == "Unassigned")
+    return 0; // Hash 0 = "Any / Master"
+  
+  // Simple hash: use std::hash on the string
+  return static_cast<uintptr_t>(std::hash<juce::String>{}(aliasName));
+}
 
-  if (isDown) {
-    const MidiAction *action = findMapping(input);
-    if (action != nullptr) {
-      if (action->type == ActionType::Note) {
-        voiceManager.noteOn(input, action->data1, action->data2,
-                            action->channel);
-      }
-    }
-  } else {
+void InputProcessor::processEvent(InputID input, bool isDown) {
+  if (!isDown) {
+    // Key up - just handle note off
     voiceManager.handleKeyUp(input);
+    return;
+  }
+
+  // Step A: Process Input Alias (Resolve hardware ID to Alias Name via DeviceManager)
+  juce::String aliasName = deviceManager.getAliasForHardware(input.deviceHandle);
+  
+  // Convert alias name to hash for zone matching
+  // Use 0 for "Unassigned" or empty (treat as "Any / Master")
+  uintptr_t aliasHash = 0;
+  if (aliasName != "Unassigned" && !aliasName.isEmpty()) {
+    aliasHash = aliasNameToHash(aliasName);
+  }
+
+  // Step B: Zone Priority
+  // Construct InputID with the Alias Hash instead of hardware ID
+  InputID aliasInputID = {aliasHash, input.keyCode};
+  auto zoneAction = zoneManager.handleInput(aliasInputID);
+  
+  if (zoneAction.has_value()) {
+    // Zone matched - trigger note and return (skip manual mapping lookup)
+    const auto &action = zoneAction.value();
+    if (action.type == ActionType::Note) {
+      voiceManager.noteOn(input, action.data1, action.data2, action.channel);
+    }
+    return;
+  }
+
+  // Step C: Fallback to manual mappings
+  juce::ScopedReadLock lock(mapLock);
+  const MidiAction *action = findMapping(input);
+  if (action != nullptr) {
+    if (action->type == ActionType::Note) {
+      voiceManager.noteOn(input, action->data1, action->data2, action->channel);
+    }
   }
 }
 

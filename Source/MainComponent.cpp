@@ -2,6 +2,8 @@
 #include "KeyNameUtilities.h"
 #include "MappingTypes.h"
 #include "DeviceSetupComponent.h"
+#include "Zone.h"
+#include "ScaleUtilities.h"
 
 // Windows header needed for cursor locking
 #include <windows.h>
@@ -9,7 +11,9 @@
 MainComponent::MainComponent()
     : voiceManager(midiEngine), 
       inputProcessor(voiceManager, presetManager, deviceManager),
-      mappingEditor(presetManager, rawInputManager, deviceManager) {
+      mappingEditor(presetManager, rawInputManager, deviceManager),
+      mainTabs(juce::TabbedButtonBar::TabsAtTop),
+      zoneEditor(&inputProcessor.getZoneManager(), &deviceManager, &rawInputManager) {
   // Load DeviceManager config BEFORE loading preset (if any)
   // This ensures aliases are available when preset loads
   
@@ -78,8 +82,12 @@ MainComponent::MainComponent()
     options.launchAsync();
   };
 
-  // --- Editors ---
-  addAndMakeVisible(mappingEditor);
+  // --- Main Tabs ---
+  mainTabs.addTab("Mappings", juce::Colour(0xff2a2a2a), &mappingEditor, false);
+  mainTabs.addTab("Zones", juce::Colour(0xff2a2a2a), &zoneEditor, false);
+  addAndMakeVisible(mainTabs);
+
+  // --- Log ---
   addAndMakeVisible(logComponent); // NEW LOG COMPONENT
 
   addAndMakeVisible(clearButton);
@@ -126,6 +134,19 @@ MainComponent::MainComponent()
 
   // --- Input Logic ---
   rawInputManager.addListener(this);
+
+  // --- Test Zone (Phase 10) ---
+  // Create a hardcoded test zone: Q, W, E, R -> Major scale starting at C4 (60)
+  auto testZone = std::make_shared<Zone>();
+  testZone->name = "Test Zone";
+  testZone->targetAliasHash = 0; // "Any / Master" (Alias Hash 0)
+  testZone->inputKeyCodes = {0x51, 0x57, 0x45, 0x52}; // Q, W, E, R
+  testZone->rootNote = 60; // C4
+  testZone->scale = ScaleUtilities::ScaleType::Major;
+  testZone->chromaticOffset = 0;
+  testZone->degreeOffset = 0;
+  testZone->isTransposeLocked = false;
+  inputProcessor.getZoneManager().addZone(testZone);
 
   startTimer(100);
 }
@@ -323,11 +344,11 @@ void MainComponent::resized() {
   area.removeFromTop(4);
 
   // Split remaining vertical space
-  // Top 50% = Mapping Editor
+  // Top 50% = Main Tabs (Mappings/Zones)
   // Bottom 50% = Log
 
   auto topArea = area.removeFromTop(area.getHeight() / 2);
-  mappingEditor.setBounds(topArea);
+  mainTabs.setBounds(topArea);
 
   area.removeFromTop(4); // Gap
 
