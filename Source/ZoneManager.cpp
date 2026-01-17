@@ -56,3 +56,20 @@ void ZoneManager::setGlobalTranspose(int chromatic, int degree) {
   globalDegreeTranspose = degree;
   sendChangeMessage();
 }
+
+std::optional<MidiAction> ZoneManager::simulateInput(int keyCode, uintptr_t aliasHash) {
+  juce::ScopedReadLock lock(zoneLock);
+
+  // Create InputID from explicit arguments
+  InputID input = {aliasHash, keyCode};
+
+  // Iterate through zones and return the first valid result
+  for (const auto &zone : zones) {
+    auto action = zone->processKey(input, globalChromaticTranspose, globalDegreeTranspose);
+    if (action.has_value()) {
+      return action;
+    }
+  }
+
+  return std::nullopt;
+}

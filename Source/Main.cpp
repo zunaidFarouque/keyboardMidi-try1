@@ -23,7 +23,9 @@ public:
                   juce::ResizableWindow::backgroundColourId),
               DocumentWindow::allButtons) {
       setUsingNativeTitleBar(true);
-      setContentOwned(new MainComponent(), true);
+      auto* mainComp = new MainComponent();
+      setContentOwned(mainComp, true);
+      setMenuBar(mainComp); // Set MainComponent as menu bar model
       setResizable(true, true);
       centreWithSize(getWidth(), getHeight());
       setVisible(true);

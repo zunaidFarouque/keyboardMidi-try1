@@ -1,5 +1,7 @@
 #include "Zone.h"
 #include "ScaleUtilities.h"
+#include "KeyboardLayoutUtils.h"
+#include <algorithm>
 
 Zone::Zone()
     : name("Untitled Zone"),
@@ -8,7 +10,9 @@ Zone::Zone()
       scale(ScaleUtilities::ScaleType::Major),
       chromaticOffset(0),
       degreeOffset(0),
-      isTransposeLocked(false) {
+      isTransposeLocked(false),
+      layoutStrategy(LayoutStrategy::Linear),
+      gridInterval(5) {
 }
 
 std::optional<MidiAction> Zone::processKey(InputID input, int globalChromTrans, int globalDegTrans) {
@@ -16,24 +20,56 @@ std::optional<MidiAction> Zone::processKey(InputID input, int globalChromTrans, 
   if (input.deviceHandle != targetAliasHash)
     return std::nullopt;
 
-  // Check 2: Find index of input.keyCode in inputKeyCodes
-  int index = -1;
-  for (size_t i = 0; i < inputKeyCodes.size(); ++i) {
-    if (inputKeyCodes[i] == input.keyCode) {
-      index = static_cast<int>(i);
-      break;
-    }
-  }
+  int degree = 0;
 
-  if (index < 0)
-    return std::nullopt;
+  if (layoutStrategy == LayoutStrategy::Linear) {
+    // Linear mode: Find index of input.keyCode in inputKeyCodes
+    int index = -1;
+    for (size_t i = 0; i < inputKeyCodes.size(); ++i) {
+      if (inputKeyCodes[i] == input.keyCode) {
+        index = static_cast<int>(i);
+        break;
+      }
+    }
+
+    if (index < 0)
+      return std::nullopt;
+
+    degree = index;
+  } else {
+    // Grid mode: Calculate degree based on keyboard geometry
+    const auto& layout = KeyboardLayoutUtils::getLayout();
+    
+    // Check if current key is in the layout
+    auto currentKeyIt = layout.find(input.keyCode);
+    if (currentKeyIt == layout.end())
+      return std::nullopt;
+
+    // Get anchor key (first key in inputKeyCodes)
+    if (inputKeyCodes.empty())
+      return std::nullopt;
+
+    auto anchorKeyIt = layout.find(inputKeyCodes[0]);
+    if (anchorKeyIt == layout.end())
+      return std::nullopt; // Anchor key not in layout - fallback to Linear?
+
+    const auto& currentKey = currentKeyIt->second;
+    const auto& anchorKey = anchorKeyIt->second;
+
+    // Calculate delta
+    int deltaCol = static_cast<int>(currentKey.col) - static_cast<int>(anchorKey.col);
+    int deltaRow = currentKey.row - anchorKey.row;
+
+    // Degree = deltaCol + (deltaRow * gridInterval)
+    degree = deltaCol + (deltaRow * gridInterval);
+  }
 
   // Calculate effective transposition (respect isTransposeLocked)
   int effDegTrans = isTransposeLocked ? 0 : globalDegTrans;
   int effChromTrans = isTransposeLocked ? 0 : globalChromTrans;
 
   // Calculate final degree and note
-  int finalDegree = index + degreeOffset + effDegTrans;
+  int finalDegree = degree + degreeOffset + effDegTrans;
   int baseNote = ScaleUtilities::calculateMidiNote(rootNote, scale, finalDegree);
   int finalNote = baseNote + chromaticOffset + effChromTrans;
 
@@ -48,4 +84,11 @@ std::optional<MidiAction> Zone::processKey(InputID input, int globalChromTrans, 
   action.data2 = 100;
 
   return action;
+}
+
+void Zone::removeKey(int keyCode) {
+  inputKeyCodes.erase(
+    std::remove(inputKeyCodes.begin(), inputKeyCodes.end(), keyCode),
+    inputKeyCodes.end()
+  );
 }

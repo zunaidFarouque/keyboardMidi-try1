@@ -4,6 +4,7 @@
 #include "RawInputManager.h"
 #include "MidiNoteUtilities.h"
 #include "ScaleUtilities.h"
+#include "KeyChipList.h"
 #include <JuceHeader.h>
 #include <memory>
 
@@ -44,7 +45,11 @@ private:
   juce::Slider degreeOffsetSlider;
   juce::ToggleButton transposeLockButton;
   juce::ToggleButton captureKeysButton;
-  juce::Label keysAssignedLabel;
+  juce::Label strategyLabel;
+  juce::ComboBox strategySelector;
+  juce::Label gridIntervalLabel;
+  juce::Slider gridIntervalSlider;
+  KeyChipList chipList;
 
   void refreshAliasSelector();
   void updateControlsFromZone();

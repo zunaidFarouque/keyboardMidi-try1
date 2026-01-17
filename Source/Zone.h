@@ -7,6 +7,11 @@
 
 class Zone {
 public:
+  enum class LayoutStrategy {
+    Linear,
+    Grid
+  };
+
   Zone();
 
   // Properties
@@ -18,7 +23,12 @@ public:
   int chromaticOffset; // Global transpose override
   int degreeOffset; // Scale degree shift
   bool isTransposeLocked; // If true, ignore global transpose
+  LayoutStrategy layoutStrategy = LayoutStrategy::Linear; // Layout calculation method
+  int gridInterval = 5; // For Grid mode: semitones per row (default 5 = perfect 4th)
 
   // Process a key input and return MIDI action if this zone matches
   std::optional<MidiAction> processKey(InputID input, int globalChromTrans, int globalDegTrans);
+
+  // Remove a key from inputKeyCodes
+  void removeKey(int keyCode);
 };

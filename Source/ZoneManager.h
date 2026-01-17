@@ -29,6 +29,9 @@ public:
   // Handle input and return MIDI action if a zone matches
   std::optional<MidiAction> handleInput(InputID input);
 
+  // Simulate input (for visualization) - takes explicit arguments
+  std::optional<MidiAction> simulateInput(int keyCode, uintptr_t aliasHash);
+
   // Set global transpose values
   void setGlobalTranspose(int chromatic, int degree);
 

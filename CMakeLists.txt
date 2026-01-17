@@ -45,6 +45,10 @@ target_sources(OmniKey PRIVATE
     Source/ZonePropertiesPanel.cpp
     Source/GlobalPerformancePanel.cpp
     Source/ZoneEditorComponent.cpp
+    Source/KeyboardLayoutUtils.cpp
+    Source/VisualizerComponent.cpp
+    Source/DetachableContainer.cpp
+    Source/KeyChipList.cpp
 )
 
 # 5. Definitions (Fixes Macro Hell globally)

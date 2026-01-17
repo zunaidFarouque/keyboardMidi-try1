@@ -146,9 +146,54 @@ ZonePropertiesPanel::ZonePropertiesPanel(DeviceManager *deviceMgr, RawInputManag
   captureKeysButton.setButtonText("Assign Keys");
   captureKeysButton.setClickingTogglesState(true);
 
-  addAndMakeVisible(keysAssignedLabel);
-  keysAssignedLabel.setText("0 Keys Assigned", juce::dontSendNotification);
-  keysAssignedLabel.setColour(juce::Label::textColourId, juce::Colours::lightgrey);
+  addAndMakeVisible(strategyLabel);
+  strategyLabel.setText("Layout Strategy:", juce::dontSendNotification);
+  strategyLabel.attachToComponent(&strategySelector, true);
+
+  addAndMakeVisible(strategySelector);
+  strategySelector.addItem("Linear", 1);
+  strategySelector.addItem("Grid", 2);
+  strategySelector.onChange = [this] {
+    if (currentZone) {
+      int selected = strategySelector.getSelectedItemIndex();
+      if (selected == 0) {
+        currentZone->layoutStrategy = Zone::LayoutStrategy::Linear;
+      } else if (selected == 1) {
+        currentZone->layoutStrategy = Zone::LayoutStrategy::Grid;
+      }
+      // Enable/disable grid interval slider based on strategy
+      gridIntervalSlider.setEnabled(currentZone->layoutStrategy == Zone::LayoutStrategy::Grid);
+    }
+  };
+
+  addAndMakeVisible(gridIntervalLabel);
+  gridIntervalLabel.setText("Grid Interval:", juce::dontSendNotification);
+  gridIntervalLabel.attachToComponent(&gridIntervalSlider, true);
+
+  addAndMakeVisible(gridIntervalSlider);
+  gridIntervalSlider.setRange(-12, 12, 1);
+  gridIntervalSlider.setValue(5);
+  gridIntervalSlider.textFromValueFunction = [](double value) {
+    int v = static_cast<int>(value);
+    if (v == 0) return juce::String("0");
+    if (v > 0) return juce::String("+") + juce::String(v) + "st";
+    return juce::String(v) + "st";
+  };
+  gridIntervalSlider.onValueChange = [this] {
+    if (currentZone) {
+      currentZone->gridInterval = static_cast<int>(gridIntervalSlider.getValue());
+    }
+  };
+  gridIntervalSlider.setEnabled(false); // Initially disabled (defaults to Linear)
+
+  addAndMakeVisible(chipList);
+  chipList.onKeyRemoved = [this](int keyCode) {
+    if (currentZone) {
+      currentZone->removeKey(keyCode);
+      chipList.setKeys(currentZone->inputKeyCodes);
+      updateKeysAssignedLabel();
+    }
+  };
 
   if (rawInputManager) {
     rawInputManager->addListener(this);
@@ -220,8 +265,19 @@ void ZonePropertiesPanel::resized() {
   area.removeFromTop(spacing);
   y += rowHeight + spacing;
 
-  // Keys Assigned Label
-  keysAssignedLabel.setBounds(area.removeFromTop(rowHeight).withTrimmedLeft(labelWidth));
+  // Strategy
+  strategySelector.setBounds(area.removeFromTop(rowHeight).withTrimmedLeft(labelWidth));
+  area.removeFromTop(spacing);
+  y += rowHeight + spacing;
+
+  // Grid Interval
+  gridIntervalSlider.setBounds(area.removeFromTop(rowHeight).withTrimmedLeft(labelWidth));
+  area.removeFromTop(spacing);
+  y += rowHeight + spacing;
+
+  // Key Chip List
+  auto chipListArea = area.removeFromTop(120);
+  chipList.setBounds(chipListArea.withTrimmedLeft(labelWidth).reduced(4));
 }
 
 void ZonePropertiesPanel::setZone(std::shared_ptr<Zone> zone) {
@@ -240,7 +296,10 @@ void ZonePropertiesPanel::updateControlsFromZone() {
     degreeOffsetSlider.setEnabled(false);
     transposeLockButton.setEnabled(false);
     captureKeysButton.setEnabled(false);
-    keysAssignedLabel.setText("No zone selected", juce::dontSendNotification);
+    strategySelector.setEnabled(false);
+    gridIntervalSlider.setEnabled(false);
+    chipList.setEnabled(false);
+    chipList.setKeys({});
     return;
   }
 
@@ -253,6 +312,8 @@ void ZonePropertiesPanel::updateControlsFromZone() {
   degreeOffsetSlider.setEnabled(true);
   transposeLockButton.setEnabled(true);
   captureKeysButton.setEnabled(true);
+  strategySelector.setEnabled(true);
+  gridIntervalSlider.setEnabled(currentZone->layoutStrategy == Zone::LayoutStrategy::Grid);
 
   // Update values
   nameEditor.setText(currentZone->name, juce::dontSendNotification);
@@ -289,17 +350,22 @@ void ZonePropertiesPanel::updateControlsFromZone() {
   degreeOffsetSlider.setValue(currentZone->degreeOffset, juce::dontSendNotification);
   transposeLockButton.setToggleState(currentZone->isTransposeLocked, juce::dontSendNotification);
 
+  // Set strategy
+  int strategyIndex = (currentZone->layoutStrategy == Zone::LayoutStrategy::Linear) ? 0 : 1;
+  strategySelector.setSelectedItemIndex(strategyIndex, juce::dontSendNotification);
+  
+  // Set grid interval
+  gridIntervalSlider.setValue(currentZone->gridInterval, juce::dontSendNotification);
+  gridIntervalSlider.setEnabled(currentZone->layoutStrategy == Zone::LayoutStrategy::Grid);
+
+  // Update chip list
+  chipList.setKeys(currentZone->inputKeyCodes);
+  
   updateKeysAssignedLabel();
 }
 
 void ZonePropertiesPanel::updateKeysAssignedLabel() {
-  if (!currentZone) {
-    keysAssignedLabel.setText("No zone selected", juce::dontSendNotification);
-    return;
-  }
-
-  int count = static_cast<int>(currentZone->inputKeyCodes.size());
-  keysAssignedLabel.setText(juce::String(count) + " Keys Assigned", juce::dontSendNotification);
+  // Label removed - chip list now shows keys visually
 }
 
 void ZonePropertiesPanel::refreshAliasSelector() {
@@ -329,8 +395,9 @@ void ZonePropertiesPanel::handleRawKeyEvent(uintptr_t deviceHandle, int keyCode,
   auto &keys = currentZone->inputKeyCodes;
   if (std::find(keys.begin(), keys.end(), keyCode) == keys.end()) {
     keys.push_back(keyCode);
-    // Update label on message thread
+    // Update chip list on message thread
     juce::MessageManager::callAsync([this] {
+      chipList.setKeys(currentZone->inputKeyCodes);
       updateKeysAssignedLabel();
     });
   }

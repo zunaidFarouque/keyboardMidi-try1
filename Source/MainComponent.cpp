@@ -13,7 +13,13 @@ MainComponent::MainComponent()
       inputProcessor(voiceManager, presetManager, deviceManager),
       mappingEditor(presetManager, rawInputManager, deviceManager),
       mainTabs(juce::TabbedButtonBar::TabsAtTop),
-      zoneEditor(&inputProcessor.getZoneManager(), &deviceManager, &rawInputManager) {
+      zoneEditor(&inputProcessor.getZoneManager(), &deviceManager, &rawInputManager),
+      visualizer(&inputProcessor.getZoneManager(), &deviceManager),
+      visualizerContainer("Visualizer", visualizer),
+      editorContainer("Mapping / Zones", mainTabs),
+      logContainer("Log", logComponent),
+      verticalBar(&verticalLayout, 1, false),  // false = horizontal bar for vertical layout (drag up/down)
+      horizontalBar(&horizontalLayout, 1, true) {  // true = vertical bar for horizontal layout (drag left/right)
   // Load DeviceManager config BEFORE loading preset (if any)
   // This ensures aliases are available when preset loads
   
@@ -82,14 +88,31 @@ MainComponent::MainComponent()
     options.launchAsync();
   };
 
-  // --- Main Tabs ---
+  // --- Setup Main Tabs ---
   mainTabs.addTab("Mappings", juce::Colour(0xff2a2a2a), &mappingEditor, false);
   mainTabs.addTab("Zones", juce::Colour(0xff2a2a2a), &zoneEditor, false);
-  addAndMakeVisible(mainTabs);
 
-  // --- Log ---
-  addAndMakeVisible(logComponent); // NEW LOG COMPONENT
+  // --- Add Containers ---
+  addAndMakeVisible(visualizerContainer);
+  addAndMakeVisible(editorContainer);
+  addAndMakeVisible(logContainer);
 
+  // --- Add Resizer Bars ---
+  addAndMakeVisible(verticalBar);
+  addAndMakeVisible(horizontalBar);
+
+  // --- Setup Layout Managers ---
+  // Vertical: Visualizer (150-300px) | Bar | Bottom Area (rest)
+  verticalLayout.setItemLayout(0, 150, 300, 200); // Visualizer
+  verticalLayout.setItemLayout(1, 4, 4, 4);       // Resizer bar
+  verticalLayout.setItemLayout(2, -0.1, -1.0, -0.6); // Bottom area (stretchable)
+
+  // Horizontal: Editors (50%-70%) | Bar | Log (30%-50%)
+  horizontalLayout.setItemLayout(0, -0.5, -0.7, -0.6); // Editors
+  horizontalLayout.setItemLayout(1, 4, 4, 4);          // Resizer bar
+  horizontalLayout.setItemLayout(2, -0.3, -0.5, -0.4); // Log
+
+  // --- Log Controls ---
   addAndMakeVisible(clearButton);
   clearButton.setButtonText("Clear Log");
   clearButton.onClick = [this] { logComponent.clear(); };
@@ -134,6 +157,7 @@ MainComponent::MainComponent()
 
   // --- Input Logic ---
   rawInputManager.addListener(this);
+  rawInputManager.addListener(&visualizer);
 
   // --- Test Zone (Phase 10) ---
   // Create a hardcoded test zone: Q, W, E, R -> Major scale starting at C4 (60)
@@ -149,9 +173,26 @@ MainComponent::MainComponent()
   inputProcessor.getZoneManager().addZone(testZone);
 
   startTimer(100);
+
+  // Load layout positions from DeviceManager
+  loadLayoutPositions();
+
+  // Setup visibility callbacks
+  visualizerContainer.onVisibilityChanged = [this](DetachableContainer* container, bool hidden) {
+    resized();
+  };
+  editorContainer.onVisibilityChanged = [this](DetachableContainer* container, bool hidden) {
+    resized();
+  };
+  logContainer.onVisibilityChanged = [this](DetachableContainer* container, bool hidden) {
+    resized();
+  };
 }
 
 MainComponent::~MainComponent() {
+  // Save layout positions to DeviceManager
+  saveLayoutPositions();
+  
   stopTimer();
   rawInputManager.removeListener(this);
   rawInputManager.shutdown();
@@ -322,6 +363,76 @@ juce::String MainComponent::getNoteName(int noteNumber) {
   return juce::String(notes[noteIndex]) + " " + juce::String(octave);
 }
 
+void MainComponent::loadLayoutPositions() {
+  // Load vertical split position from DeviceManager
+  // For now, use default positions; can be extended to load from config
+  // verticalLayout.setItemPosition(0, 200); // Example
+}
+
+void MainComponent::saveLayoutPositions() {
+  // Save vertical split position to DeviceManager config
+  // Can be extended to save to globalConfig
+  // int position = verticalLayout.getItemCurrentPosition(0);
+}
+
+juce::StringArray MainComponent::getMenuBarNames() {
+  return { "File", "Edit", "Window", "Help" };
+}
+
+juce::PopupMenu MainComponent::getMenuForIndex(int topLevelMenuIndex, const juce::String &menuName) {
+  juce::PopupMenu result;
+
+  if (topLevelMenuIndex == 0) {
+    // File menu (placeholder)
+    result.addItem(1, "Save Preset");
+    result.addItem(2, "Load Preset");
+    result.addSeparator();
+    result.addItem(3, "Exit");
+  } else if (topLevelMenuIndex == 1) {
+    // Edit menu (placeholder)
+    result.addCommandItem(&commandManager, juce::StandardApplicationCommandIDs::undo);
+    result.addCommandItem(&commandManager, juce::StandardApplicationCommandIDs::redo);
+  } else if (topLevelMenuIndex == 2) {
+    // Window menu - show all windows, tick when visible (not hidden)
+    // Menu item shows tick when container is visible
+    result.addItem(WindowShowVisualizer, "Visualizer", true, !visualizerContainer.isHidden());
+    result.addItem(WindowShowEditors, "Mapping / Zones", true, !editorContainer.isHidden());
+    result.addItem(WindowShowLog, "Event Log", true, !logContainer.isHidden());
+  } else if (topLevelMenuIndex == 3) {
+    // Help menu (placeholder)
+    result.addItem(4, "About");
+  }
+
+  return result;
+}
+
+void MainComponent::menuItemSelected(int menuItemID, int topLevelMenuIndex) {
+  if (topLevelMenuIndex == 2) {
+    // Window menu
+    switch (menuItemID) {
+    case WindowShowVisualizer:
+      if (visualizerContainer.isHidden())
+        visualizerContainer.show();
+      else
+        visualizerContainer.hide();
+      break;
+    case WindowShowEditors:
+      if (editorContainer.isHidden())
+        editorContainer.show();
+      else
+        editorContainer.hide();
+      break;
+    case WindowShowLog:
+      if (logContainer.isHidden())
+        logContainer.show();
+      else
+        logContainer.hide();
+      break;
+    }
+    resized();
+  }
+}
+
 void MainComponent::paint(juce::Graphics &g) {
   g.fillAll(juce::Colour(0xff222222));
 }
@@ -343,18 +454,44 @@ void MainComponent::resized() {
 
   area.removeFromTop(4);
 
-  // Split remaining vertical space
-  // Top 50% = Main Tabs (Mappings/Zones)
-  // Bottom 50% = Log
+  // Use StretchableLayoutManager for vertical split: Visualizer | Bar | Bottom
+  // Layout manager items: 0 = Visualizer, 1 = Bar, 2 = Bottom area (placeholder)
+  
+  juce::Rectangle<int> bottomArea;
+  
+  if (!visualizerContainer.isHidden()) {
+    // Include visualizer and bar in the layout (use nullptr for item 2 as placeholder)
+    juce::Component* verticalComps[] = { &visualizerContainer, &verticalBar, nullptr };
+    verticalLayout.layOutComponents(verticalComps, 3,
+                                     area.getX(), area.getY(),
+                                     area.getWidth(), area.getHeight(),
+                                     true, true);  // true = vertical layout (stack top to bottom)
+    
+    // Bottom area starts after the bar
+    bottomArea = area.withTop(verticalBar.getBottom());
+  } else {
+    // Visualizer hidden - bottom area takes full space, bar is hidden
+    bottomArea = area;
+  }
 
-  auto topArea = area.removeFromTop(area.getHeight() / 2);
-  mainTabs.setBounds(topArea);
+  // Inside bottom area, use horizontal split: Editors | Bar | Log
+  juce::Array<juce::Component*> horizontalComponents;
+  if (!editorContainer.isHidden())
+    horizontalComponents.add(&editorContainer);
+  if (!editorContainer.isHidden() && !logContainer.isHidden())
+    horizontalComponents.add(&horizontalBar);
+  if (!logContainer.isHidden())
+    horizontalComponents.add(&logContainer);
+  
+  auto logButtonArea = bottomArea.removeFromBottom(30);
+  clearButton.setBounds(logButtonArea.removeFromRight(100).reduced(2));
 
-  area.removeFromTop(4); // Gap
-
-  // Log Section
-  clearButton.setBounds(area.removeFromBottom(30));
-  logComponent.setBounds(area);
+  if (horizontalComponents.size() > 0) {
+    horizontalLayout.layOutComponents(horizontalComponents.getRawDataPointer(), horizontalComponents.size(),
+                                       bottomArea.getX(), bottomArea.getY(),
+                                       bottomArea.getWidth(), bottomArea.getHeight(),
+                                       false, true);
+  }
 }
 
 void MainComponent::timerCallback() {
