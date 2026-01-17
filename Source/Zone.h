@@ -31,4 +31,8 @@ public:
 
   // Remove a key from inputKeyCodes
   void removeKey(int keyCode);
+
+  // Serialization
+  juce::ValueTree toValueTree() const;
+  static std::shared_ptr<Zone> fromValueTree(const juce::ValueTree& vt);
 };

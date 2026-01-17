@@ -92,3 +92,59 @@ void Zone::removeKey(int keyCode) {
     inputKeyCodes.end()
   );
 }
+
+juce::ValueTree Zone::toValueTree() const {
+  juce::ValueTree vt("Zone");
+  
+  vt.setProperty("name", name, nullptr);
+  vt.setProperty("targetAliasHash", static_cast<int64>(targetAliasHash), nullptr);
+  vt.setProperty("rootNote", rootNote, nullptr);
+  vt.setProperty("scale", static_cast<int>(scale), nullptr);
+  vt.setProperty("chromaticOffset", chromaticOffset, nullptr);
+  vt.setProperty("degreeOffset", degreeOffset, nullptr);
+  vt.setProperty("isTransposeLocked", isTransposeLocked, nullptr);
+  vt.setProperty("layoutStrategy", static_cast<int>(layoutStrategy), nullptr);
+  vt.setProperty("gridInterval", gridInterval, nullptr);
+  
+  // Serialize inputKeyCodes as comma-separated string
+  juce::StringArray keyCodesArray;
+  for (int keyCode : inputKeyCodes) {
+    keyCodesArray.add(juce::String(keyCode));
+  }
+  vt.setProperty("inputKeyCodes", keyCodesArray.joinIntoString(","), nullptr);
+  
+  return vt;
+}
+
+std::shared_ptr<Zone> Zone::fromValueTree(const juce::ValueTree& vt) {
+  if (!vt.isValid() || !vt.hasType("Zone"))
+    return nullptr;
+  
+  auto zone = std::make_shared<Zone>();
+  
+  zone->name = vt.getProperty("name", "Untitled Zone").toString();
+  zone->targetAliasHash = static_cast<uintptr_t>(vt.getProperty("targetAliasHash", 0).operator int64());
+  zone->rootNote = vt.getProperty("rootNote", 60);
+  zone->scale = static_cast<ScaleUtilities::ScaleType>(vt.getProperty("scale", static_cast<int>(ScaleUtilities::ScaleType::Major)).operator int());
+  zone->chromaticOffset = vt.getProperty("chromaticOffset", 0);
+  zone->degreeOffset = vt.getProperty("degreeOffset", 0);
+  zone->isTransposeLocked = vt.getProperty("isTransposeLocked", false);
+  zone->layoutStrategy = static_cast<LayoutStrategy>(vt.getProperty("layoutStrategy", static_cast<int>(LayoutStrategy::Linear)).operator int());
+  zone->gridInterval = vt.getProperty("gridInterval", 5);
+  
+  // Deserialize inputKeyCodes from comma-separated string
+  juce::String keyCodesStr = vt.getProperty("inputKeyCodes", "").toString();
+  if (keyCodesStr.isNotEmpty()) {
+    juce::StringArray keyCodesArray;
+    keyCodesArray.addTokens(keyCodesStr, ",", "");
+    zone->inputKeyCodes.clear();
+    for (const auto& keyStr : keyCodesArray) {
+      int keyCode = keyStr.getIntValue();
+      if (keyCode > 0) {
+        zone->inputKeyCodes.push_back(keyCode);
+      }
+    }
+  }
+  
+  return zone;
+}

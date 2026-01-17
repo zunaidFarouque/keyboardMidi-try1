@@ -228,6 +228,54 @@ static uintptr_t aliasNameToHash(const juce::String &aliasName) {
   return static_cast<uintptr_t>(std::hash<juce::String>{}(aliasName));
 }
 
+// Shared lookup logic for processEvent and simulateInput
+// Returns: {action, sourceDescription}
+std::pair<std::optional<MidiAction>, juce::String> InputProcessor::lookupAction(uintptr_t deviceHandle, int keyCode) {
+  // Step 1: Get alias name for hardware ID
+  juce::String aliasName = deviceManager.getAliasForHardware(deviceHandle);
+  
+  // Convert alias name to hash
+  uintptr_t aliasHash = 0;
+  if (aliasName != "Unassigned" && !aliasName.isEmpty()) {
+    aliasHash = aliasNameToHash(aliasName);
+  }
+  
+  // Step 2: Check specific alias zones first
+  if (aliasHash != 0) {
+    InputID aliasInputID = {aliasHash, keyCode};
+    auto [zoneAction, zoneName] = zoneManager.handleInputWithName(aliasInputID);
+    if (zoneAction.has_value()) {
+      return {zoneAction, "Zone: " + zoneName};
+    }
+  }
+  
+  // Step 3: Check wildcard zone (hash 0 = "Any / Master")
+  InputID wildcardInputID = {0, keyCode};
+  auto [zoneAction, zoneName] = zoneManager.handleInputWithName(wildcardInputID);
+  if (zoneAction.has_value()) {
+    return {zoneAction, "Zone: " + zoneName};
+  }
+  
+  // Step 4: Check manual mappings (specific alias first)
+  InputID input = {deviceHandle, keyCode};
+  juce::ScopedReadLock lock(mapLock);
+  const MidiAction *action = findMapping(input);
+  if (action != nullptr) {
+    return {*action, "Mapping"};
+  }
+  
+  // Step 5: Check manual mappings (wildcard)
+  if (deviceHandle != 0) {
+    InputID anyDevice = {0, keyCode};
+    action = findMapping(anyDevice);
+    if (action != nullptr) {
+      return {*action, "Mapping"};
+    }
+  }
+  
+  return {std::nullopt, ""};
+}
+
 void InputProcessor::processEvent(InputID input, bool isDown) {
   if (!isDown) {
     // Key up - just handle note off
@@ -235,38 +283,19 @@ void InputProcessor::processEvent(InputID input, bool isDown) {
     return;
   }
 
-  // Step A: Process Input Alias (Resolve hardware ID to Alias Name via DeviceManager)
-  juce::String aliasName = deviceManager.getAliasForHardware(input.deviceHandle);
+  // Use shared lookup logic
+  auto [action, source] = lookupAction(input.deviceHandle, input.keyCode);
   
-  // Convert alias name to hash for zone matching
-  // Use 0 for "Unassigned" or empty (treat as "Any / Master")
-  uintptr_t aliasHash = 0;
-  if (aliasName != "Unassigned" && !aliasName.isEmpty()) {
-    aliasHash = aliasNameToHash(aliasName);
-  }
-
-  // Step B: Zone Priority
-  // Construct InputID with the Alias Hash instead of hardware ID
-  InputID aliasInputID = {aliasHash, input.keyCode};
-  auto zoneAction = zoneManager.handleInput(aliasInputID);
-  
-  if (zoneAction.has_value()) {
-    // Zone matched - trigger note and return (skip manual mapping lookup)
-    const auto &action = zoneAction.value();
-    if (action.type == ActionType::Note) {
-      voiceManager.noteOn(input, action.data1, action.data2, action.channel);
-    }
-    return;
-  }
-
-  // Step C: Fallback to manual mappings
-  juce::ScopedReadLock lock(mapLock);
-  const MidiAction *action = findMapping(input);
-  if (action != nullptr) {
-    if (action->type == ActionType::Note) {
-      voiceManager.noteOn(input, action->data1, action->data2, action->channel);
+  if (action.has_value()) {
+    const auto &midiAction = action.value();
+    if (midiAction.type == ActionType::Note) {
+      voiceManager.noteOn(input, midiAction.data1, midiAction.data2, midiAction.channel);
     }
   }
+}
+
+std::pair<std::optional<MidiAction>, juce::String> InputProcessor::simulateInput(uintptr_t deviceHandle, int keyCode) {
+  return lookupAction(deviceHandle, keyCode);
 }
 
 void InputProcessor::handleAxisEvent(uintptr_t deviceHandle, int inputCode,

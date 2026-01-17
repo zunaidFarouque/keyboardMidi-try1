@@ -4,6 +4,7 @@
 #include "DeviceSetupComponent.h"
 #include "Zone.h"
 #include "ScaleUtilities.h"
+#include "MidiNoteUtilities.h"
 
 // Windows header needed for cursor locking
 #include <windows.h>
@@ -11,6 +12,7 @@
 MainComponent::MainComponent()
     : voiceManager(midiEngine), 
       inputProcessor(voiceManager, presetManager, deviceManager),
+      startupManager(&presetManager, &deviceManager, &inputProcessor.getZoneManager()),
       mappingEditor(presetManager, rawInputManager, deviceManager),
       mainTabs(juce::TabbedButtonBar::TabsAtTop),
       zoneEditor(&inputProcessor.getZoneManager(), &deviceManager, &rawInputManager),
@@ -20,8 +22,8 @@ MainComponent::MainComponent()
       logContainer("Log", logComponent),
       verticalBar(&verticalLayout, 1, false),  // false = horizontal bar for vertical layout (drag up/down)
       horizontalBar(&horizontalLayout, 1, true) {  // true = vertical bar for horizontal layout (drag left/right)
-  // Load DeviceManager config BEFORE loading preset (if any)
-  // This ensures aliases are available when preset loads
+  // Initialize application (load or create factory default)
+  startupManager.initApp();
   
   // Setup Command Manager for Undo/Redo
   commandManager.registerAllCommandsForTarget(this);
@@ -159,18 +161,7 @@ MainComponent::MainComponent()
   rawInputManager.addListener(this);
   rawInputManager.addListener(&visualizer);
 
-  // --- Test Zone (Phase 10) ---
-  // Create a hardcoded test zone: Q, W, E, R -> Major scale starting at C4 (60)
-  auto testZone = std::make_shared<Zone>();
-  testZone->name = "Test Zone";
-  testZone->targetAliasHash = 0; // "Any / Master" (Alias Hash 0)
-  testZone->inputKeyCodes = {0x51, 0x57, 0x45, 0x52}; // Q, W, E, R
-  testZone->rootNote = 60; // C4
-  testZone->scale = ScaleUtilities::ScaleType::Major;
-  testZone->chromaticOffset = 0;
-  testZone->degreeOffset = 0;
-  testZone->isTransposeLocked = false;
-  inputProcessor.getZoneManager().addZone(testZone);
+  // Note: Test zone removed - StartupManager now handles factory default zones
 
   startTimer(100);
 
@@ -192,6 +183,9 @@ MainComponent::MainComponent()
 MainComponent::~MainComponent() {
   // Save layout positions to DeviceManager
   saveLayoutPositions();
+  
+  // Save immediately on close (flush pending saves)
+  startupManager.saveImmediate();
   
   stopTimer();
   rawInputManager.removeListener(this);
@@ -219,35 +213,30 @@ void MainComponent::logEvent(uintptr_t device, int keyCode, bool isDown) {
     stateStr = isDown ? "DOWN" : "UP  ";
   }
 
-  // "( 81) Q"
+  // "Key: Q"
   juce::String keyName = RawInputManager::getKeyName(keyCode);
-  juce::String keyInfo =
-      "(" + juce::String(keyCode).paddedLeft(' ', 3) + ") " + keyName;
+  juce::String keyInfo = "Key: " + keyName;
 
-  // Pad the Key info so arrows align
-  keyInfo = keyInfo.paddedRight(' ', 12);
+  juce::String logLine = devStr + " | " + keyInfo;
 
-  juce::String logLine = devStr + " | " + stateStr + " | " + keyInfo;
+  // 2. Simulate input to get action and source
+  auto [action, source] = inputProcessor.simulateInput(device, keyCode);
 
-  // 2. Check for MIDI Mapping (Peek into Processor)
-  InputID id = {device, keyCode};
-  const MidiAction *action = inputProcessor.getMappingForInput(id);
-
-  if (action != nullptr) {
+  if (action.has_value()) {
+    const auto &midiAction = action.value();
     logLine += " -> [MIDI] ";
 
-    if (action->type == ActionType::Note) {
-      juce::String noteState = isDown ? "Note On " : "Note Off";
-      juce::String noteName = getNoteName(action->data1); // e.g., "C 4"
-      juce::String vel = "vel: " + juce::String(action->data2);
-      juce::String ch = "ch: " + juce::String(action->channel);
-
-      // Format: "Note On | 60 (C 4) | vel: 127 | ch: 1"
-      logLine += noteState + " | " + juce::String(action->data1) + " (" +
-                 noteName + ") | " + vel + " | " + ch;
-    } else if (action->type == ActionType::CC) {
-      logLine += "CC " + juce::String(action->data1) +
-                 " | val: " + juce::String(action->data2);
+    if (midiAction.type == ActionType::Note) {
+      juce::String noteName = MidiNoteUtilities::getMidiNoteName(midiAction.data1);
+      logLine += "Note " + juce::String(midiAction.data1) + " (" + noteName + ")";
+    } else if (midiAction.type == ActionType::CC) {
+      logLine += "CC " + juce::String(midiAction.data1) +
+                 " | val: " + juce::String(midiAction.data2);
+    }
+    
+    // Add source description
+    if (!source.isEmpty()) {
+      logLine += " | Source: " + source;
     }
   }
 

@@ -9,6 +9,7 @@
 #include "PresetManager.h"
 #include "RawInputManager.h"
 #include "DeviceManager.h"
+#include "StartupManager.h"
 
 #include <JuceHeader.h>
 
@@ -45,6 +46,7 @@ private:
   PresetManager presetManager;
   VoiceManager voiceManager;
   InputProcessor inputProcessor;
+  StartupManager startupManager; // Must be after all managers it references
 
   // Logic (must be before UI elements that reference it)
   RawInputManager rawInputManager;

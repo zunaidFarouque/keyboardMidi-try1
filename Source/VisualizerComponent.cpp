@@ -103,28 +103,47 @@ void VisualizerComponent::paint(juce::Graphics &g) {
 
     // Center: Note name (if mapped)
     if (zoneManager) {
-      // Try Master alias first
-      uintptr_t aliasHash = 0;
-      auto action = zoneManager->simulateInput(keyCode, aliasHash);
+      // Check all zones regardless of alias hash
+      // Find the first zone that contains this key
+      std::pair<std::shared_ptr<Zone>, bool> zoneInfo{nullptr, false};
       
-      if (action.has_value() && action->type == ActionType::Note) {
-        int noteNumber = action->data1;
-        juce::String noteName = MidiNoteUtilities::getMidiNoteName(noteNumber);
-        
-        // Check if this is the root note
-        auto zoneInfo = findZoneForKey(keyCode, aliasHash);
-        bool isRoot = zoneInfo.second;
-        
-        if (isRoot) {
-          // Bold/Gold for root note
-          g.setColour(juce::Colours::gold);
-          g.setFont(14.0f);
-        } else {
-          g.setColour(juce::Colours::lightgreen);
-          g.setFont(12.0f);
+      // First, try Master alias (hash 0)
+      zoneInfo = findZoneForKey(keyCode, 0);
+      
+      // If not found in Master, check all device aliases
+      if (!zoneInfo.first && deviceManager) {
+        auto aliases = deviceManager->getAllAliasNames();
+        for (const auto &aliasName : aliases) {
+          uintptr_t aliasHash = aliasNameToHash(aliasName);
+          zoneInfo = findZoneForKey(keyCode, aliasHash);
+          if (zoneInfo.first) {
+            break; // Found a zone with this key
+          }
         }
+      }
+      
+      // If we found a zone, simulate the input with that zone's alias hash
+      if (zoneInfo.first) {
+        uintptr_t aliasHash = zoneInfo.first->targetAliasHash;
+        auto action = zoneManager->simulateInput(keyCode, aliasHash);
         
-        g.drawText(noteName, keyBounds.reduced(2.0f), juce::Justification::centred, false);
+        if (action.has_value() && action->type == ActionType::Note) {
+          int noteNumber = action->data1;
+          juce::String noteName = MidiNoteUtilities::getMidiNoteName(noteNumber);
+          
+          bool isRoot = zoneInfo.second;
+          
+          if (isRoot) {
+            // Bold/Gold for root note
+            g.setColour(juce::Colours::gold);
+            g.setFont(14.0f);
+          } else {
+            g.setColour(juce::Colours::lightgreen);
+            g.setFont(12.0f);
+          }
+          
+          g.drawText(noteName, keyBounds.reduced(2.0f), juce::Justification::centred, false);
+        }
       }
     }
   }

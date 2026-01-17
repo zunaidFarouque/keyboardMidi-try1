@@ -23,6 +23,9 @@ public:
   // NEW: Helper for the Logger to peek at what will happen
   const MidiAction *getMappingForInput(InputID input);
 
+  // Simulate input and return action with source description
+  std::pair<std::optional<MidiAction>, juce::String> simulateInput(uintptr_t deviceHandle, int keyCode);
+
   // Zone management
   ZoneManager &getZoneManager() { return zoneManager; }
 
@@ -57,4 +60,7 @@ private:
   void addMappingFromTree(juce::ValueTree mappingNode);
   void removeMappingFromTree(juce::ValueTree mappingNode);
   const MidiAction *findMapping(const InputID &input);
+  
+  // Shared lookup logic (used by both processEvent and simulateInput)
+  std::pair<std::optional<MidiAction>, juce::String> lookupAction(uintptr_t deviceHandle, int keyCode);
 };

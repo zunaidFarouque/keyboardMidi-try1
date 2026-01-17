@@ -29,6 +29,9 @@ public:
   // Handle input and return MIDI action if a zone matches
   std::optional<MidiAction> handleInput(InputID input);
 
+  // Handle input and return MIDI action with zone name if a zone matches
+  std::pair<std::optional<MidiAction>, juce::String> handleInputWithName(InputID input);
+
   // Simulate input (for visualization) - takes explicit arguments
   std::optional<MidiAction> simulateInput(int keyCode, uintptr_t aliasHash);
 
@@ -38,6 +41,10 @@ public:
   // Get global transpose values
   int getGlobalChromaticTranspose() const { return globalChromaticTranspose; }
   int getGlobalDegreeTranspose() const { return globalDegreeTranspose; }
+
+  // Serialization
+  juce::ValueTree toValueTree() const;
+  void restoreFromValueTree(const juce::ValueTree& vt);
 
 private:
   mutable juce::ReadWriteLock zoneLock;
