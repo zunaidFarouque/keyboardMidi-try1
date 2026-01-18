@@ -5,6 +5,7 @@
 #include "Zone.h"
 #include "ScaleUtilities.h"
 #include "MidiNoteUtilities.h"
+#include "ChordUtilities.h"
 
 // Windows header needed for cursor locking
 #include <windows.h>
@@ -16,7 +17,7 @@ MainComponent::MainComponent()
       mappingEditor(presetManager, rawInputManager, deviceManager),
       mainTabs(juce::TabbedButtonBar::TabsAtTop),
       zoneEditor(&inputProcessor.getZoneManager(), &deviceManager, &rawInputManager, &scaleLibrary),
-      visualizer(&inputProcessor.getZoneManager(), &deviceManager, &inputProcessor),
+      visualizer(&inputProcessor.getZoneManager(), &deviceManager, &presetManager, &inputProcessor),
       visualizerContainer("Visualizer", visualizer),
       editorContainer("Mapping / Zones", mainTabs),
       logContainer("Log", logComponent),
@@ -372,11 +373,14 @@ juce::PopupMenu MainComponent::getMenuForIndex(int topLevelMenuIndex, const juce
   juce::PopupMenu result;
 
   if (topLevelMenuIndex == 0) {
-    // File menu (placeholder)
-    result.addItem(1, "Save Preset");
-    result.addItem(2, "Load Preset");
+    // File menu
+    result.addItem(FileSavePreset, "Save Preset");
+    result.addItem(FileLoadPreset, "Load Preset");
     result.addSeparator();
-    result.addItem(3, "Exit");
+    result.addItem(FileResetEverything, "Reset Everything");
+    result.addItem(FileExportVoicingReport, "Export Voicing Report");
+    result.addSeparator();
+    result.addItem(FileExit, "Exit");
   } else if (topLevelMenuIndex == 1) {
     // Edit menu (placeholder)
     result.addCommandItem(&commandManager, juce::StandardApplicationCommandIDs::undo);
@@ -396,7 +400,48 @@ juce::PopupMenu MainComponent::getMenuForIndex(int topLevelMenuIndex, const juce
 }
 
 void MainComponent::menuItemSelected(int menuItemID, int topLevelMenuIndex) {
-  if (topLevelMenuIndex == 2) {
+  if (topLevelMenuIndex == 0) {
+    // File menu
+    switch (menuItemID) {
+    case FileSavePreset:
+      saveButton.triggerClick();
+      break;
+    case FileLoadPreset:
+      loadButton.triggerClick();
+      break;
+      case FileExportVoicingReport: {
+        juce::File targetFile = juce::File::getSpecialLocation(juce::File::userDesktopDirectory)
+                                   .getChildFile("OmniKey_Voicings.txt");
+        ChordUtilities::dumpDebugReport(targetFile);
+        logComponent.addEntry("Voicing report exported to: " + targetFile.getFullPathName());
+        break;
+      }
+      case FileResetEverything:
+      juce::AlertWindow::showOkCancelBox(
+        juce::AlertWindow::WarningIcon,
+        "Reset Everything",
+        "This will reset all mappings and zones to factory defaults.\n\n"
+        "This action cannot be undone. Continue?",
+        "Reset",
+        "Cancel",
+        this,
+        juce::ModalCallbackFunction::create([this](int result) {
+          if (result == 1) { // OK clicked
+            startupManager.createFactoryDefault();
+            // Force InputProcessor to rebuild its keyMapping (ensures conflict detection is accurate)
+            inputProcessor.forceRebuildMappings();
+            // Trigger visualizer repaint to update conflict indicators
+            visualizer.repaint();
+            logComponent.addEntry("Reset to factory defaults");
+          }
+        })
+      );
+      break;
+    case FileExit:
+      juce::JUCEApplication::getInstance()->systemRequestedQuit();
+      break;
+    }
+  } else if (topLevelMenuIndex == 2) {
     // Window menu
     switch (menuItemID) {
     case WindowShowVisualizer:

@@ -20,6 +20,11 @@ public:
     Strum    // Buffer notes, play on trigger key
   };
 
+  enum class ReleaseBehavior {
+    Normal,  // Release to keep playing for N ms, then stop
+    Sustain  // Release to sustain for N ms (notes continue, then sustain)
+  };
+
   Zone();
 
   // Properties
@@ -36,9 +41,14 @@ public:
   juce::Colour zoneColor; // Visual color for this zone
   int midiChannel = 1; // MIDI output channel (1-16)
   ChordUtilities::ChordType chordType = ChordUtilities::ChordType::None; // Chord type (None = single note)
-  ChordUtilities::Voicing voicing = ChordUtilities::Voicing::Close; // Chord voicing
+  ChordUtilities::Voicing voicing = ChordUtilities::Voicing::RootPosition; // Chord voicing
   int strumSpeedMs = 0; // Strum speed in milliseconds (0 = no strum, all notes at once)
   PlayMode playMode = PlayMode::Direct; // Play mode (Direct = immediate, Strum = buffered)
+  bool allowSustain = true; // If false (e.g. Drums), sustain pedal does not hold notes
+  ReleaseBehavior releaseBehavior = ReleaseBehavior::Normal; // How to handle key release in strum mode
+  int releaseDurationMs = 0; // Continue playing for N ms after release (0 = stop immediately)
+  int baseVelocity = 100; // Base MIDI velocity (1-127)
+  int velocityRandom = 0; // Velocity randomization range (0-64)
 
   // Performance cache: Pre-compiled key-to-chord mappings (compilation strategy).
   // Config-time: rebuildCache() runs ChordUtilities::generateChord, ScaleUtilities; fills this map.

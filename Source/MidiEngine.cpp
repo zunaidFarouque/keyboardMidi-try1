@@ -59,3 +59,12 @@ void MidiEngine::sendCC(int channel, int controller, int value) {
     currentOutput->sendMessageNow(msg);
   }
 }
+
+void MidiEngine::allNotesOff() {
+  if (currentOutput) {
+    for (int ch = 1; ch <= 16; ++ch) {
+      auto msg = juce::MidiMessage::controllerEvent(ch, 123, 0);
+      currentOutput->sendMessageNow(msg);
+    }
+  }
+}

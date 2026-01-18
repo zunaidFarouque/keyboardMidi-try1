@@ -10,11 +10,14 @@
 
 class InputProcessor;
 
+class PresetManager;
+
 class VisualizerComponent : public juce::Component,
                             public RawInputManager::Listener,
-                            public juce::ChangeListener {
+                            public juce::ChangeListener,
+                            public juce::ValueTree::Listener {
 public:
-  VisualizerComponent(ZoneManager *zoneMgr, DeviceManager *deviceMgr, InputProcessor *inputProc = nullptr);
+  VisualizerComponent(ZoneManager *zoneMgr, DeviceManager *deviceMgr, PresetManager *presetMgr = nullptr, InputProcessor *inputProc = nullptr);
   ~VisualizerComponent() override;
 
   void paint(juce::Graphics &) override;
@@ -27,9 +30,15 @@ public:
   // ChangeListener implementation
   void changeListenerCallback(juce::ChangeBroadcaster *source) override;
 
+  // ValueTree::Listener implementation
+  void valueTreeChildAdded(juce::ValueTree &parentTree, juce::ValueTree &childWhichHasBeenAdded) override;
+  void valueTreeChildRemoved(juce::ValueTree &parentTree, juce::ValueTree &childWhichHasBeenRemoved, int indexFromWhichChildWasRemoved) override;
+  void valueTreePropertyChanged(juce::ValueTree &treeWhosePropertyHasChanged, const juce::Identifier &property) override;
+
 private:
   ZoneManager *zoneManager;
   DeviceManager *deviceManager;
+  PresetManager *presetManager;
   InputProcessor *inputProcessor;
   std::set<int> activeKeys;
 

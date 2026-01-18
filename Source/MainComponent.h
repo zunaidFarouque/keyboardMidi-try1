@@ -97,6 +97,15 @@ private:
   juce::PopupMenu getMenuForIndex(int topLevelMenuIndex, const juce::String &menuName) override;
   void menuItemSelected(int menuItemID, int topLevelMenuIndex) override;
 
+  // File menu items
+  enum {
+    FileSavePreset = 1,
+    FileLoadPreset = 2,
+    FileResetEverything = 4,
+    FileExportVoicingReport = 5,
+    FileExit = 3
+  };
+
   // Window menu items
   enum {
     WindowShowVisualizer = 2001,

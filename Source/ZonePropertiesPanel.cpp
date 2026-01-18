@@ -309,19 +309,19 @@ ZonePropertiesPanel::ZonePropertiesPanel(ZoneManager *zoneMgr, DeviceManager *de
   voicingLabel.attachToComponent(&voicingSelector, true);
 
   addAndMakeVisible(voicingSelector);
-  voicingSelector.addItem("Close", 1);
-  voicingSelector.addItem("Open", 2);
-  voicingSelector.addItem("Guitar", 3);
+  voicingSelector.addItem("Root Position (Bass)", 1);
+  voicingSelector.addItem("Smooth / Inversions (Pads)", 2);
+  voicingSelector.addItem("Guitar / Spread (Strum)", 3);
   voicingSelector.onChange = [this] {
     if (currentZone) {
       int selected = voicingSelector.getSelectedItemIndex();
       if (selected >= 0) {
         if (selected == 0) {
-          currentZone->voicing = ChordUtilities::Voicing::Close;
+          currentZone->voicing = ChordUtilities::Voicing::RootPosition;
         } else if (selected == 1) {
-          currentZone->voicing = ChordUtilities::Voicing::Open;
+          currentZone->voicing = ChordUtilities::Voicing::Smooth;
         } else if (selected == 2) {
-          currentZone->voicing = ChordUtilities::Voicing::Guitar;
+          currentZone->voicing = ChordUtilities::Voicing::GuitarSpread;
         }
         // Rebuild cache when voicing changes
         if (zoneManager && scaleLibrary) {
@@ -367,6 +367,94 @@ ZonePropertiesPanel::ZonePropertiesPanel(ZoneManager *zoneMgr, DeviceManager *de
   strumSpeedSlider.onValueChange = [this] {
     if (currentZone) {
       currentZone->strumSpeedMs = static_cast<int>(strumSpeedSlider.getValue());
+      if (zoneManager) {
+        zoneManager->sendChangeMessage();
+      }
+    }
+  };
+
+  addAndMakeVisible(releaseBehaviorLabel);
+  releaseBehaviorLabel.setText("Release Behavior:", juce::dontSendNotification);
+  releaseBehaviorLabel.attachToComponent(&releaseBehaviorSelector, true);
+
+  addAndMakeVisible(releaseBehaviorSelector);
+  releaseBehaviorSelector.addItem("Normal", 1);
+  releaseBehaviorSelector.addItem("Sustain", 2);
+  releaseBehaviorSelector.onChange = [this] {
+    if (currentZone) {
+      int selected = releaseBehaviorSelector.getSelectedItemIndex();
+      if (selected >= 0) {
+        if (selected == 0) {
+          currentZone->releaseBehavior = Zone::ReleaseBehavior::Normal;
+        } else if (selected == 1) {
+          currentZone->releaseBehavior = Zone::ReleaseBehavior::Sustain;
+        }
+        if (zoneManager) {
+          zoneManager->sendChangeMessage();
+        }
+      }
+    }
+  };
+
+  addAndMakeVisible(releaseDurationLabel);
+  releaseDurationLabel.setText("Release Duration:", juce::dontSendNotification);
+  releaseDurationLabel.attachToComponent(&releaseDurationSlider, true);
+
+  addAndMakeVisible(releaseDurationSlider);
+  releaseDurationSlider.setRange(0, 2000, 1);
+  releaseDurationSlider.setValue(0);
+  releaseDurationSlider.setTextValueSuffix(" ms");
+  releaseDurationSlider.onValueChange = [this] {
+    if (currentZone) {
+      currentZone->releaseDurationMs = static_cast<int>(releaseDurationSlider.getValue());
+      if (zoneManager) {
+        zoneManager->sendChangeMessage();
+      }
+    }
+  };
+
+  addAndMakeVisible(allowSustainToggle);
+  allowSustainToggle.setButtonText("Allow Sustain");
+  allowSustainToggle.onClick = [this] {
+    if (currentZone) {
+      currentZone->allowSustain = allowSustainToggle.getToggleState();
+      if (zoneManager)
+        zoneManager->sendChangeMessage();
+    }
+  };
+
+  addAndMakeVisible(baseVelLabel);
+  baseVelLabel.setText("Base Velocity:", juce::dontSendNotification);
+  baseVelLabel.attachToComponent(&baseVelSlider, true);
+
+  addAndMakeVisible(baseVelSlider);
+  baseVelSlider.setRange(1, 127, 1);
+  baseVelSlider.setValue(100);
+  baseVelSlider.textFromValueFunction = [](double value) {
+    return juce::String(static_cast<int>(value));
+  };
+  baseVelSlider.onValueChange = [this] {
+    if (currentZone) {
+      currentZone->baseVelocity = static_cast<int>(baseVelSlider.getValue());
+      if (zoneManager) {
+        zoneManager->sendChangeMessage();
+      }
+    }
+  };
+
+  addAndMakeVisible(randVelLabel);
+  randVelLabel.setText("Velocity Random:", juce::dontSendNotification);
+  randVelLabel.attachToComponent(&randVelSlider, true);
+
+  addAndMakeVisible(randVelSlider);
+  randVelSlider.setRange(0, 64, 1);
+  randVelSlider.setValue(0);
+  randVelSlider.textFromValueFunction = [](double value) {
+    return juce::String(static_cast<int>(value));
+  };
+  randVelSlider.onValueChange = [this] {
+    if (currentZone) {
+      currentZone->velocityRandom = static_cast<int>(randVelSlider.getValue());
       if (zoneManager) {
         zoneManager->sendChangeMessage();
       }
@@ -531,6 +619,20 @@ void ZonePropertiesPanel::resized() {
   transposeLockButton.setBounds(leftMargin, y, width, rowHeight);
   y += rowHeight + spacing;
 
+  // Allow Sustain
+  allowSustainToggle.setBounds(leftMargin, y, width, rowHeight);
+  y += rowHeight + spacing;
+
+  // Base Velocity
+  baseVelLabel.setBounds(0, y, labelWidth, rowHeight);
+  baseVelSlider.setBounds(leftMargin, y, width, rowHeight);
+  y += rowHeight + spacing;
+
+  // Velocity Random
+  randVelLabel.setBounds(0, y, labelWidth, rowHeight);
+  randVelSlider.setBounds(leftMargin, y, width, rowHeight);
+  y += rowHeight + spacing;
+
   // Chord Type
   chordTypeSelector.setBounds(leftMargin, y, width, rowHeight);
   y += rowHeight + spacing;
@@ -545,6 +647,14 @@ void ZonePropertiesPanel::resized() {
 
   // Strum Speed
   strumSpeedSlider.setBounds(leftMargin, y, width, rowHeight);
+  y += rowHeight + spacing;
+
+  // Release Behavior
+  releaseBehaviorSelector.setBounds(leftMargin, y, width, rowHeight);
+  y += rowHeight + spacing;
+
+  // Release Duration
+  releaseDurationSlider.setBounds(leftMargin, y, width, rowHeight);
   y += rowHeight + spacing;
 
   // Capture Keys and Remove Keys (side by side)
@@ -591,7 +701,7 @@ int ZonePropertiesPanel::getRequiredHeight() const {
   int bottomPadding = 8;
   
   // Count number of rows
-  int numRows = 16; // Alias, Name, Scale, Root, Chromatic, Degree, Lock, ChordType, Voicing, PlayMode, StrumSpeed, Capture/Remove, Strategy, Grid, Channel, Color
+  int numRows = 21; // Alias, Name, Scale, Root, Chromatic, Degree, Lock, ChordType, Voicing, PlayMode, StrumSpeed, ReleaseBehavior, ReleaseDuration, AllowSustain, Capture/Remove, Strategy, Grid, Channel, Color
   // Add one more row if Piano help label is visible
   if (currentZone && currentZone->layoutStrategy == Zone::LayoutStrategy::Piano) {
     numRows++;
@@ -626,6 +736,11 @@ void ZonePropertiesPanel::updateControlsFromZone() {
     voicingSelector.setEnabled(false);
     playModeSelector.setEnabled(false);
     strumSpeedSlider.setEnabled(false);
+    releaseBehaviorSelector.setEnabled(false);
+    releaseDurationSlider.setEnabled(false);
+    allowSustainToggle.setEnabled(false);
+    baseVelSlider.setEnabled(false);
+    randVelSlider.setEnabled(false);
     channelSlider.setEnabled(false);
     colorButton.setEnabled(false);
     chipList.setEnabled(false);
@@ -649,7 +764,12 @@ void ZonePropertiesPanel::updateControlsFromZone() {
   voicingSelector.setEnabled(true);
   playModeSelector.setEnabled(true);
   strumSpeedSlider.setEnabled(true);
-  channelSlider.setEnabled(true);
+  releaseBehaviorSelector.setEnabled(true);
+    releaseDurationSlider.setEnabled(true);
+    allowSustainToggle.setEnabled(true);
+    baseVelSlider.setEnabled(true);
+    randVelSlider.setEnabled(true);
+    channelSlider.setEnabled(true);
   colorButton.setEnabled(true);
 
   // Update values
@@ -731,9 +851,9 @@ void ZonePropertiesPanel::updateControlsFromZone() {
   // Set voicing
   int voicingIndex = 0;
   switch (currentZone->voicing) {
-    case ChordUtilities::Voicing::Close: voicingIndex = 0; break;
-    case ChordUtilities::Voicing::Open: voicingIndex = 1; break;
-    case ChordUtilities::Voicing::Guitar: voicingIndex = 2; break;
+    case ChordUtilities::Voicing::RootPosition: voicingIndex = 0; break;
+    case ChordUtilities::Voicing::Smooth: voicingIndex = 1; break;
+    case ChordUtilities::Voicing::GuitarSpread: voicingIndex = 2; break;
   }
   voicingSelector.setSelectedItemIndex(voicingIndex, juce::dontSendNotification);
 
@@ -743,6 +863,17 @@ void ZonePropertiesPanel::updateControlsFromZone() {
 
   // Set strum speed
   strumSpeedSlider.setValue(currentZone->strumSpeedMs, juce::dontSendNotification);
+
+  // Set release behavior
+  int releaseBehaviorIndex = (currentZone->releaseBehavior == Zone::ReleaseBehavior::Normal) ? 0 : 1;
+  releaseBehaviorSelector.setSelectedItemIndex(releaseBehaviorIndex, juce::dontSendNotification);
+
+  // Set release duration
+  releaseDurationSlider.setValue(currentZone->releaseDurationMs, juce::dontSendNotification);
+
+  allowSustainToggle.setToggleState(currentZone->allowSustain, juce::dontSendNotification);
+  baseVelSlider.setValue(currentZone->baseVelocity, juce::dontSendNotification);
+  randVelSlider.setValue(currentZone->velocityRandom, juce::dontSendNotification);
 
   // Update chip list
   chipList.setKeys(currentZone->inputKeyCodes);

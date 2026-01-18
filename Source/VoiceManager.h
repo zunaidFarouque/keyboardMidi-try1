@@ -3,39 +3,69 @@
 #include "MidiEngine.h"
 #include "StrumEngine.h"
 #include <JuceHeader.h>
-#include <unordered_map>
 #include <vector>
+#include <functional>
+#include <unordered_map>
 
-// Manages active notes to prevent stuck notes
-// Tracks what's currently playing and ensures NoteOff is sent
-// Now supports chords (multiple notes per input)
-class VoiceManager {
+class VoiceManager : public juce::HighResolutionTimer {
 public:
-  explicit VoiceManager(MidiEngine &engine);
+  explicit VoiceManager(MidiEngine& engine);
   ~VoiceManager() = default;
 
-  // Trigger a single note on and track it
-  void noteOn(InputID source, int note, int vel, int channel);
+  // --- Note playback ---
+  void noteOn(InputID source, int note, int vel, int channel, bool allowSustain = true);
+  void noteOn(InputID source, const std::vector<int>& notes, int vel, int channel, int strumSpeedMs, bool allowSustain = true);
 
-  // Trigger multiple notes (chord) with strumming
-  void noteOn(InputID source, const std::vector<int>& notes, int vel, int channel, int strumSpeedMs);
-
-  // Strum notes from a buffer (with direction)
   void strumNotes(const std::vector<int>& notes, int speedMs, bool downstroke);
 
-  // Send all NoteOff messages for a given input and remove from map
   void handleKeyUp(InputID source);
+  void handleKeyUp(InputID source, int releaseDurationMs, bool shouldSustain);
 
-  // Send MIDI CC message
   void sendCC(int channel, int controller, int value);
 
-  // Emergency: Send allNotesOff on all channels and clear map
+  // --- Sustain (pedal) ---
+  void setSustain(bool active);
+  bool isSustainActive() const { return globalSustainActive; }
+
+  // --- Latch (toggle hold) ---
+  void setLatch(bool active) { globalLatchActive = active; }
+  bool isLatchActive() const { return globalLatchActive; }
+
+  // --- Panic ---
   void panic();
+  void panicLatch();
 
 private:
-  MidiEngine &midiEngine;
-  StrumEngine strumEngine;
+  enum class VoiceState { Playing, Sustained, Latched };
 
-  // Maps InputID to (note, channel) for correct note-off
-  std::unordered_multimap<InputID, std::pair<int, int>> activeNoteNumbers;
+  struct ActiveVoice {
+    int noteNumber;
+    int midiChannel;
+    InputID source;
+    bool allowSustain;
+    VoiceState state;
+  };
+
+  void addVoiceFromStrum(InputID source, int note, int channel, bool allowSustain);
+
+  // HighResolutionTimer callback - checks for expired releases
+  void hiResTimerCallback() override;
+
+  struct PendingRelease {
+    double releaseTimeMs;
+    int durationMs;
+    bool shouldSustain;
+  };
+
+  MidiEngine& midiEngine;
+  StrumEngine strumEngine;
+  std::vector<ActiveVoice> voices;
+  juce::CriticalSection voicesLock;
+  std::unordered_map<InputID, PendingRelease> pendingReleases; // Track releases waiting for expiration
+  juce::CriticalSection releasesLock;
+
+  bool globalSustainActive = false;
+  bool globalLatchActive = false;
+
+  double getCurrentTimeMs() const;
 };

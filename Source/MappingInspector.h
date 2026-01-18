@@ -38,11 +38,15 @@ private:
   juce::Slider channelSlider;
   juce::Slider data1Slider;
   juce::Slider data2Slider;
+  juce::Slider randVelSlider;
   juce::Label channelLabel;
   juce::Label data1Label;
   juce::Label data2Label;
+  juce::Label randVelLabel;
   juce::Label typeLabel;
   juce::Label aliasLabel;
+  juce::Label commandLabel;
+  juce::ComboBox commandSelector;
 
   // Helper methods
   void updateControlsFromSelection();

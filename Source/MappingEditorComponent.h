@@ -51,6 +51,7 @@ private:
   DeviceManager &deviceManager;
   juce::TableListBox table;
   juce::TextButton addButton;
+  juce::TextButton deleteButton;
   juce::ToggleButton learnButton;
   juce::UndoManager undoManager;
   MappingInspector inspector;

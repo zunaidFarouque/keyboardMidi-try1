@@ -4,10 +4,24 @@
 
 // Action types for MIDI mapping
 enum class ActionType {
-  Note, // MIDI Note
-  CC,   // MIDI Control Change
-  Macro // Future: Custom macro actions
+  Note,    // MIDI Note
+  CC,     // MIDI Control Change
+  Command,// Sustain/Latch/Panic (data1 = CommandID)
+  Macro   // Future: Custom macro actions
 };
+
+// Command IDs for ActionType::Command (stored in MidiAction::data1)
+// In namespace to avoid clash with juce::CommandID
+namespace OmniKey {
+enum class CommandID : int {
+  SustainMomentary = 0,  // Press=On, Release=Off
+  SustainToggle    = 1,  // Press=Flip
+  SustainInverse   = 2,  // Press=Off, Release=On (Palm Mute)
+  LatchToggle      = 3,  // Global Latch Mode
+  Panic            = 4,  // All Notes Off
+  PanicLatch       = 5   // Kill only Latched notes
+};
+}
 
 // Pseudo-codes for non-keyboard inputs (Mouse/Trackpad)
 namespace InputTypes {
@@ -23,6 +37,7 @@ struct MidiAction {
   int channel;
   int data1; // Note number or CC number
   int data2; // Velocity or CC value
+  int velocityRandom = 0; // Velocity randomization range (0 = no randomization)
 };
 
 // Represents a unique input source (device + key)

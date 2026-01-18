@@ -17,6 +17,9 @@ public:
   void sendNoteOff(int channel, int note);
   void sendCC(int channel, int controller, int value);
 
+  // All Notes Off (CC 123) on all 16 channels
+  void allNotesOff();
+
 private:
   std::unique_ptr<juce::MidiOutput> currentOutput;
 

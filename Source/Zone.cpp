@@ -246,6 +246,11 @@ juce::ValueTree Zone::toValueTree() const {
   vt.setProperty("voicing", static_cast<int>(voicing), nullptr);
   vt.setProperty("strumSpeedMs", strumSpeedMs, nullptr);
   vt.setProperty("playMode", static_cast<int>(playMode), nullptr);
+  vt.setProperty("allowSustain", allowSustain, nullptr);
+  vt.setProperty("releaseBehavior", static_cast<int>(releaseBehavior), nullptr);
+  vt.setProperty("releaseDurationMs", releaseDurationMs, nullptr);
+  vt.setProperty("baseVel", baseVelocity, nullptr);
+  vt.setProperty("randVel", velocityRandom, nullptr);
   
   // Serialize inputKeyCodes as comma-separated string
   juce::StringArray keyCodesArray;
@@ -289,9 +294,14 @@ std::shared_ptr<Zone> Zone::fromValueTree(const juce::ValueTree& vt) {
   zone->layoutStrategy = static_cast<LayoutStrategy>(vt.getProperty("layoutStrategy", static_cast<int>(LayoutStrategy::Linear)).operator int());
   zone->gridInterval = vt.getProperty("gridInterval", 5);
   zone->chordType = static_cast<ChordUtilities::ChordType>(vt.getProperty("chordType", static_cast<int>(ChordUtilities::ChordType::None)).operator int());
-  zone->voicing = static_cast<ChordUtilities::Voicing>(vt.getProperty("voicing", static_cast<int>(ChordUtilities::Voicing::Close)).operator int());
+  zone->voicing = static_cast<ChordUtilities::Voicing>(vt.getProperty("voicing", static_cast<int>(ChordUtilities::Voicing::RootPosition)).operator int());
   zone->strumSpeedMs = vt.getProperty("strumSpeedMs", 0);
   zone->playMode = static_cast<PlayMode>(vt.getProperty("playMode", static_cast<int>(PlayMode::Direct)).operator int());
+  zone->allowSustain = vt.getProperty("allowSustain", true);
+  zone->releaseBehavior = static_cast<ReleaseBehavior>(vt.getProperty("releaseBehavior", static_cast<int>(ReleaseBehavior::Normal)).operator int());
+  zone->releaseDurationMs = vt.getProperty("releaseDurationMs", 0);
+  zone->baseVelocity = vt.getProperty("baseVel", 100);
+  zone->velocityRandom = vt.getProperty("randVel", 0);
   
   // Load zone color (default to transparent if not found)
   juce::String colorStr = vt.getProperty("zoneColor", "").toString();

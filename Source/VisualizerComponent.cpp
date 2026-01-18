@@ -1,5 +1,6 @@
 #include "VisualizerComponent.h"
 #include "InputProcessor.h"
+#include "PresetManager.h"
 #include "Zone.h"
 #include <algorithm>
 
@@ -10,16 +11,31 @@ static uintptr_t aliasNameToHash(const juce::String &aliasName) {
   return static_cast<uintptr_t>(std::hash<juce::String>{}(aliasName));
 }
 
-VisualizerComponent::VisualizerComponent(ZoneManager *zoneMgr, DeviceManager *deviceMgr, InputProcessor *inputProc)
-    : zoneManager(zoneMgr), deviceManager(deviceMgr), inputProcessor(inputProc) {
+VisualizerComponent::VisualizerComponent(ZoneManager *zoneMgr, DeviceManager *deviceMgr, PresetManager *presetMgr, InputProcessor *inputProc)
+    : zoneManager(zoneMgr), deviceManager(deviceMgr), presetManager(presetMgr), inputProcessor(inputProc) {
   if (zoneManager) {
     zoneManager->addChangeListener(this);
+  }
+  if (presetManager) {
+    auto mappingsNode = presetManager->getMappingsNode();
+    if (mappingsNode.isValid()) {
+      mappingsNode.addListener(this);
+    }
+    // Also listen to root node changes (in case mappings node is recreated)
+    presetManager->getRootNode().addListener(this);
   }
 }
 
 VisualizerComponent::~VisualizerComponent() {
   if (zoneManager) {
     zoneManager->removeChangeListener(this);
+  }
+  if (presetManager) {
+    auto mappingsNode = presetManager->getMappingsNode();
+    if (mappingsNode.isValid()) {
+      mappingsNode.removeListener(this);
+    }
+    presetManager->getRootNode().removeListener(this);
   }
 }
 
@@ -151,6 +167,8 @@ void VisualizerComponent::paint(juce::Graphics &g) {
     }
 
     // --- 4. Get Buffered Notes (for Strum mode visualization) ---
+    // COMMENTED OUT: Strumming indicator disabled for now
+    /*
     std::vector<int> bufferedNotes;
     bool isBuffered = false;
     
@@ -181,6 +199,8 @@ void VisualizerComponent::paint(juce::Graphics &g) {
         }
       }
     }
+    */
+    bool isBuffered = false; // Disabled - always false
 
     // --- 5. Render Layers ---
     
@@ -239,6 +259,45 @@ void VisualizerComponent::changeListenerCallback(juce::ChangeBroadcaster *source
   if (source == zoneManager) {
     juce::MessageManager::callAsync([this] {
       repaint();
+    });
+  }
+}
+
+void VisualizerComponent::valueTreeChildAdded(juce::ValueTree &parentTree, juce::ValueTree &childWhichHasBeenAdded) {
+  // Repaint when mappings are added
+  auto mappingsNode = presetManager ? presetManager->getMappingsNode() : juce::ValueTree();
+  if (parentTree.isEquivalentTo(mappingsNode) || parentTree.getParent().isEquivalentTo(mappingsNode)) {
+    // Small delay to ensure InputProcessor has finished updating keyMapping
+    juce::MessageManager::callAsync([this] {
+      juce::MessageManager::callAsync([this] {
+        repaint();
+      });
+    });
+  }
+}
+
+void VisualizerComponent::valueTreeChildRemoved(juce::ValueTree &parentTree, juce::ValueTree &childWhichHasBeenRemoved, int indexFromWhichChildWasRemoved) {
+  // Repaint when mappings are removed
+  auto mappingsNode = presetManager ? presetManager->getMappingsNode() : juce::ValueTree();
+  if (parentTree.isEquivalentTo(mappingsNode) || parentTree.getParent().isEquivalentTo(mappingsNode)) {
+    // Small delay to ensure InputProcessor has finished updating keyMapping
+    juce::MessageManager::callAsync([this] {
+      juce::MessageManager::callAsync([this] {
+        repaint();
+      });
+    });
+  }
+}
+
+void VisualizerComponent::valueTreePropertyChanged(juce::ValueTree &treeWhosePropertyHasChanged, const juce::Identifier &property) {
+  // Repaint when mapping properties change (e.g., keyCode, which affects conflict detection)
+  auto mappingsNode = presetManager ? presetManager->getMappingsNode() : juce::ValueTree();
+  if (treeWhosePropertyHasChanged.getParent().isEquivalentTo(mappingsNode)) {
+    // Small delay to ensure InputProcessor has finished updating keyMapping
+    juce::MessageManager::callAsync([this] {
+      juce::MessageManager::callAsync([this] {
+        repaint();
+      });
     });
   }
 }

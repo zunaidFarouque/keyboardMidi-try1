@@ -1,5 +1,6 @@
 #include "MappingEditorComponent.h"
 #include "KeyNameUtilities.h"
+#include <algorithm>
 
 // Helper to parse Hex strings from XML correctly
 static uintptr_t parseDeviceHash(const juce::var &var) {
@@ -93,6 +94,70 @@ MappingEditorComponent::MappingEditorComponent(PresetManager &pm,
   };
   addAndMakeVisible(addButton);
 
+  // Setup Delete Button
+  deleteButton.setButtonText("-");
+  deleteButton.onClick = [this] {
+    int numSelected = table.getNumSelectedRows();
+    if (numSelected == 0) {
+      juce::AlertWindow::showMessageBoxAsync(
+        juce::AlertWindow::InfoIcon,
+        "No Selection",
+        "Please select one or more mappings to delete.",
+        "OK"
+      );
+      return;
+    }
+
+    // Build confirmation message
+    juce::String message;
+    if (numSelected == 1) {
+      message = "Delete the selected mapping?\n\nThis action cannot be undone.";
+    } else {
+      message = "Delete " + juce::String(numSelected) + " selected mappings?\n\nThis action cannot be undone.";
+    }
+
+    juce::AlertWindow::showOkCancelBox(
+      juce::AlertWindow::WarningIcon,
+      "Delete Mappings",
+      message,
+      "Delete",
+      "Cancel",
+      this,
+      juce::ModalCallbackFunction::create([this, numSelected](int result) {
+        if (result == 1) { // OK clicked
+          auto mappingsNode = presetManager.getMappingsNode();
+          if (!mappingsNode.isValid())
+            return;
+
+          // Collect selected rows (sorted descending to avoid index shifting)
+          juce::Array<int> selectedRows;
+          for (int i = 0; i < numSelected; ++i) {
+            int row = table.getSelectedRow(i);
+            if (row >= 0)
+              selectedRows.add(row);
+          }
+          selectedRows.sort();
+          std::reverse(selectedRows.begin(), selectedRows.end()); // Remove from end to start
+
+          // Remove each selected mapping
+          undoManager.beginNewTransaction("Delete Mappings");
+          for (int row : selectedRows) {
+            auto child = mappingsNode.getChild(row);
+            if (child.isValid()) {
+              mappingsNode.removeChild(child, &undoManager);
+            }
+          }
+
+          // Clear selection and refresh
+          table.deselectAllRows();
+          table.updateContent();
+          inspector.setSelection({});
+        }
+      })
+    );
+  };
+  addAndMakeVisible(deleteButton);
+
   // Setup Learn Button
   learnButton.setButtonText("Learn");
   learnButton.setClickingTogglesState(true);
@@ -127,6 +192,8 @@ void MappingEditorComponent::resized() {
   auto area = getLocalBounds();
   auto header = area.removeFromTop(24);
   addButton.setBounds(header.removeFromRight(30));
+  header.removeFromRight(4);
+  deleteButton.setBounds(header.removeFromRight(30));
   header.removeFromRight(4);
   learnButton.setBounds(header.removeFromRight(60));
   

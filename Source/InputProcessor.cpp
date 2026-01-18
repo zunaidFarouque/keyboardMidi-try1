@@ -1,6 +1,7 @@
 #include "InputProcessor.h"
 #include "ScaleLibrary.h"
 #include "ChordUtilities.h"
+#include "MappingTypes.h"
 
 InputProcessor::InputProcessor(VoiceManager &voiceMgr, PresetManager &presetMgr, DeviceManager &deviceMgr, ScaleLibrary &scaleLib)
     : voiceManager(voiceMgr), presetManager(presetMgr), deviceManager(deviceMgr), zoneManager(scaleLib), scaleLibrary(scaleLib) {
@@ -59,21 +60,31 @@ void InputProcessor::addMappingFromTree(juce::ValueTree mappingNode) {
     juce::String t = typeVar.toString();
     if (t == "CC")
       actionType = ActionType::CC;
+    else if (t == "Command")
+      actionType = ActionType::Command;
     else if (t == "Macro")
       actionType = ActionType::Macro;
   } else if (typeVar.isInt()) {
     int t = static_cast<int>(typeVar);
     if (t == 1)
       actionType = ActionType::CC;
-    if (t == 2)
+    else if (t == 2)
       actionType = ActionType::Macro;
+    else if (t == 3)
+      actionType = ActionType::Command;
   }
 
   int channel = mappingNode.getProperty("channel", 1);
   int data1 = mappingNode.getProperty("data1", 60);
   int data2 = mappingNode.getProperty("data2", 127);
+  int velocityRandom = mappingNode.getProperty("velRandom", 0);
 
-  MidiAction action = {actionType, channel, data1, data2};
+  MidiAction action;
+  action.type = actionType;
+  action.channel = channel;
+  action.data1 = data1;
+  action.data2 = data2;
+  action.velocityRandom = velocityRandom;
 
   // Compile alias into hardware IDs
   if (!aliasName.isEmpty()) {
@@ -188,9 +199,11 @@ void InputProcessor::valueTreePropertyChanged(
   auto parent = treeWhosePropertyHasChanged.getParent();
 
   if (parent.isEquivalentTo(mappingsNode)) {
+    // When a mapping property changes (e.g., inputKey/keyCode), we need to rebuild
+    // the entire map because we can't know the old value to remove the old entries.
+    // This is especially important for keyCode changes (via "learn" feature).
     juce::ScopedWriteLock lock(mapLock);
-    removeMappingFromTree(treeWhosePropertyHasChanged);
-    addMappingFromTree(treeWhosePropertyHasChanged);
+    rebuildMapFromTree();
   } else if (treeWhosePropertyHasChanged.isEquivalentTo(mappingsNode)) {
     juce::ScopedWriteLock lock(mapLock);
     rebuildMapFromTree();
@@ -281,6 +294,17 @@ std::pair<std::optional<MidiAction>, juce::String> InputProcessor::lookupAction(
 // Resolve zone using same InputID as lookupAction: zoneLookupTable is keyed by
 // (targetAliasHash, keyCode), not (deviceHandle, keyCode). For "Any" zones
 // targetAliasHash=0. We must try (aliasHash, keyCode) and (0, keyCode).
+int InputProcessor::calculateVelocity(int base, int range) {
+  if (range <= 0)
+    return base;
+  
+  // Generate random delta in range [-range, +range]
+  int delta = random.nextInt(range * 2 + 1) - range;
+  
+  // Clamp result between 1 and 127
+  return juce::jlimit(1, 127, base + delta);
+}
+
 std::shared_ptr<Zone> InputProcessor::getZoneForInputResolved(InputID input) {
   juce::String aliasName = deviceManager.getAliasForHardware(input.deviceHandle);
   uintptr_t aliasHash = (aliasName != "Unassigned" && !aliasName.isEmpty())
@@ -294,19 +318,31 @@ std::shared_ptr<Zone> InputProcessor::getZoneForInputResolved(InputID input) {
 
 void InputProcessor::processEvent(InputID input, bool isDown) {
   if (!isDown) {
-    // Key up - handle note off or buffer clearing
-    // Check if this key belongs to a zone in Strum mode
     auto [action, source] = lookupAction(input.deviceHandle, input.keyCode);
+    // Command key-up: SustainMomentary=Off, SustainInverse=On
+    if (action.has_value() && action->type == ActionType::Command) {
+      int cmd = action->data1;
+      if (cmd == static_cast<int>(OmniKey::CommandID::SustainMomentary))
+        voiceManager.setSustain(false);
+      else if (cmd == static_cast<int>(OmniKey::CommandID::SustainInverse))
+        voiceManager.setSustain(true);
+    }
     if (action.has_value() && source.startsWith("Zone: ")) {
       auto zone = getZoneForInputResolved(input);
       if (zone && zone->playMode == Zone::PlayMode::Strum) {
-        // Clear buffer when zone key is released (requires holding keys)
         juce::ScopedWriteLock lock(bufferLock);
         noteBuffer.clear();
-        bufferedStrumSpeedMs = 50; // Reset to default
+        bufferedStrumSpeedMs = 50;
+        
+        // Use zone's release behavior
+        bool shouldSustain = (zone->releaseBehavior == Zone::ReleaseBehavior::Sustain);
+        voiceManager.handleKeyUp(input, zone->releaseDurationMs, shouldSustain);
+      } else {
+        voiceManager.handleKeyUp(input);
       }
+    } else {
+      voiceManager.handleKeyUp(input);
     }
-    voiceManager.handleKeyUp(input);
     return;
   }
 
@@ -315,33 +351,47 @@ void InputProcessor::processEvent(InputID input, bool isDown) {
   
   if (action.has_value()) {
     const auto &midiAction = action.value();
+
+    if (midiAction.type == ActionType::Command) {
+      int cmd = midiAction.data1;
+      if (cmd == static_cast<int>(OmniKey::CommandID::SustainMomentary))
+        voiceManager.setSustain(true);
+      else if (cmd == static_cast<int>(OmniKey::CommandID::SustainToggle))
+        voiceManager.setSustain(!voiceManager.isSustainActive());
+      else if (cmd == static_cast<int>(OmniKey::CommandID::SustainInverse))
+        voiceManager.setSustain(false);
+      else if (cmd == static_cast<int>(OmniKey::CommandID::LatchToggle))
+        voiceManager.setLatch(!voiceManager.isLatchActive());
+      else if (cmd == static_cast<int>(OmniKey::CommandID::Panic))
+        voiceManager.panic();
+      else if (cmd == static_cast<int>(OmniKey::CommandID::PanicLatch))
+        voiceManager.panicLatch();
+      return;
+    }
+
     if (midiAction.type == ActionType::Note) {
-      // Check if this is from a zone (for chord support)
       if (source.startsWith("Zone: ")) {
-        // Get the zone to check play mode (use resolved InputID: table is keyed by aliasHash/0, not deviceHandle)
         auto zone = getZoneForInputResolved(input);
         if (zone) {
-          // O(1): getNotesForKey = keyToChordCache.find + O(k) transpose (k=chord size).
-          // Chords are pre-compiled in rebuildCache at config-time.
           auto notes = zone->getNotesForKey(input.keyCode, 
                                             zoneManager.getGlobalChromaticTranspose(),
                                             zoneManager.getGlobalDegreeTranspose());
-          
+          bool allowSustain = zone->allowSustain;
+
           if (notes.has_value() && !notes->empty()) {
-            // Check play mode
+            // Calculate velocity with randomization for zones
+            int vel = calculateVelocity(zone->baseVelocity, zone->velocityRandom);
+            
             if (zone->playMode == Zone::PlayMode::Direct) {
-              // Direct mode - play immediately
               if (notes->size() > 1) {
-                voiceManager.noteOn(input, *notes, midiAction.data2, midiAction.channel, zone->strumSpeedMs);
+                voiceManager.noteOn(input, *notes, vel, midiAction.channel, zone->strumSpeedMs, allowSustain);
               } else {
-                voiceManager.noteOn(input, notes->front(), midiAction.data2, midiAction.channel);
+                voiceManager.noteOn(input, notes->front(), vel, midiAction.channel, allowSustain);
               }
             } else if (zone->playMode == Zone::PlayMode::Strum) {
-              // Strum mode: auto-strum on key press (bottom to top). If user plays another
-              // chord before this finishes, cancel pending + note-off previous, then strum new.
               int strumMs = (zone->strumSpeedMs > 0) ? zone->strumSpeedMs : 50;
               voiceManager.handleKeyUp(lastStrumSource);
-              voiceManager.noteOn(input, *notes, midiAction.data2, midiAction.channel, strumMs);
+              voiceManager.noteOn(input, *notes, vel, midiAction.channel, strumMs, allowSustain);
               lastStrumSource = input;
               {
                 juce::ScopedWriteLock bufferWriteLock(bufferLock);
@@ -350,16 +400,19 @@ void InputProcessor::processEvent(InputID input, bool isDown) {
               }
             }
           } else {
-            // No notes found - fallback to single note
-            voiceManager.noteOn(input, midiAction.data1, midiAction.data2, midiAction.channel);
+            // Fallback: use mapping velocity with randomization
+            int vel = calculateVelocity(midiAction.data2, midiAction.velocityRandom);
+            voiceManager.noteOn(input, midiAction.data1, vel, midiAction.channel, allowSustain);
           }
         } else {
-          // Zone not found - single note, direct mode
-          voiceManager.noteOn(input, midiAction.data1, midiAction.data2, midiAction.channel);
+          // Fallback: use mapping velocity with randomization
+          int vel = calculateVelocity(midiAction.data2, midiAction.velocityRandom);
+          voiceManager.noteOn(input, midiAction.data1, vel, midiAction.channel, true);
         }
       } else {
-        // Manual mapping - single note, direct mode
-        voiceManager.noteOn(input, midiAction.data1, midiAction.data2, midiAction.channel);
+        // Manual mapping: use mapping velocity with randomization
+        int vel = calculateVelocity(midiAction.data2, midiAction.velocityRandom);
+        voiceManager.noteOn(input, midiAction.data1, vel, midiAction.channel, true);
       }
     }
   }
@@ -377,6 +430,11 @@ bool InputProcessor::hasManualMappingForKey(int keyCode) {
       return true;
   }
   return false;
+}
+
+void InputProcessor::forceRebuildMappings() {
+  juce::ScopedWriteLock lock(mapLock);
+  rebuildMapFromTree();
 }
 
 std::pair<std::optional<MidiAction>, juce::String> InputProcessor::simulateInput(uintptr_t deviceHandle, int keyCode) {

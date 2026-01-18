@@ -37,6 +37,9 @@ public:
   // True if any manual mapping exists for this keyCode (for conflict highlight in visualizer)
   bool hasManualMappingForKey(int keyCode);
 
+  // Force rebuild of keyMapping from ValueTree (for reset operations)
+  void forceRebuildMappings();
+
   // ChangeListener implementation
   void changeListenerCallback(juce::ChangeBroadcaster *source) override;
 
@@ -83,4 +86,10 @@ private:
 
   // Resolve zone using same InputID as lookupAction (alias hash or 0 for "Any")
   std::shared_ptr<Zone> getZoneForInputResolved(InputID input);
+
+  // Velocity randomization helper
+  int calculateVelocity(int base, int range);
+
+  // Random number generator for velocity humanization
+  juce::Random random;
 };

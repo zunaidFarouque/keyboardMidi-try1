@@ -91,7 +91,17 @@ void StartupManager::initApp() {
 }
 
 void StartupManager::createFactoryDefault() {
-  // Clear all managers
+  // Clear all mappings
+  if (presetManager) {
+    auto mappingsNode = presetManager->getMappingsNode();
+    if (mappingsNode.isValid()) {
+      while (mappingsNode.getNumChildren() > 0) {
+        mappingsNode.removeChild(0, nullptr);
+      }
+    }
+  }
+
+  // Clear all zones
   if (zoneManager) {
     auto zones = zoneManager->getZones();
     for (auto& zone : zones) {

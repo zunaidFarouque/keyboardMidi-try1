@@ -1,6 +1,7 @@
 #include "MappingInspector.h"
 #include "MidiNoteUtilities.h"
 #include "DeviceManager.h"
+#include "MappingTypes.h"
 
 MappingInspector::MappingInspector(juce::UndoManager *undoMgr, DeviceManager *deviceMgr)
     : undoManager(undoMgr), deviceManager(deviceMgr) {
@@ -24,6 +25,20 @@ MappingInspector::MappingInspector(juce::UndoManager *undoMgr, DeviceManager *de
   data2Label.attachToComponent(&data2Slider, true);
   addAndMakeVisible(data2Label);
   addAndMakeVisible(data2Slider);
+
+  randVelLabel.setText("Velocity Random:", juce::dontSendNotification);
+  randVelLabel.attachToComponent(&randVelSlider, true);
+  addAndMakeVisible(randVelLabel);
+  addAndMakeVisible(randVelSlider);
+  randVelSlider.setVisible(false);
+  randVelLabel.setVisible(false);
+
+  commandLabel.setText("Command:", juce::dontSendNotification);
+  commandLabel.attachToComponent(&commandSelector, true);
+  addAndMakeVisible(commandLabel);
+  addAndMakeVisible(commandSelector);
+  commandSelector.setVisible(false);
+  commandLabel.setVisible(false);
 
   aliasLabel.setText("Alias:", juce::dontSendNotification);
   aliasLabel.attachToComponent(&aliasSelector, true);
@@ -65,7 +80,8 @@ MappingInspector::MappingInspector(juce::UndoManager *undoMgr, DeviceManager *de
   // Setup Type Selector
   typeSelector.addItem("Note", 1);
   typeSelector.addItem("CC", 2);
-  typeSelector.addItem("Macro", 3);
+  typeSelector.addItem("Command", 3);
+  typeSelector.addItem("Macro", 4);
   typeSelector.onChange = [this] {
     if (selectedTrees.empty())
       return;
@@ -77,6 +93,8 @@ MappingInspector::MappingInspector(juce::UndoManager *undoMgr, DeviceManager *de
     else if (selectedId == 2)
       typeStr = "CC";
     else if (selectedId == 3)
+      typeStr = "Command";
+    else if (selectedId == 4)
       typeStr = "Macro";
     else
       return; // Invalid selection
@@ -87,6 +105,31 @@ MappingInspector::MappingInspector(juce::UndoManager *undoMgr, DeviceManager *de
         tree.setProperty("type", typeStr, undoManager);
     }
     // Transaction ends automatically when next beginNewTransaction() is called
+  };
+
+  // Setup Command Selector (IDs 1-6 map to CommandID 0-5)
+  commandSelector.addItem("Sustain (Momentary)", 1);
+  commandSelector.addItem("Sustain (Toggle)", 2);
+  commandSelector.addItem("Sustain (Inverse)", 3);
+  commandSelector.addItem("Latch (Toggle)", 4);
+  commandSelector.addItem("Panic (All Off)", 5);
+  commandSelector.addItem("Panic (Latched Only)", 6);
+  commandSelector.onChange = [this] {
+    if (selectedTrees.empty())
+      return;
+
+    int selectedId = commandSelector.getSelectedId();
+    if (selectedId < 1 || selectedId > 6)
+      return;
+
+    // Map ComboBox ID (1-6) to CommandID enum value (0-5)
+    int cmdValue = selectedId - 1;
+
+    undoManager->beginNewTransaction("Change Command");
+    for (auto &tree : selectedTrees) {
+      if (tree.isValid())
+        tree.setProperty("data1", cmdValue, undoManager);
+    }
   };
 
   // Setup Channel Slider
@@ -146,6 +189,26 @@ MappingInspector::MappingInspector(juce::UndoManager *undoMgr, DeviceManager *de
     for (auto &tree : selectedTrees) {
       if (tree.isValid())
         tree.setProperty("data2", value, undoManager);
+    }
+    // Transaction ends automatically when next beginNewTransaction() is called
+  };
+
+  // Setup Velocity Random Slider (only for Note type)
+  randVelSlider.setRange(0, 64, 1);
+  randVelSlider.setTextValueSuffix("");
+  randVelSlider.onValueChange = [this] {
+    if (selectedTrees.empty())
+      return;
+    
+    // Don't update if showing mixed value
+    if (randVelSlider.getTextValueSuffix().contains("---"))
+      return;
+
+    undoManager->beginNewTransaction("Change Velocity Random");
+    int value = static_cast<int>(randVelSlider.getValue());
+    for (auto &tree : selectedTrees) {
+      if (tree.isValid())
+        tree.setProperty("velRandom", value, undoManager);
     }
     // Transaction ends automatically when next beginNewTransaction() is called
   };
@@ -214,17 +277,35 @@ void MappingInspector::resized() {
   typeSelector.setBounds(leftMargin, y, width, controlHeight);
   y += controlHeight + spacing;
 
-  channelSlider.setBounds(leftMargin, y, width, controlHeight);
-  y += controlHeight + spacing;
+  if (channelSlider.isVisible()) {
+    channelSlider.setBounds(leftMargin, y, width, controlHeight);
+    y += controlHeight + spacing;
+  }
 
   aliasSelector.setBounds(leftMargin, y, width, controlHeight);
   y += controlHeight + spacing;
 
-  data1Slider.setBounds(leftMargin, y, width, controlHeight);
-  y += controlHeight + spacing;
+  if (commandSelector.isVisible()) {
+    commandSelector.setBounds(leftMargin, y, width, controlHeight);
+    y += controlHeight + spacing;
+  }
 
-  data2Slider.setBounds(leftMargin, y, width, controlHeight);
-  y += controlHeight + 10; // Bottom padding
+  if (data1Slider.isVisible()) {
+    data1Slider.setBounds(leftMargin, y, width, controlHeight);
+    y += controlHeight + spacing;
+  }
+
+  if (data2Slider.isVisible()) {
+    data2Slider.setBounds(leftMargin, y, width, controlHeight);
+    y += controlHeight + spacing;
+  }
+
+  if (randVelSlider.isVisible()) {
+    randVelSlider.setBounds(leftMargin, y, width, controlHeight);
+    y += controlHeight + spacing;
+  }
+
+  y += 10; // Bottom padding
 
   // Set component size based on calculated height
   setSize(getWidth(), y);
@@ -278,8 +359,10 @@ void MappingInspector::updateControlsFromSelection() {
       typeSelector.setSelectedId(1, juce::dontSendNotification);
     else if (typeStr == "CC")
       typeSelector.setSelectedId(2, juce::dontSendNotification);
-    else if (typeStr == "Macro")
+    else if (typeStr == "Command")
       typeSelector.setSelectedId(3, juce::dontSendNotification);
+    else if (typeStr == "Macro")
+      typeSelector.setSelectedId(4, juce::dontSendNotification);
     else
       typeSelector.setSelectedId(-1, juce::dontSendNotification);
   } else {
@@ -287,7 +370,24 @@ void MappingInspector::updateControlsFromSelection() {
     typeStr = ""; // Mixed types
   }
 
-  // Configure Data1 slider based on type
+  // Show/hide controls based on type
+  bool isCommand = (typeStr == "Command");
+  bool isNoteOrCC = (typeStr == "Note" || typeStr == "CC" || typeStr == "Macro");
+  bool isNote = (typeStr == "Note");
+
+  channelSlider.setVisible(isNoteOrCC);
+  channelLabel.setVisible(isNoteOrCC);
+  data1Slider.setVisible(isNoteOrCC);
+  data1Label.setVisible(isNoteOrCC);
+  data2Slider.setVisible(isNoteOrCC);
+  data2Label.setVisible(isNoteOrCC);
+  randVelSlider.setVisible(isNote);
+  randVelLabel.setVisible(isNote);
+
+  commandSelector.setVisible(isCommand);
+  commandLabel.setVisible(isCommand);
+
+  // Configure Data1 slider based on type (only for Note/CC/Macro)
   if (typeStr == "Note") {
     data1Label.setText("Note:", juce::dontSendNotification);
     data1Slider.setEnabled(true);
@@ -313,6 +413,19 @@ void MappingInspector::updateControlsFromSelection() {
     data1Slider.textFromValueFunction = nullptr;
     data1Slider.valueFromTextFunction = nullptr;
     data1Slider.updateText();
+  } else if (typeStr == "Command") {
+    // Command type - update commandSelector from data1
+    if (allTreesHaveSameValue("data1")) {
+      int data1 = static_cast<int>(getCommonValue("data1"));
+      // Map CommandID enum value (0-5) to ComboBox ID (1-6)
+      if (data1 >= 0 && data1 <= 5) {
+        commandSelector.setSelectedId(data1 + 1, juce::dontSendNotification);
+      } else {
+        commandSelector.setSelectedId(-1, juce::dontSendNotification);
+      }
+    } else {
+      commandSelector.setSelectedId(-1, juce::dontSendNotification);
+    }
   } else {
     // Mixed or unknown type - disable smart functions
     data1Label.setText("Data1:", juce::dontSendNotification);
@@ -404,6 +517,22 @@ void MappingInspector::updateControlsFromSelection() {
     data2Slider.setValue(64, juce::dontSendNotification);
     data2Slider.setTextValueSuffix(" (---)");
   }
+
+  // Update Velocity Random Slider (only for Note type)
+  if (typeStr == "Note") {
+    if (allTreesHaveSameValue("velRandom")) {
+      int velRandom = static_cast<int>(getCommonValue("velRandom"));
+      randVelSlider.setValue(velRandom, juce::dontSendNotification);
+      randVelSlider.setTextValueSuffix("");
+    } else {
+      // Mixed value - set to 0 and show "---"
+      randVelSlider.setValue(0, juce::dontSendNotification);
+      randVelSlider.setTextValueSuffix(" (---)");
+    }
+  }
+
+  // Trigger layout update after visibility changes
+  resized();
 }
 
 void MappingInspector::enableControls(bool enabled) {
@@ -412,6 +541,8 @@ void MappingInspector::enableControls(bool enabled) {
   aliasSelector.setEnabled(enabled);
   data1Slider.setEnabled(enabled);
   data2Slider.setEnabled(enabled);
+  randVelSlider.setEnabled(enabled);
+  commandSelector.setEnabled(enabled);
 }
 
 bool MappingInspector::allTreesHaveSameValue(const juce::Identifier &property) {

@@ -23,7 +23,6 @@ cmake_install.cmake
 *.userosscache
 *.sln.docstates
 .vs/
-.vscode/
 *.VC.db
 *.VC.VC.opendb
 

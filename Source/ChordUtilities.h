@@ -13,9 +13,9 @@ public:
   };
 
   enum class Voicing {
-    Close,  // Notes as calculated (close together)
-    Open,   // Middle note (3rd) moved up one octave
-    Guitar  // Root, 5th, Octave, 10th (3rd + 12)
+    RootPosition,  // Notes as calculated (close together, root position)
+    Smooth,        // Inversions to minimize movement (cluster around center)
+    GuitarSpread   // Spread voicings to reduce mud (open/drop voicings)
   };
 
   // Generate chord notes from root note, scale intervals, and degree index
@@ -25,4 +25,7 @@ public:
                                         int degreeIndex, 
                                         ChordType type, 
                                         Voicing voicing);
+
+  // Debug: Export comprehensive voicing report
+  static void dumpDebugReport(juce::File targetFile);
 };

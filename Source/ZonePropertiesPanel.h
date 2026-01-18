@@ -76,6 +76,15 @@ private:
   juce::ComboBox playModeSelector;
   juce::Label strumSpeedLabel;
   juce::Slider strumSpeedSlider;
+  juce::Label releaseBehaviorLabel;
+  juce::ComboBox releaseBehaviorSelector;
+  juce::Label releaseDurationLabel;
+  juce::Slider releaseDurationSlider;
+  juce::ToggleButton allowSustainToggle;
+  juce::Label baseVelLabel;
+  juce::Slider baseVelSlider;
+  juce::Label randVelLabel;
+  juce::Slider randVelSlider;
   KeyChipList chipList;
 
   void refreshAliasSelector();
