@@ -35,7 +35,7 @@ void VoiceManager::noteOn(InputID source, int note, int vel, int channel, bool a
   voices.push_back({note, channel, source, allowSustain, VoiceState::Playing});
 }
 
-void VoiceManager::noteOn(InputID source, const std::vector<int>& notes, int vel, int channel, int strumSpeedMs, bool allowSustain) {
+void VoiceManager::noteOn(InputID source, const std::vector<int>& notes, const std::vector<int>& velocities, int channel, int strumSpeedMs, bool allowSustain) {
   if (notes.empty())
     return;
 
@@ -58,14 +58,22 @@ void VoiceManager::noteOn(InputID source, const std::vector<int>& notes, int vel
     }
   }
 
+  // Ensure velocities vector matches notes size (use first velocity as default if needed)
+  std::vector<int> finalVelocities = velocities;
+  if (finalVelocities.size() < notes.size()) {
+    int defaultVel = finalVelocities.empty() ? 100 : finalVelocities[0];
+    finalVelocities.resize(notes.size(), defaultVel);
+  }
+
   if (strumSpeedMs == 0) {
     juce::ScopedLock l2(voicesLock);
-    for (int note : notes) {
-      midiEngine.sendNoteOn(channel, note, static_cast<float>(vel) / 127.0f);
-      voices.push_back({note, channel, source, allowSustain, VoiceState::Playing});
+    for (size_t i = 0; i < notes.size(); ++i) {
+      int vel = (i < finalVelocities.size()) ? finalVelocities[i] : 100;
+      midiEngine.sendNoteOn(channel, notes[i], static_cast<float>(vel) / 127.0f);
+      voices.push_back({notes[i], channel, source, allowSustain, VoiceState::Playing});
     }
   } else {
-    strumEngine.triggerStrum(notes, vel, channel, strumSpeedMs, source, allowSustain);
+    strumEngine.triggerStrum(notes, finalVelocities, channel, strumSpeedMs, source, allowSustain);
   }
 }
 
@@ -85,8 +93,10 @@ void VoiceManager::strumNotes(const std::vector<int>& notes, int speedMs, bool d
   if (!downstroke)
     std::reverse(notesToStrum.begin(), notesToStrum.end());
 
+  // Use default velocity for strumNotes (all notes same velocity)
+  std::vector<int> velocities(notesToStrum.size(), 100);
   InputID dummySource = {0, 0};
-  strumEngine.triggerStrum(notesToStrum, 100, 1, speedMs, dummySource, true);
+  strumEngine.triggerStrum(notesToStrum, velocities, 1, speedMs, dummySource, true);
 }
 
 void VoiceManager::handleKeyUp(InputID source) {

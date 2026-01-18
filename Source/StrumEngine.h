@@ -22,8 +22,8 @@ public:
   StrumEngine(MidiEngine& engine, OnNotePlayedCallback onPlayed);
   ~StrumEngine() override;
 
-  // Trigger a strum with multiple notes
-  void triggerStrum(const std::vector<int>& notes, int velocity, int channel,
+  // Trigger a strum with multiple notes (with per-note velocities)
+  void triggerStrum(const std::vector<int>& notes, const std::vector<int>& velocities, int channel,
                     int speedMs, InputID source, bool allowSustain = true);
 
   // Cancel all pending notes for a given source

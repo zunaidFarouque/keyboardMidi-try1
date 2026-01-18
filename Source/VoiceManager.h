@@ -14,7 +14,7 @@ public:
 
   // --- Note playback ---
   void noteOn(InputID source, int note, int vel, int channel, bool allowSustain = true);
-  void noteOn(InputID source, const std::vector<int>& notes, int vel, int channel, int strumSpeedMs, bool allowSustain = true);
+  void noteOn(InputID source, const std::vector<int>& notes, const std::vector<int>& velocities, int channel, int strumSpeedMs, bool allowSustain = true);
 
   void strumNotes(const std::vector<int>& notes, int speedMs, bool downstroke);
 

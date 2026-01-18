@@ -49,17 +49,19 @@ public:
   int releaseDurationMs = 0; // Continue playing for N ms after release (0 = stop immediately)
   int baseVelocity = 100; // Base MIDI velocity (1-127)
   int velocityRandom = 0; // Velocity randomization range (0-64)
+  bool strictGhostHarmony = true; // Ghost note harmony mode (true = strict 1/5, false = loose 7/9)
+  float ghostVelocityScale = 0.6f; // Velocity multiplier for ghost notes (0.0-1.0)
 
   // Performance cache: Pre-compiled key-to-chord mappings (compilation strategy).
   // Config-time: rebuildCache() runs ChordUtilities::generateChord, ScaleUtilities; fills this map.
   // Play-time: getNotesForKey() does O(1) find + O(k) transpose (k = chord size). No chord/scale math.
-  std::unordered_map<int, std::vector<int>> keyToChordCache; // keyCode -> relative notes (to root)
+  std::unordered_map<int, std::vector<ChordUtilities::ChordNote>> keyToChordCache; // keyCode -> chord notes (with ghost flags)
 
   // Config-time: (re)build keyToChordCache when zone/scale/chord/keys change.
   void rebuildCache(const std::vector<int>& intervals);
 
-  // Play-time: O(1) lookup + O(k) transpose. Returns final MIDI notes or nullopt if not in zone.
-  std::optional<std::vector<int>> getNotesForKey(int keyCode, int globalChromTrans, int globalDegTrans);
+  // Play-time: O(1) lookup + O(k) transpose. Returns final MIDI chord notes (with ghost flags) or nullopt if not in zone.
+  std::optional<std::vector<ChordUtilities::ChordNote>> getNotesForKey(int keyCode, int globalChromTrans, int globalDegTrans);
 
   // Process a key input and return MIDI action if this zone matches
   // Note: Returns first note of chord for backward compatibility

@@ -85,6 +85,9 @@ private:
   juce::Slider baseVelSlider;
   juce::Label randVelLabel;
   juce::Slider randVelSlider;
+  juce::ToggleButton strictGhostToggle;
+  juce::Label ghostVelLabel;
+  juce::Slider ghostVelSlider;
   KeyChipList chipList;
 
   void refreshAliasSelector();

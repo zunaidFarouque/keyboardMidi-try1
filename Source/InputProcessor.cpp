@@ -373,29 +373,46 @@ void InputProcessor::processEvent(InputID input, bool isDown) {
       if (source.startsWith("Zone: ")) {
         auto zone = getZoneForInputResolved(input);
         if (zone) {
-          auto notes = zone->getNotesForKey(input.keyCode, 
-                                            zoneManager.getGlobalChromaticTranspose(),
-                                            zoneManager.getGlobalDegreeTranspose());
+          auto chordNotes = zone->getNotesForKey(input.keyCode, 
+                                                  zoneManager.getGlobalChromaticTranspose(),
+                                                  zoneManager.getGlobalDegreeTranspose());
           bool allowSustain = zone->allowSustain;
 
-          if (notes.has_value() && !notes->empty()) {
-            // Calculate velocity with randomization for zones
-            int vel = calculateVelocity(zone->baseVelocity, zone->velocityRandom);
+          if (chordNotes.has_value() && !chordNotes->empty()) {
+            // Calculate per-note velocities with ghost note scaling
+            int mainVelocity = calculateVelocity(zone->baseVelocity, zone->velocityRandom);
+            
+            std::vector<int> finalNotes;
+            std::vector<int> finalVelocities;
+            finalNotes.reserve(chordNotes->size());
+            finalVelocities.reserve(chordNotes->size());
+            
+            for (const auto& cn : *chordNotes) {
+              finalNotes.push_back(cn.pitch);
+              if (cn.isGhost) {
+                // Ghost notes use scaled velocity
+                int ghostVel = static_cast<int>(mainVelocity * zone->ghostVelocityScale);
+                finalVelocities.push_back(juce::jlimit(1, 127, ghostVel));
+              } else {
+                finalVelocities.push_back(mainVelocity);
+              }
+            }
             
             if (zone->playMode == Zone::PlayMode::Direct) {
-              if (notes->size() > 1) {
-                voiceManager.noteOn(input, *notes, vel, midiAction.channel, zone->strumSpeedMs, allowSustain);
+              if (finalNotes.size() > 1) {
+                voiceManager.noteOn(input, finalNotes, finalVelocities, midiAction.channel, zone->strumSpeedMs, allowSustain);
               } else {
-                voiceManager.noteOn(input, notes->front(), vel, midiAction.channel, allowSustain);
+                voiceManager.noteOn(input, finalNotes.front(), finalVelocities.front(), midiAction.channel, allowSustain);
               }
             } else if (zone->playMode == Zone::PlayMode::Strum) {
               int strumMs = (zone->strumSpeedMs > 0) ? zone->strumSpeedMs : 50;
               voiceManager.handleKeyUp(lastStrumSource);
-              voiceManager.noteOn(input, *notes, vel, midiAction.channel, strumMs, allowSustain);
+              voiceManager.noteOn(input, finalNotes, finalVelocities, midiAction.channel, strumMs, allowSustain);
               lastStrumSource = input;
               {
                 juce::ScopedWriteLock bufferWriteLock(bufferLock);
-                noteBuffer = *notes;
+                // Store pitches only for visualizer (backward compatibility)
+                noteBuffer = finalNotes;
                 bufferedStrumSpeedMs = strumMs;
               }
             }

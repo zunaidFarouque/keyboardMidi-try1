@@ -11,14 +11,15 @@ StrumEngine::~StrumEngine() {
   stopTimer();
 }
 
-void StrumEngine::triggerStrum(const std::vector<int>& notes, int velocity, int channel,
+void StrumEngine::triggerStrum(const std::vector<int>& notes, const std::vector<int>& velocities, int channel,
                                int speedMs, InputID source, bool allowSustain) {
   juce::ScopedLock lock(queueLock);
   double now = getCurrentTimeMs();
   for (size_t i = 0; i < notes.size(); ++i) {
     PendingNote p;
     p.note = notes[i];
-    p.velocity = velocity;
+    // Use per-note velocity if available, otherwise fall back to first velocity
+    p.velocity = (i < velocities.size()) ? velocities[i] : (velocities.empty() ? 100 : velocities[0]);
     p.channel = channel;
     p.targetTimeMs = now + (static_cast<double>(i) * speedMs);
     p.source = source;

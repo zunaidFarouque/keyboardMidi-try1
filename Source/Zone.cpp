@@ -38,15 +38,16 @@ void Zone::rebuildCache(const std::vector<int>& intervals) {
       int baseNote = ScaleUtilities::calculateMidiNote(rootNote, intervals, degree);
       
       if (useChords) {
-        std::vector<int> chordNotes = ChordUtilities::generateChord(
-          rootNote, intervals, degree, chordType, voicing
+        std::vector<ChordUtilities::ChordNote> chordNotes = ChordUtilities::generateChord(
+          rootNote, intervals, degree, chordType, voicing, strictGhostHarmony
         );
-        std::vector<int> relativeChord;
-        for (int note : chordNotes)
-          relativeChord.push_back(note - rootNote);
+        std::vector<ChordUtilities::ChordNote> relativeChord;
+        for (const auto& cn : chordNotes) {
+          relativeChord.emplace_back(cn.pitch - rootNote, cn.isGhost);
+        }
         keyToChordCache[keyCode] = relativeChord;
       } else {
-        keyToChordCache[keyCode] = {baseNote - rootNote};
+        keyToChordCache[keyCode] = {ChordUtilities::ChordNote(baseNote - rootNote, false)};
       }
     }
   } else if (layoutStrategy == LayoutStrategy::Grid) {
@@ -80,15 +81,16 @@ void Zone::rebuildCache(const std::vector<int>& intervals) {
       int baseNote = ScaleUtilities::calculateMidiNote(rootNote, intervals, degree);
       
       if (useChords) {
-        std::vector<int> chordNotes = ChordUtilities::generateChord(
-          rootNote, intervals, degree, chordType, voicing
+        std::vector<ChordUtilities::ChordNote> chordNotes = ChordUtilities::generateChord(
+          rootNote, intervals, degree, chordType, voicing, strictGhostHarmony
         );
-        std::vector<int> relativeChord;
-        for (int note : chordNotes)
-          relativeChord.push_back(note - rootNote);
+        std::vector<ChordUtilities::ChordNote> relativeChord;
+        for (const auto& cn : chordNotes) {
+          relativeChord.emplace_back(cn.pitch - rootNote, cn.isGhost);
+        }
         keyToChordCache[keyCode] = relativeChord;
       } else {
-        keyToChordCache[keyCode] = {baseNote - rootNote};
+        keyToChordCache[keyCode] = {ChordUtilities::ChordNote(baseNote - rootNote, false)};
       }
     }
   } else if (layoutStrategy == LayoutStrategy::Piano) {
@@ -150,7 +152,7 @@ void Zone::rebuildCache(const std::vector<int>& intervals) {
       int baseNote = ScaleUtilities::calculateMidiNote(rootNote, majorIntervals, degree);
       int relativeNote = baseNote - rootNote;
       // Piano mode: Store single note only (chords disabled in Piano mode)
-      keyToChordCache[whiteKeyCode] = {relativeNote};
+      keyToChordCache[whiteKeyCode] = {ChordUtilities::ChordNote(relativeNote, false)};
 
       // Check for black key above this white key
       // Black keys are positioned between white keys (roughly col + 0.5)
@@ -170,7 +172,7 @@ void Zone::rebuildCache(const std::vector<int>& intervals) {
             // Map black key to sharp (white note + 1 semitone)
             // Piano mode: Store single note only
             int whiteRelativeNote = baseNote - rootNote;
-            keyToChordCache[blackKeyCode] = {whiteRelativeNote + 1};
+            keyToChordCache[blackKeyCode] = {ChordUtilities::ChordNote(whiteRelativeNote + 1, false)};
             break; // One black key per white key
           }
         }
@@ -184,21 +186,21 @@ void Zone::rebuildCache(const std::vector<int>& intervals) {
 
 // Play-time: O(1) hash lookup + O(k) transpose apply (k = chord size, typically 3–5).
 // Chords are pre-compiled in rebuildCache; no ChordUtilities or ScaleUtilities here.
-std::optional<std::vector<int>> Zone::getNotesForKey(int keyCode, int globalChromTrans, int globalDegTrans) {
+std::optional<std::vector<ChordUtilities::ChordNote>> Zone::getNotesForKey(int keyCode, int globalChromTrans, int globalDegTrans) {
   auto it = keyToChordCache.find(keyCode);
   if (it == keyToChordCache.end())
     return std::nullopt;
 
-  const std::vector<int>& relativeNotes = it->second;
+  const std::vector<ChordUtilities::ChordNote>& relativeChordNotes = it->second;
   int effChromTrans = isTransposeLocked ? 0 : globalChromTrans;
 
-  std::vector<int> finalNotes;
-  finalNotes.reserve(relativeNotes.size());
-  for (int relativeNote : relativeNotes) {
-    int finalNote = rootNote + relativeNote + chromaticOffset + effChromTrans;
-    finalNotes.push_back(juce::jlimit(0, 127, finalNote));
+  std::vector<ChordUtilities::ChordNote> finalChordNotes;
+  finalChordNotes.reserve(relativeChordNotes.size());
+  for (const auto& cn : relativeChordNotes) {
+    int finalNote = rootNote + cn.pitch + chromaticOffset + effChromTrans;
+    finalChordNotes.emplace_back(juce::jlimit(0, 127, finalNote), cn.isGhost);
   }
-  return finalNotes;
+  return finalChordNotes;
 }
 
 std::optional<MidiAction> Zone::processKey(InputID input, int globalChromTrans, int globalDegTrans) {
@@ -206,16 +208,16 @@ std::optional<MidiAction> Zone::processKey(InputID input, int globalChromTrans, 
   if (input.deviceHandle != targetAliasHash)
     return std::nullopt;
 
-  // Get notes for this key
-  auto notes = getNotesForKey(input.keyCode, globalChromTrans, globalDegTrans);
-  if (!notes.has_value() || notes->empty())
+  // Get chord notes for this key
+  auto chordNotes = getNotesForKey(input.keyCode, globalChromTrans, globalDegTrans);
+  if (!chordNotes.has_value() || chordNotes->empty())
     return std::nullopt;
 
   // Return MIDI action with first note (for backward compatibility)
   MidiAction action;
   action.type = ActionType::Note;
   action.channel = this->midiChannel;
-  action.data1 = notes->front(); // First note of chord
+  action.data1 = chordNotes->front().pitch; // First note of chord
   action.data2 = 100;
 
   return action;
@@ -251,6 +253,8 @@ juce::ValueTree Zone::toValueTree() const {
   vt.setProperty("releaseDurationMs", releaseDurationMs, nullptr);
   vt.setProperty("baseVel", baseVelocity, nullptr);
   vt.setProperty("randVel", velocityRandom, nullptr);
+  vt.setProperty("strictGhost", strictGhostHarmony, nullptr);
+  vt.setProperty("ghostVelScale", ghostVelocityScale, nullptr);
   
   // Serialize inputKeyCodes as comma-separated string
   juce::StringArray keyCodesArray;
@@ -302,6 +306,8 @@ std::shared_ptr<Zone> Zone::fromValueTree(const juce::ValueTree& vt) {
   zone->releaseDurationMs = vt.getProperty("releaseDurationMs", 0);
   zone->baseVelocity = vt.getProperty("baseVel", 100);
   zone->velocityRandom = vt.getProperty("randVel", 0);
+  zone->strictGhostHarmony = vt.getProperty("strictGhost", true);
+  zone->ghostVelocityScale = static_cast<float>(vt.getProperty("ghostVelScale", 0.6));
   
   // Load zone color (default to transparent if not found)
   juce::String colorStr = vt.getProperty("zoneColor", "").toString();

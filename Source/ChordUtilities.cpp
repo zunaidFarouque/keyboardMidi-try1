@@ -4,18 +4,29 @@
 #include <algorithm>
 #include <sstream>
 
-std::vector<int> ChordUtilities::generateChord(int rootNote, 
-                                                const std::vector<int>& scaleIntervals, 
-                                                int degreeIndex, 
-                                                ChordType type, 
-                                                Voicing voicing) {
-  std::vector<int> notes;
+// Helper: Convert int vector to ChordNote vector (all non-ghost)
+static std::vector<ChordUtilities::ChordNote> intsToChordNotes(const std::vector<int>& ints) {
+  std::vector<ChordUtilities::ChordNote> result;
+  for (int n : ints) {
+    result.emplace_back(n, false);
+  }
+  return result;
+}
+
+std::vector<ChordUtilities::ChordNote> ChordUtilities::generateChord(int rootNote, 
+                                                                      const std::vector<int>& scaleIntervals, 
+                                                                      int degreeIndex, 
+                                                                      ChordType type, 
+                                                                      Voicing voicing,
+                                                                      bool strictGhostHarmony) {
+  std::vector<ChordNote> chordNotes;
+  std::vector<int> notes; // Temporary int vector for voicing calculations
 
   if (type == ChordType::None) {
     // Single note - just return the root
     int note = ScaleUtilities::calculateMidiNote(rootNote, scaleIntervals, degreeIndex);
-    notes.push_back(note);
-    return notes;
+    chordNotes.emplace_back(note, false);
+    return chordNotes;
   }
 
   // Step A: Generate Raw Stack
@@ -48,13 +59,20 @@ std::vector<int> ChordUtilities::generateChord(int rootNote,
   }
 
   // Step B: Apply Voicing Strategy
-  // Debug: Verify voicing is being passed correctly
-  // (voicing should be 0=RootPosition, 1=Smooth, 2=GuitarSpread)
+  bool needsGhostNotes = (voicing == Voicing::SmoothFilled || voicing == Voicing::GuitarFilled);
+  Voicing baseVoicing = voicing;
   
-  if (voicing == Voicing::RootPosition) {
+  // Map filled voicings to their base voicings
+  if (voicing == Voicing::SmoothFilled) {
+    baseVoicing = Voicing::Smooth;
+  } else if (voicing == Voicing::GuitarFilled) {
+    baseVoicing = Voicing::GuitarSpread;
+  }
+  
+  if (baseVoicing == Voicing::RootPosition) {
     // Do nothing - keep as 1-3-5 (root position)
     // Notes stay as calculated
-  } else if (voicing == Voicing::Smooth) {
+  } else if (baseVoicing == Voicing::Smooth) {
     // Smooth voicing: Inversions to minimize movement
     // Target Center = The rootNote argument (Zone Root) for smooth voice leading
     // Cluster ALL notes (including root) around Zone Root for smooth voice leading
@@ -115,9 +133,13 @@ std::vector<int> ChordUtilities::generateChord(int rootNote,
       notes.insert(notes.begin(), targetRoot);
     }
     
-    // Return early since we've already sorted
-    return notes;
-  } else if (voicing == Voicing::GuitarSpread) {
+    // Convert to ChordNote and check for ghost notes
+    chordNotes = intsToChordNotes(notes);
+    if (needsGhostNotes) {
+      addGhostNotes(chordNotes, rootNote, type, scaleIntervals, degreeIndex, strictGhostHarmony);
+    }
+    return chordNotes;
+  } else if (baseVoicing == Voicing::GuitarSpread) {
     // GuitarSpread voicing: Open shapes with octave folding (Phase 18.6)
     // Maintain spread texture, shift octaves to keep in range
     
@@ -159,14 +181,117 @@ std::vector<int> ChordUtilities::generateChord(int rootNote,
     // Step 4: Finalize - Sort by pitch (Low to High)
     std::sort(notes.begin(), notes.end());
     
-    return notes;
+    // Convert to ChordNote and check for ghost notes
+    chordNotes = intsToChordNotes(notes);
+    if (needsGhostNotes) {
+      addGhostNotes(chordNotes, rootNote, type, scaleIntervals, degreeIndex, strictGhostHarmony);
+    }
+    return chordNotes;
   }
 
   // Step C: Final Polish - Sort by pitch (Low to High)
   // (Note: Smooth voicing already sorted and returned above)
   std::sort(notes.begin(), notes.end());
 
-  return notes;
+  // Convert to ChordNote (no ghost notes for RootPosition)
+  chordNotes = intsToChordNotes(notes);
+  return chordNotes;
+}
+
+void ChordUtilities::addGhostNotes(std::vector<ChordNote>& notes,
+                                   int zoneAnchor,
+                                   ChordType type,
+                                   const std::vector<int>& scaleIntervals,
+                                   int degreeIndex,
+                                   bool strictHarmony) {
+  if (notes.empty())
+    return;
+  
+  // Step 1: Identify candidate notes for ghost filling
+  std::vector<int> candidates;
+  
+  if (strictHarmony) {
+    // Strict mode: Use Root (1) and 5th only
+    int root = ScaleUtilities::calculateMidiNote(zoneAnchor, scaleIntervals, degreeIndex);
+    int fifth = ScaleUtilities::calculateMidiNote(zoneAnchor, scaleIntervals, degreeIndex + 4);
+    candidates.push_back(root);
+    candidates.push_back(fifth);
+    // Also include 3rd if it's not already in the chord
+    if (type == ChordType::Triad || type == ChordType::Seventh || type == ChordType::Ninth) {
+      int third = ScaleUtilities::calculateMidiNote(zoneAnchor, scaleIntervals, degreeIndex + 2);
+      candidates.push_back(third);
+    }
+  } else {
+    // Loose mode: Use harmonic extensions
+    if (type == ChordType::Triad) {
+      // For triads, add 7th
+      int seventh = ScaleUtilities::calculateMidiNote(zoneAnchor, scaleIntervals, degreeIndex + 6);
+      candidates.push_back(seventh);
+    } else if (type == ChordType::Seventh) {
+      // For 7ths, add 9th
+      int ninth = ScaleUtilities::calculateMidiNote(zoneAnchor, scaleIntervals, degreeIndex + 8);
+      candidates.push_back(ninth);
+    }
+  }
+  
+  // Step 2: Analyze gaps in current voicing
+  // Sort notes by pitch
+  std::sort(notes.begin(), notes.end(), [](const ChordNote& a, const ChordNote& b) {
+    return a.pitch < b.pitch;
+  });
+  
+  // Find largest gap
+  int largestGap = 0;
+  size_t gapStartIdx = 0;
+  
+  for (size_t i = 0; i < notes.size() - 1; ++i) {
+    int gap = notes[i + 1].pitch - notes[i].pitch;
+    if (gap > largestGap && gap > 7) { // Only consider gaps > 7 semitones
+      largestGap = gap;
+      gapStartIdx = i;
+    }
+  }
+  
+  // Step 3: Try to place a ghost note in the largest gap
+  if (largestGap > 7) {
+    int gapStart = notes[gapStartIdx].pitch;
+    int gapEnd = notes[gapStartIdx + 1].pitch;
+    int gapCenter = (gapStart + gapEnd) / 2;
+    
+    // Try each candidate in different octaves around the gap center
+    for (int candidate : candidates) {
+      // Try candidate in different octaves to fit in gap
+      for (int octaveOffset = -12; octaveOffset <= 12; octaveOffset += 12) {
+        int testPitch = candidate + octaveOffset;
+        
+        // Check if testPitch is in the gap
+        if (testPitch > gapStart && testPitch < gapEnd) {
+          // Check for minor 2nd clashes (avoid notes within 1 semitone)
+          bool hasClash = false;
+          for (const auto& cn : notes) {
+            if (std::abs(cn.pitch - testPitch) <= 1) {
+              hasClash = true;
+              break;
+            }
+          }
+          
+          if (!hasClash) {
+            // Valid ghost note - insert it
+            ChordNote ghost(testPitch, true);
+            notes.insert(notes.begin() + gapStartIdx + 1, ghost);
+            // Re-sort after insertion
+            std::sort(notes.begin(), notes.end(), [](const ChordNote& a, const ChordNote& b) {
+              return a.pitch < b.pitch;
+            });
+            return; // Only add one ghost note per call
+          }
+        }
+      }
+    }
+  }
+  
+  // Also check for headroom/floor gaps (between highest/lowest note and range limits)
+  // This is optional and can be added later if needed
 }
 
 void ChordUtilities::dumpDebugReport(juce::File targetFile) {
@@ -176,10 +301,11 @@ void ChordUtilities::dumpDebugReport(juce::File targetFile) {
   
   juce::String report;
   
-  report += "=== OmniKey Voicing Debug Report ===\n";
+  report += "=== OmniKey Voicing Debug Report (Phase 18.8) ===\n";
   report += "Scale: C Major\n";
   report += "Zone Anchor/Root: C4 (MIDI 60)\n";
-  report += "Input Root: C4 (MIDI 60)\n\n";
+  report += "Input Root: C4 (MIDI 60)\n";
+  report += "Ghost Notes marked with [G] or *\n\n";
   
   // Helper to create repeated strings
   auto repeatString = [](const juce::String& str, int count) {
@@ -189,59 +315,87 @@ void ChordUtilities::dumpDebugReport(juce::File targetFile) {
     return result;
   };
   
-  // Iterate through all voicing strategies
-  const Voicing voicings[] = {Voicing::RootPosition, Voicing::Smooth, Voicing::GuitarSpread};
-  const juce::String voicingNames[] = {"Root Position", "Smooth", "Guitar Spread"};
+  // Iterate through Strict and Loose harmony modes
+  const bool harmonyModes[] = {true, false}; // true = Strict, false = Loose
+  const juce::String harmonyModeNames[] = {"ON", "OFF"};
   
-  // Iterate through chord types (skip None and Power5 for this report)
-  const ChordType types[] = {ChordType::Triad, ChordType::Seventh, ChordType::Ninth};
-  const juce::String typeNames[] = {"Triad", "Seventh", "Ninth"};
-  
-  // Iterate through scale degrees (0-6)
-  for (int voicingIdx = 0; voicingIdx < 3; ++voicingIdx) {
-    Voicing voicing = voicings[voicingIdx];
-    report += "\n" + repeatString("=", 60) + "\n";
-    report += "VOICING: " + voicingNames[voicingIdx] + "\n";
-    report += repeatString("=", 60) + "\n\n";
+  for (int harmonyIdx = 0; harmonyIdx < 2; ++harmonyIdx) {
+    bool strictMode = harmonyModes[harmonyIdx];
+    report += "\n" + repeatString("=", 70) + "\n";
+    report += "=== STRICT HARMONY: " + harmonyModeNames[harmonyIdx] + " ===\n";
+    report += repeatString("=", 70) + "\n\n";
     
-    for (int typeIdx = 0; typeIdx < 3; ++typeIdx) {
-      ChordType type = types[typeIdx];
-      report += "  Chord Type: " + typeNames[typeIdx] + "\n";
-      report += "  " + repeatString("-", 50) + "\n";
+    // Iterate through all voicing strategies (including filled)
+    const Voicing voicings[] = {
+      Voicing::RootPosition, 
+      Voicing::Smooth, 
+      Voicing::GuitarSpread,
+      Voicing::SmoothFilled,
+      Voicing::GuitarFilled
+    };
+    const juce::String voicingNames[] = {
+      "Root Position", 
+      "Smooth", 
+      "Guitar Spread",
+      "Smooth (Filled)",
+      "Guitar (Filled)"
+    };
+    
+    // Iterate through chord types (skip None and Power5 for this report)
+    const ChordType types[] = {ChordType::Triad, ChordType::Seventh, ChordType::Ninth};
+    const juce::String typeNames[] = {"Triad", "Seventh", "Ninth"};
+    
+    // Iterate through all voicings
+    for (int voicingIdx = 0; voicingIdx < 5; ++voicingIdx) {
+      Voicing voicing = voicings[voicingIdx];
+      report += "\n" + repeatString("-", 60) + "\n";
+      report += "VOICING: " + voicingNames[voicingIdx] + "\n";
+      report += repeatString("-", 60) + "\n\n";
       
-      for (int degree = 0; degree <= 6; ++degree) {
-        // Calculate base note for this degree
-        int baseNote = ScaleUtilities::calculateMidiNote(zoneAnchor, cMajorIntervals, degree);
+      for (int typeIdx = 0; typeIdx < 3; ++typeIdx) {
+        ChordType type = types[typeIdx];
+        report += "  Chord Type: " + typeNames[typeIdx] + "\n";
+        report += "  " + repeatString("-", 50) + "\n";
         
-        // Generate chord
-        std::vector<int> notes = generateChord(zoneAnchor, cMajorIntervals, degree, type, voicing);
-        
-        // Format MIDI numbers
-        juce::String midiStr = "[";
-        juce::String noteNamesStr = "(";
-        for (size_t i = 0; i < notes.size(); ++i) {
-          if (i > 0) {
-            midiStr += ", ";
-            noteNamesStr += ", ";
+        for (int degree = 0; degree <= 6; ++degree) {
+          // Generate chord with current harmony mode
+          std::vector<ChordNote> chordNotes = generateChord(zoneAnchor, cMajorIntervals, degree, type, voicing, strictMode);
+          
+          // Format MIDI numbers and note names with ghost indicators
+          juce::String midiStr = "[";
+          juce::String noteNamesStr = "(";
+          for (size_t i = 0; i < chordNotes.size(); ++i) {
+            if (i > 0) {
+              midiStr += ", ";
+              noteNamesStr += ", ";
+            }
+            midiStr += juce::String(chordNotes[i].pitch);
+            if (chordNotes[i].isGhost) {
+              midiStr += "*"; // Mark ghost in MIDI numbers
+            }
+            
+            juce::String noteName = MidiNoteUtilities::getMidiNoteName(chordNotes[i].pitch);
+            if (chordNotes[i].isGhost) {
+              noteName += " [G]"; // Mark ghost in note names
+            }
+            noteNamesStr += noteName;
           }
-          midiStr += juce::String(notes[i]);
-          noteNamesStr += MidiNoteUtilities::getMidiNoteName(notes[i]);
+          midiStr += "]";
+          noteNamesStr += ")";
+          
+          // Get degree name
+          const juce::String degreeNames[] = {"C (I)", "D (II)", "E (III)", "F (IV)", "G (V)", "A (VI)", "B (VII)"};
+          juce::String degreeName = (degree < 7) ? degreeNames[degree] : juce::String("Degree ") + juce::String(degree);
+          
+          report += "    Degree " + juce::String(degree) + " (" + degreeName + "): " 
+                 + midiStr + " " + noteNamesStr + "\n";
         }
-        midiStr += "]";
-        noteNamesStr += ")";
-        
-        // Get degree name
-        const juce::String degreeNames[] = {"C (I)", "D (II)", "E (III)", "F (IV)", "G (V)", "A (VI)", "B (VII)"};
-        juce::String degreeName = (degree < 7) ? degreeNames[degree] : juce::String("Degree ") + juce::String(degree);
-        
-        report += "    Degree " + juce::String(degree) + " (" + degreeName + "): " 
-               + midiStr + " " + noteNamesStr + "\n";
+        report += "\n";
       }
-      report += "\n";
     }
   }
   
-  report += "\n" + repeatString("=", 60) + "\n";
+  report += "\n" + repeatString("=", 70) + "\n";
   report += "End of Report\n";
   
   // Write to file

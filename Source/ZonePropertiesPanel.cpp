@@ -312,6 +312,8 @@ ZonePropertiesPanel::ZonePropertiesPanel(ZoneManager *zoneMgr, DeviceManager *de
   voicingSelector.addItem("Root Position (Bass)", 1);
   voicingSelector.addItem("Smooth / Inversions (Pads)", 2);
   voicingSelector.addItem("Guitar / Spread (Strum)", 3);
+  voicingSelector.addItem("Smooth (Filled)", 4);
+  voicingSelector.addItem("Guitar (Filled)", 5);
   voicingSelector.onChange = [this] {
     if (currentZone) {
       int selected = voicingSelector.getSelectedItemIndex();
@@ -322,6 +324,10 @@ ZonePropertiesPanel::ZonePropertiesPanel(ZoneManager *zoneMgr, DeviceManager *de
           currentZone->voicing = ChordUtilities::Voicing::Smooth;
         } else if (selected == 2) {
           currentZone->voicing = ChordUtilities::Voicing::GuitarSpread;
+        } else if (selected == 3) {
+          currentZone->voicing = ChordUtilities::Voicing::SmoothFilled;
+        } else if (selected == 4) {
+          currentZone->voicing = ChordUtilities::Voicing::GuitarFilled;
         }
         // Rebuild cache when voicing changes
         if (zoneManager && scaleLibrary) {
@@ -455,6 +461,39 @@ ZonePropertiesPanel::ZonePropertiesPanel(ZoneManager *zoneMgr, DeviceManager *de
   randVelSlider.onValueChange = [this] {
     if (currentZone) {
       currentZone->velocityRandom = static_cast<int>(randVelSlider.getValue());
+      if (zoneManager) {
+        zoneManager->sendChangeMessage();
+      }
+    }
+  };
+
+  addAndMakeVisible(strictGhostToggle);
+  strictGhostToggle.setButtonText("Strict Ghost Harmony");
+  strictGhostToggle.onClick = [this] {
+    if (currentZone) {
+      currentZone->strictGhostHarmony = strictGhostToggle.getToggleState();
+      // Rebuild cache when ghost harmony mode changes
+      if (zoneManager && scaleLibrary) {
+        std::vector<int> intervals = scaleLibrary->getIntervals(currentZone->scaleName);
+        currentZone->rebuildCache(intervals);
+        zoneManager->sendChangeMessage();
+      }
+    }
+  };
+
+  addAndMakeVisible(ghostVelLabel);
+  ghostVelLabel.setText("Ghost Velocity %:", juce::dontSendNotification);
+  ghostVelLabel.attachToComponent(&ghostVelSlider, true);
+
+  addAndMakeVisible(ghostVelSlider);
+  ghostVelSlider.setRange(0.0, 100.0, 1.0);
+  ghostVelSlider.setValue(60.0);
+  ghostVelSlider.textFromValueFunction = [](double value) {
+    return juce::String(static_cast<int>(value));
+  };
+  ghostVelSlider.onValueChange = [this] {
+    if (currentZone) {
+      currentZone->ghostVelocityScale = static_cast<float>(ghostVelSlider.getValue()) / 100.0f;
       if (zoneManager) {
         zoneManager->sendChangeMessage();
       }
@@ -633,6 +672,15 @@ void ZonePropertiesPanel::resized() {
   randVelSlider.setBounds(leftMargin, y, width, rowHeight);
   y += rowHeight + spacing;
 
+  // Strict Ghost Toggle
+  strictGhostToggle.setBounds(leftMargin, y, width, rowHeight);
+  y += rowHeight + spacing;
+
+  // Ghost Velocity
+  ghostVelLabel.setBounds(0, y, labelWidth, rowHeight);
+  ghostVelSlider.setBounds(leftMargin, y, width, rowHeight);
+  y += rowHeight + spacing;
+
   // Chord Type
   chordTypeSelector.setBounds(leftMargin, y, width, rowHeight);
   y += rowHeight + spacing;
@@ -701,7 +749,7 @@ int ZonePropertiesPanel::getRequiredHeight() const {
   int bottomPadding = 8;
   
   // Count number of rows
-  int numRows = 21; // Alias, Name, Scale, Root, Chromatic, Degree, Lock, ChordType, Voicing, PlayMode, StrumSpeed, ReleaseBehavior, ReleaseDuration, AllowSustain, Capture/Remove, Strategy, Grid, Channel, Color
+  int numRows = 23; // Alias, Name, Scale, Root, Chromatic, Degree, Lock, ChordType, Voicing, PlayMode, StrumSpeed, ReleaseBehavior, ReleaseDuration, AllowSustain, BaseVel, RandVel, StrictGhost, GhostVel, Capture/Remove, Strategy, Grid, Channel, Color
   // Add one more row if Piano help label is visible
   if (currentZone && currentZone->layoutStrategy == Zone::LayoutStrategy::Piano) {
     numRows++;
@@ -741,6 +789,8 @@ void ZonePropertiesPanel::updateControlsFromZone() {
     allowSustainToggle.setEnabled(false);
     baseVelSlider.setEnabled(false);
     randVelSlider.setEnabled(false);
+    strictGhostToggle.setEnabled(false);
+    ghostVelSlider.setEnabled(false);
     channelSlider.setEnabled(false);
     colorButton.setEnabled(false);
     chipList.setEnabled(false);
@@ -769,6 +819,8 @@ void ZonePropertiesPanel::updateControlsFromZone() {
     allowSustainToggle.setEnabled(true);
     baseVelSlider.setEnabled(true);
     randVelSlider.setEnabled(true);
+    strictGhostToggle.setEnabled(true);
+    ghostVelSlider.setEnabled(true);
     channelSlider.setEnabled(true);
   colorButton.setEnabled(true);
 
@@ -854,6 +906,9 @@ void ZonePropertiesPanel::updateControlsFromZone() {
     case ChordUtilities::Voicing::RootPosition: voicingIndex = 0; break;
     case ChordUtilities::Voicing::Smooth: voicingIndex = 1; break;
     case ChordUtilities::Voicing::GuitarSpread: voicingIndex = 2; break;
+    case ChordUtilities::Voicing::SmoothFilled: voicingIndex = 3; break;
+    case ChordUtilities::Voicing::GuitarFilled: voicingIndex = 4; break;
+    default: voicingIndex = 0; break;
   }
   voicingSelector.setSelectedItemIndex(voicingIndex, juce::dontSendNotification);
 
@@ -874,6 +929,8 @@ void ZonePropertiesPanel::updateControlsFromZone() {
   allowSustainToggle.setToggleState(currentZone->allowSustain, juce::dontSendNotification);
   baseVelSlider.setValue(currentZone->baseVelocity, juce::dontSendNotification);
   randVelSlider.setValue(currentZone->velocityRandom, juce::dontSendNotification);
+  strictGhostToggle.setToggleState(currentZone->strictGhostHarmony, juce::dontSendNotification);
+  ghostVelSlider.setValue(currentZone->ghostVelocityScale * 100.0, juce::dontSendNotification);
 
   // Update chip list
   chipList.setKeys(currentZone->inputKeyCodes);
