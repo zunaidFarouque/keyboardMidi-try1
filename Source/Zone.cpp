@@ -1,6 +1,7 @@
 #include "Zone.h"
 #include "ScaleUtilities.h"
 #include "KeyboardLayoutUtils.h"
+#include "MidiNoteUtilities.h"
 #include <algorithm>
 #include <map>
 #include <set>
@@ -22,6 +23,7 @@ Zone::Zone()
 
 void Zone::rebuildCache(const std::vector<int>& intervals) {
   keyToChordCache.clear();
+  keyToLabelCache.clear();
   
   // Compilation: chord generation (ChordUtilities::generateChord, ScaleUtilities) runs only here.
   // Disable chords in Piano mode (Piano mode ignores scales)
@@ -29,6 +31,47 @@ void Zone::rebuildCache(const std::vector<int>& intervals) {
 
   if (inputKeyCodes.empty())
     return;
+  
+  // Helper lambda to process a key's cache entry
+  auto processKeyCache = [this, &intervals, useChords](int keyCode, int degree, int baseNote) {
+    // Generate chord or single note (absolute pitches)
+    std::vector<ChordUtilities::ChordNote> chordNotes;
+    if (useChords) {
+      chordNotes = ChordUtilities::generateChord(
+        rootNote, intervals, degree, chordType, voicing, strictGhostHarmony
+      );
+    } else {
+      chordNotes = {ChordUtilities::ChordNote(baseNote, false)};
+    }
+    
+    // Add bass note if enabled (bass is the root of the chord, shifted down)
+    if (addBassNote) {
+      // Bass note is the root of the chord (baseNote), shifted down by bassOctaveOffset octaves
+      int bassPitch = baseNote + (bassOctaveOffset * 12);
+      bassPitch = juce::jlimit(0, 127, bassPitch);
+      chordNotes.emplace_back(bassPitch, false); // Bass is not a ghost note
+      // Sort to ensure bass is first (lowest pitch)
+      std::sort(chordNotes.begin(), chordNotes.end(), [](const ChordUtilities::ChordNote& a, const ChordUtilities::ChordNote& b) {
+        return a.pitch < b.pitch;
+      });
+    }
+    
+    // Convert to relative chord (relative to rootNote) for storage
+    std::vector<ChordUtilities::ChordNote> relativeChord;
+    for (const auto& cn : chordNotes) {
+      relativeChord.emplace_back(cn.pitch - rootNote, cn.isGhost);
+    }
+    keyToChordCache[keyCode] = relativeChord;
+    
+    // Cache label (Roman numeral or note name)
+    juce::String label;
+    if (showRomanNumerals && useChords) {
+      label = ScaleUtilities::getRomanNumeral(degree, intervals);
+    } else {
+      label = MidiNoteUtilities::getMidiNoteName(baseNote);
+    }
+    keyToLabelCache[keyCode] = label;
+  };
 
   if (layoutStrategy == LayoutStrategy::Linear) {
     // Linear mode: Map each key to its index in inputKeyCodes
@@ -36,19 +79,7 @@ void Zone::rebuildCache(const std::vector<int>& intervals) {
       int keyCode = inputKeyCodes[i];
       int degree = static_cast<int>(i) + degreeOffset;
       int baseNote = ScaleUtilities::calculateMidiNote(rootNote, intervals, degree);
-      
-      if (useChords) {
-        std::vector<ChordUtilities::ChordNote> chordNotes = ChordUtilities::generateChord(
-          rootNote, intervals, degree, chordType, voicing, strictGhostHarmony
-        );
-        std::vector<ChordUtilities::ChordNote> relativeChord;
-        for (const auto& cn : chordNotes) {
-          relativeChord.emplace_back(cn.pitch - rootNote, cn.isGhost);
-        }
-        keyToChordCache[keyCode] = relativeChord;
-      } else {
-        keyToChordCache[keyCode] = {ChordUtilities::ChordNote(baseNote - rootNote, false)};
-      }
+      processKeyCache(keyCode, degree, baseNote);
     }
   } else if (layoutStrategy == LayoutStrategy::Grid) {
     // Grid mode: Calculate based on keyboard geometry
@@ -79,19 +110,7 @@ void Zone::rebuildCache(const std::vector<int>& intervals) {
       // Degree = deltaCol + (deltaRow * gridInterval)
       int degree = deltaCol + (deltaRow * gridInterval) + degreeOffset;
       int baseNote = ScaleUtilities::calculateMidiNote(rootNote, intervals, degree);
-      
-      if (useChords) {
-        std::vector<ChordUtilities::ChordNote> chordNotes = ChordUtilities::generateChord(
-          rootNote, intervals, degree, chordType, voicing, strictGhostHarmony
-        );
-        std::vector<ChordUtilities::ChordNote> relativeChord;
-        for (const auto& cn : chordNotes) {
-          relativeChord.emplace_back(cn.pitch - rootNote, cn.isGhost);
-        }
-        keyToChordCache[keyCode] = relativeChord;
-      } else {
-        keyToChordCache[keyCode] = {ChordUtilities::ChordNote(baseNote - rootNote, false)};
-      }
+      processKeyCache(keyCode, degree, baseNote);
     }
   } else if (layoutStrategy == LayoutStrategy::Piano) {
     // Piano mode: Force Chromatic scale (Major scale intervals for white keys)
@@ -147,12 +166,21 @@ void Zone::rebuildCache(const std::vector<int>& intervals) {
       int whiteKeyCode = whiteKeyPair.first;
       float whiteCol = whiteKeyPair.second;
 
-      // Calculate note for white key using Major scale
+      // Calculate note for white key using Major scale (Piano mode doesn't use processKeyCache helper)
       int degree = diatonicIndex;
       int baseNote = ScaleUtilities::calculateMidiNote(rootNote, majorIntervals, degree);
       int relativeNote = baseNote - rootNote;
       // Piano mode: Store single note only (chords disabled in Piano mode)
       keyToChordCache[whiteKeyCode] = {ChordUtilities::ChordNote(relativeNote, false)};
+      
+      // Cache label
+      juce::String label;
+      if (showRomanNumerals) {
+        label = ScaleUtilities::getRomanNumeral(degree, majorIntervals);
+      } else {
+        label = MidiNoteUtilities::getMidiNoteName(baseNote);
+      }
+      keyToLabelCache[whiteKeyCode] = label;
 
       // Check for black key above this white key
       // Black keys are positioned between white keys (roughly col + 0.5)
@@ -173,6 +201,17 @@ void Zone::rebuildCache(const std::vector<int>& intervals) {
             // Piano mode: Store single note only
             int whiteRelativeNote = baseNote - rootNote;
             keyToChordCache[blackKeyCode] = {ChordUtilities::ChordNote(whiteRelativeNote + 1, false)};
+            
+            // Cache label for black key
+            int blackNote = baseNote + 1;
+            juce::String label;
+            if (showRomanNumerals) {
+              // For black keys, show the sharp version of the white key's Roman numeral
+              label = ScaleUtilities::getRomanNumeral(degree, majorIntervals) + "#";
+            } else {
+              label = MidiNoteUtilities::getMidiNoteName(blackNote);
+            }
+            keyToLabelCache[blackKeyCode] = label;
             break; // One black key per white key
           }
         }
@@ -255,6 +294,9 @@ juce::ValueTree Zone::toValueTree() const {
   vt.setProperty("randVel", velocityRandom, nullptr);
   vt.setProperty("strictGhost", strictGhostHarmony, nullptr);
   vt.setProperty("ghostVelScale", ghostVelocityScale, nullptr);
+  vt.setProperty("addBassNote", addBassNote, nullptr);
+  vt.setProperty("bassOctaveOffset", bassOctaveOffset, nullptr);
+  vt.setProperty("showRomanNumerals", showRomanNumerals, nullptr);
   
   // Serialize inputKeyCodes as comma-separated string
   juce::StringArray keyCodesArray;
@@ -331,5 +373,18 @@ std::shared_ptr<Zone> Zone::fromValueTree(const juce::ValueTree& vt) {
     }
   }
   
+  // Load new properties (with defaults)
+  zone->addBassNote = vt.getProperty("addBassNote", false);
+  zone->bassOctaveOffset = vt.getProperty("bassOctaveOffset", -1);
+  zone->showRomanNumerals = vt.getProperty("showRomanNumerals", false);
+  
   return zone;
+}
+
+juce::String Zone::getKeyLabel(int keyCode) const {
+  auto it = keyToLabelCache.find(keyCode);
+  if (it != keyToLabelCache.end()) {
+    return it->second;
+  }
+  return ""; // Return empty string if not found
 }

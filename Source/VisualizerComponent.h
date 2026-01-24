@@ -9,15 +9,16 @@
 #include <set>
 
 class InputProcessor;
-
 class PresetManager;
+class VoiceManager;
 
 class VisualizerComponent : public juce::Component,
                             public RawInputManager::Listener,
                             public juce::ChangeListener,
-                            public juce::ValueTree::Listener {
+                            public juce::ValueTree::Listener,
+                            public juce::Timer {
 public:
-  VisualizerComponent(ZoneManager *zoneMgr, DeviceManager *deviceMgr, PresetManager *presetMgr = nullptr, InputProcessor *inputProc = nullptr);
+  VisualizerComponent(ZoneManager *zoneMgr, DeviceManager *deviceMgr, const VoiceManager &voiceMgr, PresetManager *presetMgr = nullptr, InputProcessor *inputProc = nullptr);
   ~VisualizerComponent() override;
 
   void paint(juce::Graphics &) override;
@@ -35,9 +36,13 @@ public:
   void valueTreeChildRemoved(juce::ValueTree &parentTree, juce::ValueTree &childWhichHasBeenRemoved, int indexFromWhichChildWasRemoved) override;
   void valueTreePropertyChanged(juce::ValueTree &treeWhosePropertyHasChanged, const juce::Identifier &property) override;
 
+  // Timer implementation (for updating sustain/latch indicators)
+  void timerCallback() override;
+
 private:
   ZoneManager *zoneManager;
   DeviceManager *deviceManager;
+  const VoiceManager &voiceManager;
   PresetManager *presetManager;
   InputProcessor *inputProcessor;
   std::set<int> activeKeys;

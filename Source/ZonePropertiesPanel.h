@@ -88,6 +88,11 @@ private:
   juce::ToggleButton strictGhostToggle;
   juce::Label ghostVelLabel;
   juce::Slider ghostVelSlider;
+  juce::ToggleButton bassToggle;
+  juce::Label bassOctaveLabel;
+  juce::Slider bassOctaveSlider;
+  juce::Label displayModeLabel;
+  juce::ComboBox displayModeSelector;
   KeyChipList chipList;
 
   void refreshAliasSelector();

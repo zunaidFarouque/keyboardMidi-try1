@@ -500,6 +500,65 @@ ZonePropertiesPanel::ZonePropertiesPanel(ZoneManager *zoneMgr, DeviceManager *de
     }
   };
 
+  // Bass Note Controls
+  addAndMakeVisible(bassToggle);
+  bassToggle.setButtonText("Add Bass");
+  bassToggle.onClick = [this] {
+    if (currentZone) {
+      currentZone->addBassNote = bassToggle.getToggleState();
+      bassOctaveSlider.setEnabled(bassToggle.getToggleState());
+      // Rebuild cache when bass setting changes
+      if (zoneManager && scaleLibrary) {
+        std::vector<int> intervals = scaleLibrary->getIntervals(currentZone->scaleName);
+        currentZone->rebuildCache(intervals);
+        zoneManager->sendChangeMessage();
+      }
+    }
+  };
+
+  addAndMakeVisible(bassOctaveLabel);
+  bassOctaveLabel.setText("Bass Octave:", juce::dontSendNotification);
+  bassOctaveLabel.attachToComponent(&bassOctaveSlider, true);
+
+  addAndMakeVisible(bassOctaveSlider);
+  bassOctaveSlider.setRange(-3, -1, 1);
+  bassOctaveSlider.setValue(-1);
+  bassOctaveSlider.textFromValueFunction = [](double value) {
+    return juce::String(static_cast<int>(value));
+  };
+  bassOctaveSlider.onValueChange = [this] {
+    if (currentZone) {
+      currentZone->bassOctaveOffset = static_cast<int>(bassOctaveSlider.getValue());
+      // Rebuild cache when bass octave changes
+      if (zoneManager && scaleLibrary) {
+        std::vector<int> intervals = scaleLibrary->getIntervals(currentZone->scaleName);
+        currentZone->rebuildCache(intervals);
+        zoneManager->sendChangeMessage();
+      }
+    }
+  };
+  bassOctaveSlider.setEnabled(false); // Disabled until bass toggle is on
+
+  // Display Mode Controls
+  addAndMakeVisible(displayModeLabel);
+  displayModeLabel.setText("Display Mode:", juce::dontSendNotification);
+  displayModeLabel.attachToComponent(&displayModeSelector, true);
+
+  addAndMakeVisible(displayModeSelector);
+  displayModeSelector.addItem("Note Name", 1);
+  displayModeSelector.addItem("Roman Numeral", 2);
+  displayModeSelector.onChange = [this] {
+    if (currentZone) {
+      currentZone->showRomanNumerals = (displayModeSelector.getSelectedId() == 2);
+      // Rebuild cache when display mode changes
+      if (zoneManager && scaleLibrary) {
+        std::vector<int> intervals = scaleLibrary->getIntervals(currentZone->scaleName);
+        currentZone->rebuildCache(intervals);
+        zoneManager->sendChangeMessage();
+      }
+    }
+  };
+
   addAndMakeVisible(channelLabel);
   channelLabel.setText("MIDI Channel:", juce::dontSendNotification);
   channelLabel.attachToComponent(&channelSlider, true);
@@ -681,6 +740,20 @@ void ZonePropertiesPanel::resized() {
   ghostVelSlider.setBounds(leftMargin, y, width, rowHeight);
   y += rowHeight + spacing;
 
+  // Bass Toggle
+  bassToggle.setBounds(leftMargin, y, width, rowHeight);
+  y += rowHeight + spacing;
+
+  // Bass Octave
+  bassOctaveLabel.setBounds(0, y, labelWidth, rowHeight);
+  bassOctaveSlider.setBounds(leftMargin, y, width, rowHeight);
+  y += rowHeight + spacing;
+
+  // Display Mode
+  displayModeLabel.setBounds(0, y, labelWidth, rowHeight);
+  displayModeSelector.setBounds(leftMargin, y, width, rowHeight);
+  y += rowHeight + spacing;
+
   // Chord Type
   chordTypeSelector.setBounds(leftMargin, y, width, rowHeight);
   y += rowHeight + spacing;
@@ -749,7 +822,7 @@ int ZonePropertiesPanel::getRequiredHeight() const {
   int bottomPadding = 8;
   
   // Count number of rows
-  int numRows = 23; // Alias, Name, Scale, Root, Chromatic, Degree, Lock, ChordType, Voicing, PlayMode, StrumSpeed, ReleaseBehavior, ReleaseDuration, AllowSustain, BaseVel, RandVel, StrictGhost, GhostVel, Capture/Remove, Strategy, Grid, Channel, Color
+  int numRows = 26; // Alias, Name, Scale, Root, Chromatic, Degree, Lock, ChordType, Voicing, PlayMode, StrumSpeed, ReleaseBehavior, ReleaseDuration, AllowSustain, BaseVel, RandVel, StrictGhost, GhostVel, BassToggle, BassOctave, DisplayMode, Capture/Remove, Strategy, Grid, Channel, Color
   // Add one more row if Piano help label is visible
   if (currentZone && currentZone->layoutStrategy == Zone::LayoutStrategy::Piano) {
     numRows++;
@@ -791,6 +864,9 @@ void ZonePropertiesPanel::updateControlsFromZone() {
     randVelSlider.setEnabled(false);
     strictGhostToggle.setEnabled(false);
     ghostVelSlider.setEnabled(false);
+    bassToggle.setEnabled(false);
+    bassOctaveSlider.setEnabled(false);
+    displayModeSelector.setEnabled(false);
     channelSlider.setEnabled(false);
     colorButton.setEnabled(false);
     chipList.setEnabled(false);
@@ -821,6 +897,9 @@ void ZonePropertiesPanel::updateControlsFromZone() {
     randVelSlider.setEnabled(true);
     strictGhostToggle.setEnabled(true);
     ghostVelSlider.setEnabled(true);
+    bassToggle.setEnabled(true);
+    bassOctaveSlider.setEnabled(currentZone->addBassNote);
+    displayModeSelector.setEnabled(true);
     channelSlider.setEnabled(true);
   colorButton.setEnabled(true);
 
@@ -931,6 +1010,10 @@ void ZonePropertiesPanel::updateControlsFromZone() {
   randVelSlider.setValue(currentZone->velocityRandom, juce::dontSendNotification);
   strictGhostToggle.setToggleState(currentZone->strictGhostHarmony, juce::dontSendNotification);
   ghostVelSlider.setValue(currentZone->ghostVelocityScale * 100.0, juce::dontSendNotification);
+  bassToggle.setToggleState(currentZone->addBassNote, juce::dontSendNotification);
+  bassOctaveSlider.setValue(currentZone->bassOctaveOffset, juce::dontSendNotification);
+  bassOctaveSlider.setEnabled(currentZone->addBassNote);
+  displayModeSelector.setSelectedId(currentZone->showRomanNumerals ? 2 : 1, juce::dontSendNotification);
 
   // Update chip list
   chipList.setKeys(currentZone->inputKeyCodes);

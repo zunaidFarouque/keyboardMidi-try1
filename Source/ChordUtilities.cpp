@@ -207,66 +207,69 @@ void ChordUtilities::addGhostNotes(std::vector<ChordNote>& notes,
   if (notes.empty())
     return;
   
-  // Step 1: Identify candidate notes for ghost filling
-  std::vector<int> candidates;
-  
-  if (strictHarmony) {
-    // Strict mode: Use Root (1) and 5th only
-    int root = ScaleUtilities::calculateMidiNote(zoneAnchor, scaleIntervals, degreeIndex);
-    int fifth = ScaleUtilities::calculateMidiNote(zoneAnchor, scaleIntervals, degreeIndex + 4);
-    candidates.push_back(root);
-    candidates.push_back(fifth);
-    // Also include 3rd if it's not already in the chord
-    if (type == ChordType::Triad || type == ChordType::Seventh || type == ChordType::Ninth) {
-      int third = ScaleUtilities::calculateMidiNote(zoneAnchor, scaleIntervals, degreeIndex + 2);
-      candidates.push_back(third);
-    }
-  } else {
-    // Loose mode: Use harmonic extensions
-    if (type == ChordType::Triad) {
-      // For triads, add 7th
-      int seventh = ScaleUtilities::calculateMidiNote(zoneAnchor, scaleIntervals, degreeIndex + 6);
-      candidates.push_back(seventh);
-    } else if (type == ChordType::Seventh) {
-      // For 7ths, add 9th
-      int ninth = ScaleUtilities::calculateMidiNote(zoneAnchor, scaleIntervals, degreeIndex + 8);
-      candidates.push_back(ninth);
-    }
-  }
-  
-  // Step 2: Analyze gaps in current voicing
-  // Sort notes by pitch
+  // Sort notes by pitch for gap analysis
   std::sort(notes.begin(), notes.end(), [](const ChordNote& a, const ChordNote& b) {
     return a.pitch < b.pitch;
   });
   
-  // Find largest gap
+  // Step 1: Define candidate degrees (scale degree offsets from chord root)
+  std::vector<int> candidateDegrees;
+  
+  if (strictHarmony) {
+    // Strict mode: ONLY Root (degreeIndex) and 5th (degreeIndex + 4)
+    candidateDegrees = {degreeIndex, degreeIndex + 4}; // Root, 5th
+  } else {
+    // Loose mode: Use harmonic extensions (7th and 9th)
+    if (type == ChordType::Triad) {
+      // For triads, add 7th (degreeIndex + 6)
+      candidateDegrees = {degreeIndex + 6};
+    } else if (type == ChordType::Seventh) {
+      // For 7ths, add 9th (degreeIndex + 8)
+      candidateDegrees = {degreeIndex + 8};
+    } else {
+      // For other types, no candidates
+      return;
+    }
+  }
+  
+  // Step 2: Analyze gaps in current voicing
+  // Find largest gap between adjacent notes
   int largestGap = 0;
   size_t gapStartIdx = 0;
+  int gapStart = 0;
+  int gapEnd = 0;
   
   for (size_t i = 0; i < notes.size() - 1; ++i) {
     int gap = notes[i + 1].pitch - notes[i].pitch;
     if (gap > largestGap && gap > 7) { // Only consider gaps > 7 semitones
       largestGap = gap;
       gapStartIdx = i;
+      gapStart = notes[i].pitch;
+      gapEnd = notes[i + 1].pitch;
     }
   }
   
   // Step 3: Try to place a ghost note in the largest gap
   if (largestGap > 7) {
-    int gapStart = notes[gapStartIdx].pitch;
-    int gapEnd = notes[gapStartIdx + 1].pitch;
-    int gapCenter = (gapStart + gapEnd) / 2;
-    
-    // Try each candidate in different octaves around the gap center
-    for (int candidate : candidates) {
-      // Try candidate in different octaves to fit in gap
-      for (int octaveOffset = -12; octaveOffset <= 12; octaveOffset += 12) {
-        int testPitch = candidate + octaveOffset;
+    // Try each candidate degree
+    for (int candidateDegree : candidateDegrees) {
+      // Calculate the base MIDI note for this candidate degree using ScaleUtilities
+      // This ensures the note is diatonic (in key)
+      int baseCandidatePitch = ScaleUtilities::calculateMidiNote(zoneAnchor, scaleIntervals, candidateDegree);
+      
+      // Find the octave that places this pitch in the gap
+      // Try different octaves to find one that fits
+      // Start from a low octave and work up
+      for (int octaveOffset = -24; octaveOffset <= 24; octaveOffset += 12) {
+        int testPitch = baseCandidatePitch + octaveOffset;
+        
+        // Clamp to valid MIDI range
+        if (testPitch < 0 || testPitch > 127)
+          continue;
         
         // Check if testPitch is in the gap
         if (testPitch > gapStart && testPitch < gapEnd) {
-          // Check for minor 2nd clashes (avoid notes within 1 semitone)
+          // Check for minor 2nd clashes (avoid notes within 1 semitone of existing notes)
           bool hasClash = false;
           for (const auto& cn : notes) {
             if (std::abs(cn.pitch - testPitch) <= 1) {
@@ -275,7 +278,8 @@ void ChordUtilities::addGhostNotes(std::vector<ChordNote>& notes,
             }
           }
           
-          if (!hasClash) {
+          // Additional clash check: ensure distance from gap boundaries > 1 semitone
+          if (!hasClash && std::abs(testPitch - gapStart) > 1 && std::abs(gapEnd - testPitch) > 1) {
             // Valid ghost note - insert it
             ChordNote ghost(testPitch, true);
             notes.insert(notes.begin() + gapStartIdx + 1, ghost);
@@ -288,10 +292,12 @@ void ChordUtilities::addGhostNotes(std::vector<ChordNote>& notes,
         }
       }
     }
+    
+    // Strict mode fallback: If no candidate fit, do NOT try loose candidates
+    // Just return the original chord (already handled by the loop above)
   }
   
-  // Also check for headroom/floor gaps (between highest/lowest note and range limits)
-  // This is optional and can be added later if needed
+  // No ghost note added - return original chord
 }
 
 void ChordUtilities::dumpDebugReport(juce::File targetFile) {

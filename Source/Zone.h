@@ -51,17 +51,24 @@ public:
   int velocityRandom = 0; // Velocity randomization range (0-64)
   bool strictGhostHarmony = true; // Ghost note harmony mode (true = strict 1/5, false = loose 7/9)
   float ghostVelocityScale = 0.6f; // Velocity multiplier for ghost notes (0.0-1.0)
+  bool addBassNote = false; // If true, add a bass note (root shifted down)
+  int bassOctaveOffset = -1; // Octave offset for bass note (-3 to -1)
+  bool showRomanNumerals = false; // If true, display Roman numerals instead of note names
 
   // Performance cache: Pre-compiled key-to-chord mappings (compilation strategy).
   // Config-time: rebuildCache() runs ChordUtilities::generateChord, ScaleUtilities; fills this map.
   // Play-time: getNotesForKey() does O(1) find + O(k) transpose (k = chord size). No chord/scale math.
   std::unordered_map<int, std::vector<ChordUtilities::ChordNote>> keyToChordCache; // keyCode -> chord notes (with ghost flags)
+  std::unordered_map<int, juce::String> keyToLabelCache; // keyCode -> display label (note name or Roman numeral)
 
   // Config-time: (re)build keyToChordCache when zone/scale/chord/keys change.
   void rebuildCache(const std::vector<int>& intervals);
 
   // Play-time: O(1) lookup + O(k) transpose. Returns final MIDI chord notes (with ghost flags) or nullopt if not in zone.
   std::optional<std::vector<ChordUtilities::ChordNote>> getNotesForKey(int keyCode, int globalChromTrans, int globalDegTrans);
+  
+  // Get display label for a key (note name or Roman numeral)
+  juce::String getKeyLabel(int keyCode) const;
 
   // Process a key input and return MIDI action if this zone matches
   // Note: Returns first note of chord for backward compatibility

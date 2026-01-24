@@ -30,6 +30,9 @@ public:
   // --- Latch (toggle hold) ---
   void setLatch(bool active) { globalLatchActive = active; }
   bool isLatchActive() const { return globalLatchActive; }
+  
+  // Check if a specific key code has any latched voices
+  bool isKeyLatched(int keyCode) const;
 
   // --- Panic ---
   void panic();
@@ -59,8 +62,8 @@ private:
 
   MidiEngine& midiEngine;
   StrumEngine strumEngine;
-  std::vector<ActiveVoice> voices;
-  juce::CriticalSection voicesLock;
+  mutable std::vector<ActiveVoice> voices; // Mutable for const accessors
+  mutable juce::CriticalSection voicesLock; // Mutable for const accessors
   std::unordered_map<InputID, PendingRelease> pendingReleases; // Track releases waiting for expiration
   juce::CriticalSection releasesLock;
 

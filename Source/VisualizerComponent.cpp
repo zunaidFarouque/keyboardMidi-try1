@@ -1,7 +1,9 @@
 #include "VisualizerComponent.h"
 #include "InputProcessor.h"
 #include "PresetManager.h"
+#include "VoiceManager.h"
 #include "Zone.h"
+#include <JuceHeader.h>
 #include <algorithm>
 
 // Helper to convert alias name to hash (same as in InputProcessor)
@@ -11,8 +13,8 @@ static uintptr_t aliasNameToHash(const juce::String &aliasName) {
   return static_cast<uintptr_t>(std::hash<juce::String>{}(aliasName));
 }
 
-VisualizerComponent::VisualizerComponent(ZoneManager *zoneMgr, DeviceManager *deviceMgr, PresetManager *presetMgr, InputProcessor *inputProc)
-    : zoneManager(zoneMgr), deviceManager(deviceMgr), presetManager(presetMgr), inputProcessor(inputProc) {
+VisualizerComponent::VisualizerComponent(ZoneManager *zoneMgr, DeviceManager *deviceMgr, const VoiceManager &voiceMgr, PresetManager *presetMgr, InputProcessor *inputProc)
+    : zoneManager(zoneMgr), deviceManager(deviceMgr), voiceManager(voiceMgr), presetManager(presetMgr), inputProcessor(inputProc) {
   if (zoneManager) {
     zoneManager->addChangeListener(this);
   }
@@ -24,9 +26,12 @@ VisualizerComponent::VisualizerComponent(ZoneManager *zoneMgr, DeviceManager *de
     // Also listen to root node changes (in case mappings node is recreated)
     presetManager->getRootNode().addListener(this);
   }
+  // Start timer to update sustain/latch indicators (30 FPS)
+  startTimer(33); // ~30 FPS
 }
 
 VisualizerComponent::~VisualizerComponent() {
+  stopTimer();
   if (zoneManager) {
     zoneManager->removeChangeListener(this);
   }
@@ -46,6 +51,24 @@ void VisualizerComponent::paint(juce::Graphics &g) {
     return; // Can't render without zone manager
   }
 
+  // --- 0. Header Bar (Sustain Indicator) ---
+  auto bounds = getLocalBounds();
+  auto headerRect = bounds.removeFromTop(30);
+  g.setColour(juce::Colour(0xff222222));
+  g.fillRect(headerRect);
+  
+  // Sustain Indicator
+  bool sustainActive = voiceManager.isSustainActive();
+  juce::Colour sustainColor = sustainActive ? juce::Colours::lime : juce::Colours::grey;
+  int indicatorSize = 12;
+  int indicatorX = headerRect.getRight() - 100;
+  int indicatorY = headerRect.getCentreY() - indicatorSize / 2;
+  g.setColour(sustainColor);
+  g.fillEllipse(indicatorX, indicatorY, indicatorSize, indicatorSize);
+  g.setColour(juce::Colours::white);
+  g.setFont(12.0f);
+  g.drawText("SUSTAIN", indicatorX + indicatorSize + 5, indicatorY, 60, indicatorSize, juce::Justification::centredLeft, false);
+
   // --- 1. Calculate Dynamic Scale ---
   // Full 104-key layout is roughly 23.0 keys wide (including numpad) and 6.5 keys tall (including function row).
   // Row -1 (function row) is at -1.2f offset, rows 0-4 are at 0-4
@@ -54,36 +77,26 @@ void VisualizerComponent::paint(juce::Graphics &g) {
   // Total span from function row top to row 4 bottom: 5.8f - (-1.44f) = 7.24f units
   float unitsWide = 23.0f;
   float unitsTall = 7.3f; // Accounts for function row at -1.2 offset + key height
+  float headerHeight = 30.0f;
+  float availableHeight = static_cast<float>(getHeight()) - headerHeight;
   
-  // Determine the maximum size a key can be while fitting in the component
+  // Scale keySize to fit in AVAILABLE height (below header) and width
   float scaleX = static_cast<float>(getWidth()) / unitsWide;
-  float scaleY = static_cast<float>(getHeight()) / unitsTall;
+  float scaleY = (availableHeight > 0.0f) ? (availableHeight / unitsTall) : scaleX;
   float keySize = std::min(scaleX, scaleY) * 0.9f; // 0.9f for margin
   
-  // Calculate actual bounds
-  // Function row top: startY + (-1.2f * 1.2f * keySize) = startY - 1.44f * keySize
-  // Row 4 bottom: startY + (4.0f * 1.2f * keySize) + (1.0f * keySize) = startY + 5.8f * keySize
-  // Total height needed: 5.8f - (-1.44f) = 7.24f * keySize
-  
-  // Position startY to fit everything within getHeight()
-  // We want: startY - 1.44f * keySize >= 0 AND startY + 5.8f * keySize <= getHeight()
-  // So: startY >= 1.44f * keySize AND startY <= getHeight() - 5.8f * keySize
-  // Center it: startY = (1.44f * keySize + getHeight() - 5.8f * keySize) / 2.0f
-  // Simplified: startY = (getHeight() - 4.36f * keySize) / 2.0f + 1.44f * keySize
-  float totalWidth = unitsWide * keySize;
-  float startX = (getWidth() - totalWidth) / 2.0f;
-  
-  // Calculate startY to ensure both function row and bottom row fit
-  float functionRowTop = 1.44f * keySize; // Minimum Y for function row to be visible
+  // Keyboard vertical span: top at startY - 1.44*keySize, bottom at startY + 5.8*keySize
+  // Constraint: top >= headerHeight, bottom <= getHeight() (keys use component coords)
   float row4Bottom = 5.8f * keySize; // Height from startY to row 4 bottom
-  float minStartY = functionRowTop;
-  float maxStartY = getHeight() - row4Bottom;
+  float minStartY = headerHeight + 1.44f * keySize;
+  float maxStartY = static_cast<float>(getHeight()) - row4Bottom;
   
-  // Center vertically within available space
+  // Center vertically within [minStartY, maxStartY]; clamp so keyboard is never clipped
   float startY = (minStartY + maxStartY) / 2.0f;
-  
-  // Clamp to ensure everything fits
   startY = juce::jlimit(minStartY, maxStartY, startY);
+  
+  float totalWidth = unitsWide * keySize;
+  float startX = (static_cast<float>(getWidth()) - totalWidth) / 2.0f;
 
   // --- 2. Iterate Keys ---
   const auto &layout = KeyboardLayoutUtils::getLayout();
@@ -158,11 +171,18 @@ void VisualizerComponent::paint(juce::Graphics &g) {
     }
     
     if (zoneInfo.first) {
-      uintptr_t aliasHash = zoneInfo.first->targetAliasHash;
-      auto action = zoneManager->simulateInput(keyCode, aliasHash);
-      
-      if (action.has_value() && action->type == ActionType::Note) {
-        labelText = MidiNoteUtilities::getMidiNoteName(action->data1);
+      // Use cached label from zone (supports both note names and Roman numerals)
+      juce::String cachedLabel = zoneInfo.first->getKeyLabel(keyCode);
+      if (cachedLabel.isNotEmpty()) {
+        labelText = cachedLabel;
+      } else {
+        // Fallback: calculate note name manually if cache is empty
+        uintptr_t aliasHash = zoneInfo.first->targetAliasHash;
+        auto action = zoneManager->simulateInput(keyCode, aliasHash);
+        
+        if (action.has_value() && action->type == ActionType::Note) {
+          labelText = MidiNoteUtilities::getMidiNoteName(action->data1);
+        }
       }
     }
 
@@ -208,6 +228,13 @@ void VisualizerComponent::paint(juce::Graphics &g) {
     if (!underlayColor.isTransparent()) {
       g.setColour(underlayColor.withAlpha(0.6f));
       g.fillRect(fullBounds);
+    }
+
+    // Layer 1.5: Latched State (drawn after Zone Underlay, before Physical Press)
+    bool isLatched = voiceManager.isKeyLatched(keyCode);
+    if (isLatched) {
+      g.setColour(juce::Colours::cyan.withAlpha(0.8f));
+      g.fillRoundedRectangle(keyBounds, 6.0f);
     }
 
     // Layer 2: Key Body
@@ -387,4 +414,9 @@ std::pair<std::shared_ptr<Zone>, bool> VisualizerComponent::findZoneForKey(int k
   }
 
   return {nullptr, false};
+}
+
+void VisualizerComponent::timerCallback() {
+  // Repaint to update sustain indicator and latched keys
+  repaint();
 }
