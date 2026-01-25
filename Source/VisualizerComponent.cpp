@@ -26,12 +26,11 @@ VisualizerComponent::VisualizerComponent(ZoneManager *zoneMgr, DeviceManager *de
     // Also listen to root node changes (in case mappings node is recreated)
     presetManager->getRootNode().addListener(this);
   }
-  // Start timer to update sustain/latch indicators (30 FPS)
-  startTimer(33); // ~30 FPS
+  vBlankAttachment = std::make_unique<juce::VBlankAttachment>(this, [this] { repaint(); });
 }
 
 VisualizerComponent::~VisualizerComponent() {
-  stopTimer();
+  vBlankAttachment.reset();
   if (zoneManager) {
     zoneManager->removeChangeListener(this);
   }
@@ -110,6 +109,13 @@ void VisualizerComponent::paint(juce::Graphics &g) {
   float totalWidth = unitsWide * keySize;
   float startX = (static_cast<float>(getWidth()) - totalWidth) / 2.0f;
 
+  // Snapshot active keys under lock (RawInput may come from OS thread)
+  std::set<int> activeKeysSnapshot;
+  {
+    juce::ScopedLock lock(keyStateLock);
+    activeKeysSnapshot = activeKeys;
+  }
+
   // --- 2. Iterate Keys ---
   const auto &layout = KeyboardLayoutUtils::getLayout();
   for (const auto &pair : layout) {
@@ -159,7 +165,7 @@ void VisualizerComponent::paint(juce::Graphics &g) {
     }
 
     // B. Key State
-    bool isPressed = (activeKeys.find(keyCode) != activeKeys.end());
+    bool isPressed = (activeKeysSnapshot.find(keyCode) != activeKeysSnapshot.end());
     
     // C. Text/Label
     juce::String labelText = geometry.label; // Default: "Q"
@@ -279,15 +285,11 @@ void VisualizerComponent::resized() {
 }
 
 void VisualizerComponent::handleRawKeyEvent(uintptr_t deviceHandle, int keyCode, bool isDown) {
-  if (isDown) {
+  juce::ScopedLock lock(keyStateLock);
+  if (isDown)
     activeKeys.insert(keyCode);
-  } else {
+  else
     activeKeys.erase(keyCode);
-  }
-  
-  juce::MessageManager::callAsync([this] {
-    repaint();
-  });
 }
 
 void VisualizerComponent::handleAxisEvent(uintptr_t deviceHandle, int inputCode, float value) {
@@ -426,9 +428,4 @@ std::pair<std::shared_ptr<Zone>, bool> VisualizerComponent::findZoneForKey(int k
   }
 
   return {nullptr, false};
-}
-
-void VisualizerComponent::timerCallback() {
-  // Repaint to update sustain indicator and latched keys
-  repaint();
 }

@@ -15,8 +15,7 @@ class VoiceManager;
 class VisualizerComponent : public juce::Component,
                             public RawInputManager::Listener,
                             public juce::ChangeListener,
-                            public juce::ValueTree::Listener,
-                            public juce::Timer {
+                            public juce::ValueTree::Listener {
 public:
   VisualizerComponent(ZoneManager *zoneMgr, DeviceManager *deviceMgr, const VoiceManager &voiceMgr, PresetManager *presetMgr = nullptr, InputProcessor *inputProc = nullptr);
   ~VisualizerComponent() override;
@@ -36,9 +35,6 @@ public:
   void valueTreeChildRemoved(juce::ValueTree &parentTree, juce::ValueTree &childWhichHasBeenRemoved, int indexFromWhichChildWasRemoved) override;
   void valueTreePropertyChanged(juce::ValueTree &treeWhosePropertyHasChanged, const juce::Identifier &property) override;
 
-  // Timer implementation (for updating sustain/latch indicators)
-  void timerCallback() override;
-
 private:
   ZoneManager *zoneManager;
   DeviceManager *deviceManager;
@@ -46,6 +42,8 @@ private:
   PresetManager *presetManager;
   InputProcessor *inputProcessor;
   std::set<int> activeKeys;
+  mutable juce::CriticalSection keyStateLock;
+  std::unique_ptr<juce::VBlankAttachment> vBlankAttachment;
 
   // Helper to check if a key belongs to any zone
   bool isKeyInAnyZone(int keyCode, uintptr_t aliasHash);

@@ -164,7 +164,7 @@ MainComponent::MainComponent()
 
   // Note: Test zone removed - StartupManager now handles factory default zones
 
-  startTimer(100);
+  startTimer(33); // 30 Hz for async log processing (Phase 21.1)
 
   // Load layout positions from DeviceManager
   loadLayoutPositions();
@@ -294,24 +294,25 @@ void MainComponent::handleRawKeyEvent(uintptr_t deviceHandle, int keyCode,
   // Check if this is a scroll event
   bool isScrollEvent = (keyCode == InputTypes::ScrollUp || keyCode == InputTypes::ScrollDown);
   
-  // For scroll events, only process if there's a mapping
+  // For scroll events, only process and queue log if mapping exists
   if (isScrollEvent) {
     InputID id = {deviceHandle, keyCode};
     const MidiAction *action = inputProcessor.getMappingForInput(id);
-    
-    // Only log and process if mapping exists
     if (action != nullptr) {
-      logEvent(deviceHandle, keyCode, isDown);
+      {
+        juce::ScopedLock lock(queueLock);
+        eventQueue.push_back({deviceHandle, keyCode, isDown});
+      }
       inputProcessor.processEvent(id, isDown);
     }
     return;
   }
 
-  // For regular keys, always log and process
-  // 1. Log Visuals
-  logEvent(deviceHandle, keyCode, isDown);
-
-  // 2. Process Logic
+  // For regular keys: push to log queue (no string formatting here), then process MIDI
+  {
+    juce::ScopedLock lock(queueLock);
+    eventQueue.push_back({deviceHandle, keyCode, isDown});
+  }
   InputID id = {deviceHandle, keyCode};
   inputProcessor.processEvent(id, isDown);
 }
@@ -536,8 +537,17 @@ void MainComponent::timerCallback() {
         rawInputManager.initialize(hwnd);
         isInputInitialized = true;
         logComponent.addEntry("--- SYSTEM: Raw Input Hooked Successfully ---");
-        stopTimer();
       }
     }
+  }
+
+  // Process log batch (Phase 21.1: fire-and-forget logging on timer, not input thread)
+  std::vector<PendingEvent> tempQueue;
+  {
+    juce::ScopedLock lock(queueLock);
+    tempQueue.swap(eventQueue);
+  }
+  for (const auto &ev : tempQueue) {
+    logEvent(ev.device, ev.keyCode, ev.isDown);
   }
 }

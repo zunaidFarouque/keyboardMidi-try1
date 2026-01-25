@@ -13,6 +13,7 @@
 #include "ScaleLibrary.h"
 
 #include <JuceHeader.h>
+#include <vector>
 
 class MainComponent : public juce::Component,
                       public juce::Timer,
@@ -54,6 +55,15 @@ private:
   RawInputManager rawInputManager;
   bool isInputInitialized = false;
 
+  // Async logging: Input thread pushes POD only; timer processes batches (Phase 21.1)
+  struct PendingEvent {
+    uintptr_t device;
+    int keyCode;
+    bool isDown;
+  };
+  std::vector<PendingEvent> eventQueue;
+  juce::CriticalSection queueLock;
+
   // UI Elements (Logic components - MainComponent owns these)
   VisualizerComponent visualizer;
   juce::TabbedComponent mainTabs;
@@ -84,7 +94,7 @@ private:
   // Command Manager for Undo/Redo
   juce::ApplicationCommandManager commandManager;
 
-  // Helper to format the beautiful log string
+  // Log formatting (called from timer batch only, not from input path)
   void logEvent(uintptr_t device, int keyCode, bool isDown);
   juce::String getNoteName(int noteNumber);
 

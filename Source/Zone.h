@@ -54,15 +54,22 @@ public:
   bool addBassNote = false; // If true, add a bass note (root shifted down)
   int bassOctaveOffset = -1; // Octave offset for bass note (-3 to -1)
   bool showRomanNumerals = false; // If true, display Roman numerals instead of note names
+  bool useGlobalScale = false; // If true, inherit ZoneManager::globalScaleName
+  bool useGlobalRoot = false;  // If true, inherit ZoneManager::globalRootNote
 
   // Performance cache: Pre-compiled key-to-chord mappings (compilation strategy).
   // Config-time: rebuildCache() runs ChordUtilities::generateChord, ScaleUtilities; fills this map.
   // Play-time: getNotesForKey() does O(1) find + O(k) transpose (k = chord size). No chord/scale math.
   std::unordered_map<int, std::vector<ChordUtilities::ChordNote>> keyToChordCache; // keyCode -> chord notes (with ghost flags)
   std::unordered_map<int, juce::String> keyToLabelCache; // keyCode -> display label (note name or Roman numeral)
+  int cacheEffectiveRoot = 60; // Root used for last rebuild; getNotesForKey uses this
 
   // Config-time: (re)build keyToChordCache when zone/scale/chord/keys change.
-  void rebuildCache(const std::vector<int>& intervals);
+  // Caller provides scaleIntervals and effectiveRoot (global or local per ZoneManager logic).
+  void rebuildCache(const std::vector<int>& scaleIntervals, int effectiveRoot);
+
+  bool usesGlobalScale() const { return useGlobalScale; }
+  bool usesGlobalRoot() const { return useGlobalRoot; }
 
   // Play-time: O(1) lookup + O(k) transpose. Returns final MIDI chord notes (with ghost flags) or nullopt if not in zone.
   std::optional<std::vector<ChordUtilities::ChordNote>> getNotesForKey(int keyCode, int globalChromTrans, int globalDegTrans);

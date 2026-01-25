@@ -69,10 +69,10 @@ ZonePropertiesPanel::ZonePropertiesPanel(ZoneManager *zoneMgr, DeviceManager *de
       if (selected >= 0) {
         juce::String scaleName = scaleSelector.getItemText(selected);
         currentZone->scaleName = scaleName;
-        // Rebuild cache when scale changes
+        // Rebuild cache when scale changes (Phase 21: pass intervals + root; keep local behavior)
         if (zoneManager) {
           std::vector<int> intervals = scaleLibrary->getIntervals(scaleName);
-          currentZone->rebuildCache(intervals);
+          currentZone->rebuildCache(intervals, currentZone->rootNote);
           zoneManager->sendChangeMessage();
         }
       }
@@ -123,9 +123,9 @@ ZonePropertiesPanel::ZonePropertiesPanel(ZoneManager *zoneMgr, DeviceManager *de
   rootSlider.onValueChange = [this] {
     if (currentZone && scaleLibrary && zoneManager) {
       currentZone->rootNote = static_cast<int>(rootSlider.getValue());
-      // Rebuild cache when root note changes
+      // Rebuild cache when root note changes (Phase 21: pass intervals + root)
       std::vector<int> intervals = scaleLibrary->getIntervals(currentZone->scaleName);
-      currentZone->rebuildCache(intervals);
+      currentZone->rebuildCache(intervals, currentZone->rootNote);
       zoneManager->sendChangeMessage();
     }
   };
@@ -166,9 +166,9 @@ ZonePropertiesPanel::ZonePropertiesPanel(ZoneManager *zoneMgr, DeviceManager *de
   degreeOffsetSlider.onValueChange = [this] {
     if (currentZone && scaleLibrary && zoneManager) {
       currentZone->degreeOffset = static_cast<int>(degreeOffsetSlider.getValue());
-      // Rebuild cache when degree offset changes
+      // Rebuild cache when degree offset changes (Phase 21: pass intervals + root)
       std::vector<int> intervals = scaleLibrary->getIntervals(currentZone->scaleName);
-      currentZone->rebuildCache(intervals);
+      currentZone->rebuildCache(intervals, currentZone->rootNote);
       zoneManager->sendChangeMessage();
     }
   };
@@ -228,10 +228,10 @@ ZonePropertiesPanel::ZonePropertiesPanel(ZoneManager *zoneMgr, DeviceManager *de
       // Show/hide piano help label based on strategy
       pianoHelpLabel.setVisible(currentZone->layoutStrategy == Zone::LayoutStrategy::Piano);
       
-      // Rebuild cache when strategy changes
+      // Rebuild cache when strategy changes (Phase 21: pass intervals + root)
       if (zoneManager && scaleLibrary) {
         std::vector<int> intervals = scaleLibrary->getIntervals(currentZone->scaleName);
-        currentZone->rebuildCache(intervals);
+        currentZone->rebuildCache(intervals, currentZone->rootNote);
         zoneManager->rebuildLookupTable(); // Rebuild lookup table (keys might be reorganized)
         zoneManager->sendChangeMessage();
       }
@@ -294,10 +294,10 @@ ZonePropertiesPanel::ZonePropertiesPanel(ZoneManager *zoneMgr, DeviceManager *de
         } else if (selected == 4) {
           currentZone->chordType = ChordUtilities::ChordType::Power5;
         }
-        // Rebuild cache when chord type changes (config-time compilation)
+        // Rebuild cache when chord type changes (Phase 21: pass intervals + root)
         if (zoneManager && scaleLibrary) {
           std::vector<int> intervals = scaleLibrary->getIntervals(currentZone->scaleName);
-          currentZone->rebuildCache(intervals);
+          currentZone->rebuildCache(intervals, currentZone->rootNote);
           zoneManager->sendChangeMessage();
         }
       }
@@ -329,10 +329,10 @@ ZonePropertiesPanel::ZonePropertiesPanel(ZoneManager *zoneMgr, DeviceManager *de
         } else if (selected == 4) {
           currentZone->voicing = ChordUtilities::Voicing::GuitarFilled;
         }
-        // Rebuild cache when voicing changes
+        // Rebuild cache when voicing changes (Phase 21: pass intervals + root)
         if (zoneManager && scaleLibrary) {
           std::vector<int> intervals = scaleLibrary->getIntervals(currentZone->scaleName);
-          currentZone->rebuildCache(intervals);
+          currentZone->rebuildCache(intervals, currentZone->rootNote);
           zoneManager->sendChangeMessage();
         }
       }
@@ -472,10 +472,10 @@ ZonePropertiesPanel::ZonePropertiesPanel(ZoneManager *zoneMgr, DeviceManager *de
   strictGhostToggle.onClick = [this] {
     if (currentZone) {
       currentZone->strictGhostHarmony = strictGhostToggle.getToggleState();
-      // Rebuild cache when ghost harmony mode changes
+      // Rebuild cache when ghost harmony mode changes (Phase 21: pass intervals + root)
       if (zoneManager && scaleLibrary) {
         std::vector<int> intervals = scaleLibrary->getIntervals(currentZone->scaleName);
-        currentZone->rebuildCache(intervals);
+        currentZone->rebuildCache(intervals, currentZone->rootNote);
         zoneManager->sendChangeMessage();
       }
     }
@@ -507,10 +507,10 @@ ZonePropertiesPanel::ZonePropertiesPanel(ZoneManager *zoneMgr, DeviceManager *de
     if (currentZone) {
       currentZone->addBassNote = bassToggle.getToggleState();
       bassOctaveSlider.setEnabled(bassToggle.getToggleState());
-      // Rebuild cache when bass setting changes
+      // Rebuild cache when bass setting changes (Phase 21: pass intervals + root)
       if (zoneManager && scaleLibrary) {
         std::vector<int> intervals = scaleLibrary->getIntervals(currentZone->scaleName);
-        currentZone->rebuildCache(intervals);
+        currentZone->rebuildCache(intervals, currentZone->rootNote);
         zoneManager->sendChangeMessage();
       }
     }
@@ -529,10 +529,10 @@ ZonePropertiesPanel::ZonePropertiesPanel(ZoneManager *zoneMgr, DeviceManager *de
   bassOctaveSlider.onValueChange = [this] {
     if (currentZone) {
       currentZone->bassOctaveOffset = static_cast<int>(bassOctaveSlider.getValue());
-      // Rebuild cache when bass octave changes
+      // Rebuild cache when bass octave changes (Phase 21: pass intervals + root)
       if (zoneManager && scaleLibrary) {
         std::vector<int> intervals = scaleLibrary->getIntervals(currentZone->scaleName);
-        currentZone->rebuildCache(intervals);
+        currentZone->rebuildCache(intervals, currentZone->rootNote);
         zoneManager->sendChangeMessage();
       }
     }
@@ -550,10 +550,10 @@ ZonePropertiesPanel::ZonePropertiesPanel(ZoneManager *zoneMgr, DeviceManager *de
   displayModeSelector.onChange = [this] {
     if (currentZone) {
       currentZone->showRomanNumerals = (displayModeSelector.getSelectedId() == 2);
-      // Rebuild cache when display mode changes
+      // Rebuild cache when display mode changes (Phase 21: pass intervals + root)
       if (zoneManager && scaleLibrary) {
         std::vector<int> intervals = scaleLibrary->getIntervals(currentZone->scaleName);
-        currentZone->rebuildCache(intervals);
+        currentZone->rebuildCache(intervals, currentZone->rootNote);
         zoneManager->sendChangeMessage();
       }
     }
@@ -635,9 +635,9 @@ ZonePropertiesPanel::ZonePropertiesPanel(ZoneManager *zoneMgr, DeviceManager *de
       currentZone->removeKey(keyCode);
       chipList.setKeys(currentZone->inputKeyCodes);
       updateKeysAssignedLabel();
-      // Rebuild cache when keys are removed
+      // Rebuild cache when keys are removed (Phase 21: pass intervals + root)
       std::vector<int> intervals = scaleLibrary->getIntervals(currentZone->scaleName);
-      currentZone->rebuildCache(intervals);
+      currentZone->rebuildCache(intervals, currentZone->rootNote);
       zoneManager->rebuildLookupTable(); // Rebuild lookup table when keys change
       zoneManager->sendChangeMessage();
       // Notify parent that resize is needed
@@ -1018,10 +1018,10 @@ void ZonePropertiesPanel::updateControlsFromZone() {
   // Update chip list
   chipList.setKeys(currentZone->inputKeyCodes);
   
-  // Rebuild cache when zone is set (in case it wasn't rebuilt before)
+  // Rebuild cache when zone is set (Phase 21: pass intervals + root)
   if (scaleLibrary && zoneManager) {
     std::vector<int> intervals = scaleLibrary->getIntervals(currentZone->scaleName);
-    currentZone->rebuildCache(intervals);
+    currentZone->rebuildCache(intervals, currentZone->rootNote);
   }
   
   updateKeysAssignedLabel();
@@ -1082,10 +1082,10 @@ void ZonePropertiesPanel::handleRawKeyEvent(uintptr_t deviceHandle, int keyCode,
       juce::MessageManager::callAsync([this] {
         chipList.setKeys(currentZone->inputKeyCodes);
         updateKeysAssignedLabel();
-        // Rebuild cache when keys are added
+        // Rebuild cache when keys are added (Phase 21: pass intervals + root)
         if (scaleLibrary && zoneManager) {
           std::vector<int> intervals = scaleLibrary->getIntervals(currentZone->scaleName);
-          currentZone->rebuildCache(intervals);
+          currentZone->rebuildCache(intervals, currentZone->rootNote);
           zoneManager->rebuildLookupTable(); // Rebuild lookup table when keys change
           zoneManager->sendChangeMessage();
         }
@@ -1109,10 +1109,10 @@ void ZonePropertiesPanel::handleRawKeyEvent(uintptr_t deviceHandle, int keyCode,
       juce::MessageManager::callAsync([this] {
         chipList.setKeys(currentZone->inputKeyCodes);
         updateKeysAssignedLabel();
-        // Rebuild cache when keys are removed
+        // Rebuild cache when keys are removed (Phase 21: pass intervals + root)
         if (scaleLibrary && zoneManager) {
           std::vector<int> intervals = scaleLibrary->getIntervals(currentZone->scaleName);
-          currentZone->rebuildCache(intervals);
+          currentZone->rebuildCache(intervals, currentZone->rootNote);
           zoneManager->rebuildLookupTable(); // Rebuild lookup table when keys change
           zoneManager->sendChangeMessage();
         }

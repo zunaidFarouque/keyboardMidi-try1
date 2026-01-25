@@ -54,6 +54,12 @@ public:
   int getGlobalChromaticTranspose() const { return globalChromaticTranspose; }
   int getGlobalDegreeTranspose() const { return globalDegreeTranspose; }
 
+  // Global scale and root (for zone inheritance)
+  void setGlobalScale(juce::String name);
+  void setGlobalRoot(int root);
+  juce::String getGlobalScaleName() const { return globalScaleName; }
+  int getGlobalRootNote() const { return globalRootNote; }
+
   // Rebuild the lookup table (call when zones or their keys change)
   void rebuildLookupTable();
 
@@ -62,12 +68,16 @@ public:
   void restoreFromValueTree(const juce::ValueTree& vt);
 
 private:
+  void rebuildZoneCache(Zone* zone);
+
   ScaleLibrary& scaleLibrary;
   mutable juce::ReadWriteLock zoneLock;
   std::vector<std::shared_ptr<Zone>> zones;
   int globalChromaticTranspose = 0;
   int globalDegreeTranspose = 0;
-  
+  juce::String globalScaleName = "Major";
+  int globalRootNote = 60;
+
   // Master lookup table: InputID -> Zone* for instant access
   std::unordered_map<InputID, Zone*> zoneLookupTable;
 };

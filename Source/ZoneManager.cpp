@@ -8,6 +8,14 @@ ZoneManager::ZoneManager(ScaleLibrary& scaleLib) : scaleLibrary(scaleLib) {
 ZoneManager::~ZoneManager() {
 }
 
+void ZoneManager::rebuildZoneCache(Zone* zone) {
+  std::vector<int> intervals = zone->usesGlobalScale()
+    ? scaleLibrary.getIntervals(globalScaleName)
+    : scaleLibrary.getIntervals(zone->scaleName);
+  int root = zone->usesGlobalRoot() ? globalRootNote : zone->rootNote;
+  zone->rebuildCache(intervals, root);
+}
+
 void ZoneManager::rebuildLookupTable() {
   juce::ScopedWriteLock lock(zoneLock);
   
@@ -49,9 +57,8 @@ void ZoneManager::addZone(std::shared_ptr<Zone> zone) {
     zone->zoneColor = colorPalette[zoneIndex % (sizeof(colorPalette) / sizeof(colorPalette[0]))];
   }
   
-  // Rebuild cache for the zone
-  std::vector<int> intervals = scaleLibrary.getIntervals(zone->scaleName);
-  zone->rebuildCache(intervals);
+  // Rebuild cache for the zone (use global scale/root if zone flags set)
+  rebuildZoneCache(zone.get());
   
   juce::ScopedWriteLock lock(zoneLock);
   zones.push_back(zone);
@@ -96,9 +103,8 @@ std::shared_ptr<Zone> ZoneManager::createDefaultZone() {
   
   zone->zoneColor = colorPalette[zoneIndex % (sizeof(colorPalette) / sizeof(colorPalette[0]))];
   
-  // Rebuild cache for new zone
-  std::vector<int> intervals = scaleLibrary.getIntervals(zone->scaleName);
-  zone->rebuildCache(intervals);
+  // Rebuild cache for new zone (use global scale/root if zone flags set)
+  rebuildZoneCache(zone.get());
   
   juce::ScopedWriteLock lock(zoneLock);
   zones.push_back(zone);
@@ -143,6 +149,28 @@ void ZoneManager::setGlobalTranspose(int chromatic, int degree) {
   juce::ScopedWriteLock lock(zoneLock);
   globalChromaticTranspose = chromatic;
   globalDegreeTranspose = degree;
+  sendChangeMessage();
+}
+
+void ZoneManager::setGlobalScale(juce::String name) {
+  juce::ScopedWriteLock lock(zoneLock);
+  globalScaleName = name;
+  for (const auto& zone : zones) {
+    if (zone->usesGlobalScale())
+      rebuildZoneCache(zone.get());
+  }
+  rebuildLookupTable();
+  sendChangeMessage();
+}
+
+void ZoneManager::setGlobalRoot(int root) {
+  juce::ScopedWriteLock lock(zoneLock);
+  globalRootNote = root;
+  for (const auto& zone : zones) {
+    if (zone->usesGlobalRoot())
+      rebuildZoneCache(zone.get());
+  }
+  rebuildLookupTable();
   sendChangeMessage();
 }
 
@@ -223,6 +251,8 @@ juce::ValueTree ZoneManager::toValueTree() const {
   // Save global transpose
   vt.setProperty("globalChromaticTranspose", globalChromaticTranspose, nullptr);
   vt.setProperty("globalDegreeTranspose", globalDegreeTranspose, nullptr);
+  vt.setProperty("globalScaleName", globalScaleName, nullptr);
+  vt.setProperty("globalRootNote", globalRootNote, nullptr);
   
   // Save all zones as children
   for (const auto& zone : zones) {
@@ -244,16 +274,16 @@ void ZoneManager::restoreFromValueTree(const juce::ValueTree& vt) {
   // Restore global transpose
   globalChromaticTranspose = vt.getProperty("globalChromaticTranspose", 0);
   globalDegreeTranspose = vt.getProperty("globalDegreeTranspose", 0);
-  
+  globalScaleName = vt.getProperty("globalScaleName", "Major").toString();
+  globalRootNote = vt.getProperty("globalRootNote", 60);
+
   // Restore zones
   for (int i = 0; i < vt.getNumChildren(); ++i) {
     auto zoneVT = vt.getChild(i);
     if (zoneVT.hasType("Zone")) {
       auto zone = Zone::fromValueTree(zoneVT);
       if (zone) {
-        // Rebuild cache for restored zone
-        std::vector<int> intervals = scaleLibrary.getIntervals(zone->scaleName);
-        zone->rebuildCache(intervals);
+        rebuildZoneCache(zone.get());
         zones.push_back(zone);
       }
     }
