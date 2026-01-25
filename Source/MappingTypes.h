@@ -19,7 +19,11 @@ enum class CommandID : int {
   SustainInverse   = 2,  // Press=Off, Release=On (Palm Mute)
   LatchToggle      = 3,  // Global Latch Mode
   Panic            = 4,  // All Notes Off
-  PanicLatch       = 5   // Kill only Latched notes
+  PanicLatch       = 5,  // Kill only Latched notes
+  GlobalPitchUp    = 6,  // Chromatic +1
+  GlobalPitchDown  = 7,  // Chromatic -1
+  GlobalModeUp     = 8,  // Degree +1
+  GlobalModeDown   = 9   // Degree -1
 };
 }
 

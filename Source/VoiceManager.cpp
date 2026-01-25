@@ -253,6 +253,11 @@ void VoiceManager::panicLatch() {
   }
 }
 
+void VoiceManager::resetPerformanceState() {
+  globalSustainActive = false;
+  globalLatchActive = false;
+}
+
 bool VoiceManager::isKeyLatched(int keyCode) const {
   juce::ScopedLock lock(voicesLock);
   for (const auto& voice : voices) {

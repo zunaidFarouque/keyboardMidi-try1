@@ -34,6 +34,17 @@ void InputProcessor::rebuildMapFromTree() {
   for (int i = 0; i < mappingsNode.getNumChildren(); ++i) {
     addMappingFromTree(mappingsNode.getChild(i));
   }
+
+  // State flush: reset Sustain/Latch, then re-evaluate SustainInverse
+  voiceManager.resetPerformanceState();
+  for (const auto& pair : keyMapping) {
+    const MidiAction& action = pair.second;
+    if (action.type == ActionType::Command &&
+        action.data1 == static_cast<int>(OmniKey::CommandID::SustainInverse)) {
+      voiceManager.setSustain(true);
+      break;
+    }
+  }
 }
 
 // Helper to parse Hex strings from XML correctly
@@ -366,6 +377,23 @@ void InputProcessor::processEvent(InputID input, bool isDown) {
         voiceManager.panic();
       else if (cmd == static_cast<int>(OmniKey::CommandID::PanicLatch))
         voiceManager.panicLatch();
+      else if (cmd == static_cast<int>(OmniKey::CommandID::GlobalPitchUp)) {
+        int chrom = zoneManager.getGlobalChromaticTranspose();
+        int deg = zoneManager.getGlobalDegreeTranspose();
+        zoneManager.setGlobalTranspose(chrom + 1, deg);
+      } else if (cmd == static_cast<int>(OmniKey::CommandID::GlobalPitchDown)) {
+        int chrom = zoneManager.getGlobalChromaticTranspose();
+        int deg = zoneManager.getGlobalDegreeTranspose();
+        zoneManager.setGlobalTranspose(chrom - 1, deg);
+      } else if (cmd == static_cast<int>(OmniKey::CommandID::GlobalModeUp)) {
+        int chrom = zoneManager.getGlobalChromaticTranspose();
+        int deg = zoneManager.getGlobalDegreeTranspose();
+        zoneManager.setGlobalTranspose(chrom, deg + 1);
+      } else if (cmd == static_cast<int>(OmniKey::CommandID::GlobalModeDown)) {
+        int chrom = zoneManager.getGlobalChromaticTranspose();
+        int deg = zoneManager.getGlobalDegreeTranspose();
+        zoneManager.setGlobalTranspose(chrom, deg - 1);
+      }
       return;
     }
 

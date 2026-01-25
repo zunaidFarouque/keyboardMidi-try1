@@ -51,13 +51,26 @@ void VisualizerComponent::paint(juce::Graphics &g) {
     return; // Can't render without zone manager
   }
 
-  // --- 0. Header Bar (Sustain Indicator) ---
+  // --- 0. Header Bar (Transpose left, Sustain right) ---
   auto bounds = getLocalBounds();
   auto headerRect = bounds.removeFromTop(30);
   g.setColour(juce::Colour(0xff222222));
   g.fillRect(headerRect);
-  
-  // Sustain Indicator
+
+  g.setColour(juce::Colours::white);
+  g.setFont(12.0f);
+
+  // TRANSPOSE (left)
+  if (zoneManager) {
+    int chrom = zoneManager->getGlobalChromaticTranspose();
+    int deg = zoneManager->getGlobalDegreeTranspose();
+    juce::String chromStr = (chrom >= 0) ? ("+" + juce::String(chrom)) : juce::String(chrom);
+    juce::String degStr = (deg >= 0) ? ("+" + juce::String(deg)) : juce::String(deg);
+    juce::String transposeText = "TRANSPOSE: [Pitch: " + chromStr + "] [Scale: " + degStr + "]";
+    g.drawText(transposeText, 8, 0, 280, headerRect.getHeight(), juce::Justification::centredLeft, false);
+  }
+
+  // Sustain Indicator (right)
   bool sustainActive = voiceManager.isSustainActive();
   juce::Colour sustainColor = sustainActive ? juce::Colours::lime : juce::Colours::grey;
   int indicatorSize = 12;
@@ -66,7 +79,6 @@ void VisualizerComponent::paint(juce::Graphics &g) {
   g.setColour(sustainColor);
   g.fillEllipse(indicatorX, indicatorY, indicatorSize, indicatorSize);
   g.setColour(juce::Colours::white);
-  g.setFont(12.0f);
   g.drawText("SUSTAIN", indicatorX + indicatorSize + 5, indicatorY, 60, indicatorSize, juce::Justification::centredLeft, false);
 
   // --- 1. Calculate Dynamic Scale ---

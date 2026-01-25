@@ -38,6 +38,9 @@ public:
   void panic();
   void panicLatch();
 
+  // --- State flush (when mappings change) ---
+  void resetPerformanceState();
+
 private:
   enum class VoiceState { Playing, Sustained, Latched };
 

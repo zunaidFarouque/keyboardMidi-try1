@@ -107,22 +107,26 @@ MappingInspector::MappingInspector(juce::UndoManager *undoMgr, DeviceManager *de
     // Transaction ends automatically when next beginNewTransaction() is called
   };
 
-  // Setup Command Selector (IDs 1-6 map to CommandID 0-5)
+  // Setup Command Selector (IDs 1-10 map to CommandID 0-9)
   commandSelector.addItem("Sustain (Momentary)", 1);
   commandSelector.addItem("Sustain (Toggle)", 2);
   commandSelector.addItem("Sustain (Inverse)", 3);
   commandSelector.addItem("Latch (Toggle)", 4);
   commandSelector.addItem("Panic (All Off)", 5);
   commandSelector.addItem("Panic (Latched Only)", 6);
+  commandSelector.addItem("Global Pitch +1", 7);
+  commandSelector.addItem("Global Pitch -1", 8);
+  commandSelector.addItem("Global Mode +1", 9);
+  commandSelector.addItem("Global Mode -1", 10);
   commandSelector.onChange = [this] {
     if (selectedTrees.empty())
       return;
 
     int selectedId = commandSelector.getSelectedId();
-    if (selectedId < 1 || selectedId > 6)
+    if (selectedId < 1 || selectedId > 10)
       return;
 
-    // Map ComboBox ID (1-6) to CommandID enum value (0-5)
+    // Map ComboBox ID (1-10) to CommandID enum value (0-9)
     int cmdValue = selectedId - 1;
 
     undoManager->beginNewTransaction("Change Command");
@@ -417,8 +421,8 @@ void MappingInspector::updateControlsFromSelection() {
     // Command type - update commandSelector from data1
     if (allTreesHaveSameValue("data1")) {
       int data1 = static_cast<int>(getCommonValue("data1"));
-      // Map CommandID enum value (0-5) to ComboBox ID (1-6)
-      if (data1 >= 0 && data1 <= 5) {
+      // Map CommandID enum value (0-9) to ComboBox ID (1-10)
+      if (data1 >= 0 && data1 <= 9) {
         commandSelector.setSelectedId(data1 + 1, juce::dontSendNotification);
       } else {
         commandSelector.setSelectedId(-1, juce::dontSendNotification);
