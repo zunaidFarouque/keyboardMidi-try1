@@ -77,3 +77,25 @@ void MidiEngine::allNotesOff() {
     }
   }
 }
+
+void MidiEngine::sendPitchBendRangeRPN(int channel, int rangeSemitones) {
+  if (!currentOutput)
+    return;
+
+  // RPN Setup: Pitch Bend Sensitivity is 00 00
+  // Order: LSB (100) then MSB (101) is often safer for legacy/strict parsers
+  currentOutput->sendMessageNow(
+      juce::MidiMessage::controllerEvent(channel, 100, 0));
+  currentOutput->sendMessageNow(
+      juce::MidiMessage::controllerEvent(channel, 101, 0));
+
+  // Data Entry: Set the Range
+  currentOutput->sendMessageNow(
+      juce::MidiMessage::controllerEvent(channel, 6, rangeSemitones));
+  currentOutput->sendMessageNow(
+      juce::MidiMessage::controllerEvent(channel, 38, 0)); // Cents = 0
+
+  // NOTE: We are intentionally SKIPPING the "Null RPN" reset (101=127, 100=127).
+  // Sending it immediately can sometimes interrupt the Data Entry processing in some VSTs
+  // if the buffer is processed fast. Leaving RPN 00 selected is harmless.
+}

@@ -12,6 +12,7 @@
 #include <vector>
 
 class VoiceManager : public juce::HighResolutionTimer,
+                     public juce::Timer,
                      public juce::ChangeListener {
 public:
   VoiceManager(MidiEngine &engine, SettingsManager &settingsMgr);
@@ -77,6 +78,7 @@ private:
     bool allowSustain;
     VoiceState state;
     int releaseMs = 0; // Zone release envelope; 0 = instant NoteOff
+    PolyphonyMode polyphonyMode = PolyphonyMode::Poly; // Polyphony mode for this voice (Phase 26.3)
   };
 
   void addVoiceFromStrum(InputID source, int note, int channel,
@@ -84,6 +86,9 @@ private:
 
   // HighResolutionTimer callback - checks for expired releases
   void hiResTimerCallback() override;
+
+  // Timer callback - Watchdog for stuck notes (Phase 26.6)
+  void timerCallback() override;
 
   struct PendingRelease {
     double releaseTimeMs;
@@ -119,6 +124,10 @@ private:
   std::unordered_map<int, std::deque<std::pair<int, InputID>>>
       monoStacks; // channel -> deque<note, source>
   juce::CriticalSection monoStackLock;
+
+  // Critical section for Mono/Legato state integrity (Phase 26.5)
+  // Protects monoStacks, voices, and portamentoEngine during NoteOn/NoteOff
+  juce::CriticalSection monoCriticalSection;
 
   // Per-channel polyphony mode and glide time (for handleKeyUp)
   std::unordered_map<int, std::pair<PolyphonyMode, int>>

@@ -2,8 +2,8 @@ now, we have to do an important thing.
 
 currently the software detects all keystrokes. whether the application is in focus or not.
 but we have to do this:
-1. do a global shortcut binding 
-2. e.g. Caps lock on = Midi mode. that specific keyboard device will be intercepted, and only midi will be sent. Caps Lock off = no midi. no interception. keyboard works as expected,
+1. do a global shortcut binding (in settings panel tab)
+2. e.g. Scroll lock on = Midi mode. keyboard device will be intercepted, and only midi will be sent. Scroll Lock off = no midi. no interception. keyboard works as expected,
 
 is it possible?
 and will it harm my performance optimizations?
@@ -16,13 +16,3 @@ and will it harm my performance optimizations?
 ---
 
 THE Window uses 10% of my CPU at all the time. even if I dont use it. this is huge! why is that?
-
-
----
-
-===
-
----
-
-Thank you. now, as I will use HALion, I should be able to send PRNs to send the pitchbend range. that would be useful.
-an option/button to send the PRN data now would be useful too.

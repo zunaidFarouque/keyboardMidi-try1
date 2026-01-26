@@ -1,7 +1,7 @@
 #include "SettingsPanel.h"
 
-SettingsPanel::SettingsPanel(SettingsManager& settingsMgr)
-    : settingsManager(settingsMgr) {
+SettingsPanel::SettingsPanel(SettingsManager& settingsMgr, MidiEngine& midiEng)
+    : settingsManager(settingsMgr), midiEngine(midiEng) {
   // Setup PB Range Slider
   pbRangeLabel.setText("Global Pitch Bend Range (+/- semitones):", juce::dontSendNotification);
   pbRangeLabel.attachToComponent(&pbRangeSlider, true);
@@ -15,6 +15,23 @@ SettingsPanel::SettingsPanel(SettingsManager& settingsMgr)
   pbRangeSlider.onValueChange = [this] {
     int value = static_cast<int>(pbRangeSlider.getValue());
     settingsManager.setPitchBendRange(value);
+  };
+
+  // Setup Send RPN Button (Phase 25.2)
+  addAndMakeVisible(sendRpnButton);
+  sendRpnButton.setButtonText("Sync Range to Synth");
+  sendRpnButton.onClick = [this] {
+    int range = settingsManager.getPitchBendRange();
+    DBG("Sending RPN Range " + juce::String(range) + " to all channels...");
+    // Send RPN to all 16 MIDI channels
+    for (int ch = 1; ch <= 16; ++ch) {
+      midiEngine.sendPitchBendRangeRPN(ch, range);
+    }
+    // Show feedback (optional - could use a toast or label)
+    sendRpnButton.setButtonText("Sent!");
+    juce::MessageManager::callAsync([this] {
+      sendRpnButton.setButtonText("Sync Range to Synth");
+    });
   };
 }
 
@@ -33,4 +50,8 @@ void SettingsPanel::resized() {
 
   int y = topPadding;
   pbRangeSlider.setBounds(leftMargin, y, width, controlHeight);
+  y += controlHeight + spacing;
+  
+  // Position Send RPN button below the slider
+  sendRpnButton.setBounds(leftMargin, y, 200, controlHeight);
 }

@@ -21,6 +21,9 @@ public:
   // All Notes Off (CC 123) on all 16 channels
   void allNotesOff();
 
+  // Send Pitch Bend Range RPN (Registered Parameter Number) to configure synth
+  void sendPitchBendRangeRPN(int channel, int rangeSemitones);
+
 private:
   std::unique_ptr<juce::MidiOutput> currentOutput;
 

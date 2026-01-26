@@ -19,7 +19,7 @@ MainComponent::MainComponent()
       mainTabs(juce::TabbedButtonBar::TabsAtTop),
       zoneEditor(&inputProcessor.getZoneManager(), &deviceManager,
                  &rawInputManager, &scaleLibrary),
-      settingsPanel(settingsManager),
+      settingsPanel(settingsManager, midiEngine),
       visualizer(&inputProcessor.getZoneManager(), &deviceManager, voiceManager,
                  &presetManager, &inputProcessor),
       visualizerContainer("Visualizer", visualizer),
