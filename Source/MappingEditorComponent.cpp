@@ -104,6 +104,44 @@ MappingEditorComponent::MappingEditorComponent(PresetManager &pm,
   };
   addAndMakeVisible(addButton);
 
+  // Setup Duplicate Button
+  duplicateButton.setButtonText("Duplicate");
+  duplicateButton.onClick = [this] {
+    int row = table.getSelectedRow();
+    auto mappingsNode = presetManager.getMappingsNode();
+    
+    // Validation
+    if (row < 0 || row >= mappingsNode.getNumChildren()) {
+      juce::AlertWindow::showMessageBoxAsync(
+        juce::AlertWindow::InfoIcon,
+        "No Selection",
+        "Please select a mapping to duplicate.",
+        "OK"
+      );
+      return;
+    }
+    
+    // Get the original mapping
+    juce::ValueTree original = mappingsNode.getChild(row);
+    if (!original.isValid()) {
+      return;
+    }
+    
+    // Create deep copy
+    juce::ValueTree copy = original.createCopy();
+    
+    // Insert directly below the original
+    mappingsNode.addChild(copy, row + 1, &undoManager);
+    
+    // Select the new row
+    table.selectRow(row + 1);
+    
+    // Refresh UI
+    table.updateContent();
+    table.repaint();
+  };
+  addAndMakeVisible(duplicateButton);
+
   // Setup Delete Button
   deleteButton.setButtonText("-");
   deleteButton.onClick = [this] {
@@ -202,6 +240,8 @@ void MappingEditorComponent::resized() {
   auto area = getLocalBounds();
   auto header = area.removeFromTop(24);
   addButton.setBounds(header.removeFromRight(30));
+  header.removeFromRight(4);
+  duplicateButton.setBounds(header.removeFromRight(80));
   header.removeFromRight(4);
   deleteButton.setBounds(header.removeFromRight(30));
   header.removeFromRight(4);

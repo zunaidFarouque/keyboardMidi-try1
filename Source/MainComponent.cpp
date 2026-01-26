@@ -7,7 +7,7 @@
 #include "ScaleUtilities.h"
 #include "Zone.h"
 
-// Windows header needed for cursor locking
+// Windows header needed for cursor locking and window state checks
 #include <windows.h>
 
 MainComponent::MainComponent()
@@ -19,9 +19,9 @@ MainComponent::MainComponent()
       mainTabs(juce::TabbedButtonBar::TabsAtTop),
       zoneEditor(&inputProcessor.getZoneManager(), &deviceManager,
                  &rawInputManager, &scaleLibrary),
-      settingsPanel(settingsManager, midiEngine),
+      settingsPanel(settingsManager, midiEngine, rawInputManager),
       visualizer(&inputProcessor.getZoneManager(), &deviceManager, voiceManager,
-                 &presetManager, &inputProcessor),
+                 &settingsManager, &presetManager, &inputProcessor),
       visualizerContainer("Visualizer", visualizer),
       editorContainer("Mapping / Zones", mainTabs),
       logContainer("Log", logComponent),
@@ -33,6 +33,12 @@ MainComponent::MainComponent()
           true) { // true = vertical bar for horizontal layout (drag left/right)
   // Initialize application (load or create factory default)
   startupManager.initApp();
+  
+  // Initialize Mini Status Window
+  miniWindow = std::make_unique<MiniStatusWindow>(settingsManager);
+  
+  // Listen to SettingsManager for MIDI mode changes
+  settingsManager.addChangeListener(this);
 
   // Setup Command Manager for Undo/Redo
   commandManager.registerAllCommandsForTarget(this);
@@ -42,11 +48,37 @@ MainComponent::MainComponent()
   addAndMakeVisible(midiSelector);
   midiSelector.setTextWhenNoChoicesAvailable("No MIDI Devices");
   midiSelector.addItemList(midiEngine.getDeviceNames(), 1);
-  midiSelector.onChange = [this] {
-    midiEngine.setOutputDevice(midiSelector.getSelectedItemIndex());
-  };
-  if (midiSelector.getNumItems() > 0)
+  
+  // Auto-select saved MIDI device
+  juce::String savedName = settingsManager.getLastMidiDevice();
+  bool foundSavedDevice = false;
+  if (!savedName.isEmpty() && midiSelector.getNumItems() > 0) {
+    // Search for the saved device name
+    for (int i = 0; i < midiSelector.getNumItems(); ++i) {
+      if (midiSelector.getItemText(i) == savedName) {
+        midiSelector.setSelectedItemIndex(i);
+        midiEngine.setOutputDevice(i);
+        foundSavedDevice = true;
+        break;
+      }
+    }
+  }
+  
+  // Fallback to first device if saved device not found
+  if (!foundSavedDevice && midiSelector.getNumItems() > 0) {
     midiSelector.setSelectedItemIndex(0);
+    midiEngine.setOutputDevice(0);
+  }
+  
+  midiSelector.onChange = [this] {
+    int selectedIndex = midiSelector.getSelectedItemIndex();
+    if (selectedIndex >= 0) {
+      midiEngine.setOutputDevice(selectedIndex);
+      // Save the device name (not index) for persistence
+      juce::String deviceName = midiSelector.getItemText(selectedIndex);
+      settingsManager.setLastMidiDevice(deviceName);
+    }
+  };
 
   addAndMakeVisible(saveButton);
   saveButton.setButtonText("Save Preset");
@@ -172,6 +204,23 @@ MainComponent::MainComponent()
   // --- Input Logic ---
   rawInputManager.addListener(this);
   rawInputManager.addListener(&visualizer);
+  
+  // Register focus target callback
+  rawInputManager.setFocusTargetCallback([this]() -> void* {
+    // Check if Main Window is Minimized (Iconic)
+    if (auto* peer = getPeer()) {
+      void* hwnd = peer->getNativeHandle();
+      if (hwnd != nullptr && IsIconic(static_cast<HWND>(hwnd))) {
+        // Main window is minimized - use mini window
+        if (miniWindow && miniWindow->getPeer()) {
+          return miniWindow->getPeer()->getNativeHandle();
+        }
+      }
+      // Main window is not minimized - use main window
+      return hwnd;
+    }
+    return nullptr;
+  });
 
   // Note: Test zone removed - StartupManager now handles factory default zones
 
@@ -196,9 +245,14 @@ MainComponent::~MainComponent() {
   // Save immediately on close (flush pending saves)
   startupManager.saveImmediate();
 
+  // Remove listeners
+  settingsManager.removeChangeListener(this);
   stopTimer();
   rawInputManager.removeListener(this);
   rawInputManager.shutdown();
+  
+  // Clean up mini window
+  miniWindow.reset();
 
   // Ensure cursor is unlocked on exit
   if (performanceModeButton.getToggleState()) {
@@ -290,8 +344,36 @@ juce::ApplicationCommandTarget *MainComponent::getNextCommandTarget() {
   return nullptr;
 }
 
+void MainComponent::changeListenerCallback(juce::ChangeBroadcaster* source) {
+  if (source == &settingsManager) {
+    // Handle MIDI mode changes
+    if (!settingsManager.isMidiModeActive()) {
+      // MIDI mode turned off - hide mini window
+      if (miniWindow) {
+        miniWindow->setVisible(false);
+      }
+    } else {
+      // MIDI mode turned on - show mini window if main window is minimized
+      if (miniWindow) {
+        if (auto* peer = getPeer()) {
+          void* hwnd = peer->getNativeHandle();
+          if (hwnd != nullptr && IsIconic(static_cast<HWND>(hwnd))) {
+            miniWindow->setVisible(true);
+          }
+        }
+      }
+    }
+  }
+}
+
 void MainComponent::handleRawKeyEvent(uintptr_t deviceHandle, int keyCode,
                                       bool isDown) {
+  // Check for toggle key press (must be checked before other processing)
+  if (isDown && keyCode == settingsManager.getToggleKey()) {
+    settingsManager.setMidiModeActive(!settingsManager.isMidiModeActive());
+    return; // Don't process this key for MIDI
+  }
+  
   // Safety: Check for Escape key to unlock cursor
   if (isDown && keyCode == VK_ESCAPE &&
       performanceModeButton.getToggleState()) {
@@ -553,12 +635,15 @@ void MainComponent::resized() {
 
 void MainComponent::timerCallback() {
   if (!isInputInitialized) {
-    if (auto *peer = getPeer()) {
-      void *hwnd = peer->getNativeHandle();
-      if (hwnd != nullptr) {
-        rawInputManager.initialize(hwnd);
-        isInputInitialized = true;
-        logComponent.addEntry("--- SYSTEM: Raw Input Hooked Successfully ---");
+    // Get the top-level component to ensure we have the real OS window handle
+    if (auto *top = getTopLevelComponent()) {
+      if (auto *peer = top->getPeer()) {
+        void *hwnd = peer->getNativeHandle();
+        if (hwnd != nullptr) {
+          rawInputManager.initialize(hwnd, &settingsManager);
+          isInputInitialized = true;
+          logComponent.addEntry("--- SYSTEM: Raw Input Hooked Successfully ---");
+        }
       }
     }
   }

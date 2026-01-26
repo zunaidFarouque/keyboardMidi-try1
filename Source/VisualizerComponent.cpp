@@ -1,8 +1,10 @@
 #include "VisualizerComponent.h"
 #include "InputProcessor.h"
 #include "PresetManager.h"
+#include "SettingsManager.h"
 #include "VoiceManager.h"
 #include "Zone.h"
+#include "RawInputManager.h"
 #include <JuceHeader.h>
 #include <algorithm>
 
@@ -13,10 +15,13 @@ static uintptr_t aliasNameToHash(const juce::String &aliasName) {
   return static_cast<uintptr_t>(std::hash<juce::String>{}(aliasName));
 }
 
-VisualizerComponent::VisualizerComponent(ZoneManager *zoneMgr, DeviceManager *deviceMgr, const VoiceManager &voiceMgr, PresetManager *presetMgr, InputProcessor *inputProc)
-    : zoneManager(zoneMgr), deviceManager(deviceMgr), voiceManager(voiceMgr), presetManager(presetMgr), inputProcessor(inputProc) {
+VisualizerComponent::VisualizerComponent(ZoneManager *zoneMgr, DeviceManager *deviceMgr, const VoiceManager &voiceMgr, SettingsManager *settingsMgr, PresetManager *presetMgr, InputProcessor *inputProc)
+    : zoneManager(zoneMgr), deviceManager(deviceMgr), voiceManager(voiceMgr), settingsManager(settingsMgr), presetManager(presetMgr), inputProcessor(inputProc) {
   if (zoneManager) {
     zoneManager->addChangeListener(this);
+  }
+  if (settingsManager) {
+    settingsManager->addChangeListener(this);
   }
   if (presetManager) {
     auto mappingsNode = presetManager->getMappingsNode();
@@ -34,6 +39,9 @@ VisualizerComponent::~VisualizerComponent() {
   if (zoneManager) {
     zoneManager->removeChangeListener(this);
   }
+  if (settingsManager) {
+    settingsManager->removeChangeListener(this);
+  }
   if (presetManager) {
     auto mappingsNode = presetManager->getMappingsNode();
     if (mappingsNode.isValid()) {
@@ -49,6 +57,9 @@ void VisualizerComponent::paint(juce::Graphics &g) {
   if (!zoneManager) {
     return; // Can't render without zone manager
   }
+  
+  // Check if MIDI mode is disabled and draw overlay
+  bool midiModeDisabled = settingsManager && !settingsManager->isMidiModeActive();
 
   // --- 0. Header Bar (Transpose left, Sustain right) ---
   auto bounds = getLocalBounds();
@@ -278,6 +289,20 @@ void VisualizerComponent::paint(juce::Graphics &g) {
     g.setFont(keySize * 0.4f); // Dynamic font size
     g.drawText(labelText, keyBounds, juce::Justification::centred, false);
   }
+  
+  // Draw overlay if MIDI mode is disabled
+  if (midiModeDisabled) {
+    // Semi-transparent black overlay
+    g.setColour(juce::Colours::black.withAlpha(0.7f));
+    g.fillAll();
+    
+    // Draw text message
+    g.setColour(juce::Colours::white);
+    g.setFont(24.0f);
+    juce::String toggleKeyName = settingsManager ? RawInputManager::getKeyName(settingsManager->getToggleKey()) : "Scroll Lock";
+    juce::String message = "MIDI MODE DISABLED\n(Press " + toggleKeyName + " to enable)";
+    g.drawText(message, getLocalBounds(), juce::Justification::centred, false);
+  }
 }
 
 void VisualizerComponent::resized() {
@@ -297,7 +322,7 @@ void VisualizerComponent::handleAxisEvent(uintptr_t deviceHandle, int inputCode,
 }
 
 void VisualizerComponent::changeListenerCallback(juce::ChangeBroadcaster *source) {
-  if (source == zoneManager) {
+  if (source == zoneManager || source == settingsManager) {
     juce::MessageManager::callAsync([this] {
       repaint();
     });

@@ -13,6 +13,7 @@
 #include "StartupManager.h"
 #include "VisualizerComponent.h"
 #include "ZoneEditorComponent.h"
+#include "MiniStatusWindow.h"
 
 #include <JuceHeader.h>
 #include <vector>
@@ -21,7 +22,8 @@ class MainComponent : public juce::Component,
                       public juce::Timer,
                       public juce::ApplicationCommandTarget,
                       public RawInputManager::Listener,
-                      public juce::MenuBarModel {
+                      public juce::MenuBarModel,
+                      public juce::ChangeListener {
 public:
   MainComponent();
   ~MainComponent() override;
@@ -58,6 +60,9 @@ private:
   // Logic (must be before UI elements that reference it)
   RawInputManager rawInputManager;
   bool isInputInitialized = false;
+  
+  // Mini Status Window
+  std::unique_ptr<MiniStatusWindow> miniWindow;
 
   // Async logging: Input thread pushes POD only; timer processes batches
   // (Phase 21.1)
@@ -107,6 +112,9 @@ private:
   // Layout persistence
   void loadLayoutPositions();
   void saveLayoutPositions();
+
+  // ChangeListener implementation
+  void changeListenerCallback(juce::ChangeBroadcaster* source) override;
 
   // MenuBarModel implementation
   juce::StringArray getMenuBarNames() override;

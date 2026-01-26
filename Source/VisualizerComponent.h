@@ -10,6 +10,7 @@
 
 class InputProcessor;
 class PresetManager;
+class SettingsManager;
 class VoiceManager;
 
 class VisualizerComponent : public juce::Component,
@@ -17,7 +18,7 @@ class VisualizerComponent : public juce::Component,
                             public juce::ChangeListener,
                             public juce::ValueTree::Listener {
 public:
-  VisualizerComponent(ZoneManager *zoneMgr, DeviceManager *deviceMgr, const VoiceManager &voiceMgr, PresetManager *presetMgr = nullptr, InputProcessor *inputProc = nullptr);
+  VisualizerComponent(ZoneManager *zoneMgr, DeviceManager *deviceMgr, const VoiceManager &voiceMgr, SettingsManager *settingsMgr, PresetManager *presetMgr = nullptr, InputProcessor *inputProc = nullptr);
   ~VisualizerComponent() override;
 
   void paint(juce::Graphics &) override;
@@ -39,6 +40,7 @@ private:
   ZoneManager *zoneManager;
   DeviceManager *deviceManager;
   const VoiceManager &voiceManager;
+  SettingsManager *settingsManager;
   PresetManager *presetManager;
   InputProcessor *inputProcessor;
   std::set<int> activeKeys;

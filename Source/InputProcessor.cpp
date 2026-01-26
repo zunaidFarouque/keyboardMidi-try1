@@ -441,6 +441,11 @@ std::shared_ptr<Zone> InputProcessor::getZoneForInputResolved(InputID input) {
 }
 
 void InputProcessor::processEvent(InputID input, bool isDown) {
+  // Gate: If MIDI mode is not active, don't generate MIDI
+  if (!settingsManager.isMidiModeActive()) {
+    return;
+  }
+  
   if (!isDown) {
     auto [action, source] = lookupAction(input.deviceHandle, input.keyCode);
     // Command key-up: SustainMomentary=Off, SustainInverse=On

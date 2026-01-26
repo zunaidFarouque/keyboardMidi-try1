@@ -1,12 +1,15 @@
 #pragma once
 #include <JuceHeader.h>
 #include <cstdint>
-#include <memory>
+#include <functional>
 #include <map>
+#include <memory>
 #include <set>
+
 
 // Forward declaration
 class PointerInputManager;
+class SettingsManager;
 
 class RawInputManager {
 public:
@@ -23,7 +26,7 @@ public:
   ~RawInputManager();
 
   // Uses void* to avoid including <windows.h> in the header
-  void initialize(void *nativeWindowHandle);
+  void initialize(void *nativeWindowHandle, SettingsManager* settingsMgr = nullptr);
   void shutdown();
 
   // Listener management
@@ -33,18 +36,23 @@ public:
   // State management for anti-ghosting and autorepeat filtering
   void resetState();
 
+  // Focus target callback for dynamic window selection
+  void setFocusTargetCallback(std::function<void*()> cb);
+
   static juce::String getKeyName(int virtualKey);
 
 private:
   void *targetHwnd = nullptr;
+  SettingsManager* settingsManager = nullptr;
+  std::function<void*()> focusTargetCallback;
   juce::ListenerList<Listener> listeners;
   bool isInitialized = false;
   std::unique_ptr<PointerInputManager> pointerInputManager;
-  
+
   // Forward declaration for helper class (defined in .cpp)
   class PointerEventForwarder;
   std::unique_ptr<PointerEventForwarder> pointerEventForwarder;
-  
+
   // Anti-ghosting and autorepeat filtering: Track pressed keys per device
   std::map<uintptr_t, std::set<int>> deviceKeyStates;
 
