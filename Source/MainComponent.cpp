@@ -11,14 +11,15 @@
 #include <windows.h>
 
 MainComponent::MainComponent()
-    : voiceManager(midiEngine),
-      inputProcessor(voiceManager, presetManager, deviceManager, scaleLibrary, midiEngine),
+    : voiceManager(midiEngine, settingsManager),
+      inputProcessor(voiceManager, presetManager, deviceManager, scaleLibrary, midiEngine, settingsManager),
       startupManager(&presetManager, &deviceManager,
-                     &inputProcessor.getZoneManager()),
+                     &inputProcessor.getZoneManager(), &settingsManager),
       mappingEditor(presetManager, rawInputManager, deviceManager),
       mainTabs(juce::TabbedButtonBar::TabsAtTop),
       zoneEditor(&inputProcessor.getZoneManager(), &deviceManager,
                  &rawInputManager, &scaleLibrary),
+      settingsPanel(settingsManager),
       visualizer(&inputProcessor.getZoneManager(), &deviceManager, voiceManager,
                  &presetManager, &inputProcessor),
       visualizerContainer("Visualizer", visualizer),
@@ -102,6 +103,7 @@ MainComponent::MainComponent()
   // --- Setup Main Tabs ---
   mainTabs.addTab("Mappings", juce::Colour(0xff2a2a2a), &mappingEditor, false);
   mainTabs.addTab("Zones", juce::Colour(0xff2a2a2a), &zoneEditor, false);
+  mainTabs.addTab("Settings", juce::Colour(0xff2a2a2a), &settingsPanel, false);
 
   // --- Add Containers ---
   addAndMakeVisible(visualizerContainer);

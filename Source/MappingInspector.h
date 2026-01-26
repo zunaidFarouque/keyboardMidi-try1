@@ -61,10 +61,13 @@ private:
   juce::Label envTargetLabel;
 
   // Pitch Bend musical controls (for Envelope with PitchBend target)
-  juce::Slider pbRangeSlider;
   juce::Slider pbShiftSlider;
-  juce::Label pbRangeLabel;
   juce::Label pbShiftLabel;
+  juce::Label pbGlobalRangeLabel; // "Uses Global Range" label
+
+  // Smart Scale Bend controls (for Envelope with SmartScaleBend target)
+  juce::Slider smartStepSlider;
+  juce::Label smartStepLabel;
 
   // Helper methods
   void updateControlsFromSelection();

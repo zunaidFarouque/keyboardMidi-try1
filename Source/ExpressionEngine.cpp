@@ -1,4 +1,5 @@
 #include "ExpressionEngine.h"
+#include "MappingTypes.h"
 #include <algorithm>
 
 ExpressionEngine::ExpressionEngine(MidiEngine& engine)
@@ -124,13 +125,13 @@ void ExpressionEngine::hiResTimerCallback() {
     }
 
     // Calculate output value with zero point logic
-    int zeroPoint = env.settings.isPitchBend ? 8192 : 0; // Pitch Bend center = 8192, CC = 0
+    int zeroPoint = (env.settings.target == AdsrTarget::PitchBend || env.settings.target == AdsrTarget::SmartScaleBend) ? 8192 : 0;
     int peak = env.peakValue;
     double range = static_cast<double>(peak - zeroPoint); // Can be negative for downward bends
     int outputVal = static_cast<int>(zeroPoint + (env.currentLevel * range));
     
     // Clamp to valid ranges
-    if (env.settings.isPitchBend) {
+    if (env.settings.target == AdsrTarget::PitchBend || env.settings.target == AdsrTarget::SmartScaleBend) {
       outputVal = juce::jlimit(0, 16383, outputVal);
     } else {
       outputVal = juce::jlimit(0, 127, outputVal);
@@ -138,7 +139,7 @@ void ExpressionEngine::hiResTimerCallback() {
 
     // Delta check: only send MIDI if value changed
     if (outputVal != env.lastSentValue) {
-      if (env.settings.isPitchBend) {
+      if (env.settings.target == AdsrTarget::PitchBend || env.settings.target == AdsrTarget::SmartScaleBend) {
         midiEngine.sendPitchBend(env.channel, outputVal);
       } else {
         midiEngine.sendCC(env.channel, env.settings.ccNumber, outputVal);

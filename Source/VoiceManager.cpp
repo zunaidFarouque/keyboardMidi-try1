@@ -1,12 +1,25 @@
 #include "VoiceManager.h"
 #include <algorithm>
 
-VoiceManager::VoiceManager(MidiEngine &engine)
+VoiceManager::VoiceManager(MidiEngine &engine, SettingsManager& settingsMgr)
     : midiEngine(engine),
+      settingsManager(settingsMgr),
       strumEngine(engine, [this](InputID s, int n, int c, bool a) {
         addVoiceFromStrum(s, n, c, a);
-      }) {
+      }),
+      portamentoEngine(engine) {
   startTimer(1); // Check for expired releases every 1ms
+  
+  // Register as listener to SettingsManager
+  settingsManager.addChangeListener(this);
+  
+  // Initialize PB lookup table
+  rebuildPbLookup();
+}
+
+VoiceManager::~VoiceManager() {
+  settingsManager.removeChangeListener(this);
+  portamentoEngine.stop(); // Reset PB to center
 }
 
 void VoiceManager::addVoiceFromStrum(InputID source, int note, int channel,
@@ -15,8 +28,80 @@ void VoiceManager::addVoiceFromStrum(InputID source, int note, int channel,
   voices.push_back({note, channel, source, allowSustain, VoiceState::Playing, 0});
 }
 
+void VoiceManager::rebuildPbLookup() {
+  int globalRange = settingsManager.getPitchBendRange();
+  double stepsPerSemitone = 8192.0 / static_cast<double>(globalRange);
+  
+  // Fill lookup table: index = delta + 127 (so -127 maps to 0, +127 maps to 254)
+  for (int delta = -127; delta <= 127; ++delta) {
+    int index = delta + 127;
+    if (std::abs(delta) <= globalRange) {
+      // Within range: calculate PB value
+      int pbValue = static_cast<int>(8192.0 + (delta * stepsPerSemitone));
+      pbLookup[index] = juce::jlimit(0, 16383, pbValue);
+    } else {
+      // Out of range: use sentinel
+      pbLookup[index] = -1;
+    }
+  }
+}
+
+int VoiceManager::getCurrentPlayingNote(int channel) const {
+  juce::ScopedLock lock(voicesLock);
+  for (const auto& voice : voices) {
+    if (voice.midiChannel == channel && voice.state == VoiceState::Playing) {
+      return voice.noteNumber;
+    }
+  }
+  return -1; // No note playing
+}
+
+void VoiceManager::pushToMonoStack(int channel, int note, InputID source) {
+  juce::ScopedLock lock(monoStackLock);
+  auto& stack = monoStacks[channel];
+  // Remove any existing entry for this source
+  stack.erase(std::remove_if(stack.begin(), stack.end(),
+    [source](const std::pair<int, InputID>& entry) {
+      return entry.second == source;
+    }), stack.end());
+  // Push to back (last note priority)
+  stack.push_back({note, source});
+}
+
+void VoiceManager::removeFromMonoStack(int channel, InputID source) {
+  juce::ScopedLock lock(monoStackLock);
+  auto it = monoStacks.find(channel);
+  if (it != monoStacks.end()) {
+    auto& stack = it->second;
+    stack.erase(std::remove_if(stack.begin(), stack.end(),
+      [source](const std::pair<int, InputID>& entry) {
+        return entry.second == source;
+      }), stack.end());
+    // Remove empty stacks
+    if (stack.empty()) {
+      monoStacks.erase(it);
+    }
+  }
+}
+
+int VoiceManager::getMonoStackTop(int channel) const {
+  juce::ScopedLock lock(monoStackLock);
+  auto it = monoStacks.find(channel);
+  if (it != monoStacks.end() && !it->second.empty()) {
+    return it->second.back().first; // Last element (most recent)
+  }
+  return -1; // Stack empty
+}
+
+void VoiceManager::changeListenerCallback(juce::ChangeBroadcaster* source) {
+  if (source == &settingsManager) {
+    // PB Range changed, rebuild lookup table
+    rebuildPbLookup();
+  }
+}
+
 void VoiceManager::noteOn(InputID source, int note, int vel, int channel,
-                          bool allowSustain, int releaseMs) {
+                          bool allowSustain, int releaseMs, PolyphonyMode polyMode, int glideTimeMs) {
   {
     juce::ScopedLock rl(releasesLock);
     releaseQueue.erase(
@@ -25,6 +110,88 @@ void VoiceManager::noteOn(InputID source, int note, int vel, int channel,
           return p.note == note && p.channel == channel;
         }),
       releaseQueue.end());
+  }
+
+  // Handle Mono/Legato modes
+  if (polyMode == PolyphonyMode::Mono || polyMode == PolyphonyMode::Legato) {
+    pushToMonoStack(channel, note, source);
+    
+    int currentNote = getCurrentPlayingNote(channel);
+    
+    if (currentNote >= 0 && currentNote != note) {
+      // Calculate semitone delta
+      int delta = note - currentNote;
+      int lookupIndex = delta + 127;
+      
+      // Check if Legato glide is possible
+      if (polyMode == PolyphonyMode::Legato && lookupIndex >= 0 && lookupIndex < 255 && pbLookup[lookupIndex] != -1) {
+        // Legato glide: use portamento
+        int currentPB = 8192; // Assume center (we could track actual PB, but center is safe)
+        int targetPB = pbLookup[lookupIndex];
+        portamentoEngine.startGlide(currentPB, targetPB, glideTimeMs, channel);
+        // Do NOT send NoteOff/NoteOn - just glide the PB
+        return; // Exit early, no new note triggered
+      } else {
+        // Retrigger: NoteOff current, reset PB, NoteOn new
+        juce::ScopedLock lock(voicesLock);
+        for (auto it = voices.begin(); it != voices.end();) {
+          if (it->midiChannel == channel && it->noteNumber == currentNote) {
+            midiEngine.sendNoteOff(it->midiChannel, it->noteNumber);
+            it = voices.erase(it);
+          } else {
+            ++it;
+          }
+        }
+        // Reset PB to center
+        portamentoEngine.stop();
+        midiEngine.sendPitchBend(channel, 8192);
+      }
+    } else if (currentNote < 0) {
+      // No note currently playing, reset PB to center
+      portamentoEngine.stop();
+      midiEngine.sendPitchBend(channel, 8192);
+    }
+  }
+
+  // Handle Mono/Legato modes
+  if (polyMode == PolyphonyMode::Mono || polyMode == PolyphonyMode::Legato) {
+    pushToMonoStack(channel, note, source);
+    
+    int currentNote = getCurrentPlayingNote(channel);
+    
+    if (currentNote >= 0 && currentNote != note) {
+      // Calculate semitone delta
+      int delta = note - currentNote;
+      int lookupIndex = delta + 127;
+      
+      // Check if Legato glide is possible
+      if (polyMode == PolyphonyMode::Legato && lookupIndex >= 0 && lookupIndex < 255 && pbLookup[lookupIndex] != -1) {
+        // Legato glide: use portamento
+        int currentPB = 8192; // Assume center (we could track actual PB, but center is safe)
+        int targetPB = pbLookup[lookupIndex];
+        portamentoEngine.startGlide(currentPB, targetPB, glideTimeMs, channel);
+        // Do NOT send NoteOff/NoteOn - just glide the PB
+        return; // Exit early, no new note triggered
+      } else {
+        // Retrigger: NoteOff current, reset PB, NoteOn new
+        juce::ScopedLock lock(voicesLock);
+        for (auto it = voices.begin(); it != voices.end();) {
+          if (it->midiChannel == channel && it->noteNumber == currentNote) {
+            midiEngine.sendNoteOff(it->midiChannel, it->noteNumber);
+            it = voices.erase(it);
+          } else {
+            ++it;
+          }
+        }
+        // Reset PB to center
+        portamentoEngine.stop();
+        midiEngine.sendPitchBend(channel, 8192);
+      }
+    } else if (currentNote < 0) {
+      // No note currently playing, reset PB to center
+      portamentoEngine.stop();
+      midiEngine.sendPitchBend(channel, 8192);
+    }
   }
 
   juce::ScopedLock lock(voicesLock);
@@ -54,7 +221,7 @@ void VoiceManager::noteOn(InputID source, int note, int vel, int channel,
 
 void VoiceManager::noteOn(InputID source, const std::vector<int> &notes,
                           const std::vector<int> &velocities, int channel,
-                          int strumSpeedMs, bool allowSustain, int releaseMs) {
+                          int strumSpeedMs, bool allowSustain, int releaseMs, PolyphonyMode polyMode, int glideTimeMs) {
   if (notes.empty())
     return;
 
@@ -140,6 +307,9 @@ void VoiceManager::handleKeyUp(InputID source) {
 
   std::vector<PendingNoteOff> toQueue;
   double now = getCurrentTimeMs();
+  
+  int releasedChannel = -1;
+  int releasedNote = -1;
 
   {
     juce::ScopedLock lock(voicesLock);
@@ -149,6 +319,10 @@ void VoiceManager::handleKeyUp(InputID source) {
         ++it;
         continue;
       }
+      
+      releasedChannel = it->midiChannel;
+      releasedNote = it->noteNumber;
+      
       if (globalLatchActive) {
         it->state = VoiceState::Latched;
         ++it;
@@ -161,6 +335,70 @@ void VoiceManager::handleKeyUp(InputID source) {
       } else {
         midiEngine.sendNoteOff(it->midiChannel, it->noteNumber);
         it = voices.erase(it);
+      }
+    }
+  }
+  
+  // Handle Mono/Legato stack if this was a mono/legato voice
+  if (releasedChannel >= 0) {
+    auto polyModeIt = channelPolyModes.find(releasedChannel);
+    if (polyModeIt != channelPolyModes.end()) {
+      PolyphonyMode polyMode = polyModeIt->second.first;
+      int glideTimeMs = polyModeIt->second.second;
+      
+      if (polyMode == PolyphonyMode::Mono || polyMode == PolyphonyMode::Legato) {
+        removeFromMonoStack(releasedChannel, source);
+        
+        int previousNote = getMonoStackTop(releasedChannel);
+        
+        if (previousNote < 0) {
+          // Stack empty: NoteOff current (already done above)
+          portamentoEngine.stop();
+          midiEngine.sendPitchBend(releasedChannel, 8192);
+          channelPolyModes.erase(polyModeIt);
+        } else if (previousNote != releasedNote) {
+          // Stack has previous note: return to it
+          int currentNote = getCurrentPlayingNote(releasedChannel);
+          if (currentNote >= 0 && currentNote != previousNote) {
+            int delta = previousNote - currentNote;
+            int lookupIndex = delta + 127;
+            
+            // Check if Legato glide is possible
+            if (polyMode == PolyphonyMode::Legato && lookupIndex >= 0 && lookupIndex < 255 && pbLookup[lookupIndex] != -1) {
+              // Legato glide back
+              int currentPB = 8192;
+              int targetPB = pbLookup[lookupIndex];
+              portamentoEngine.startGlide(currentPB, targetPB, glideTimeMs, releasedChannel);
+              // Do NOT retrigger note - just glide PB
+            } else {
+              // Retrigger previous note
+              juce::ScopedLock lock(voicesLock);
+              for (auto it = voices.begin(); it != voices.end();) {
+                if (it->midiChannel == releasedChannel && it->noteNumber == currentNote) {
+                  midiEngine.sendNoteOff(it->midiChannel, it->noteNumber);
+                  it = voices.erase(it);
+                } else {
+                  ++it;
+                }
+              }
+              portamentoEngine.stop();
+              midiEngine.sendPitchBend(releasedChannel, 8192);
+              // Trigger previous note with default velocity
+              midiEngine.sendNoteOn(releasedChannel, previousNote, 100.0f / 127.0f);
+              // Add voice for previous note (we don't have the original source, so use dummy)
+              InputID dummySource = {0, 0};
+              voices.push_back({previousNote, releasedChannel, dummySource, true, VoiceState::Playing, 0});
+            }
+          } else if (currentNote < 0) {
+            // No note playing, trigger previous note
+            portamentoEngine.stop();
+            midiEngine.sendPitchBend(releasedChannel, 8192);
+            midiEngine.sendNoteOn(releasedChannel, previousNote, 100.0f / 127.0f);
+            InputID dummySource = {0, 0};
+            juce::ScopedLock lock(voicesLock);
+            voices.push_back({previousNote, releasedChannel, dummySource, true, VoiceState::Playing, 0});
+          }
+        }
       }
     }
   }

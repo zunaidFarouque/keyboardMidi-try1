@@ -1,14 +1,16 @@
 #include "StartupManager.h"
 #include "Zone.h"
 #include "ScaleUtilities.h"
+#include "SettingsManager.h"
 
-StartupManager::StartupManager(PresetManager* presetMgr, DeviceManager* deviceMgr, ZoneManager* zoneMgr)
-    : presetManager(presetMgr), deviceManager(deviceMgr), zoneManager(zoneMgr) {
+StartupManager::StartupManager(PresetManager* presetMgr, DeviceManager* deviceMgr, ZoneManager* zoneMgr, SettingsManager* settingsMgr)
+    : presetManager(presetMgr), deviceManager(deviceMgr), zoneManager(zoneMgr), settingsManager(settingsMgr) {
   
   // Setup file paths
   appDataFolder = juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory)
                       .getChildFile("OmniKey");
   autoloadFile = appDataFolder.getChildFile("autoload.xml");
+  settingsFile = appDataFolder.getChildFile("settings.xml");
   
   // Listen to changes
   if (presetManager) {
@@ -19,6 +21,9 @@ StartupManager::StartupManager(PresetManager* presetMgr, DeviceManager* deviceMg
   }
   if (zoneManager) {
     zoneManager->addChangeListener(this);
+  }
+  if (settingsManager) {
+    settingsManager->addChangeListener(this);
   }
 }
 
@@ -35,11 +40,19 @@ StartupManager::~StartupManager() {
   if (zoneManager) {
     zoneManager->removeChangeListener(this);
   }
+  if (settingsManager) {
+    settingsManager->removeChangeListener(this);
+  }
 }
 
 void StartupManager::initApp() {
   // Ensure app data folder exists
   appDataFolder.createDirectory();
+  
+  // Load SettingsManager config (global settings)
+  if (settingsManager) {
+    settingsManager->loadFromXml(settingsFile);
+  }
   
   // Load DeviceManager config (global settings)
   if (deviceManager) {
@@ -159,6 +172,11 @@ void StartupManager::timerCallback() {
 
 void StartupManager::performSave() {
   stopTimer();
+  
+  // Save SettingsManager to separate file
+  if (settingsManager) {
+    settingsManager->saveToXml(settingsFile);
+  }
   
   // Construct master XML
   juce::ValueTree sessionTree("OmniKeySession");

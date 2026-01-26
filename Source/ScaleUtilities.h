@@ -12,4 +12,9 @@ public:
   // Generate Roman numeral for a scale degree (e.g., 0 -> "I", 1 -> "ii", 4 -> "V")
   // Returns string like "I", "ii", "iii", "IV", "V", "vi", "vii°", "III+"
   static juce::String getRomanNumeral(int degree, const std::vector<int>& intervals);
+  
+  // Find the scale degree index of a MIDI note given root and intervals
+  // Returns the degree index (can be negative for notes below root)
+  // If note is not in scale, returns the closest scale degree
+  static int findScaleDegree(int midiNote, int rootNote, const std::vector<int>& intervals);
 };

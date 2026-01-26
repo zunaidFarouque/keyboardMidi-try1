@@ -300,6 +300,8 @@ juce::ValueTree Zone::toValueTree() const {
   vt.setProperty("showRomanNumerals", showRomanNumerals, nullptr);
   vt.setProperty("useGlobalScale", useGlobalScale, nullptr);
   vt.setProperty("useGlobalRoot", useGlobalRoot, nullptr);
+  vt.setProperty("polyphonyMode", static_cast<int>(polyphonyMode), nullptr);
+  vt.setProperty("glideTimeMs", glideTimeMs, nullptr);
   
   // Serialize inputKeyCodes as comma-separated string
   juce::StringArray keyCodesArray;
@@ -382,6 +384,8 @@ std::shared_ptr<Zone> Zone::fromValueTree(const juce::ValueTree& vt) {
   zone->showRomanNumerals = vt.getProperty("showRomanNumerals", false);
   zone->useGlobalScale = vt.getProperty("useGlobalScale", false);
   zone->useGlobalRoot = vt.getProperty("useGlobalRoot", false);
+  zone->polyphonyMode = static_cast<PolyphonyMode>(vt.getProperty("polyphonyMode", static_cast<int>(PolyphonyMode::Poly)).operator int());
+  zone->glideTimeMs = vt.getProperty("glideTimeMs", 50);
   
   return zone;
 }

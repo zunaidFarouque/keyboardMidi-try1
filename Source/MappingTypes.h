@@ -11,6 +11,13 @@ enum class ActionType {
   Envelope// ADSR envelope (data1 = CC number or 0 for Pitch Bend, data2 = peak value)
 };
 
+// Polyphony modes (Phase 26)
+enum class PolyphonyMode {
+  Poly,   // Polyphonic (multiple notes simultaneously)
+  Mono,   // Monophonic (last note priority, retrigger)
+  Legato  // Legato (portamento glide, no retrigger within PB range)
+};
+
 // Command IDs for ActionType::Command (stored in MidiAction::data1)
 // In namespace to avoid clash with juce::CommandID
 namespace OmniKey {
@@ -36,14 +43,24 @@ namespace InputTypes {
   constexpr int PointerY   = 0x2001;
 }
 
+// ADSR envelope target types (Phase 25.1)
+enum class AdsrTarget {
+  CC,           // Control Change
+  PitchBend,    // Standard Pitch Bend
+  SmartScaleBend // Scale-based Pitch Bend (pre-compiled lookup)
+};
+
 // ADSR envelope settings (Phase 23.1)
 struct AdsrSettings {
   int attackMs = 10;   // Attack time in milliseconds
   int decayMs = 10;    // Decay time in milliseconds
   float sustainLevel = 0.7f; // Sustain level (0.0-1.0)
   int releaseMs = 100; // Release time in milliseconds
-  bool isPitchBend = false; // If true, output Pitch Bend; else CC
-  int ccNumber = 1;    // CC number (if not Pitch Bend)
+  AdsrTarget target = AdsrTarget::CC; // Target type
+  int ccNumber = 1;    // CC number (if target is CC)
+  
+  // Legacy compatibility: isPitchBend maps to target
+  bool isPitchBend() const { return target == AdsrTarget::PitchBend || target == AdsrTarget::SmartScaleBend; }
 };
 
 // Represents a MIDI action to be performed
@@ -54,6 +71,7 @@ struct MidiAction {
   int data2; // Velocity or CC value
   int velocityRandom = 0; // Velocity randomization range (0 = no randomization)
   AdsrSettings adsrSettings; // ADSR settings (for ActionType::Envelope)
+  std::vector<int> smartBendLookup; // Pre-compiled PB lookup table (128 entries) for SmartScaleBend
 };
 
 // Represents a unique input source (device + key)

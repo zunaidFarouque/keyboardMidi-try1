@@ -8,6 +8,8 @@
 #include "PresetManager.h"
 #include "RawInputManager.h"
 #include "ScaleLibrary.h"
+#include "SettingsManager.h"
+#include "SettingsPanel.h"
 #include "StartupManager.h"
 #include "VisualizerComponent.h"
 #include "ZoneEditorComponent.h"
@@ -48,6 +50,7 @@ private:
       deviceManager; // Must be before presetManager and inputProcessor
   PresetManager presetManager;
   ScaleLibrary scaleLibrary; // Must be before ZoneManager/InputProcessor
+  SettingsManager settingsManager; // Global settings (must be before InputProcessor)
   VoiceManager voiceManager;
   InputProcessor inputProcessor;
   StartupManager startupManager; // Must be after all managers it references
@@ -71,6 +74,7 @@ private:
   juce::TabbedComponent mainTabs;
   MappingEditorComponent mappingEditor;
   ZoneEditorComponent zoneEditor;
+  SettingsPanel settingsPanel;
   LogComponent logComponent; // <--- REPLACED TextEditor
 
   // Containers (Detachable wrappers)

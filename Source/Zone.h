@@ -56,6 +56,8 @@ public:
   bool showRomanNumerals = false; // If true, display Roman numerals instead of note names
   bool useGlobalScale = false; // If true, inherit ZoneManager::globalScaleName
   bool useGlobalRoot = false;  // If true, inherit ZoneManager::globalRootNote
+  PolyphonyMode polyphonyMode = PolyphonyMode::Poly; // Polyphony mode (Phase 26)
+  int glideTimeMs = 50; // Portamento glide time in milliseconds (Phase 26)
 
   // Performance cache: Pre-compiled key-to-chord mappings (compilation strategy).
   // Config-time: rebuildCache() runs ChordUtilities::generateChord, ScaleUtilities; fills this map.

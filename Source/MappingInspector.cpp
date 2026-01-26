@@ -88,6 +88,7 @@ MappingInspector::MappingInspector(juce::UndoManager *undoMgr, DeviceManager *de
   addAndMakeVisible(envTargetSelector);
   envTargetSelector.addItem("CC", 1);
   envTargetSelector.addItem("Pitch Bend", 2);
+  envTargetSelector.addItem("Smart Scale Bend", 3);
   envTargetSelector.setVisible(false);
   envTargetLabel.setVisible(false);
 
@@ -147,10 +148,16 @@ MappingInspector::MappingInspector(juce::UndoManager *undoMgr, DeviceManager *de
   envTargetSelector.onChange = [this] {
     if (selectedTrees.empty())
       return;
-    if (envTargetSelector.getSelectedId() < 1 || envTargetSelector.getSelectedId() > 2)
+    if (envTargetSelector.getSelectedId() < 1 || envTargetSelector.getSelectedId() > 3)
       return;
     undoManager->beginNewTransaction("Change Envelope Target");
-    juce::String targetStr = (envTargetSelector.getSelectedId() == 1) ? "CC" : "PitchBend";
+    juce::String targetStr;
+    if (envTargetSelector.getSelectedId() == 1)
+      targetStr = "CC";
+    else if (envTargetSelector.getSelectedId() == 2)
+      targetStr = "PitchBend";
+    else if (envTargetSelector.getSelectedId() == 3)
+      targetStr = "SmartScaleBend";
     for (auto &tree : selectedTrees) {
       if (tree.isValid())
         tree.setProperty("adsrTarget", targetStr, undoManager);
@@ -160,15 +167,6 @@ MappingInspector::MappingInspector(juce::UndoManager *undoMgr, DeviceManager *de
   };
 
   // Setup Pitch Bend musical controls (initially hidden)
-  pbRangeLabel.setText("PB Range:", juce::dontSendNotification);
-  pbRangeLabel.attachToComponent(&pbRangeSlider, true);
-  addAndMakeVisible(pbRangeLabel);
-  addAndMakeVisible(pbRangeSlider);
-  pbRangeSlider.setRange(1, 48, 1);
-  pbRangeSlider.setTextValueSuffix(" semitones");
-  pbRangeSlider.setVisible(false);
-  pbRangeLabel.setVisible(false);
-
   pbShiftLabel.setText("PB Shift:", juce::dontSendNotification);
   pbShiftLabel.attachToComponent(&pbShiftSlider, true);
   addAndMakeVisible(pbShiftLabel);
@@ -178,23 +176,37 @@ MappingInspector::MappingInspector(juce::UndoManager *undoMgr, DeviceManager *de
   pbShiftSlider.setVisible(false);
   pbShiftLabel.setVisible(false);
 
-  // Pitch Bend slider callbacks
-  pbRangeSlider.onValueChange = [this] {
+  // "Uses Global Range" label
+  pbGlobalRangeLabel.setText("Uses Global Range", juce::dontSendNotification);
+  pbGlobalRangeLabel.setColour(juce::Label::textColourId, juce::Colours::lightgrey);
+  addAndMakeVisible(pbGlobalRangeLabel);
+  pbGlobalRangeLabel.setVisible(false);
+
+  // Setup Smart Scale Bend controls (initially hidden)
+  smartStepLabel.setText("Scale Steps:", juce::dontSendNotification);
+  smartStepLabel.attachToComponent(&smartStepSlider, true);
+  addAndMakeVisible(smartStepLabel);
+  addAndMakeVisible(smartStepSlider);
+  smartStepSlider.setRange(-7, 7, 1);
+  smartStepSlider.setTextValueSuffix(" steps");
+  smartStepSlider.setVisible(false);
+  smartStepLabel.setVisible(false);
+
+  // Smart Step slider callback
+  smartStepSlider.onValueChange = [this] {
     if (selectedTrees.empty())
       return;
-    if (pbRangeSlider.getTextValueSuffix().contains("---"))
+    if (smartStepSlider.getTextValueSuffix().contains("---"))
       return;
-    undoManager->beginNewTransaction("Change PB Range");
-    int value = static_cast<int>(pbRangeSlider.getValue());
+    undoManager->beginNewTransaction("Change Smart Step Shift");
+    int value = static_cast<int>(smartStepSlider.getValue());
     for (auto &tree : selectedTrees) {
-      if (tree.isValid()) {
-        tree.setProperty("pbRange", value, undoManager);
-        // Recalculate and update data2 (peak value)
-        updatePitchBendPeakValue(tree);
-      }
+      if (tree.isValid())
+        tree.setProperty("smartStepShift", value, undoManager);
     }
   };
 
+  // Pitch Bend slider callbacks
   pbShiftSlider.onValueChange = [this] {
     if (selectedTrees.empty())
       return;
@@ -205,8 +217,8 @@ MappingInspector::MappingInspector(juce::UndoManager *undoMgr, DeviceManager *de
     for (auto &tree : selectedTrees) {
       if (tree.isValid()) {
         tree.setProperty("pbShift", value, undoManager);
-        // Recalculate and update data2 (peak value)
-        updatePitchBendPeakValue(tree);
+        // Note: data2 will be recalculated by InputProcessor when it rebuilds
+        // the map from tree, using the global range from SettingsManager
       }
     }
   };
@@ -495,9 +507,16 @@ void MappingInspector::resized() {
     adsrY += controlHeight + spacing;
     
     // Pitch Bend controls (if visible)
-    if (pbRangeSlider.isVisible()) {
-      pbRangeSlider.setBounds(leftMargin, adsrY, adsrWidth, controlHeight);
-      pbShiftSlider.setBounds(leftMargin + adsrWidth + spacing, adsrY, adsrWidth, controlHeight);
+    if (pbShiftSlider.isVisible()) {
+      pbShiftSlider.setBounds(leftMargin, adsrY, width, controlHeight);
+      adsrY += controlHeight + spacing;
+      pbGlobalRangeLabel.setBounds(leftMargin, adsrY, width, controlHeight);
+      adsrY += controlHeight + spacing;
+    }
+
+    // Smart Scale Bend controls (if visible)
+    if (smartStepSlider.isVisible()) {
+      smartStepSlider.setBounds(leftMargin, adsrY, width, controlHeight);
       adsrY += controlHeight + spacing;
     }
     
@@ -607,13 +626,17 @@ void MappingInspector::updateControlsFromSelection() {
   // Pitch Bend controls visibility (only for Envelope with PitchBend target)
   juce::String target = allTreesHaveSameValue("adsrTarget") ? getCommonValue("adsrTarget").toString() : "";
   bool isPitchBend = (isEnvelope && target == "PitchBend");
-  pbRangeSlider.setVisible(isPitchBend);
-  pbRangeLabel.setVisible(isPitchBend);
+  bool isSmartScaleBend = (isEnvelope && target == "SmartScaleBend");
   pbShiftSlider.setVisible(isPitchBend);
   pbShiftLabel.setVisible(isPitchBend);
+  pbGlobalRangeLabel.setVisible(isPitchBend);
   
-  // Hide data1Slider and data2Slider for Pitch Bend (use musical controls instead)
-  if (isPitchBend) {
+  // Smart Scale Bend controls visibility
+  smartStepSlider.setVisible(isSmartScaleBend);
+  smartStepLabel.setVisible(isSmartScaleBend);
+  
+  // Hide data1Slider and data2Slider for Pitch Bend and SmartScaleBend (use musical controls instead)
+  if (isPitchBend || isSmartScaleBend) {
     data1Slider.setVisible(false);
     data1Label.setVisible(false);
     data2Slider.setVisible(false);
@@ -831,6 +854,8 @@ void MappingInspector::updateControlsFromSelection() {
         envTargetSelector.setSelectedId(1, juce::dontSendNotification);
       else if (target == "PitchBend")
         envTargetSelector.setSelectedId(2, juce::dontSendNotification);
+      else if (target == "SmartScaleBend")
+        envTargetSelector.setSelectedId(3, juce::dontSendNotification);
       else
         envTargetSelector.setSelectedId(-1, juce::dontSendNotification);
     } else {
@@ -839,16 +864,6 @@ void MappingInspector::updateControlsFromSelection() {
 
     // Update Pitch Bend sliders
     if (target == "PitchBend") {
-      // Update PB Range
-      if (allTreesHaveSameValue("pbRange")) {
-        int pbRange = static_cast<int>(getCommonValue("pbRange"));
-        pbRangeSlider.setValue(pbRange, juce::dontSendNotification);
-        pbRangeSlider.setTextValueSuffix(" semitones");
-      } else {
-        pbRangeSlider.setValue(12, juce::dontSendNotification);
-        pbRangeSlider.setTextValueSuffix(" semitones (---)");
-      }
-
       // Update PB Shift
       if (allTreesHaveSameValue("pbShift")) {
         int pbShift = static_cast<int>(getCommonValue("pbShift"));
@@ -857,6 +872,19 @@ void MappingInspector::updateControlsFromSelection() {
       } else {
         pbShiftSlider.setValue(0, juce::dontSendNotification);
         pbShiftSlider.setTextValueSuffix(" semitones (---)");
+      }
+    }
+
+    // Update Smart Scale Bend slider
+    if (target == "SmartScaleBend") {
+      // Update Smart Step Shift
+      if (allTreesHaveSameValue("smartStepShift")) {
+        int smartStep = static_cast<int>(getCommonValue("smartStepShift"));
+        smartStepSlider.setValue(smartStep, juce::dontSendNotification);
+        smartStepSlider.setTextValueSuffix(" steps");
+      } else {
+        smartStepSlider.setValue(0, juce::dontSendNotification);
+        smartStepSlider.setTextValueSuffix(" steps (---)");
       }
     }
 
@@ -899,19 +927,11 @@ juce::var MappingInspector::getCommonValue(const juce::Identifier &property) {
 }
 
 void MappingInspector::updatePitchBendPeakValue(juce::ValueTree& tree) {
-  if (!tree.isValid())
-    return;
-  
-  int pbRange = tree.getProperty("pbRange", 12);
-  int pbShift = tree.getProperty("pbShift", 0);
-  
-  // Calculate target MIDI value: 8192 (center) + (shift * steps per semitone)
-  double stepsPerSemitone = 8192.0 / static_cast<double>(pbRange);
-  int calculatedPeak = static_cast<int>(8192.0 + (pbShift * stepsPerSemitone));
-  calculatedPeak = juce::jlimit(0, 16383, calculatedPeak);
-  
-  // Update data2 with calculated peak value
-  tree.setProperty("data2", calculatedPeak, undoManager);
+  // Note: This method is no longer used since InputProcessor now handles
+  // the calculation using global range. However, we keep it for potential
+  // future use or if we need to update data2 from the UI side.
+  // The actual calculation happens in InputProcessor::addMappingFromTree
+  // using SettingsManager::getPitchBendRange().
 }
 
 void MappingInspector::valueTreePropertyChanged(juce::ValueTree &tree,
@@ -922,8 +942,9 @@ void MappingInspector::valueTreePropertyChanged(juce::ValueTree &tree,
       property == juce::Identifier("inputAlias") || property == juce::Identifier("deviceHash") ||
       property == juce::Identifier("adsrAttack") || property == juce::Identifier("adsrDecay") ||
       property == juce::Identifier("adsrSustain") || property == juce::Identifier("adsrRelease") ||
-      property == juce::Identifier("adsrTarget") || property == juce::Identifier("pbRange") ||
-      property == juce::Identifier("pbShift")) {
+      property == juce::Identifier("adsrTarget") ||
+      property == juce::Identifier("pbShift") ||
+      property == juce::Identifier("smartStepShift")) {
     updateControlsFromSelection();
   }
 }

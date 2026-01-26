@@ -549,6 +549,50 @@ ZonePropertiesPanel::ZonePropertiesPanel(ZoneManager *zoneMgr, DeviceManager *de
     }
   };
 
+  // Polyphony Mode Controls (Phase 26)
+  addAndMakeVisible(polyphonyModeLabel);
+  polyphonyModeLabel.setText("Polyphony Mode:", juce::dontSendNotification);
+  polyphonyModeLabel.attachToComponent(&polyphonyModeSelector, true);
+
+  addAndMakeVisible(polyphonyModeSelector);
+  polyphonyModeSelector.addItem("Poly", 1);
+  polyphonyModeSelector.addItem("Mono (Retrigger)", 2);
+  polyphonyModeSelector.addItem("Legato (Glide)", 3);
+  polyphonyModeSelector.onChange = [this] {
+    if (currentZone) {
+      int selected = polyphonyModeSelector.getSelectedId();
+      if (selected == 1)
+        currentZone->polyphonyMode = PolyphonyMode::Poly;
+      else if (selected == 2)
+        currentZone->polyphonyMode = PolyphonyMode::Mono;
+      else if (selected == 3)
+        currentZone->polyphonyMode = PolyphonyMode::Legato;
+      updateVisibility();
+      if (zoneManager) {
+        zoneManager->sendChangeMessage();
+      }
+    }
+  };
+
+  addAndMakeVisible(glideTimeLabel);
+  glideTimeLabel.setText("Glide Time:", juce::dontSendNotification);
+  glideTimeLabel.attachToComponent(&glideTimeSlider, true);
+
+  addAndMakeVisible(glideTimeSlider);
+  glideTimeSlider.setRange(0, 500, 1);
+  glideTimeSlider.setTextValueSuffix(" ms");
+  glideTimeSlider.setValue(50);
+  glideTimeSlider.onValueChange = [this] {
+    if (currentZone) {
+      currentZone->glideTimeMs = static_cast<int>(glideTimeSlider.getValue());
+      if (zoneManager) {
+        zoneManager->sendChangeMessage();
+      }
+    }
+  };
+  glideTimeSlider.setVisible(false); // Initially hidden (only visible for Legato)
+  glideTimeLabel.setVisible(false);
+
   addAndMakeVisible(channelLabel);
   channelLabel.setText("MIDI Channel:", juce::dontSendNotification);
   channelLabel.attachToComponent(&channelSlider, true);
@@ -745,6 +789,16 @@ void ZonePropertiesPanel::resized() {
   displayModeSelector.setBounds(leftMargin, y, width, rowHeight);
   y += rowHeight + spacing;
 
+  // Polyphony Mode (Phase 26)
+  polyphonyModeSelector.setBounds(leftMargin, y, width, rowHeight);
+  y += rowHeight + spacing;
+
+  // Glide Time (only visible for Legato)
+  if (glideTimeSlider.isVisible()) {
+    glideTimeSlider.setBounds(leftMargin, y, width, rowHeight);
+    y += rowHeight + spacing;
+  }
+
   // Chord Type
   chordTypeSelector.setBounds(leftMargin, y, width, rowHeight);
   y += rowHeight + spacing;
@@ -860,6 +914,8 @@ void ZonePropertiesPanel::updateControlsFromZone() {
     bassToggle.setEnabled(false);
     bassOctaveSlider.setEnabled(false);
     displayModeSelector.setEnabled(false);
+    polyphonyModeSelector.setEnabled(false);
+    glideTimeSlider.setEnabled(false);
     channelSlider.setEnabled(false);
     colorButton.setEnabled(false);
     chipList.setEnabled(false);
@@ -895,6 +951,8 @@ void ZonePropertiesPanel::updateControlsFromZone() {
     bassToggle.setEnabled(true);
     bassOctaveSlider.setEnabled(currentZone->addBassNote);
     displayModeSelector.setEnabled(true);
+    polyphonyModeSelector.setEnabled(true);
+    glideTimeSlider.setEnabled(true);
     channelSlider.setEnabled(true);
   colorButton.setEnabled(true);
 
@@ -1006,6 +1064,19 @@ void ZonePropertiesPanel::updateControlsFromZone() {
   bassOctaveSlider.setEnabled(currentZone->addBassNote);
   displayModeSelector.setSelectedId(currentZone->showRomanNumerals ? 2 : 1, juce::dontSendNotification);
 
+  // Set polyphony mode
+  int polyModeId = 1; // Default to Poly
+  if (currentZone->polyphonyMode == PolyphonyMode::Poly)
+    polyModeId = 1;
+  else if (currentZone->polyphonyMode == PolyphonyMode::Mono)
+    polyModeId = 2;
+  else if (currentZone->polyphonyMode == PolyphonyMode::Legato)
+    polyModeId = 3;
+  polyphonyModeSelector.setSelectedId(polyModeId, juce::dontSendNotification);
+
+  // Set glide time
+  glideTimeSlider.setValue(currentZone->glideTimeMs, juce::dontSendNotification);
+
   chipList.setKeys(currentZone->inputKeyCodes);
 
   globalScaleToggle.setToggleState(currentZone->useGlobalScale, juce::dontSendNotification);
@@ -1036,6 +1107,11 @@ void ZonePropertiesPanel::updateVisibility() {
   scaleSelector.setEnabled((!piano) && (!useGlobalScale));
   editScaleButton.setEnabled((!piano) && (!useGlobalScale));
   rootSlider.setEnabled(!useGlobalRoot);
+  
+  // Show glide time slider only for Legato mode
+  bool isLegato = (currentZone->polyphonyMode == PolyphonyMode::Legato);
+  glideTimeSlider.setVisible(isLegato);
+  glideTimeLabel.setVisible(isLegato);
 }
 
 void ZonePropertiesPanel::rebuildZoneCache() {

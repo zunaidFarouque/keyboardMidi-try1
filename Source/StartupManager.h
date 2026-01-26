@@ -4,11 +4,13 @@
 #include "ZoneManager.h"
 #include <JuceHeader.h>
 
+class SettingsManager;
+
 class StartupManager : public juce::Timer,
                         public juce::ValueTree::Listener,
                         public juce::ChangeListener {
 public:
-  StartupManager(PresetManager* presetMgr, DeviceManager* deviceMgr, ZoneManager* zoneMgr);
+  StartupManager(PresetManager* presetMgr, DeviceManager* deviceMgr, ZoneManager* zoneMgr, SettingsManager* settingsMgr);
   ~StartupManager() override;
 
   // Initialize application (load or create factory default)
@@ -42,9 +44,11 @@ private:
   PresetManager* presetManager;
   DeviceManager* deviceManager;
   ZoneManager* zoneManager;
+  SettingsManager* settingsManager;
 
   juce::File appDataFolder;
   juce::File autoloadFile;
+  juce::File settingsFile;
 
   void performSave();
 

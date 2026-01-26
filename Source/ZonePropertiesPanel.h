@@ -95,6 +95,10 @@ private:
   juce::Slider bassOctaveSlider;
   juce::Label displayModeLabel;
   juce::ComboBox displayModeSelector;
+  juce::Label polyphonyModeLabel;
+  juce::ComboBox polyphonyModeSelector;
+  juce::Label glideTimeLabel;
+  juce::Slider glideTimeSlider;
   KeyChipList chipList;
 
   void refreshAliasSelector();

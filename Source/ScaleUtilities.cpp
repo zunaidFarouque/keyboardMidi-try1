@@ -88,3 +88,34 @@ juce::String ScaleUtilities::getRomanNumeral(int degree, const std::vector<int>&
   
   return baseNumeral;
 }
+
+int ScaleUtilities::findScaleDegree(int midiNote, int rootNote, const std::vector<int>& intervals) {
+  if (intervals.empty())
+    return 0; // Safety check
+  
+  // Calculate semitone offset from root
+  int offset = midiNote - rootNote;
+  
+  // Normalize offset to be in range [0, 11] (chromatic position)
+  int chromaticOffset = ((offset % 12) + 12) % 12;
+  
+  // Find which interval matches this chromatic position
+  int bestMatch = 0;
+  int bestDistance = 12; // Max distance
+  
+  // Check all intervals in the scale
+  for (size_t i = 0; i < intervals.size(); ++i) {
+    int intervalChromatic = intervals[i] % 12;
+    int distance = std::abs(chromaticOffset - intervalChromatic);
+    if (distance < bestDistance) {
+      bestDistance = distance;
+      bestMatch = static_cast<int>(i);
+    }
+  }
+  
+  // Calculate octaves
+  int octaves = (offset - intervals[bestMatch]) / 12;
+  
+  // Return degree index: bestMatch + (octaves * scale size)
+  return bestMatch + (octaves * static_cast<int>(intervals.size()));
+}

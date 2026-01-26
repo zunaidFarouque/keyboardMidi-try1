@@ -3,15 +3,18 @@
 #include "MappingTypes.h"
 #include "ScaleLibrary.h"
 #include "MidiEngine.h"
+#include "SettingsManager.h"
 
 InputProcessor::InputProcessor(VoiceManager &voiceMgr, PresetManager &presetMgr,
-                               DeviceManager &deviceMgr, ScaleLibrary &scaleLib, MidiEngine &midiEng)
+                               DeviceManager &deviceMgr, ScaleLibrary &scaleLib, MidiEngine &midiEng, SettingsManager &settingsMgr)
     : voiceManager(voiceMgr), presetManager(presetMgr),
       deviceManager(deviceMgr), zoneManager(scaleLib), scaleLibrary(scaleLib),
-      expressionEngine(midiEng) {
+      expressionEngine(midiEng), settingsManager(settingsMgr) {
   // Add listeners
   presetManager.getRootNode().addListener(this);
   deviceManager.addChangeListener(this);
+  settingsManager.addChangeListener(this);
+  zoneManager.addChangeListener(this);
 
   // Populate map from existing tree
   rebuildMapFromTree();
@@ -21,11 +24,19 @@ InputProcessor::~InputProcessor() {
   // Remove listeners
   presetManager.getRootNode().removeListener(this);
   deviceManager.removeChangeListener(this);
+  settingsManager.removeChangeListener(this);
+  zoneManager.removeChangeListener(this);
 }
 
 void InputProcessor::changeListenerCallback(juce::ChangeBroadcaster *source) {
   if (source == &deviceManager) {
     // Device alias configuration changed, rebuild the map
+    rebuildMapFromTree();
+  } else if (source == &settingsManager) {
+    // Global settings changed (e.g., PB Range), rebuild the map to recalculate PB values
+    rebuildMapFromTree();
+  } else if (source == &zoneManager) {
+    // Global scale/root changed, rebuild the map to recalculate SmartScaleBend lookup tables
     rebuildMapFromTree();
   }
 }
@@ -118,22 +129,69 @@ void InputProcessor::addMappingFromTree(juce::ValueTree mappingNode) {
     action.adsrSettings.decayMs = adsrDecay;
     action.adsrSettings.sustainLevel = adsrSustain / 127.0f; // Convert 0-127 to 0.0-1.0
     action.adsrSettings.releaseMs = adsrRelease;
-    action.adsrSettings.isPitchBend = (adsrTarget == "PitchBend");
+    
+    // Set target type
+    if (adsrTarget == "PitchBend") {
+      action.adsrSettings.target = AdsrTarget::PitchBend;
+    } else if (adsrTarget == "SmartScaleBend") {
+      action.adsrSettings.target = AdsrTarget::SmartScaleBend;
+    } else {
+      action.adsrSettings.target = AdsrTarget::CC;
+    }
     action.adsrSettings.ccNumber = data1; // Use data1 for CC number
     
-    // If Pitch Bend, calculate peak value from musical parameters
-    if (action.adsrSettings.isPitchBend) {
-      // Read optional musical parameters (defaults: range=12, shift=0)
-      int pbRange = mappingNode.getProperty("pbRange", 12);
+    // If Pitch Bend, calculate peak value from musical parameters using Global Range
+    if (action.adsrSettings.target == AdsrTarget::PitchBend) {
+      // Read pbShift (semitones) from mapping (default: 0)
       int pbShift = mappingNode.getProperty("pbShift", 0);
       
+      // Get global range from SettingsManager
+      int globalRange = settingsManager.getPitchBendRange();
+      
       // Calculate target MIDI value: 8192 (center) + (shift * steps per semitone)
-      double stepsPerSemitone = 8192.0 / static_cast<double>(pbRange);
+      double stepsPerSemitone = 8192.0 / static_cast<double>(globalRange);
       int calculatedPeak = static_cast<int>(8192.0 + (pbShift * stepsPerSemitone));
       calculatedPeak = juce::jlimit(0, 16383, calculatedPeak);
       
       // Overwrite data2 with calculated peak value (ensures consistency)
       action.data2 = calculatedPeak;
+    } else if (action.adsrSettings.target == AdsrTarget::SmartScaleBend) {
+      // Compile SmartScaleBend lookup table
+      // Read smartStepShift (scale steps) from mapping (default: 0)
+      int smartStepShift = mappingNode.getProperty("smartStepShift", 0);
+      
+      // Get global range from SettingsManager
+      int globalRange = settingsManager.getPitchBendRange();
+      
+      // Get global scale intervals and root from ZoneManager
+      juce::String globalScaleName = zoneManager.getGlobalScaleName();
+      int globalRoot = zoneManager.getGlobalRootNote();
+      std::vector<int> globalIntervals = scaleLibrary.getIntervals(globalScaleName);
+      
+      // Pre-compile lookup table for all 128 MIDI notes
+      action.smartBendLookup.resize(128);
+      double stepsPerSemitone = 8192.0 / static_cast<double>(globalRange);
+      
+      for (int note = 0; note < 128; ++note) {
+        // Find current scale degree of this note
+        int currentDegree = ScaleUtilities::findScaleDegree(note, globalRoot, globalIntervals);
+        
+        // Calculate target degree
+        int targetDegree = currentDegree + smartStepShift;
+        
+        // Calculate target MIDI note
+        int targetNote = ScaleUtilities::calculateMidiNote(globalRoot, globalIntervals, targetDegree);
+        
+        // Calculate semitone delta
+        int semitoneDelta = targetNote - note;
+        
+        // Calculate Pitch Bend value: 8192 (center) + (delta * steps per semitone)
+        int pbValue = static_cast<int>(8192.0 + (semitoneDelta * stepsPerSemitone));
+        pbValue = juce::jlimit(0, 16383, pbValue);
+        
+        // Store in lookup table
+        action.smartBendLookup[note] = pbValue;
+      }
     }
   }
 
@@ -425,10 +483,19 @@ void InputProcessor::processEvent(InputID input, bool isDown) {
     const auto &midiAction = action.value();
 
     if (midiAction.type == ActionType::Envelope) {
-      // Use data2 as peak value (pre-calculated by UI/InputProcessor)
-      // For Pitch Bend: data2 contains the calculated target (e.g., 9000)
-      // For CC: data2 contains the peak value (0-127)
+      // Determine peak value based on target type
       int peakValue = midiAction.data2;
+      
+      if (midiAction.adsrSettings.target == AdsrTarget::SmartScaleBend) {
+        // Use pre-compiled lookup table based on last triggered note
+        if (!midiAction.smartBendLookup.empty() && lastTriggeredNote >= 0 && lastTriggeredNote < 128) {
+          peakValue = midiAction.smartBendLookup[lastTriggeredNote];
+        } else {
+          // Fallback: use center (8192) if lookup table not available
+          peakValue = 8192;
+        }
+      }
+      
       expressionEngine.triggerEnvelope(input, midiAction.channel, midiAction.adsrSettings, peakValue);
       return;
     }
@@ -504,17 +571,27 @@ void InputProcessor::processEvent(InputID input, bool isDown) {
                 voiceManager.noteOn(input, finalNotes, finalVelocities,
                                     midiAction.channel, zone->strumSpeedMs,
                                     allowSustain, releaseMs);
+                // Track last note (use first note of chord)
+                if (!finalNotes.empty()) {
+                  lastTriggeredNote = finalNotes.front();
+                }
               } else {
                 voiceManager.noteOn(input, finalNotes.front(),
                                     finalVelocities.front(), midiAction.channel,
                                     allowSustain, releaseMs);
+                // Track last note
+                lastTriggeredNote = finalNotes.front();
               }
             } else if (zone->playMode == Zone::PlayMode::Strum) {
               int strumMs = (zone->strumSpeedMs > 0) ? zone->strumSpeedMs : 50;
               voiceManager.handleKeyUp(lastStrumSource);
               voiceManager.noteOn(input, finalNotes, finalVelocities,
-                                  midiAction.channel, strumMs, allowSustain);
+                                  midiAction.channel, strumMs, allowSustain, 0, zone->polyphonyMode, zone->glideTimeMs);
               lastStrumSource = input;
+              // Track last note (use first note of chord for strum)
+              if (!finalNotes.empty()) {
+                lastTriggeredNote = finalNotes.front();
+              }
               {
                 juce::ScopedWriteLock bufferWriteLock(bufferLock);
                 // Store pitches only for visualizer (backward compatibility)
@@ -527,21 +604,27 @@ void InputProcessor::processEvent(InputID input, bool isDown) {
             int vel =
                 calculateVelocity(midiAction.data2, midiAction.velocityRandom);
             voiceManager.noteOn(input, midiAction.data1, vel,
-                                midiAction.channel, allowSustain);
+                                midiAction.channel, allowSustain, 0, PolyphonyMode::Poly, 50);
+            // Track last note
+            lastTriggeredNote = midiAction.data1;
           }
         } else {
           // Fallback: use mapping velocity with randomization
           int vel =
               calculateVelocity(midiAction.data2, midiAction.velocityRandom);
           voiceManager.noteOn(input, midiAction.data1, vel, midiAction.channel,
-                              true);
+                              true, 0, PolyphonyMode::Poly, 50);
+          // Track last note
+          lastTriggeredNote = midiAction.data1;
         }
       } else {
         // Manual mapping: use mapping velocity with randomization
         int vel =
             calculateVelocity(midiAction.data2, midiAction.velocityRandom);
         voiceManager.noteOn(input, midiAction.data1, vel, midiAction.channel,
-                            true);
+                            true, 0, PolyphonyMode::Poly, 50);
+        // Track last note
+        lastTriggeredNote = midiAction.data1;
       }
     }
   }

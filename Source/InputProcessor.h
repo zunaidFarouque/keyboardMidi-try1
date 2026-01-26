@@ -9,10 +9,11 @@
 
 class ScaleLibrary;
 class MidiEngine;
+class SettingsManager;
 
 class InputProcessor : public juce::ValueTree::Listener, public juce::ChangeListener {
 public:
-  InputProcessor(VoiceManager &voiceMgr, PresetManager &presetMgr, DeviceManager &deviceMgr, ScaleLibrary &scaleLib, MidiEngine &midiEng);
+  InputProcessor(VoiceManager &voiceMgr, PresetManager &presetMgr, DeviceManager &deviceMgr, ScaleLibrary &scaleLib, MidiEngine &midiEng, SettingsManager &settingsMgr);
   ~InputProcessor() override;
 
   // The main entry point for key events
@@ -52,6 +53,7 @@ private:
   ScaleLibrary &scaleLibrary;
   ZoneManager zoneManager;
   ExpressionEngine expressionEngine;
+  SettingsManager &settingsManager;
 
   // Thread Safety
   juce::ReadWriteLock mapLock;
@@ -69,6 +71,9 @@ private:
 
   // Current CC values for relative inputs (scroll)
   std::unordered_map<InputID, float> currentCCValues;
+
+  // Track last triggered note for SmartScaleBend
+  int lastTriggeredNote = 60; // Default to middle C
 
   // ValueTree Callbacks
   void valueTreeChildAdded(juce::ValueTree &parentTree,
