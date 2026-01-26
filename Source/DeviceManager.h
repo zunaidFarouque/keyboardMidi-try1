@@ -19,6 +19,9 @@ public:
   // Delete an alias (removes the alias and all its hardware assignments)
   void deleteAlias(const juce::String &aliasName);
 
+  // Rename an alias
+  void renameAlias(const juce::String &oldName, const juce::String &newName, class PresetManager* presetManager = nullptr);
+
   // Get all hardware IDs for an alias
   juce::Array<uintptr_t> getHardwareForAlias(const juce::String &aliasName) const;
 

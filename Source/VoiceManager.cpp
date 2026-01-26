@@ -17,8 +17,22 @@ VoiceManager::VoiceManager(MidiEngine &engine, SettingsManager &settingsMgr)
 }
 
 VoiceManager::~VoiceManager() {
-  juce::Timer::stopTimer(); // Stop watchdog timer (Phase 26.6)
+  // 1. Stop Watchdog (juce::Timer)
+  juce::Timer::stopTimer();
+  
+  // 2. Stop Release Envelopes (juce::HighResolutionTimer)
+  juce::HighResolutionTimer::stopTimer();
+  
+  // 3. Remove listeners
   settingsManager.removeChangeListener(this);
+  
+  // 4. Clear data
+  {
+    const juce::ScopedLock sl(monoCriticalSection);
+    voices.clear();
+  }
+  
+  // 5. Reset portamento
   portamentoEngine.stop(); // Reset PB to center
 }
 

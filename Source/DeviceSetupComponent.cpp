@@ -1,14 +1,24 @@
 #include "DeviceSetupComponent.h"
 #include "KeyNameUtilities.h"
+#include "PresetManager.h"
 
 void AliasListModel::selectedRowsChanged(int lastRowSelected) {
   if (parentComponent != nullptr)
     parentComponent->onAliasSelected();
 }
 
-DeviceSetupComponent::DeviceSetupComponent(DeviceManager &deviceMgr, RawInputManager &rawInputMgr)
-    : deviceManager(deviceMgr), rawInputManager(rawInputMgr),
+DeviceSetupComponent::DeviceSetupComponent(DeviceManager &deviceMgr, RawInputManager &rawInputMgr, PresetManager* presetMgr)
+    : deviceManager(deviceMgr), rawInputManager(rawInputMgr), presetManager(presetMgr),
       aliasModel(deviceMgr, this), hardwareModel(deviceMgr) {
+  
+  // Setup labels
+  aliasHeaderLabel.setText("Defined Aliases", juce::dontSendNotification);
+  aliasHeaderLabel.setJustificationType(juce::Justification::left);
+  addAndMakeVisible(aliasHeaderLabel);
+  
+  hardwareHeaderLabel.setText("Associated Hardware", juce::dontSendNotification);
+  hardwareHeaderLabel.setJustificationType(juce::Justification::left);
+  addAndMakeVisible(hardwareHeaderLabel);
   
   // Setup alias list
   aliasListBox.setModel(&aliasModel);
@@ -28,6 +38,58 @@ DeviceSetupComponent::DeviceSetupComponent(DeviceManager &deviceMgr, RawInputMan
   deleteAliasButton.setButtonText("Delete Alias");
   deleteAliasButton.onClick = [this] { deleteSelectedAlias(); };
   addAndMakeVisible(deleteAliasButton);
+
+  renameButton.setButtonText("Rename");
+  renameButton.onClick = [this] {
+    int selectedRow = aliasListBox.getSelectedRow();
+    auto aliases = deviceManager.getAllAliases();
+    
+    if (selectedRow < 0 || selectedRow >= aliases.size())
+      return;
+    
+    juce::String oldName = aliases[selectedRow];
+    
+    auto* dialog = new juce::AlertWindow("Rename Alias", "Enter new alias name:", juce::AlertWindow::QuestionIcon);
+    dialog->addTextEditor("name", oldName, "New Alias Name:");
+    dialog->addButton("Rename", 1);
+    dialog->addButton("Cancel", 0);
+    
+    dialog->enterModalState(true, juce::ModalCallbackFunction::create([this, dialog, oldName](int result) {
+      if (result == 1) {
+        juce::String newName = dialog->getTextEditorContents("name").trim();
+        if (!newName.isEmpty() && newName != oldName) {
+          // ASYNC CALL to prevent stack corruption
+          juce::MessageManager::callAsync([this, oldName, newName]() {
+            // Safe to call now
+            deviceManager.renameAlias(oldName, newName, presetManager);
+            
+            // Update selected alias if it was renamed
+            if (selectedAlias == oldName) {
+              selectedAlias = newName;
+            }
+            
+            // Refresh UI - this will update the alias list and reselect if needed
+            refreshAliasList();
+            
+            // Reselect the renamed alias in the list
+            auto aliases = deviceManager.getAllAliases();
+            int newIndex = aliases.indexOf(newName);
+            if (newIndex >= 0) {
+              aliasListBox.selectRow(newIndex);
+            }
+            
+            // Update hardware list if the renamed alias was selected
+            if (selectedAlias == newName) {
+              hardwareModel.setAlias(newName);
+              refreshHardwareList();
+            }
+          });
+        }
+      }
+      delete dialog;
+    }), true);
+  };
+  addAndMakeVisible(renameButton);
 
   scanButton.setButtonText("Scan/Add");
   scanButton.onClick = [this] {
@@ -66,6 +128,8 @@ void DeviceSetupComponent::resized() {
   buttonRow.removeFromLeft(10);
   deleteAliasButton.setBounds(buttonRow.removeFromLeft(100));
   buttonRow.removeFromLeft(10);
+  renameButton.setBounds(buttonRow.removeFromLeft(100));
+  buttonRow.removeFromLeft(10);
   scanButton.setBounds(buttonRow.removeFromLeft(120));
   buttonRow.removeFromLeft(10);
   removeButton.setBounds(buttonRow.removeFromLeft(100));
@@ -75,16 +139,12 @@ void DeviceSetupComponent::resized() {
   auto leftPanel = area.removeFromLeft(getWidth() / 2 - 5);
   auto rightPanel = area.removeFromRight(getWidth() / 2 - 5);
 
-  // Left: Alias list
-  juce::Label aliasLabel("Aliases");
-  aliasLabel.setBounds(leftPanel.removeFromTop(20));
-  addAndMakeVisible(aliasLabel);
+  // Left: Alias list with header
+  aliasHeaderLabel.setBounds(leftPanel.removeFromTop(24));
   aliasListBox.setBounds(leftPanel);
 
-  // Right: Hardware list
-  juce::Label hardwareLabel("Hardware");
-  hardwareLabel.setBounds(rightPanel.removeFromTop(20));
-  addAndMakeVisible(hardwareLabel);
+  // Right: Hardware list with header
+  hardwareHeaderLabel.setBounds(rightPanel.removeFromTop(24));
   hardwareListBox.setBounds(rightPanel);
 }
 
@@ -114,6 +174,7 @@ void DeviceSetupComponent::handleAxisEvent(uintptr_t deviceHandle, int inputCode
 
 void DeviceSetupComponent::refreshAliasList() {
   aliasListBox.updateContent();
+  aliasListBox.repaint();
 }
 
 void DeviceSetupComponent::refreshHardwareList() {
@@ -163,7 +224,7 @@ void DeviceSetupComponent::deleteSelectedAlias() {
           
           // Clear selection and refresh
           selectedAlias = "";
-          hardwareModel.setSelectedAlias("");
+          hardwareModel.setAlias("");
           refreshAliasList();
           refreshHardwareList();
         }
@@ -192,11 +253,13 @@ void DeviceSetupComponent::onAliasSelected() {
   
   if (selectedRow >= 0 && selectedRow < aliases.size()) {
     selectedAlias = aliases[selectedRow];
-    hardwareModel.setSelectedAlias(selectedAlias);
-    refreshHardwareList();
+    hardwareModel.setAlias(selectedAlias);
+    hardwareListBox.updateContent();
+    hardwareListBox.repaint();
   } else {
     selectedAlias = "";
-    hardwareModel.setSelectedAlias("");
-    refreshHardwareList();
+    hardwareModel.setAlias("");
+    hardwareListBox.updateContent();
+    hardwareListBox.repaint();
   }
 }

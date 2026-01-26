@@ -15,11 +15,12 @@ MainComponent::MainComponent()
       inputProcessor(voiceManager, presetManager, deviceManager, scaleLibrary, midiEngine, settingsManager),
       startupManager(&presetManager, &deviceManager,
                      &inputProcessor.getZoneManager(), &settingsManager),
-      mappingEditor(presetManager, rawInputManager, deviceManager),
+      rawInputManager(std::make_unique<RawInputManager>()),
+      mappingEditor(presetManager, *rawInputManager, deviceManager),
       mainTabs(juce::TabbedButtonBar::TabsAtTop),
       zoneEditor(&inputProcessor.getZoneManager(), &deviceManager,
-                 &rawInputManager, &scaleLibrary),
-      settingsPanel(settingsManager, midiEngine, rawInputManager),
+                 rawInputManager.get(), &scaleLibrary),
+      settingsPanel(settingsManager, midiEngine, *rawInputManager),
       visualizer(&inputProcessor.getZoneManager(), &deviceManager, voiceManager,
                  &settingsManager, &presetManager, &inputProcessor),
       visualizerContainer("Visualizer", visualizer),
@@ -123,7 +124,7 @@ MainComponent::MainComponent()
   deviceSetupButton.onClick = [this] {
     juce::DialogWindow::LaunchOptions options;
     auto *setupComponent =
-        new DeviceSetupComponent(deviceManager, rawInputManager);
+        new DeviceSetupComponent(deviceManager, *rawInputManager, &presetManager);
     options.content.setOwned(setupComponent);
     options.content->setSize(600, 400);
     options.dialogTitle = "Rig Configuration";
@@ -202,11 +203,11 @@ MainComponent::MainComponent()
   setSize(800, 600);
 
   // --- Input Logic ---
-  rawInputManager.addListener(this);
-  rawInputManager.addListener(&visualizer);
+  rawInputManager->addListener(this);
+  rawInputManager->addListener(&visualizer);
   
   // Register focus target callback
-  rawInputManager.setFocusTargetCallback([this]() -> void* {
+  rawInputManager->setFocusTargetCallback([this]() -> void* {
     // Check if Main Window is Minimized (Iconic)
     if (auto* peer = getPeer()) {
       void* hwnd = peer->getNativeHandle();
@@ -239,22 +240,29 @@ MainComponent::MainComponent()
 }
 
 MainComponent::~MainComponent() {
-  // Save layout positions to DeviceManager
-  saveLayoutPositions();
+  // 1. Stop Events immediately
+  stopTimer(); // Stop logging timer
+  
+  // 2. Stop Input
+  if (rawInputManager) {
+    rawInputManager->removeListener(this);
+    rawInputManager->shutdown(); // Unhooks window, stops sending callbacks
+  }
 
-  // Save immediately on close (flush pending saves)
+  // 3. Force Save
+  saveLayoutPositions(); // Save layout positions to DeviceManager
   startupManager.saveImmediate();
 
-  // Remove listeners
-  settingsManager.removeChangeListener(this);
-  stopTimer();
-  rawInputManager.removeListener(this);
-  rawInputManager.shutdown();
-  
-  // Clean up mini window
-  miniWindow.reset();
+  // 4. Close Child Windows
+  if (miniWindow) {
+    miniWindow->setVisible(false);
+    miniWindow = nullptr;
+  }
 
-  // Ensure cursor is unlocked on exit
+  // 5. Remove listeners
+  settingsManager.removeChangeListener(this);
+
+  // 6. Ensure cursor is unlocked on exit
   if (performanceModeButton.getToggleState()) {
     ::ShowCursor(TRUE);
     ClipCursor(nullptr);
@@ -640,7 +648,7 @@ void MainComponent::timerCallback() {
       if (auto *peer = top->getPeer()) {
         void *hwnd = peer->getNativeHandle();
         if (hwnd != nullptr) {
-          rawInputManager.initialize(hwnd, &settingsManager);
+          rawInputManager->initialize(hwnd, &settingsManager);
           isInputInitialized = true;
           logComponent.addEntry("--- SYSTEM: Raw Input Hooked Successfully ---");
         }
@@ -648,13 +656,27 @@ void MainComponent::timerCallback() {
     }
   }
 
-  // Process log batch (Phase 21.1: fire-and-forget logging on timer, not input
-  // thread)
+  // Check Minimization State
+  bool isMinimized = false;
+  if (auto *peer = getPeer()) {
+    isMinimized = peer->isMinimised();
+  }
+
+  // 1. Swap Queue (Thread Safe)
   std::vector<PendingEvent> tempQueue;
   {
     juce::ScopedLock lock(queueLock);
     tempQueue.swap(eventQueue);
+    // eventQueue is now empty, Input Thread is free to write
   }
+
+  // 2. OPTIMIZATION: If minimized, discard data and abort.
+  // We do not want to format strings or update TextEditors for invisible logs.
+  if (isMinimized) {
+    return;
+  }
+
+  // 3. Process Queue (Only if Visible)
   for (const auto &ev : tempQueue) {
     logEvent(ev.device, ev.keyCode, ev.isDown);
   }

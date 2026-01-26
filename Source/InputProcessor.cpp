@@ -314,17 +314,32 @@ void InputProcessor::valueTreePropertyChanged(
     const juce::Identifier &property) {
   auto mappingsNode = presetManager.getMappingsNode();
   auto parent = treeWhosePropertyHasChanged.getParent();
-
-  if (parent.isEquivalentTo(mappingsNode)) {
-    // When a mapping property changes (e.g., inputKey/keyCode), we need to
-    // rebuild the entire map because we can't know the old value to remove the
-    // old entries. This is especially important for keyCode changes (via
-    // "learn" feature).
-    juce::ScopedWriteLock lock(mapLock);
-    rebuildMapFromTree();
-  } else if (treeWhosePropertyHasChanged.isEquivalentTo(mappingsNode)) {
-    juce::ScopedWriteLock lock(mapLock);
-    rebuildMapFromTree();
+  
+  // Optimization: Only rebuild if relevant properties changed
+  if (property == juce::Identifier("inputKey") || 
+      property == juce::Identifier("deviceHash") ||
+      property == juce::Identifier("inputAlias") ||
+      property == juce::Identifier("type") ||
+      property == juce::Identifier("channel") ||
+      property == juce::Identifier("data1") ||
+      property == juce::Identifier("data2") ||
+      property == juce::Identifier("velRandom") ||
+      property == juce::Identifier("adsrTarget") ||
+      property == juce::Identifier("pbRange") ||
+      property == juce::Identifier("pbShift") ||
+      property == juce::Identifier("adsrAttack") || 
+      property == juce::Identifier("adsrDecay") ||
+      property == juce::Identifier("adsrSustain") ||
+      property == juce::Identifier("adsrRelease"))
+  {
+    if (parent.isEquivalentTo(mappingsNode) || treeWhosePropertyHasChanged.isEquivalentTo(mappingsNode))
+    {
+      // SAFER: Rebuild everything. 
+      // The logic to "Remove Old -> Add New" is impossible here because 
+      // we don't know the Old values anymore (the Tree is already updated).
+      juce::ScopedWriteLock lock(mapLock);
+      rebuildMapFromTree();
+    }
   }
 }
 

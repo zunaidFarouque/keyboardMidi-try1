@@ -1,4 +1,6 @@
 #include "DeviceManager.h"
+#include "PresetManager.h"
+#include <vector>
 
 DeviceManager::DeviceManager() {
   loadConfig();
@@ -82,6 +84,98 @@ void DeviceManager::deleteAlias(const juce::String &aliasName) {
       return;
     }
   }
+}
+
+// Helper to convert alias name to hash (same as in InputProcessor/ZonePropertiesPanel)
+static uintptr_t getAliasHash(const juce::String &aliasName) {
+  if (aliasName.isEmpty() || aliasName == "Any / Master" || aliasName == "Unassigned")
+    return 0;
+  return static_cast<uintptr_t>(std::hash<juce::String>{}(aliasName));
+}
+
+void DeviceManager::renameAlias(const juce::String &oldNameIn, const juce::String &newNameIn, PresetManager* presetManager) {
+  // Deep copies
+  const juce::String oldName = oldNameIn;
+  const juce::String newName = newNameIn;
+  
+  if (oldName == newName || newName.isEmpty())
+    return;
+  
+  if (!aliasExists(oldName))
+    return;
+  
+  if (aliasExists(newName))
+    return; // New name already exists
+  
+  // 1. Update the Alias Definition (Global Config)
+  juce::ValueTree aliasNode;
+  for (int i = 0; i < globalConfig.getNumChildren(); ++i) {
+    auto child = globalConfig.getChild(i);
+    if (child.hasType("Alias") && 
+        child.getProperty("name").toString() == oldName) {
+      aliasNode = child;
+      break;
+    }
+  }
+  
+  if (!aliasNode.isValid())
+    return;
+  
+  // Calculate Hashes
+  uintptr_t oldHash = getAliasHash(oldName);
+  uintptr_t newHash = getAliasHash(newName);
+  
+  // 2. Update Mappings (Safely - Collect then Update pattern)
+  if (presetManager) {
+    auto mappings = presetManager->getMappingsNode();
+    std::vector<juce::ValueTree> mappingsToUpdate;
+    std::vector<bool> updateInputAlias; // Track which ones need inputAlias update
+    
+    // Pass 1: Collect
+    for (int i = 0; i < mappings.getNumChildren(); ++i) {
+      auto mapping = mappings.getChild(i);
+      
+      // Check if this mapping uses the old alias name (new approach)
+      juce::String inputAlias = mapping.getProperty("inputAlias", "").toString();
+      bool needsInputAliasUpdate = (inputAlias == oldName);
+      
+      // Check if this mapping uses the old alias hash (legacy deviceHash property)
+      juce::String hashStr = mapping.getProperty("deviceHash").toString();
+      bool needsHashUpdate = false;
+      if (!hashStr.isEmpty()) {
+        uintptr_t currentHash = (uintptr_t)hashStr.getHexValue64();
+        needsHashUpdate = (currentHash == oldHash);
+      }
+      
+      if (needsInputAliasUpdate || needsHashUpdate) {
+        mappingsToUpdate.push_back(mapping);
+        updateInputAlias.push_back(needsInputAliasUpdate);
+      }
+    }
+    
+    // Pass 2: Update (Listeners fire here, but we are no longer iterating the parent tree)
+    for (size_t i = 0; i < mappingsToUpdate.size(); ++i) {
+      auto& mapping = mappingsToUpdate[i];
+      if (updateInputAlias[i]) {
+        mapping.setProperty("inputAlias", newName, nullptr);
+      }
+      // Also update deviceHash if it matched oldHash
+      juce::String hashStr = mapping.getProperty("deviceHash").toString();
+      if (!hashStr.isEmpty()) {
+        uintptr_t currentHash = (uintptr_t)hashStr.getHexValue64();
+        if (currentHash == oldHash) {
+          mapping.setProperty("deviceHash", juce::String::toHexString((juce::int64)newHash).toUpperCase(), nullptr);
+        }
+      }
+    }
+  }
+  
+  // 3. Apply Name Change
+  aliasNode.setProperty("name", newName, nullptr);
+  
+  // 4. Notify & Save
+  sendChangeMessage();
+  saveConfig();
 }
 
 juce::Array<uintptr_t> DeviceManager::getHardwareForAlias(const juce::String &aliasName) const {

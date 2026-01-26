@@ -16,7 +16,10 @@ ExpressionEngine::ExpressionEngine(MidiEngine& engine)
 }
 
 ExpressionEngine::~ExpressionEngine() {
-  stopTimer();
+  stopTimer(); // HighResolutionTimer
+  
+  const juce::ScopedLock sl(lock);
+  activeEnvelopes.clear();
 }
 
 void ExpressionEngine::triggerEnvelope(InputID source, int channel, const AdsrSettings& settings, int peakValue) {

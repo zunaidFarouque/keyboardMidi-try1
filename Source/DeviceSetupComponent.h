@@ -41,14 +41,14 @@ class HardwareListModel : public juce::ListBoxModel {
 public:
   HardwareListModel(DeviceManager &dm) : deviceManager(dm) {}
   
-  void setSelectedAlias(const juce::String &alias) {
-    selectedAlias = alias;
+  void setAlias(const juce::String &name) {
+    currentAliasName = name;
   }
   
   int getNumRows() override {
-    if (selectedAlias.isEmpty())
+    if (currentAliasName.isEmpty())
       return 0;
-    return deviceManager.getHardwareForAlias(selectedAlias).size();
+    return deviceManager.getHardwareForAlias(currentAliasName).size();
   }
   
   void paintListBoxItem(int rowNumber, juce::Graphics &g, int width, int height, bool rowIsSelected) override {
@@ -58,8 +58,8 @@ public:
     g.setColour(juce::Colours::white);
     g.setFont(14.0f);
     
-    if (!selectedAlias.isEmpty()) {
-      auto hardwareIds = deviceManager.getHardwareForAlias(selectedAlias);
+    if (!currentAliasName.isEmpty()) {
+      auto hardwareIds = deviceManager.getHardwareForAlias(currentAliasName);
       if (rowNumber < hardwareIds.size()) {
         uintptr_t id = hardwareIds[rowNumber];
         juce::String text = KeyNameUtilities::getFriendlyDeviceName(id);
@@ -70,13 +70,15 @@ public:
   
 private:
   DeviceManager &deviceManager;
-  juce::String selectedAlias;
+  juce::String currentAliasName;
 };
+
+class PresetManager;
 
 class DeviceSetupComponent : public juce::Component,
                               public RawInputManager::Listener {
 public:
-  DeviceSetupComponent(DeviceManager &deviceMgr, RawInputManager &rawInputMgr);
+  DeviceSetupComponent(DeviceManager &deviceMgr, RawInputManager &rawInputMgr, PresetManager* presetMgr = nullptr);
   ~DeviceSetupComponent() override;
 
   void paint(juce::Graphics &) override;
@@ -92,6 +94,7 @@ public:
 private:
   DeviceManager &deviceManager;
   RawInputManager &rawInputManager;
+  PresetManager* presetManager;
 
   // Models
   AliasListModel aliasModel;
@@ -100,8 +103,11 @@ private:
   // UI Elements
   juce::ListBox aliasListBox;
   juce::ListBox hardwareListBox;
+  juce::Label aliasHeaderLabel;
+  juce::Label hardwareHeaderLabel;
   juce::TextButton addAliasButton;
   juce::TextButton deleteAliasButton;
+  juce::TextButton renameButton;
   juce::TextButton scanButton;
   juce::TextButton removeButton;
 

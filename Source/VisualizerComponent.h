@@ -6,6 +6,7 @@
 #include "MidiNoteUtilities.h"
 #include "MappingTypes.h"
 #include <JuceHeader.h>
+#include <atomic>
 #include <set>
 
 class InputProcessor;
@@ -46,6 +47,17 @@ private:
   std::set<int> activeKeys;
   mutable juce::CriticalSection keyStateLock;
   std::unique_ptr<juce::VBlankAttachment> vBlankAttachment;
+  
+  // Dirty flag for rendering optimization
+  std::atomic<bool> needsRepaint { true };
+  
+  // State cache for polling external states
+  bool lastSustainState = false;
+
+  // Graphics cache for rendering optimization
+  juce::Image backgroundCache;
+  bool cacheValid = false;
+  void refreshCache();
 
   // Helper to check if a key belongs to any zone
   bool isKeyInAnyZone(int keyCode, uintptr_t aliasHash);

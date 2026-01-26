@@ -47,21 +47,52 @@ public:
   juce::ApplicationCommandTarget *getNextCommandTarget() override;
 
 private:
+  // 1. Core Hardware & Config (Must die LAST)
+  SettingsManager settingsManager;
+  DeviceManager deviceManager;
   MidiEngine midiEngine;
-  DeviceManager
-      deviceManager; // Must be before presetManager and inputProcessor
-  PresetManager presetManager;
-  ScaleLibrary scaleLibrary; // Must be before ZoneManager/InputProcessor
-  SettingsManager settingsManager; // Global settings (must be before InputProcessor)
-  VoiceManager voiceManager;
-  InputProcessor inputProcessor;
-  StartupManager startupManager; // Must be after all managers it references
+  ScaleLibrary scaleLibrary;
 
-  // Logic (must be before UI elements that reference it)
-  RawInputManager rawInputManager;
+  // 2. Logic Managers (Depend on Core)
+  VoiceManager voiceManager; // Depends on MidiEngine, SettingsManager
+  PresetManager presetManager;
+
+  // 3. Processors (Depend on Managers)
+  InputProcessor inputProcessor; // Listens to Preset/Device/Zone
+
+  // 4. Persistence Helper
+  StartupManager startupManager;
+
+  // 5. Input Source (Raw Input) - Must be before UI components that reference it
+  std::unique_ptr<RawInputManager> rawInputManager;
   bool isInputInitialized = false;
-  
-  // Mini Status Window
+
+  // 6. UI Components (Depend on everything)
+  VisualizerComponent visualizer; // Listens to RawInput/Voice/Zone
+  MappingEditorComponent mappingEditor;
+  LogComponent logComponent;
+  juce::TabbedComponent mainTabs;
+  ZoneEditorComponent zoneEditor;
+  SettingsPanel settingsPanel;
+
+  // 7. Containers/Widgets
+  DetachableContainer visualizerContainer;
+  DetachableContainer editorContainer;
+  DetachableContainer logContainer;
+  juce::TextButton clearButton;
+  juce::ComboBox midiSelector;
+  juce::TextButton saveButton;
+  juce::TextButton loadButton;
+  juce::TextButton deviceSetupButton;
+  juce::ToggleButton performanceModeButton;
+
+  // 8. Layout
+  juce::StretchableLayoutManager verticalLayout;
+  juce::StretchableLayoutManager horizontalLayout;
+  juce::StretchableLayoutResizerBar verticalBar;
+  juce::StretchableLayoutResizerBar horizontalBar;
+
+  // 9. Windows
   std::unique_ptr<MiniStatusWindow> miniWindow;
 
   // Async logging: Input thread pushes POD only; timer processes batches
@@ -73,34 +104,6 @@ private:
   };
   std::vector<PendingEvent> eventQueue;
   juce::CriticalSection queueLock;
-
-  // UI Elements (Logic components - MainComponent owns these)
-  VisualizerComponent visualizer;
-  juce::TabbedComponent mainTabs;
-  MappingEditorComponent mappingEditor;
-  ZoneEditorComponent zoneEditor;
-  SettingsPanel settingsPanel;
-  LogComponent logComponent; // <--- REPLACED TextEditor
-
-  // Containers (Detachable wrappers)
-  DetachableContainer visualizerContainer;
-  DetachableContainer editorContainer;
-  DetachableContainer logContainer;
-
-  // Layout Managers
-  juce::StretchableLayoutManager verticalLayout;
-  juce::StretchableLayoutManager horizontalLayout;
-
-  // Resizer Bars
-  juce::StretchableLayoutResizerBar verticalBar;
-  juce::StretchableLayoutResizerBar horizontalBar;
-
-  juce::TextButton clearButton;
-  juce::ComboBox midiSelector;
-  juce::TextButton saveButton;
-  juce::TextButton loadButton;
-  juce::TextButton deviceSetupButton;
-  juce::ToggleButton performanceModeButton;
 
   // Command Manager for Undo/Redo
   juce::ApplicationCommandManager commandManager;

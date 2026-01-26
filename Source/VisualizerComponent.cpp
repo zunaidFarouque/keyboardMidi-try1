@@ -31,11 +31,35 @@ VisualizerComponent::VisualizerComponent(ZoneManager *zoneMgr, DeviceManager *de
     // Also listen to root node changes (in case mappings node is recreated)
     presetManager->getRootNode().addListener(this);
   }
-  vBlankAttachment = std::make_unique<juce::VBlankAttachment>(this, [this] { repaint(); });
+  vBlankAttachment = std::make_unique<juce::VBlankAttachment>(this, [this] {
+    // OPTIMIZATION: Stop all processing if window is minimized
+    if (auto* peer = getPeer()) {
+      if (peer->isMinimised()) {
+        return;
+      }
+    }
+    
+    // 1. Poll External States (VoiceManager)
+    bool currentSustain = voiceManager.isSustainActive();
+    
+    if (currentSustain != lastSustainState) {
+      lastSustainState = currentSustain;
+      needsRepaint = true;
+    }
+
+    // 2. Check Dirty Flag
+    if (needsRepaint.exchange(false)) { // Atomic read-and-reset
+      repaint();
+    }
+  });
 }
 
 VisualizerComponent::~VisualizerComponent() {
-  vBlankAttachment.reset();
+  // Stop callbacks immediately
+  vBlankAttachment = nullptr;
+  
+  // Unregister listeners
+  // Note: rawInputManager listener is removed by MainComponent destructor
   if (zoneManager) {
     zoneManager->removeChangeListener(this);
   }
@@ -49,20 +73,35 @@ VisualizerComponent::~VisualizerComponent() {
     }
     presetManager->getRootNode().removeListener(this);
   }
+  // VoiceManager doesn't have a listener interface, it's polled.
 }
 
-void VisualizerComponent::paint(juce::Graphics &g) {
+void VisualizerComponent::refreshCache() {
+  if (!zoneManager) {
+    cacheValid = false;
+    return;
+  }
+
+  int width = getWidth();
+  int height = getHeight();
+  
+  if (width <= 0 || height <= 0) {
+    cacheValid = false;
+    backgroundCache = juce::Image(); // Clear invalid cache
+    return;
+  }
+
+  // Create cache image matching component size
+  // Use a temporary image first, then assign to ensure proper cleanup
+  juce::Image newCache(juce::Image::ARGB, width, height, true);
+  
+  {
+    juce::Graphics g(newCache);
+  
   g.fillAll(juce::Colour(0xff111111)); // Background
 
-  if (!zoneManager) {
-    return; // Can't render without zone manager
-  }
-  
-  // Check if MIDI mode is disabled and draw overlay
-  bool midiModeDisabled = settingsManager && !settingsManager->isMidiModeActive();
-
   // --- 0. Header Bar (Transpose left, Sustain right) ---
-  auto bounds = getLocalBounds();
+  auto bounds = juce::Rectangle<int>(0, 0, width, height);
   auto headerRect = bounds.removeFromTop(30);
   g.setColour(juce::Colour(0xff222222));
   g.fillRect(headerRect);
@@ -80,9 +119,8 @@ void VisualizerComponent::paint(juce::Graphics &g) {
     g.drawText(transposeText, 8, 0, 280, headerRect.getHeight(), juce::Justification::centredLeft, false);
   }
 
-  // Sustain Indicator (right)
-  bool sustainActive = voiceManager.isSustainActive();
-  juce::Colour sustainColor = sustainActive ? juce::Colours::lime : juce::Colours::grey;
+  // Sustain Indicator (right) - Use last known state for cache
+  juce::Colour sustainColor = lastSustainState ? juce::Colours::lime : juce::Colours::grey;
   int indicatorSize = 12;
   int indicatorX = headerRect.getRight() - 100;
   int indicatorY = headerRect.getCentreY() - indicatorSize / 2;
@@ -92,73 +130,52 @@ void VisualizerComponent::paint(juce::Graphics &g) {
   g.drawText("SUSTAIN", indicatorX + indicatorSize + 5, indicatorY, 60, indicatorSize, juce::Justification::centredLeft, false);
 
   // --- 1. Calculate Dynamic Scale ---
-  // Full 104-key layout is roughly 23.0 keys wide (including numpad) and 6.5 keys tall (including function row).
-  // Row -1 (function row) is at -1.2f offset, rows 0-4 are at 0-4
-  // With 1.2f vertical spacing multiplier: function row at -1.44f, rows 0-4 at 0.0f to 4.8f
-  // Row 4 bottom (including key height): 4.8f + 1.0f = 5.8f
-  // Total span from function row top to row 4 bottom: 5.8f - (-1.44f) = 7.24f units
   float unitsWide = 23.0f;
-  float unitsTall = 7.3f; // Accounts for function row at -1.2 offset + key height
+  float unitsTall = 7.3f;
   float headerHeight = 30.0f;
-  float availableHeight = static_cast<float>(getHeight()) - headerHeight;
+  float availableHeight = static_cast<float>(height) - headerHeight;
   
-  // Scale keySize to fit in AVAILABLE height (below header) and width
-  float scaleX = static_cast<float>(getWidth()) / unitsWide;
+  float scaleX = static_cast<float>(width) / unitsWide;
   float scaleY = (availableHeight > 0.0f) ? (availableHeight / unitsTall) : scaleX;
-  float keySize = std::min(scaleX, scaleY) * 0.9f; // 0.9f for margin
+  float keySize = std::min(scaleX, scaleY) * 0.9f;
   
-  // Keyboard vertical span: top at startY - 1.44*keySize, bottom at startY + 5.8*keySize
-  // Constraint: top >= headerHeight, bottom <= getHeight() (keys use component coords)
-  float row4Bottom = 5.8f * keySize; // Height from startY to row 4 bottom
+  float row4Bottom = 5.8f * keySize;
   float minStartY = headerHeight + 1.44f * keySize;
-  float maxStartY = static_cast<float>(getHeight()) - row4Bottom;
+  float maxStartY = static_cast<float>(height) - row4Bottom;
   
-  // Center vertically within [minStartY, maxStartY]; clamp so keyboard is never clipped
   float startY = (minStartY + maxStartY) / 2.0f;
   startY = juce::jlimit(minStartY, maxStartY, startY);
   
   float totalWidth = unitsWide * keySize;
-  float startX = (static_cast<float>(getWidth()) - totalWidth) / 2.0f;
+  float startX = (static_cast<float>(width) - totalWidth) / 2.0f;
 
-  // Snapshot active keys under lock (RawInput may come from OS thread)
-  std::set<int> activeKeysSnapshot;
-  {
-    juce::ScopedLock lock(keyStateLock);
-    activeKeysSnapshot = activeKeys;
-  }
-
-  // --- 2. Iterate Keys ---
+  // --- 2. Iterate Keys (Draw Static State Only) ---
   const auto &layout = KeyboardLayoutUtils::getLayout();
   for (const auto &pair : layout) {
     int keyCode = pair.first;
     const auto &geometry = pair.second;
     
-    // Calculate Position relative to start
-    // Row -1 (function row) needs special handling - place it above row 0
     float rowOffset = (geometry.row == -1) ? -1.2f : static_cast<float>(geometry.row);
     float x = startX + (geometry.col * keySize);
-    float y = startY + (rowOffset * keySize * 1.2f); // 1.2 multiplier for vertical spacing
+    float y = startY + (rowOffset * keySize * 1.2f);
     float w = geometry.width * keySize;
     float h = geometry.height * keySize;
 
     juce::Rectangle<float> fullBounds(x, y, w, h);
     
-    // Define Inner Body (Padding)
-    float padding = keySize * 0.1f; // 10% padding looks good at any size
+    float padding = keySize * 0.1f;
     auto keyBounds = fullBounds.reduced(padding);
 
-    // --- 3. Get Data from Engine ---
-    // Conflict: key in multiple zones, or in a zone and also in a manual mapping
+    // --- 3. Get Data from Engine (Static Only) ---
     int zoneCount = zoneManager->getZoneCountForKey(keyCode);
     bool hasManual = inputProcessor && inputProcessor->hasManualMappingForKey(keyCode);
     bool isConflict = (zoneCount >= 2) || (zoneCount >= 1 && hasManual);
 
-    // A. Zone Underlay Color (or red if conflict)
+    // A. Zone Underlay Color
     juce::Colour underlayColor = juce::Colours::transparentBlack;
     if (isConflict) {
       underlayColor = juce::Colours::red.withAlpha(0.7f);
     } else {
-      // Check master alias (hash 0) first, then device aliases
       auto zoneColor = zoneManager->getZoneColorForKey(keyCode, 0);
       if (zoneColor.has_value()) {
         underlayColor = zoneColor.value();
@@ -175,19 +192,12 @@ void VisualizerComponent::paint(juce::Graphics &g) {
       }
     }
 
-    // B. Key State
-    bool isPressed = (activeKeysSnapshot.find(keyCode) != activeKeysSnapshot.end());
-    
     // C. Text/Label
-    juce::String labelText = geometry.label; // Default: "Q"
+    juce::String labelText = geometry.label;
     
-    // Find which zone this key belongs to and get the note name
     std::pair<std::shared_ptr<Zone>, bool> zoneInfo{nullptr, false};
-    
-    // Try master alias first
     zoneInfo = findZoneForKey(keyCode, 0);
     
-    // If not found, try device aliases
     if (!zoneInfo.first && deviceManager) {
       auto aliases = deviceManager->getAllAliasNames();
       for (const auto &aliasName : aliases) {
@@ -200,12 +210,10 @@ void VisualizerComponent::paint(juce::Graphics &g) {
     }
     
     if (zoneInfo.first) {
-      // Use cached label from zone (supports both note names and Roman numerals)
       juce::String cachedLabel = zoneInfo.first->getKeyLabel(keyCode);
       if (cachedLabel.isNotEmpty()) {
         labelText = cachedLabel;
       } else {
-        // Fallback: calculate note name manually if cache is empty
         uintptr_t aliasHash = zoneInfo.first->targetAliasHash;
         auto action = zoneManager->simulateInput(keyCode, aliasHash);
         
@@ -215,78 +223,192 @@ void VisualizerComponent::paint(juce::Graphics &g) {
       }
     }
 
-    // --- 4. Get Buffered Notes (for Strum mode visualization) ---
-    // COMMENTED OUT: Strumming indicator disabled for now
-    /*
-    std::vector<int> bufferedNotes;
-    bool isBuffered = false;
+    // --- 4. Render Static Layers (Off State) ---
     
-    if (inputProcessor && zoneInfo.first) {
-      // Check if zone is in Strum mode
-      if (zoneInfo.first->playMode == Zone::PlayMode::Strum) {
-        bufferedNotes = inputProcessor->getBufferedNotes();
-        
-        if (!bufferedNotes.empty()) {
-          // Check if any note in the chord matches this key's note
-          // For chords, we need to check all notes in the chord
-          uintptr_t aliasHash = zoneInfo.first->targetAliasHash;
-          auto action = zoneManager->simulateInput(keyCode, aliasHash);
-          if (action.has_value() && action->type == ActionType::Note) {
-            int baseNote = action->data1;
-            
-            // Check if base note is in buffer (for single notes)
-            isBuffered = std::find(bufferedNotes.begin(), bufferedNotes.end(), baseNote) != bufferedNotes.end();
-            
-            // Also check if this key would generate a chord that overlaps with buffer
-            // (This handles the case where the key generates a chord)
-            if (!isBuffered && zoneInfo.first->chordType != ChordUtilities::ChordType::None) {
-              // The key generates a chord - check if any note in the buffer matches any note in the chord
-              // For simplicity, we'll just check if the base note is in the buffer
-              // In a full implementation, we'd generate the full chord and check overlap
-            }
-          }
-        }
-      }
-    }
-    */
-    bool isBuffered = false; // Disabled - always false
-
-    // --- 5. Render Layers ---
-    
-    // Layer 1: Underlay (Zone Color) - Sharp rectangle
+    // Layer 1: Underlay (Zone Color)
     if (!underlayColor.isTransparent()) {
       g.setColour(underlayColor.withAlpha(0.6f));
       g.fillRect(fullBounds);
     }
 
-    // Layer 1.5: Latched State (drawn after Zone Underlay, before Physical Press)
-    bool isLatched = voiceManager.isKeyLatched(keyCode);
-    if (isLatched) {
-      g.setColour(juce::Colours::cyan.withAlpha(0.8f));
-      g.fillRoundedRectangle(keyBounds, 6.0f);
-    }
-
-    // Layer 2: Key Body
-    juce::Colour bodyColor;
-    if (isPressed) {
-      bodyColor = juce::Colours::yellow; // Playing
-    } else if (isBuffered) {
-      bodyColor = juce::Colours::lightblue; // Buffered (waiting)
-    } else {
-      bodyColor = juce::Colour(0xff333333); // Default
-    }
-    g.setColour(bodyColor);
+    // Layer 2: Key Body (Dark Grey - Off State)
+    g.setColour(juce::Colour(0xff333333));
     g.fillRoundedRectangle(keyBounds, 6.0f);
 
     // Layer 3: Border
     g.setColour(juce::Colours::grey);
     g.drawRoundedRectangle(keyBounds, 6.0f, 2.0f);
 
-    // Layer 4: Text (red if conflict, else black when pressed, white otherwise)
+    // Layer 4: Text (white for off state, red if conflict)
+    juce::Colour textColor = isConflict ? juce::Colours::red : juce::Colours::white;
+    g.setColour(textColor);
+    g.setFont(keySize * 0.4f);
+    g.drawText(labelText, keyBounds, juce::Justification::centred, false);
+  }
+  } // Graphics object destroyed here
+  
+  // Assign new cache only after Graphics is fully destroyed
+  backgroundCache = std::move(newCache);
+  cacheValid = true;
+}
+
+void VisualizerComponent::paint(juce::Graphics &g) {
+  if (!zoneManager) {
+    return; // Can't render without zone manager
+  }
+  
+  // Check Cache Validity
+  if (!cacheValid || backgroundCache.isNull() || 
+      backgroundCache.getWidth() != getWidth() || 
+      backgroundCache.getHeight() != getHeight()) {
+    refreshCache();
+  }
+  
+  // Safety check: ensure cache is valid before drawing
+  if (backgroundCache.isNull() || !cacheValid) {
+    g.fillAll(juce::Colour(0xff111111)); // Fallback background
+    return;
+  }
+  
+  // Draw Background Cache
+  g.drawImageAt(backgroundCache, 0, 0);
+  
+  // Update Sustain Indicator (dynamic - always redraw since it changes frequently)
+  bool sustainActive = voiceManager.isSustainActive();
+  auto headerRect = juce::Rectangle<int>(0, 0, getWidth(), 30);
+  juce::Colour sustainColor = sustainActive ? juce::Colours::lime : juce::Colours::grey;
+  int indicatorSize = 12;
+  int indicatorX = headerRect.getRight() - 100;
+  int indicatorY = headerRect.getCentreY() - indicatorSize / 2;
+  g.setColour(juce::Colour(0xff222222));
+  g.fillRect(indicatorX - 5, indicatorY - 2, 80, indicatorSize + 4); // Clear area
+  g.setColour(sustainColor);
+  g.fillEllipse(indicatorX, indicatorY, indicatorSize, indicatorSize);
+  g.setColour(juce::Colours::white);
+  g.setFont(12.0f);
+  g.drawText("SUSTAIN", indicatorX + indicatorSize + 5, indicatorY, 60, indicatorSize, juce::Justification::centredLeft, false);
+  
+  // Check if MIDI mode is disabled and draw overlay
+  bool midiModeDisabled = settingsManager && !settingsManager->isMidiModeActive();
+
+  // --- Calculate Dynamic Scale (Same as refreshCache) ---
+  float unitsWide = 23.0f;
+  float unitsTall = 7.3f;
+  float headerHeight = 30.0f;
+  float availableHeight = static_cast<float>(getHeight()) - headerHeight;
+  
+  float scaleX = static_cast<float>(getWidth()) / unitsWide;
+  float scaleY = (availableHeight > 0.0f) ? (availableHeight / unitsTall) : scaleX;
+  float keySize = std::min(scaleX, scaleY) * 0.9f;
+  
+  float row4Bottom = 5.8f * keySize;
+  float minStartY = headerHeight + 1.44f * keySize;
+  float maxStartY = static_cast<float>(getHeight()) - row4Bottom;
+  
+  float startY = (minStartY + maxStartY) / 2.0f;
+  startY = juce::jlimit(minStartY, maxStartY, startY);
+  
+  float totalWidth = unitsWide * keySize;
+  float startX = (static_cast<float>(getWidth()) - totalWidth) / 2.0f;
+
+  // Snapshot active keys under lock (RawInput may come from OS thread)
+  std::set<int> activeKeysSnapshot;
+  {
+    juce::ScopedLock lock(keyStateLock);
+    activeKeysSnapshot = activeKeys;
+  }
+
+  // Collect all keys that need dynamic rendering (active or latched)
+  std::set<int> keysToRender;
+  keysToRender.insert(activeKeysSnapshot.begin(), activeKeysSnapshot.end());
+  
+  // Also check for latched keys
+  const auto &layout = KeyboardLayoutUtils::getLayout();
+  for (const auto &pair : layout) {
+    int keyCode = pair.first;
+    if (voiceManager.isKeyLatched(keyCode)) {
+      keysToRender.insert(keyCode);
+    }
+  }
+
+  // --- Draw Dynamic Keys (Active/Latched) on Top of Cache ---
+  for (int keyCode : keysToRender) {
+    auto it = layout.find(keyCode);
+    if (it == layout.end()) continue;
+    
+    const auto &geometry = it->second;
+    
+    // Calculate Position (same as refreshCache)
+    float rowOffset = (geometry.row == -1) ? -1.2f : static_cast<float>(geometry.row);
+    float x = startX + (geometry.col * keySize);
+    float y = startY + (rowOffset * keySize * 1.2f);
+    float w = geometry.width * keySize;
+    float h = geometry.height * keySize;
+
+    juce::Rectangle<float> fullBounds(x, y, w, h);
+    float padding = keySize * 0.1f;
+    auto keyBounds = fullBounds.reduced(padding);
+
+    // Get key state
+    bool isPressed = (activeKeysSnapshot.find(keyCode) != activeKeysSnapshot.end());
+    bool isLatched = voiceManager.isKeyLatched(keyCode);
+    
+    // Get conflict state (needed for text color)
+    int zoneCount = zoneManager->getZoneCountForKey(keyCode);
+    bool hasManual = inputProcessor && inputProcessor->hasManualMappingForKey(keyCode);
+    bool isConflict = (zoneCount >= 2) || (zoneCount >= 1 && hasManual);
+    
+    // Get label text (same logic as refreshCache)
+    juce::String labelText = geometry.label;
+    std::pair<std::shared_ptr<Zone>, bool> zoneInfo{nullptr, false};
+    zoneInfo = findZoneForKey(keyCode, 0);
+    
+    if (!zoneInfo.first && deviceManager) {
+      auto aliases = deviceManager->getAllAliasNames();
+      for (const auto &aliasName : aliases) {
+        uintptr_t aliasHash = aliasNameToHash(aliasName);
+        zoneInfo = findZoneForKey(keyCode, aliasHash);
+        if (zoneInfo.first) {
+          break;
+        }
+      }
+    }
+    
+    if (zoneInfo.first) {
+      juce::String cachedLabel = zoneInfo.first->getKeyLabel(keyCode);
+      if (cachedLabel.isNotEmpty()) {
+        labelText = cachedLabel;
+      } else {
+        uintptr_t aliasHash = zoneInfo.first->targetAliasHash;
+        auto action = zoneManager->simulateInput(keyCode, aliasHash);
+        
+        if (action.has_value() && action->type == ActionType::Note) {
+          labelText = MidiNoteUtilities::getMidiNoteName(action->data1);
+        }
+      }
+    }
+
+    // Draw Latched State (Cyan)
+    if (isLatched) {
+      g.setColour(juce::Colours::cyan.withAlpha(0.8f));
+      g.fillRoundedRectangle(keyBounds, 6.0f);
+    }
+
+    // Draw Active State (Yellow)
+    if (isPressed) {
+      g.setColour(juce::Colours::yellow);
+      g.fillRoundedRectangle(keyBounds, 6.0f);
+    }
+
+    // Redraw Border
+    g.setColour(juce::Colours::grey);
+    g.drawRoundedRectangle(keyBounds, 6.0f, 2.0f);
+
+    // Redraw Text (Important: text must be on top of highlight)
     juce::Colour textColor = isConflict ? juce::Colours::red
         : (isPressed ? juce::Colours::black : juce::Colours::white);
     g.setColour(textColor);
-    g.setFont(keySize * 0.4f); // Dynamic font size
+    g.setFont(keySize * 0.4f);
     g.drawText(labelText, keyBounds, juce::Justification::centred, false);
   }
   
@@ -306,7 +428,9 @@ void VisualizerComponent::paint(juce::Graphics &g) {
 }
 
 void VisualizerComponent::resized() {
-  repaint();
+  cacheValid = false; // Invalidate cache on resize
+  needsRepaint = true;
+  repaint(); // Resize needs immediate repaint
 }
 
 void VisualizerComponent::handleRawKeyEvent(uintptr_t deviceHandle, int keyCode, bool isDown) {
@@ -315,6 +439,7 @@ void VisualizerComponent::handleRawKeyEvent(uintptr_t deviceHandle, int keyCode,
     activeKeys.insert(keyCode);
   else
     activeKeys.erase(keyCode);
+  needsRepaint = true;
 }
 
 void VisualizerComponent::handleAxisEvent(uintptr_t deviceHandle, int inputCode, float value) {
@@ -323,8 +448,10 @@ void VisualizerComponent::handleAxisEvent(uintptr_t deviceHandle, int inputCode,
 
 void VisualizerComponent::changeListenerCallback(juce::ChangeBroadcaster *source) {
   if (source == zoneManager || source == settingsManager) {
+    cacheValid = false; // Invalidate cache on zone/transpose changes
+    needsRepaint = true;
     juce::MessageManager::callAsync([this] {
-      repaint();
+      // Repaint will be triggered by vBlank callback if needed
     });
   }
 }
@@ -333,10 +460,11 @@ void VisualizerComponent::valueTreeChildAdded(juce::ValueTree &parentTree, juce:
   // Repaint when mappings are added
   auto mappingsNode = presetManager ? presetManager->getMappingsNode() : juce::ValueTree();
   if (parentTree.isEquivalentTo(mappingsNode) || parentTree.getParent().isEquivalentTo(mappingsNode)) {
+    needsRepaint = true;
     // Small delay to ensure InputProcessor has finished updating keyMapping
     juce::MessageManager::callAsync([this] {
       juce::MessageManager::callAsync([this] {
-        repaint();
+        // Repaint will be triggered by vBlank callback if needed
       });
     });
   }
@@ -346,10 +474,11 @@ void VisualizerComponent::valueTreeChildRemoved(juce::ValueTree &parentTree, juc
   // Repaint when mappings are removed
   auto mappingsNode = presetManager ? presetManager->getMappingsNode() : juce::ValueTree();
   if (parentTree.isEquivalentTo(mappingsNode) || parentTree.getParent().isEquivalentTo(mappingsNode)) {
+    needsRepaint = true;
     // Small delay to ensure InputProcessor has finished updating keyMapping
     juce::MessageManager::callAsync([this] {
       juce::MessageManager::callAsync([this] {
-        repaint();
+        // Repaint will be triggered by vBlank callback if needed
       });
     });
   }
@@ -359,10 +488,11 @@ void VisualizerComponent::valueTreePropertyChanged(juce::ValueTree &treeWhosePro
   // Repaint when mapping properties change (e.g., keyCode, which affects conflict detection)
   auto mappingsNode = presetManager ? presetManager->getMappingsNode() : juce::ValueTree();
   if (treeWhosePropertyHasChanged.getParent().isEquivalentTo(mappingsNode)) {
+    needsRepaint = true;
     // Small delay to ensure InputProcessor has finished updating keyMapping
     juce::MessageManager::callAsync([this] {
       juce::MessageManager::callAsync([this] {
-        repaint();
+        // Repaint will be triggered by vBlank callback if needed
       });
     });
   }
