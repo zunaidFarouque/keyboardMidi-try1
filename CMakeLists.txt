@@ -57,6 +57,7 @@ target_sources(OmniKey PRIVATE
     Source/StrumEngine.cpp
     Source/ExpressionEngine.cpp
     Source/PortamentoEngine.cpp
+    Source/RhythmAnalyzer.cpp
     Source/SettingsManager.cpp
     Source/SettingsPanel.cpp
 )

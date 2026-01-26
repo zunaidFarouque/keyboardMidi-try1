@@ -1,69 +1,69 @@
 #include "Zone.h"
-#include "ScaleUtilities.h"
 #include "KeyboardLayoutUtils.h"
 #include "MidiNoteUtilities.h"
+#include "ScaleUtilities.h"
 #include <algorithm>
 #include <map>
 #include <set>
 
 Zone::Zone()
-    : name("Untitled Zone"),
-      targetAliasHash(0),
-      rootNote(60),
-      scaleName("Major"),
-      chromaticOffset(0),
-      degreeOffset(0),
-      isTransposeLocked(false),
-      layoutStrategy(LayoutStrategy::Linear),
-      gridInterval(5),
-      zoneColor(juce::Colours::transparentBlack),
+    : name("Untitled Zone"), targetAliasHash(0), rootNote(60),
+      scaleName("Major"), chromaticOffset(0), degreeOffset(0),
+      isTransposeLocked(false), layoutStrategy(LayoutStrategy::Linear),
+      gridInterval(5), zoneColor(juce::Colours::transparentBlack),
       midiChannel(1) {
   // Cache will be rebuilt when zone is added to ZoneManager
 }
 
-void Zone::rebuildCache(const std::vector<int>& scaleIntervals, int effectiveRoot) {
+void Zone::rebuildCache(const std::vector<int> &scaleIntervals,
+                        int effectiveRoot) {
   keyToChordCache.clear();
   keyToLabelCache.clear();
   cacheEffectiveRoot = effectiveRoot;
-  
-  // Compilation: chord generation (ChordUtilities::generateChord, ScaleUtilities) runs only here.
-  // Disable chords in Piano mode (Piano mode ignores scales)
-  bool useChords = (layoutStrategy != LayoutStrategy::Piano) && (chordType != ChordUtilities::ChordType::None);
+
+  // Compilation: chord generation (ChordUtilities::generateChord,
+  // ScaleUtilities) runs only here. Disable chords in Piano mode (Piano mode
+  // ignores scales)
+  bool useChords = (layoutStrategy != LayoutStrategy::Piano) &&
+                   (chordType != ChordUtilities::ChordType::None);
 
   if (inputKeyCodes.empty())
     return;
-  
+
   // Helper lambda to process a key's cache entry
-  auto processKeyCache = [this, &scaleIntervals, effectiveRoot, useChords](int keyCode, int degree, int baseNote) {
+  auto processKeyCache = [this, &scaleIntervals, effectiveRoot,
+                          useChords](int keyCode, int degree, int baseNote) {
     // Generate chord or single note (absolute pitches)
     std::vector<ChordUtilities::ChordNote> chordNotes;
     if (useChords) {
-      chordNotes = ChordUtilities::generateChord(
-        effectiveRoot, scaleIntervals, degree, chordType, voicing, strictGhostHarmony
-      );
+      chordNotes =
+          ChordUtilities::generateChord(effectiveRoot, scaleIntervals, degree,
+                                        chordType, voicing, strictGhostHarmony);
     } else {
       chordNotes = {ChordUtilities::ChordNote(baseNote, false)};
     }
-    
+
     // Add bass note if enabled (bass is the root of the chord, shifted down)
     if (addBassNote) {
-      // Bass note is the root of the chord (baseNote), shifted down by bassOctaveOffset octaves
+      // Bass note is the root of the chord (baseNote), shifted down by
+      // bassOctaveOffset octaves
       int bassPitch = baseNote + (bassOctaveOffset * 12);
       bassPitch = juce::jlimit(0, 127, bassPitch);
       chordNotes.emplace_back(bassPitch, false); // Bass is not a ghost note
       // Sort to ensure bass is first (lowest pitch)
-      std::sort(chordNotes.begin(), chordNotes.end(), [](const ChordUtilities::ChordNote& a, const ChordUtilities::ChordNote& b) {
-        return a.pitch < b.pitch;
-      });
+      std::sort(
+          chordNotes.begin(), chordNotes.end(),
+          [](const ChordUtilities::ChordNote &a,
+             const ChordUtilities::ChordNote &b) { return a.pitch < b.pitch; });
     }
-    
+
     // Convert to relative chord (relative to effectiveRoot) for storage
     std::vector<ChordUtilities::ChordNote> relativeChord;
-    for (const auto& cn : chordNotes) {
+    for (const auto &cn : chordNotes) {
       relativeChord.emplace_back(cn.pitch - effectiveRoot, cn.isGhost);
     }
     keyToChordCache[keyCode] = relativeChord;
-    
+
     // Cache label (Roman numeral or note name)
     juce::String label;
     if (showRomanNumerals && useChords) {
@@ -79,13 +79,14 @@ void Zone::rebuildCache(const std::vector<int>& scaleIntervals, int effectiveRoo
     for (size_t i = 0; i < inputKeyCodes.size(); ++i) {
       int keyCode = inputKeyCodes[i];
       int degree = static_cast<int>(i) + degreeOffset;
-      int baseNote = ScaleUtilities::calculateMidiNote(effectiveRoot, scaleIntervals, degree);
+      int baseNote = ScaleUtilities::calculateMidiNote(effectiveRoot,
+                                                       scaleIntervals, degree);
       processKeyCache(keyCode, degree, baseNote);
     }
   } else if (layoutStrategy == LayoutStrategy::Grid) {
     // Grid mode: Calculate based on keyboard geometry
-    const auto& layout = KeyboardLayoutUtils::getLayout();
-    
+    const auto &layout = KeyboardLayoutUtils::getLayout();
+
     // Get anchor key (first key in inputKeyCodes)
     if (inputKeyCodes.empty())
       return;
@@ -94,7 +95,7 @@ void Zone::rebuildCache(const std::vector<int>& scaleIntervals, int effectiveRoo
     if (anchorKeyIt == layout.end())
       return; // Anchor key not in layout
 
-    const auto& anchorKey = anchorKeyIt->second;
+    const auto &anchorKey = anchorKeyIt->second;
 
     // Process each key in inputKeyCodes
     for (int keyCode : inputKeyCodes) {
@@ -102,26 +103,29 @@ void Zone::rebuildCache(const std::vector<int>& scaleIntervals, int effectiveRoo
       if (currentKeyIt == layout.end())
         continue; // Skip keys not in layout
 
-      const auto& currentKey = currentKeyIt->second;
-      
+      const auto &currentKey = currentKeyIt->second;
+
       // Calculate delta
-      int deltaCol = static_cast<int>(currentKey.col) - static_cast<int>(anchorKey.col);
+      int deltaCol =
+          static_cast<int>(currentKey.col) - static_cast<int>(anchorKey.col);
       int deltaRow = currentKey.row - anchorKey.row;
 
       // Degree = deltaCol + (deltaRow * gridInterval)
       int degree = deltaCol + (deltaRow * gridInterval) + degreeOffset;
-      int baseNote = ScaleUtilities::calculateMidiNote(effectiveRoot, scaleIntervals, degree);
+      int baseNote = ScaleUtilities::calculateMidiNote(effectiveRoot,
+                                                       scaleIntervals, degree);
       processKeyCache(keyCode, degree, baseNote);
     }
   } else if (layoutStrategy == LayoutStrategy::Piano) {
     // Piano mode: Force Chromatic scale (Major scale intervals for white keys)
     // Major scale intervals: {0, 2, 4, 5, 7, 9, 11} = C, D, E, F, G, A, B
     const std::vector<int> majorIntervals = {0, 2, 4, 5, 7, 9, 11};
-    const auto& layout = KeyboardLayoutUtils::getLayout();
+    const auto &layout = KeyboardLayoutUtils::getLayout();
 
     // Group keys by row
-    std::map<int, std::vector<std::pair<int, float>>> keysByRow; // row -> [(keyCode, col), ...]
-    
+    std::map<int, std::vector<std::pair<int, float>>>
+        keysByRow; // row -> [(keyCode, col), ...]
+
     for (int keyCode : inputKeyCodes) {
       auto keyIt = layout.find(keyCode);
       if (keyIt == layout.end())
@@ -137,43 +141,49 @@ void Zone::rebuildCache(const std::vector<int>& scaleIntervals, int effectiveRoo
       return;
     }
 
-    // Identify rows: Max row = White Keys (bottom), Max-1 row = Black Keys (top)
+    // Identify rows: Max row = White Keys (bottom), Max-1 row = Black Keys
+    // (top)
     auto rowIt = keysByRow.rbegin();
     if (rowIt == keysByRow.rend())
       return;
 
     // Bottom row (White Keys)
-    auto& whiteKeys = rowIt->second;
-    std::sort(whiteKeys.begin(), whiteKeys.end(), 
-              [](const std::pair<int, float>& a, const std::pair<int, float>& b) {
-                return a.second < b.second; // Sort by column
-              });
+    auto &whiteKeys = rowIt->second;
+    std::sort(
+        whiteKeys.begin(), whiteKeys.end(),
+        [](const std::pair<int, float> &a, const std::pair<int, float> &b) {
+          return a.second < b.second; // Sort by column
+        });
 
     // Top row (Black Keys)
     ++rowIt;
     if (rowIt == keysByRow.rend())
       return; // Need both rows
 
-    auto& blackKeys = rowIt->second;
-    std::sort(blackKeys.begin(), blackKeys.end(),
-              [](const std::pair<int, float>& a, const std::pair<int, float>& b) {
-                return a.second < b.second; // Sort by column
-              });
+    auto &blackKeys = rowIt->second;
+    std::sort(
+        blackKeys.begin(), blackKeys.end(),
+        [](const std::pair<int, float> &a, const std::pair<int, float> &b) {
+          return a.second < b.second; // Sort by column
+        });
 
     // Map white keys to diatonic notes (C, D, E, F, G, A, B)
     // Start from degreeOffset to allow transposition
     int diatonicIndex = degreeOffset;
-    for (const auto& whiteKeyPair : whiteKeys) {
+    for (const auto &whiteKeyPair : whiteKeys) {
       int whiteKeyCode = whiteKeyPair.first;
       float whiteCol = whiteKeyPair.second;
 
-      // Calculate note for white key using Major scale (Piano mode doesn't use processKeyCache helper)
+      // Calculate note for white key using Major scale (Piano mode doesn't use
+      // processKeyCache helper)
       int degree = diatonicIndex;
-      int baseNote = ScaleUtilities::calculateMidiNote(effectiveRoot, majorIntervals, degree);
+      int baseNote = ScaleUtilities::calculateMidiNote(effectiveRoot,
+                                                       majorIntervals, degree);
       int relativeNote = baseNote - effectiveRoot;
       // Piano mode: Store single note only (chords disabled in Piano mode)
-      keyToChordCache[whiteKeyCode] = {ChordUtilities::ChordNote(relativeNote, false)};
-      
+      keyToChordCache[whiteKeyCode] = {
+          ChordUtilities::ChordNote(relativeNote, false)};
+
       // Cache label
       juce::String label;
       if (showRomanNumerals) {
@@ -191,24 +201,28 @@ void Zone::rebuildCache(const std::vector<int>& scaleIntervals, int effectiveRoo
       bool hasSharp = (diatonicIndex % 7 != 2) && (diatonicIndex % 7 != 6);
 
       if (hasSharp) {
-        // Look for black key spatially aligned (within 0.3 units of whiteCol + 0.5)
-        for (const auto& blackKeyPair : blackKeys) {
+        // Look for black key spatially aligned (within 0.3 units of whiteCol +
+        // 0.5)
+        for (const auto &blackKeyPair : blackKeys) {
           int blackKeyCode = blackKeyPair.first;
           float blackCol = blackKeyPair.second;
-          
+
           float expectedCol = whiteCol + 0.5f;
           if (std::abs(blackCol - expectedCol) < 0.3f) {
             // Map black key to sharp (white note + 1 semitone)
             // Piano mode: Store single note only
             int whiteRelativeNote = baseNote - effectiveRoot;
-            keyToChordCache[blackKeyCode] = {ChordUtilities::ChordNote(whiteRelativeNote + 1, false)};
-            
+            keyToChordCache[blackKeyCode] = {
+                ChordUtilities::ChordNote(whiteRelativeNote + 1, false)};
+
             // Cache label for black key
             int blackNote = baseNote + 1;
             juce::String label;
             if (showRomanNumerals) {
-              // For black keys, show the sharp version of the white key's Roman numeral
-              label = ScaleUtilities::getRomanNumeral(degree, majorIntervals) + "#";
+              // For black keys, show the sharp version of the white key's Roman
+              // numeral
+              label =
+                  ScaleUtilities::getRomanNumeral(degree, majorIntervals) + "#";
             } else {
               label = MidiNoteUtilities::getMidiNoteName(blackNote);
             }
@@ -217,39 +231,45 @@ void Zone::rebuildCache(const std::vector<int>& scaleIntervals, int effectiveRoo
           }
         }
       }
-      // If no sharp or black key not found, black key produces no sound (strict mode)
+      // If no sharp or black key not found, black key produces no sound (strict
+      // mode)
 
       ++diatonicIndex;
     }
   }
 }
 
-// Play-time: O(1) hash lookup + O(k) transpose apply (k = chord size, typically 3–5).
-// Chords are pre-compiled in rebuildCache; no ChordUtilities or ScaleUtilities here.
-std::optional<std::vector<ChordUtilities::ChordNote>> Zone::getNotesForKey(int keyCode, int globalChromTrans, int globalDegTrans) {
+// Play-time: O(1) hash lookup + O(k) transpose apply (k = chord size, typically
+// 3–5). Chords are pre-compiled in rebuildCache; no ChordUtilities or
+// ScaleUtilities here.
+std::optional<std::vector<ChordUtilities::ChordNote>>
+Zone::getNotesForKey(int keyCode, int globalChromTrans, int globalDegTrans) {
   auto it = keyToChordCache.find(keyCode);
   if (it == keyToChordCache.end())
     return std::nullopt;
 
-  const std::vector<ChordUtilities::ChordNote>& relativeChordNotes = it->second;
+  const std::vector<ChordUtilities::ChordNote> &relativeChordNotes = it->second;
   int effChromTrans = isTransposeLocked ? 0 : globalChromTrans;
 
   std::vector<ChordUtilities::ChordNote> finalChordNotes;
   finalChordNotes.reserve(relativeChordNotes.size());
-  for (const auto& cn : relativeChordNotes) {
-    int finalNote = cacheEffectiveRoot + cn.pitch + chromaticOffset + effChromTrans;
+  for (const auto &cn : relativeChordNotes) {
+    int finalNote =
+        cacheEffectiveRoot + cn.pitch + chromaticOffset + effChromTrans;
     finalChordNotes.emplace_back(juce::jlimit(0, 127, finalNote), cn.isGhost);
   }
   return finalChordNotes;
 }
 
-std::optional<MidiAction> Zone::processKey(InputID input, int globalChromTrans, int globalDegTrans) {
+std::optional<MidiAction> Zone::processKey(InputID input, int globalChromTrans,
+                                           int globalDegTrans) {
   // Check 1: Does input.deviceHandle match targetAliasHash?
   if (input.deviceHandle != targetAliasHash)
     return std::nullopt;
 
   // Get chord notes for this key
-  auto chordNotes = getNotesForKey(input.keyCode, globalChromTrans, globalDegTrans);
+  auto chordNotes =
+      getNotesForKey(input.keyCode, globalChromTrans, globalDegTrans);
   if (!chordNotes.has_value() || chordNotes->empty())
     return std::nullopt;
 
@@ -265,16 +285,16 @@ std::optional<MidiAction> Zone::processKey(InputID input, int globalChromTrans, 
 
 void Zone::removeKey(int keyCode) {
   inputKeyCodes.erase(
-    std::remove(inputKeyCodes.begin(), inputKeyCodes.end(), keyCode),
-    inputKeyCodes.end()
-  );
+      std::remove(inputKeyCodes.begin(), inputKeyCodes.end(), keyCode),
+      inputKeyCodes.end());
 }
 
 juce::ValueTree Zone::toValueTree() const {
   juce::ValueTree vt("Zone");
-  
+
   vt.setProperty("name", name, nullptr);
-  vt.setProperty("targetAliasHash", static_cast<int64>(targetAliasHash), nullptr);
+  vt.setProperty("targetAliasHash", static_cast<int64>(targetAliasHash),
+                 nullptr);
   vt.setProperty("zoneColor", zoneColor.toString(), nullptr);
   vt.setProperty("midiChannel", midiChannel, nullptr);
   vt.setProperty("rootNote", rootNote, nullptr);
@@ -302,25 +322,28 @@ juce::ValueTree Zone::toValueTree() const {
   vt.setProperty("useGlobalRoot", useGlobalRoot, nullptr);
   vt.setProperty("polyphonyMode", static_cast<int>(polyphonyMode), nullptr);
   vt.setProperty("glideTimeMs", glideTimeMs, nullptr);
-  
+  vt.setProperty("isAdaptiveGlide", isAdaptiveGlide, nullptr);
+  vt.setProperty("maxGlideTimeMs", maxGlideTimeMs, nullptr);
+
   // Serialize inputKeyCodes as comma-separated string
   juce::StringArray keyCodesArray;
   for (int keyCode : inputKeyCodes) {
     keyCodesArray.add(juce::String(keyCode));
   }
   vt.setProperty("inputKeyCodes", keyCodesArray.joinIntoString(","), nullptr);
-  
+
   return vt;
 }
 
-std::shared_ptr<Zone> Zone::fromValueTree(const juce::ValueTree& vt) {
+std::shared_ptr<Zone> Zone::fromValueTree(const juce::ValueTree &vt) {
   if (!vt.isValid() || !vt.hasType("Zone"))
     return nullptr;
-  
+
   auto zone = std::make_shared<Zone>();
-  
+
   zone->name = vt.getProperty("name", "Untitled Zone").toString();
-  zone->targetAliasHash = static_cast<uintptr_t>(vt.getProperty("targetAliasHash", 0).operator int64());
+  zone->targetAliasHash = static_cast<uintptr_t>(
+      vt.getProperty("targetAliasHash", 0).operator int64());
   zone->rootNote = vt.getProperty("rootNote", 60);
   zone->midiChannel = vt.getProperty("midiChannel", 1);
   // Handle migration: if old "scale" property exists, convert to scaleName
@@ -328,13 +351,27 @@ std::shared_ptr<Zone> Zone::fromValueTree(const juce::ValueTree& vt) {
     // Migrate old enum to scale name
     int scaleEnum = vt.getProperty("scale", static_cast<int>(1)); // 1 = Major
     switch (scaleEnum) {
-      case 0: zone->scaleName = "Chromatic"; break;
-      case 1: zone->scaleName = "Major"; break;
-      case 2: zone->scaleName = "Minor"; break;
-      case 3: zone->scaleName = "Pentatonic Major"; break;
-      case 4: zone->scaleName = "Pentatonic Minor"; break;
-      case 5: zone->scaleName = "Blues"; break;
-      default: zone->scaleName = "Major"; break;
+    case 0:
+      zone->scaleName = "Chromatic";
+      break;
+    case 1:
+      zone->scaleName = "Major";
+      break;
+    case 2:
+      zone->scaleName = "Minor";
+      break;
+    case 3:
+      zone->scaleName = "Pentatonic Major";
+      break;
+    case 4:
+      zone->scaleName = "Pentatonic Minor";
+      break;
+    case 5:
+      zone->scaleName = "Blues";
+      break;
+    default:
+      zone->scaleName = "Major";
+      break;
     }
   } else {
     zone->scaleName = vt.getProperty("scaleName", "Major").toString();
@@ -342,20 +379,34 @@ std::shared_ptr<Zone> Zone::fromValueTree(const juce::ValueTree& vt) {
   zone->chromaticOffset = vt.getProperty("chromaticOffset", 0);
   zone->degreeOffset = vt.getProperty("degreeOffset", 0);
   zone->isTransposeLocked = vt.getProperty("isTransposeLocked", false);
-  zone->layoutStrategy = static_cast<LayoutStrategy>(vt.getProperty("layoutStrategy", static_cast<int>(LayoutStrategy::Linear)).operator int());
+  zone->layoutStrategy = static_cast<LayoutStrategy>(
+      vt.getProperty("layoutStrategy", static_cast<int>(LayoutStrategy::Linear))
+          .operator int());
   zone->gridInterval = vt.getProperty("gridInterval", 5);
-  zone->chordType = static_cast<ChordUtilities::ChordType>(vt.getProperty("chordType", static_cast<int>(ChordUtilities::ChordType::None)).operator int());
-  zone->voicing = static_cast<ChordUtilities::Voicing>(vt.getProperty("voicing", static_cast<int>(ChordUtilities::Voicing::RootPosition)).operator int());
+  zone->chordType = static_cast<ChordUtilities::ChordType>(
+      vt.getProperty("chordType",
+                     static_cast<int>(ChordUtilities::ChordType::None))
+          .operator int());
+  zone->voicing = static_cast<ChordUtilities::Voicing>(
+      vt.getProperty("voicing",
+                     static_cast<int>(ChordUtilities::Voicing::RootPosition))
+          .operator int());
   zone->strumSpeedMs = vt.getProperty("strumSpeedMs", 0);
-  zone->playMode = static_cast<PlayMode>(vt.getProperty("playMode", static_cast<int>(PlayMode::Direct)).operator int());
+  zone->playMode = static_cast<PlayMode>(
+      vt.getProperty("playMode", static_cast<int>(PlayMode::Direct))
+          .operator int());
   zone->allowSustain = vt.getProperty("allowSustain", true);
-  zone->releaseBehavior = static_cast<ReleaseBehavior>(vt.getProperty("releaseBehavior", static_cast<int>(ReleaseBehavior::Normal)).operator int());
+  zone->releaseBehavior = static_cast<ReleaseBehavior>(
+      vt.getProperty("releaseBehavior",
+                     static_cast<int>(ReleaseBehavior::Normal))
+          .operator int());
   zone->releaseDurationMs = vt.getProperty("releaseDurationMs", 0);
   zone->baseVelocity = vt.getProperty("baseVel", 100);
   zone->velocityRandom = vt.getProperty("randVel", 0);
   zone->strictGhostHarmony = vt.getProperty("strictGhost", true);
-  zone->ghostVelocityScale = static_cast<float>(vt.getProperty("ghostVelScale", 0.6));
-  
+  zone->ghostVelocityScale =
+      static_cast<float>(vt.getProperty("ghostVelScale", 0.6));
+
   // Load zone color (default to transparent if not found)
   juce::String colorStr = vt.getProperty("zoneColor", "").toString();
   if (colorStr.isNotEmpty()) {
@@ -363,30 +414,34 @@ std::shared_ptr<Zone> Zone::fromValueTree(const juce::ValueTree& vt) {
   } else {
     zone->zoneColor = juce::Colours::transparentBlack;
   }
-  
+
   // Deserialize inputKeyCodes from comma-separated string
   juce::String keyCodesStr = vt.getProperty("inputKeyCodes", "").toString();
   if (keyCodesStr.isNotEmpty()) {
     juce::StringArray keyCodesArray;
     keyCodesArray.addTokens(keyCodesStr, ",", "");
     zone->inputKeyCodes.clear();
-    for (const auto& keyStr : keyCodesArray) {
+    for (const auto &keyStr : keyCodesArray) {
       int keyCode = keyStr.getIntValue();
       if (keyCode > 0) {
         zone->inputKeyCodes.push_back(keyCode);
       }
     }
   }
-  
+
   // Load new properties (with defaults)
   zone->addBassNote = vt.getProperty("addBassNote", false);
   zone->bassOctaveOffset = vt.getProperty("bassOctaveOffset", -1);
   zone->showRomanNumerals = vt.getProperty("showRomanNumerals", false);
   zone->useGlobalScale = vt.getProperty("useGlobalScale", false);
   zone->useGlobalRoot = vt.getProperty("useGlobalRoot", false);
-  zone->polyphonyMode = static_cast<PolyphonyMode>(vt.getProperty("polyphonyMode", static_cast<int>(PolyphonyMode::Poly)).operator int());
+  zone->polyphonyMode = static_cast<PolyphonyMode>(
+      vt.getProperty("polyphonyMode", static_cast<int>(PolyphonyMode::Poly))
+          .operator int());
   zone->glideTimeMs = vt.getProperty("glideTimeMs", 50);
-  
+  zone->isAdaptiveGlide = vt.getProperty("isAdaptiveGlide", false);
+  zone->maxGlideTimeMs = vt.getProperty("maxGlideTimeMs", 200);
+
   return zone;
 }
 

@@ -2,7 +2,7 @@
 
 PortamentoEngine::PortamentoEngine(MidiEngine& engine)
     : midiEngine(engine) {
-  startTimer(static_cast<int>(timerIntervalMs * 1000.0)); // Convert to microseconds
+  startTimer(static_cast<int>(timerIntervalMs)); // timerIntervalMs is already in milliseconds
 }
 
 PortamentoEngine::~PortamentoEngine() {

@@ -1,19 +1,23 @@
 #pragma once
+#include "DeviceManager.h"
+#include "ExpressionEngine.h"
 #include "MappingTypes.h"
 #include "PresetManager.h"
 #include "VoiceManager.h"
-#include "DeviceManager.h"
 #include "ZoneManager.h"
-#include "ExpressionEngine.h"
+#include "RhythmAnalyzer.h"
 #include <JuceHeader.h>
 
 class ScaleLibrary;
 class MidiEngine;
 class SettingsManager;
 
-class InputProcessor : public juce::ValueTree::Listener, public juce::ChangeListener {
+class InputProcessor : public juce::ValueTree::Listener,
+                       public juce::ChangeListener {
 public:
-  InputProcessor(VoiceManager &voiceMgr, PresetManager &presetMgr, DeviceManager &deviceMgr, ScaleLibrary &scaleLib, MidiEngine &midiEng, SettingsManager &settingsMgr);
+  InputProcessor(VoiceManager &voiceMgr, PresetManager &presetMgr,
+                 DeviceManager &deviceMgr, ScaleLibrary &scaleLib,
+                 MidiEngine &midiEng, SettingsManager &settingsMgr);
   ~InputProcessor() override;
 
   // The main entry point for key events
@@ -29,7 +33,8 @@ public:
   const MidiAction *getMappingForInput(InputID input);
 
   // Simulate input and return action with source description
-  std::pair<std::optional<MidiAction>, juce::String> simulateInput(uintptr_t deviceHandle, int keyCode);
+  std::pair<std::optional<MidiAction>, juce::String>
+  simulateInput(uintptr_t deviceHandle, int keyCode);
 
   // Zone management
   ZoneManager &getZoneManager() { return zoneManager; }
@@ -37,7 +42,8 @@ public:
   // Get buffered notes (for visualizer - thread safe)
   std::vector<int> getBufferedNotes();
 
-  // True if any manual mapping exists for this keyCode (for conflict highlight in visualizer)
+  // True if any manual mapping exists for this keyCode (for conflict highlight
+  // in visualizer)
   bool hasManualMappingForKey(int keyCode);
 
   // Force rebuild of keyMapping from ValueTree (for reset operations)
@@ -62,7 +68,8 @@ private:
   // The Fast Lookup Cache
   std::unordered_map<InputID, MidiAction> keyMapping;
 
-  // Note buffer for Strum mode (for visualizer; strum is triggered on key press)
+  // Note buffer for Strum mode (for visualizer; strum is triggered on key
+  // press)
   std::vector<int> noteBuffer;
   int bufferedStrumSpeedMs = 50;
 
@@ -74,6 +81,9 @@ private:
 
   // Track last triggered note for SmartScaleBend
   int lastTriggeredNote = 60; // Default to middle C
+
+  // Rhythm analyzer for adaptive glide (Phase 26.1)
+  RhythmAnalyzer rhythmAnalyzer;
 
   // ValueTree Callbacks
   void valueTreeChildAdded(juce::ValueTree &parentTree,
@@ -88,9 +98,10 @@ private:
   void addMappingFromTree(juce::ValueTree mappingNode);
   void removeMappingFromTree(juce::ValueTree mappingNode);
   const MidiAction *findMapping(const InputID &input);
-  
+
   // Shared lookup logic (used by both processEvent and simulateInput)
-  std::pair<std::optional<MidiAction>, juce::String> lookupAction(uintptr_t deviceHandle, int keyCode);
+  std::pair<std::optional<MidiAction>, juce::String>
+  lookupAction(uintptr_t deviceHandle, int keyCode);
 
   // Resolve zone using same InputID as lookupAction (alias hash or 0 for "Any")
   std::shared_ptr<Zone> getZoneForInputResolved(InputID input);

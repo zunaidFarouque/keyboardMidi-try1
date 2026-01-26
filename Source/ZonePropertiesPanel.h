@@ -1,10 +1,10 @@
 #pragma once
-#include "Zone.h"
 #include "DeviceManager.h"
-#include "RawInputManager.h"
-#include "MidiNoteUtilities.h"
-#include "ScaleUtilities.h"
 #include "KeyChipList.h"
+#include "MidiNoteUtilities.h"
+#include "RawInputManager.h"
+#include "ScaleUtilities.h"
+#include "Zone.h"
 #include <JuceHeader.h>
 #include <memory>
 
@@ -13,10 +13,11 @@ class ScaleLibrary;
 class ScaleEditorComponent;
 
 class ZonePropertiesPanel : public juce::Component,
-                           public RawInputManager::Listener,
-                           public juce::ChangeListener {
+                            public RawInputManager::Listener,
+                            public juce::ChangeListener {
 public:
-  ZonePropertiesPanel(ZoneManager *zoneMgr, DeviceManager *deviceMgr, RawInputManager *rawInputMgr, ScaleLibrary *scaleLib);
+  ZonePropertiesPanel(ZoneManager *zoneMgr, DeviceManager *deviceMgr,
+                      RawInputManager *rawInputMgr, ScaleLibrary *scaleLib);
   ~ZonePropertiesPanel() override;
 
   void paint(juce::Graphics &) override;
@@ -32,8 +33,10 @@ public:
   std::function<void()> onResizeRequested;
 
   // RawInputManager::Listener implementation
-  void handleRawKeyEvent(uintptr_t deviceHandle, int keyCode, bool isDown) override;
-  void handleAxisEvent(uintptr_t deviceHandle, int inputCode, float value) override;
+  void handleRawKeyEvent(uintptr_t deviceHandle, int keyCode,
+                         bool isDown) override;
+  void handleAxisEvent(uintptr_t deviceHandle, int inputCode,
+                       float value) override;
 
 private:
   ZoneManager *zoneManager;
@@ -99,6 +102,10 @@ private:
   juce::ComboBox polyphonyModeSelector;
   juce::Label glideTimeLabel;
   juce::Slider glideTimeSlider;
+  juce::ToggleButton adaptiveGlideToggle;
+  juce::Label maxGlideTimeLabel;
+  juce::Slider maxGlideTimeSlider;
+  juce::Label monoWarningLabel; // Warning about channel separation (Phase 26.2)
   KeyChipList chipList;
 
   void refreshAliasSelector();

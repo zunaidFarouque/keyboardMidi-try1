@@ -1,26 +1,34 @@
 #pragma once
 #include "MappingTypes.h"
 #include "MidiEngine.h"
-#include "StrumEngine.h"
 #include "PortamentoEngine.h"
 #include "SettingsManager.h"
+#include "StrumEngine.h"
 #include <JuceHeader.h>
-#include <vector>
+#include <array>
+#include <deque>
 #include <functional>
 #include <unordered_map>
-#include <deque>
-#include <array>
+#include <vector>
 
-class VoiceManager : public juce::HighResolutionTimer, public juce::ChangeListener {
+class VoiceManager : public juce::HighResolutionTimer,
+                     public juce::ChangeListener {
 public:
-  VoiceManager(MidiEngine& engine, SettingsManager& settingsMgr);
+  VoiceManager(MidiEngine &engine, SettingsManager &settingsMgr);
   ~VoiceManager() override;
 
   // --- Note playback ---
-  void noteOn(InputID source, int note, int vel, int channel, bool allowSustain = true, int releaseMs = 0, PolyphonyMode polyMode = PolyphonyMode::Poly, int glideTimeMs = 50);
-  void noteOn(InputID source, const std::vector<int>& notes, const std::vector<int>& velocities, int channel, int strumSpeedMs, bool allowSustain = true, int releaseMs = 0, PolyphonyMode polyMode = PolyphonyMode::Poly, int glideTimeMs = 50);
+  void noteOn(InputID source, int note, int vel, int channel,
+              bool allowSustain = true, int releaseMs = 0,
+              PolyphonyMode polyMode = PolyphonyMode::Poly,
+              int glideTimeMs = 50);
+  void noteOn(InputID source, const std::vector<int> &notes,
+              const std::vector<int> &velocities, int channel, int strumSpeedMs,
+              bool allowSustain = true, int releaseMs = 0,
+              PolyphonyMode polyMode = PolyphonyMode::Poly,
+              int glideTimeMs = 50);
 
-  void strumNotes(const std::vector<int>& notes, int speedMs, bool downstroke);
+  void strumNotes(const std::vector<int> &notes, int speedMs, bool downstroke);
 
   void handleKeyUp(InputID source);
   void handleKeyUp(InputID source, int releaseDurationMs, bool shouldSustain);
@@ -34,7 +42,7 @@ public:
   // --- Latch (toggle hold) ---
   void setLatch(bool active) { globalLatchActive = active; }
   bool isLatchActive() const { return globalLatchActive; }
-  
+
   // Check if a specific key code has any latched voices
   bool isKeyLatched(int keyCode) const;
 
@@ -46,7 +54,7 @@ public:
   void resetPerformanceState();
 
   // ChangeListener implementation (for SettingsManager PB range changes)
-  void changeListenerCallback(juce::ChangeBroadcaster* source) override;
+  void changeListenerCallback(juce::ChangeBroadcaster *source) override;
 
 private:
   // Rebuild PB lookup table when SettingsManager changes
@@ -59,6 +67,7 @@ private:
   void pushToMonoStack(int channel, int note, InputID source);
   void removeFromMonoStack(int channel, InputID source);
   int getMonoStackTop(int channel) const; // Returns -1 if empty
+  std::pair<int, InputID> getMonoStackTopWithSource(int channel) const; // Returns {-1, {0,0}} if empty
   enum class VoiceState { Playing, Sustained, Latched };
 
   struct ActiveVoice {
@@ -70,7 +79,8 @@ private:
     int releaseMs = 0; // Zone release envelope; 0 = instant NoteOff
   };
 
-  void addVoiceFromStrum(InputID source, int note, int channel, bool allowSustain);
+  void addVoiceFromStrum(InputID source, int note, int channel,
+                         bool allowSustain);
 
   // HighResolutionTimer callback - checks for expired releases
   void hiResTimerCallback() override;
@@ -87,28 +97,32 @@ private:
     double targetTimeMs;
   };
 
-  MidiEngine& midiEngine;
-  SettingsManager& settingsManager;
+  MidiEngine &midiEngine;
+  SettingsManager &settingsManager;
   StrumEngine strumEngine;
   PortamentoEngine portamentoEngine;
-  mutable std::vector<ActiveVoice> voices; // Mutable for const accessors
+  mutable std::vector<ActiveVoice> voices;  // Mutable for const accessors
   mutable juce::CriticalSection voicesLock; // Mutable for const accessors
-  std::unordered_map<InputID, PendingRelease> pendingReleases; // Track releases waiting for expiration
+  std::unordered_map<InputID, PendingRelease>
+      pendingReleases; // Track releases waiting for expiration
   std::vector<PendingNoteOff> releaseQueue; // Delayed NoteOff (Phase 21.3)
   juce::CriticalSection releasesLock;
 
   bool globalSustainActive = false;
   bool globalLatchActive = false;
 
-  // PB Lookup Table: Maps semitone delta (-127 to +127) to PB value (0-16383) or -1 if out of range
+  // PB Lookup Table: Maps semitone delta (-127 to +127) to PB value (0-16383)
+  // or -1 if out of range
   std::array<int, 255> pbLookup; // Index = delta + 127
 
   // Mono Stack: Per-channel deque of notes (last note priority)
-  std::unordered_map<int, std::deque<std::pair<int, InputID>>> monoStacks; // channel -> deque<note, source>
+  std::unordered_map<int, std::deque<std::pair<int, InputID>>>
+      monoStacks; // channel -> deque<note, source>
   juce::CriticalSection monoStackLock;
-  
+
   // Per-channel polyphony mode and glide time (for handleKeyUp)
-  std::unordered_map<int, std::pair<PolyphonyMode, int>> channelPolyModes; // channel -> <mode, glideTimeMs>
+  std::unordered_map<int, std::pair<PolyphonyMode, int>>
+      channelPolyModes; // channel -> <mode, glideTimeMs>
 
   double getCurrentTimeMs() const;
 };

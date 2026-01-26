@@ -2,8 +2,16 @@
 #include "MappingTypes.h"
 #include <algorithm>
 
+namespace {
+static bool isPitchBendTarget(const AdsrTarget target) {
+  return target == AdsrTarget::PitchBend || target == AdsrTarget::SmartScaleBend;
+}
+} // namespace
+
 ExpressionEngine::ExpressionEngine(MidiEngine& engine)
     : midiEngine(engine) {
+  for (int ch = 0; ch < 17; ++ch)
+    currentPitchBendValues[ch] = 8192;
   startTimer(static_cast<int>(timerIntervalMs));
 }
 
@@ -13,6 +21,12 @@ ExpressionEngine::~ExpressionEngine() {
 
 void ExpressionEngine::triggerEnvelope(InputID source, int channel, const AdsrSettings& settings, int peakValue) {
   juce::ScopedLock scopedLock(lock);
+
+  // If this source exists in the PB stack for this channel, remove it (re-press moves to top)
+  if (isPitchBendTarget(settings.target)) {
+    auto& stack = pitchBendStacks[channel];
+    stack.erase(std::remove(stack.begin(), stack.end(), source), stack.end());
+  }
 
   // Remove any existing envelope for this source (voice stealing)
   activeEnvelopes.erase(
@@ -32,6 +46,28 @@ void ExpressionEngine::triggerEnvelope(InputID source, int channel, const AdsrSe
   env.currentLevel = 0.0;
   env.stageProgress = 0.0;
   env.lastSentValue = -1; // Initialize to -1 so first value (0) is always sent
+  env.isDormant = false;
+
+  if (isPitchBendTarget(settings.target)) {
+    auto& stack = pitchBendStacks[channel];
+    // If another envelope is currently driving this channel, make it dormant
+    if (!stack.empty()) {
+      InputID prevTop = stack.back();
+      for (auto& e : activeEnvelopes) {
+        if (e.source == prevTop && e.channel == channel && isPitchBendTarget(e.settings.target)) {
+          e.isDormant = true;
+          break;
+        }
+      }
+    }
+    // Push new owner to top of stack
+    stack.push_back(source);
+    // Dynamic handoff: start from current physical pitch
+    env.dynamicStartValue = currentPitchBendValues[channel];
+  } else {
+    // CC envelopes start from zero
+    env.dynamicStartValue = 0;
+  }
 
   // Calculate step size for Attack: from 0.0 to 1.0 in attackMs
   if (settings.attackMs > 0) {
@@ -50,21 +86,99 @@ void ExpressionEngine::triggerEnvelope(InputID source, int channel, const AdsrSe
 void ExpressionEngine::releaseEnvelope(InputID source) {
   juce::ScopedLock scopedLock(lock);
 
-  for (auto& env : activeEnvelopes) {
-    if (env.source == source && env.stage != Stage::Finished) {
-      // Transition to Release stage
-      env.stage = Stage::Release;
+  auto findEnvIt = std::find_if(activeEnvelopes.begin(), activeEnvelopes.end(),
+    [source](const ActiveEnvelope& e) { return e.source == source; });
 
-      // Calculate step size for Release: from currentLevel to 0.0 in releaseMs
+  if (findEnvIt == activeEnvelopes.end())
+    return;
+
+  auto& env = *findEnvIt;
+  if (env.stage == Stage::Finished)
+    return;
+
+  // Pitch Bend priority stack behavior (Phase 23.7)
+  if (isPitchBendTarget(env.settings.target)) {
+    auto& stack = pitchBendStacks[env.channel];
+    auto it = std::find(stack.begin(), stack.end(), source);
+    if (it == stack.end()) {
+      // Fallback: behave like normal release
+      env.stage = Stage::Release;
       if (env.settings.releaseMs > 0 && env.currentLevel > 0.0) {
         double numSteps = env.settings.releaseMs / timerIntervalMs;
         env.stepSize = env.currentLevel / numSteps;
       } else {
-        // Instant release
         env.stepSize = env.currentLevel;
       }
-      break;
+      return;
     }
+
+    const bool wasTop = (!stack.empty() && stack.back() == source);
+    stack.erase(it);
+
+    if (!wasTop) {
+      // Background key released: remove silently
+      env.isDormant = true;
+      env.stage = Stage::Finished;
+      return;
+    }
+
+    if (!stack.empty()) {
+      // Active driver released -> handoff back to previous key, re-attack it
+      env.isDormant = true;
+      env.stage = Stage::Finished; // Kill released owner immediately
+
+      const InputID newTop = stack.back();
+      for (auto& e : activeEnvelopes) {
+        if (e.source == newTop && e.channel == env.channel && isPitchBendTarget(e.settings.target) && e.stage != Stage::Finished) {
+          e.isDormant = false;
+          e.dynamicStartValue = currentPitchBendValues[env.channel];
+          e.currentLevel = 0.0;
+          e.stageProgress = 0.0;
+          e.lastSentValue = -1;
+          e.stage = Stage::Attack;
+
+          if (e.settings.attackMs > 0) {
+            double numSteps = e.settings.attackMs / timerIntervalMs;
+            e.stepSize = 1.0 / numSteps;
+          } else {
+            e.stepSize = 1.0;
+            e.currentLevel = 1.0;
+            e.stage = Stage::Decay;
+          }
+          break;
+        }
+      }
+      return;
+    }
+
+    // Stack empty: let this envelope release back to center (8192)
+    env.isDormant = false;
+    env.stage = Stage::Release;
+    env.lastSentValue = -1;
+    env.dynamicStartValue = 8192;
+    env.peakValue = currentPitchBendValues[env.channel]; // start of release path
+    env.currentLevel = 1.0;
+    env.stageProgress = 0.0;
+
+    if (env.settings.releaseMs > 0) {
+      double numSteps = env.settings.releaseMs / timerIntervalMs;
+      env.stepSize = 1.0 / numSteps;
+    } else {
+      env.stepSize = 1.0;
+    }
+    return;
+  }
+
+  // CC: Standard release
+  env.stage = Stage::Release;
+
+  // Calculate step size for Release: from currentLevel to 0.0 in releaseMs
+  if (env.settings.releaseMs > 0 && env.currentLevel > 0.0) {
+    double numSteps = env.settings.releaseMs / timerIntervalMs;
+    env.stepSize = env.currentLevel / numSteps;
+  } else {
+    // Instant release
+    env.stepSize = env.currentLevel;
   }
 }
 
@@ -72,6 +186,9 @@ void ExpressionEngine::hiResTimerCallback() {
   juce::ScopedLock scopedLock(lock);
 
   for (auto& env : activeEnvelopes) {
+    if (env.isDormant)
+      continue;
+
     // Update level based on current stage
     switch (env.stage) {
       case Stage::Attack: {
@@ -124,14 +241,19 @@ void ExpressionEngine::hiResTimerCallback() {
         break;
     }
 
-    // Calculate output value with zero point logic
-    int zeroPoint = (env.settings.target == AdsrTarget::PitchBend || env.settings.target == AdsrTarget::SmartScaleBend) ? 8192 : 0;
+    const bool isPB = isPitchBendTarget(env.settings.target);
+
+    // Dynamic start logic (Phase 23.7): output = start + (level * (peak - start))
+    int startValue = env.dynamicStartValue;
+    if (startValue < 0)
+      startValue = isPB ? 8192 : 0;
+
     int peak = env.peakValue;
-    double range = static_cast<double>(peak - zeroPoint); // Can be negative for downward bends
-    int outputVal = static_cast<int>(zeroPoint + (env.currentLevel * range));
+    double range = static_cast<double>(peak - startValue);
+    int outputVal = static_cast<int>(static_cast<double>(startValue) + (env.currentLevel * range));
     
     // Clamp to valid ranges
-    if (env.settings.target == AdsrTarget::PitchBend || env.settings.target == AdsrTarget::SmartScaleBend) {
+    if (isPB) {
       outputVal = juce::jlimit(0, 16383, outputVal);
     } else {
       outputVal = juce::jlimit(0, 127, outputVal);
@@ -139,7 +261,8 @@ void ExpressionEngine::hiResTimerCallback() {
 
     // Delta check: only send MIDI if value changed
     if (outputVal != env.lastSentValue) {
-      if (env.settings.target == AdsrTarget::PitchBend || env.settings.target == AdsrTarget::SmartScaleBend) {
+      if (isPB) {
+        currentPitchBendValues[env.channel] = outputVal;
         midiEngine.sendPitchBend(env.channel, outputVal);
       } else {
         midiEngine.sendCC(env.channel, env.settings.ccNumber, outputVal);

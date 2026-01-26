@@ -1,12 +1,13 @@
 #include "ZonePropertiesPanel.h"
-#include "ZoneManager.h"
-#include "ScaleLibrary.h"
 #include "ScaleEditorComponent.h"
+#include "ScaleLibrary.h"
+#include "ZoneManager.h"
 #include <algorithm>
 
 // Helper to convert alias name to hash (same as in InputProcessor)
 static uintptr_t aliasNameToHash(const juce::String &aliasName) {
-  if (aliasName.isEmpty() || aliasName == "Any / Master" || aliasName == "Unassigned")
+  if (aliasName.isEmpty() || aliasName == "Any / Master" ||
+      aliasName == "Unassigned")
     return 0;
   return static_cast<uintptr_t>(std::hash<juce::String>{}(aliasName));
 }
@@ -15,16 +16,21 @@ static uintptr_t aliasNameToHash(const juce::String &aliasName) {
 static juce::String aliasHashToName(uintptr_t hash, DeviceManager *deviceMgr) {
   if (hash == 0)
     return "Any / Master";
-  
+
   // We can't easily reverse the hash, so we'll need to check all aliases
-  // For now, just return "Unknown" - in practice, we should store the alias name
-  // For Phase 11, we'll use a simple approach: store the alias name in the zone
+  // For now, just return "Unknown" - in practice, we should store the alias
+  // name For Phase 11, we'll use a simple approach: store the alias name in the
+  // zone
   return "Unknown";
 }
 
-ZonePropertiesPanel::ZonePropertiesPanel(ZoneManager *zoneMgr, DeviceManager *deviceMgr, RawInputManager *rawInputMgr, ScaleLibrary *scaleLib)
-    : zoneManager(zoneMgr), deviceManager(deviceMgr), rawInputManager(rawInputMgr), scaleLibrary(scaleLib) {
-  
+ZonePropertiesPanel::ZonePropertiesPanel(ZoneManager *zoneMgr,
+                                         DeviceManager *deviceMgr,
+                                         RawInputManager *rawInputMgr,
+                                         ScaleLibrary *scaleLib)
+    : zoneManager(zoneMgr), deviceManager(deviceMgr),
+      rawInputManager(rawInputMgr), scaleLibrary(scaleLib) {
+
   // Labels
   addAndMakeVisible(aliasLabel);
   aliasLabel.setText("Device Alias:", juce::dontSendNotification);
@@ -90,13 +96,13 @@ ZonePropertiesPanel::ZonePropertiesPanel(ZoneManager *zoneMgr, DeviceManager *de
   editScaleButton.onClick = [this] {
     if (!scaleLibrary)
       return;
-      
+
     // Create editor component
-    auto* editor = new ScaleEditorComponent(scaleLibrary);
-    
+    auto *editor = new ScaleEditorComponent(scaleLibrary);
+
     // CRITICAL: Set size BEFORE adding to dialog
     editor->setSize(600, 400);
-    
+
     // Setup dialog options
     juce::DialogWindow::LaunchOptions options;
     options.content.setOwned(editor);
@@ -107,8 +113,9 @@ ZonePropertiesPanel::ZonePropertiesPanel(ZoneManager *zoneMgr, DeviceManager *de
     options.resizable = true;
     options.useBottomRightCornerResizer = true;
     options.componentToCentreAround = this;
-    
-    // Launch dialog - this returns a DialogWindow* that manages its own lifetime
+
+    // Launch dialog - this returns a DialogWindow* that manages its own
+    // lifetime
     options.launchAsync();
   };
 
@@ -118,7 +125,8 @@ ZonePropertiesPanel::ZonePropertiesPanel(ZoneManager *zoneMgr, DeviceManager *de
 
   addAndMakeVisible(rootSlider);
   rootSlider.setRange(0, 127, 1);
-  rootSlider.setTextValueSuffix(" (" + MidiNoteUtilities::getMidiNoteName(60) + ")");
+  rootSlider.setTextValueSuffix(" (" + MidiNoteUtilities::getMidiNoteName(60) +
+                                ")");
   rootSlider.setValue(60);
   rootSlider.textFromValueFunction = [](double value) {
     return MidiNoteUtilities::getMidiNoteName(static_cast<int>(value));
@@ -152,14 +160,18 @@ ZonePropertiesPanel::ZonePropertiesPanel(ZoneManager *zoneMgr, DeviceManager *de
   chromaticOffsetSlider.setValue(0);
   chromaticOffsetSlider.textFromValueFunction = [](double value) {
     int v = static_cast<int>(value);
-    if (v == 0) return juce::String("0");
-    if (v > 0) return juce::String("+") + juce::String(v) + "st";
+    if (v == 0)
+      return juce::String("0");
+    if (v > 0)
+      return juce::String("+") + juce::String(v) + "st";
     return juce::String(v) + "st";
   };
   chromaticOffsetSlider.onValueChange = [this] {
     if (currentZone) {
-      currentZone->chromaticOffset = static_cast<int>(chromaticOffsetSlider.getValue());
-      // Note: chromaticOffset is applied in processKey, no need to rebuild cache
+      currentZone->chromaticOffset =
+          static_cast<int>(chromaticOffsetSlider.getValue());
+      // Note: chromaticOffset is applied in processKey, no need to rebuild
+      // cache
     }
   };
 
@@ -172,13 +184,16 @@ ZonePropertiesPanel::ZonePropertiesPanel(ZoneManager *zoneMgr, DeviceManager *de
   degreeOffsetSlider.setValue(0);
   degreeOffsetSlider.textFromValueFunction = [](double value) {
     int v = static_cast<int>(value);
-    if (v == 0) return juce::String("0");
-    if (v > 0) return juce::String("+") + juce::String(v);
+    if (v == 0)
+      return juce::String("0");
+    if (v > 0)
+      return juce::String("+") + juce::String(v);
     return juce::String(v);
   };
   degreeOffsetSlider.onValueChange = [this] {
     if (currentZone && scaleLibrary && zoneManager) {
-      currentZone->degreeOffset = static_cast<int>(degreeOffsetSlider.getValue());
+      currentZone->degreeOffset =
+          static_cast<int>(degreeOffsetSlider.getValue());
       rebuildZoneCache();
     }
   };
@@ -229,15 +244,17 @@ ZonePropertiesPanel::ZonePropertiesPanel(ZoneManager *zoneMgr, DeviceManager *de
       } else if (selected == 2) {
         currentZone->layoutStrategy = Zone::LayoutStrategy::Piano;
       }
-      gridIntervalSlider.setEnabled(currentZone->layoutStrategy == Zone::LayoutStrategy::Grid);
-      pianoHelpLabel.setVisible(currentZone->layoutStrategy == Zone::LayoutStrategy::Piano);
+      gridIntervalSlider.setEnabled(currentZone->layoutStrategy ==
+                                    Zone::LayoutStrategy::Grid);
+      pianoHelpLabel.setVisible(currentZone->layoutStrategy ==
+                                Zone::LayoutStrategy::Piano);
       updateVisibility();
       if (zoneManager && scaleLibrary) {
         rebuildZoneCache();
         zoneManager->rebuildLookupTable();
         zoneManager->sendChangeMessage();
       }
-      
+
       // Notify parent that resize might be needed (label visibility changed)
       if (onResizeRequested) {
         onResizeRequested();
@@ -254,16 +271,20 @@ ZonePropertiesPanel::ZonePropertiesPanel(ZoneManager *zoneMgr, DeviceManager *de
   gridIntervalSlider.setValue(5);
   gridIntervalSlider.textFromValueFunction = [](double value) {
     int v = static_cast<int>(value);
-    if (v == 0) return juce::String("0");
-    if (v > 0) return juce::String("+") + juce::String(v) + "st";
+    if (v == 0)
+      return juce::String("0");
+    if (v > 0)
+      return juce::String("+") + juce::String(v) + "st";
     return juce::String(v) + "st";
   };
   gridIntervalSlider.onValueChange = [this] {
     if (currentZone) {
-      currentZone->gridInterval = static_cast<int>(gridIntervalSlider.getValue());
+      currentZone->gridInterval =
+          static_cast<int>(gridIntervalSlider.getValue());
     }
   };
-  gridIntervalSlider.setEnabled(false); // Initially disabled (defaults to Linear)
+  gridIntervalSlider.setEnabled(
+      false); // Initially disabled (defaults to Linear)
 
   addAndMakeVisible(pianoHelpLabel);
   pianoHelpLabel.setText("Requires 2 rows of keys", juce::dontSendNotification);
@@ -410,7 +431,8 @@ ZonePropertiesPanel::ZonePropertiesPanel(ZoneManager *zoneMgr, DeviceManager *de
   releaseDurationSlider.setTextValueSuffix(" ms");
   releaseDurationSlider.onValueChange = [this] {
     if (currentZone) {
-      currentZone->releaseDurationMs = static_cast<int>(releaseDurationSlider.getValue());
+      currentZone->releaseDurationMs =
+          static_cast<int>(releaseDurationSlider.getValue());
       if (zoneManager) {
         zoneManager->sendChangeMessage();
       }
@@ -489,7 +511,8 @@ ZonePropertiesPanel::ZonePropertiesPanel(ZoneManager *zoneMgr, DeviceManager *de
   };
   ghostVelSlider.onValueChange = [this] {
     if (currentZone) {
-      currentZone->ghostVelocityScale = static_cast<float>(ghostVelSlider.getValue()) / 100.0f;
+      currentZone->ghostVelocityScale =
+          static_cast<float>(ghostVelSlider.getValue()) / 100.0f;
       if (zoneManager) {
         zoneManager->sendChangeMessage();
       }
@@ -522,7 +545,8 @@ ZonePropertiesPanel::ZonePropertiesPanel(ZoneManager *zoneMgr, DeviceManager *de
   };
   bassOctaveSlider.onValueChange = [this] {
     if (currentZone) {
-      currentZone->bassOctaveOffset = static_cast<int>(bassOctaveSlider.getValue());
+      currentZone->bassOctaveOffset =
+          static_cast<int>(bassOctaveSlider.getValue());
       if (zoneManager && scaleLibrary) {
         rebuildZoneCache();
         zoneManager->sendChangeMessage();
@@ -541,7 +565,8 @@ ZonePropertiesPanel::ZonePropertiesPanel(ZoneManager *zoneMgr, DeviceManager *de
   displayModeSelector.addItem("Roman Numeral", 2);
   displayModeSelector.onChange = [this] {
     if (currentZone) {
-      currentZone->showRomanNumerals = (displayModeSelector.getSelectedId() == 2);
+      currentZone->showRomanNumerals =
+          (displayModeSelector.getSelectedId() == 2);
       if (zoneManager && scaleLibrary) {
         rebuildZoneCache();
         zoneManager->sendChangeMessage();
@@ -590,7 +615,8 @@ ZonePropertiesPanel::ZonePropertiesPanel(ZoneManager *zoneMgr, DeviceManager *de
       }
     }
   };
-  glideTimeSlider.setVisible(false); // Initially hidden (only visible for Legato)
+  glideTimeSlider.setVisible(
+      false); // Initially hidden (only visible for Legato)
   glideTimeLabel.setVisible(false);
 
   addAndMakeVisible(channelLabel);
@@ -618,49 +644,53 @@ ZonePropertiesPanel::ZonePropertiesPanel(ZoneManager *zoneMgr, DeviceManager *de
   colorButton.onClick = [this] {
     if (!currentZone)
       return;
-    
+
     // Create ColourSelector with options
-    int flags = juce::ColourSelector::showColourspace | 
-                juce::ColourSelector::showSliders | 
+    int flags = juce::ColourSelector::showColourspace |
+                juce::ColourSelector::showSliders |
                 juce::ColourSelector::showColourAtTop;
-    auto* colourSelector = new juce::ColourSelector(flags);
+    auto *colourSelector = new juce::ColourSelector(flags);
     colourSelector->setName("Zone Color");
     colourSelector->setCurrentColour(currentZone->zoneColor);
     colourSelector->setSize(400, 300);
-    
+
     // Create a listener to update color when it changes
     class ColourChangeListener : public juce::ChangeListener {
     public:
-      ColourChangeListener(ZonePropertiesPanel* panel, juce::ColourSelector* selector, std::shared_ptr<Zone> zone, ZoneManager* zm)
-        : panel_(panel), selector_(selector), zone_(zone), zoneManager_(zm) {}
-      
-      void changeListenerCallback(juce::ChangeBroadcaster* source) override {
+      ColourChangeListener(ZonePropertiesPanel *panel,
+                           juce::ColourSelector *selector,
+                           std::shared_ptr<Zone> zone, ZoneManager *zm)
+          : panel_(panel), selector_(selector), zone_(zone), zoneManager_(zm) {}
+
+      void changeListenerCallback(juce::ChangeBroadcaster *source) override {
         if (source == selector_ && zone_) {
           zone_->zoneColor = selector_->getCurrentColour();
-          panel_->colorButton.setColour(juce::TextButton::buttonColourId, zone_->zoneColor);
+          panel_->colorButton.setColour(juce::TextButton::buttonColourId,
+                                        zone_->zoneColor);
           panel_->colorButton.repaint();
-          
+
           // Notify ZoneManager to refresh Visualizer
           if (zoneManager_) {
             zoneManager_->sendChangeMessage();
           }
         }
       }
-      
+
     private:
-      ZonePropertiesPanel* panel_;
-      juce::ColourSelector* selector_;
+      ZonePropertiesPanel *panel_;
+      juce::ColourSelector *selector_;
       std::shared_ptr<Zone> zone_;
-      ZoneManager* zoneManager_;
+      ZoneManager *zoneManager_;
     };
-    
-    auto* listener = new ColourChangeListener(this, colourSelector, currentZone, zoneManager);
+
+    auto *listener = new ColourChangeListener(this, colourSelector, currentZone,
+                                              zoneManager);
     colourSelector->addChangeListener(listener);
-    
+
     // Show in CallOutBox attached to the button
-    juce::CallOutBox::launchAsynchronously(std::unique_ptr<juce::Component>(colourSelector),
-                                           colorButton.getScreenBounds(),
-                                           this);
+    juce::CallOutBox::launchAsynchronously(
+        std::unique_ptr<juce::Component>(colourSelector),
+        colorButton.getScreenBounds(), this);
   };
 
   addAndMakeVisible(chipList);
@@ -799,6 +829,24 @@ void ZonePropertiesPanel::resized() {
     y += rowHeight + spacing;
   }
 
+  // Adaptive Glide Toggle (only visible for Legato)
+  if (adaptiveGlideToggle.isVisible()) {
+    adaptiveGlideToggle.setBounds(leftMargin, y, width, rowHeight);
+    y += rowHeight + spacing;
+  }
+
+  // Max Glide Time (only visible for Adaptive)
+  if (maxGlideTimeSlider.isVisible()) {
+    maxGlideTimeSlider.setBounds(leftMargin, y, width, rowHeight);
+    y += rowHeight + spacing;
+  }
+
+  // Mono Warning Label (only visible for Mono/Legato) (Phase 26.2)
+  if (monoWarningLabel.isVisible()) {
+    monoWarningLabel.setBounds(leftMargin, y, width, rowHeight * 2); // Allow 2 rows for text
+    y += (rowHeight * 2) + spacing;
+  }
+
   // Chord Type
   chordTypeSelector.setBounds(leftMargin, y, width, rowHeight);
   y += rowHeight + spacing;
@@ -825,7 +873,8 @@ void ZonePropertiesPanel::resized() {
 
   // Capture Keys and Remove Keys (side by side)
   auto keyButtonsArea = juce::Rectangle<int>(leftMargin, y, width, rowHeight);
-  removeKeysButton.setBounds(keyButtonsArea.removeFromRight(width / 2).reduced(2, 0));
+  removeKeysButton.setBounds(
+      keyButtonsArea.removeFromRight(width / 2).reduced(2, 0));
   captureKeysButton.setBounds(keyButtonsArea.reduced(2, 0));
   y += rowHeight + spacing;
 
@@ -839,7 +888,8 @@ void ZonePropertiesPanel::resized() {
 
   // Piano Help Label (only visible when Piano strategy is selected)
   pianoHelpLabel.setBounds(leftMargin, y, width, rowHeight);
-  if (currentZone && currentZone->layoutStrategy == Zone::LayoutStrategy::Piano) {
+  if (currentZone &&
+      currentZone->layoutStrategy == Zone::LayoutStrategy::Piano) {
     y += rowHeight + spacing;
   }
 
@@ -852,7 +902,10 @@ void ZonePropertiesPanel::resized() {
   y += rowHeight + spacing;
 
   // Key Chip List (dynamic height based on number of chips)
-  int chipListHeight = juce::jmax(120, static_cast<int>((currentZone ? currentZone->inputKeyCodes.size() : 0) * 28 + 16));
+  int chipListHeight = juce::jmax(
+      120,
+      static_cast<int>(
+          (currentZone ? currentZone->inputKeyCodes.size() : 0) * 28 + 16));
   chipList.setBounds(leftMargin + 4, y, width - 8, chipListHeight);
   y += chipListHeight + spacing;
 
@@ -865,18 +918,28 @@ int ZonePropertiesPanel::getRequiredHeight() const {
   int spacing = 4;
   int topPadding = 8;
   int bottomPadding = 8;
-  
+
   // Count number of rows
-  int numRows = 26; // Alias, Name, Scale, Root, Chromatic, Degree, Lock, ChordType, Voicing, PlayMode, StrumSpeed, ReleaseBehavior, ReleaseDuration, AllowSustain, BaseVel, RandVel, StrictGhost, GhostVel, BassToggle, BassOctave, DisplayMode, Capture/Remove, Strategy, Grid, Channel, Color
+  int numRows =
+      26; // Alias, Name, Scale, Root, Chromatic, Degree, Lock, ChordType,
+          // Voicing, PlayMode, StrumSpeed, ReleaseBehavior, ReleaseDuration,
+          // AllowSustain, BaseVel, RandVel, StrictGhost, GhostVel, BassToggle,
+          // BassOctave, DisplayMode, Capture/Remove, Strategy, Grid, Channel,
+          // Color
   // Add one more row if Piano help label is visible
-  if (currentZone && currentZone->layoutStrategy == Zone::LayoutStrategy::Piano) {
+  if (currentZone &&
+      currentZone->layoutStrategy == Zone::LayoutStrategy::Piano) {
     numRows++;
   }
-  
+
   // Calculate chip list height dynamically
-  int chipListHeight = juce::jmax(120, static_cast<int>((currentZone ? currentZone->inputKeyCodes.size() : 0) * 28 + 16));
-  
-  return topPadding + (numRows * (rowHeight + spacing)) + chipListHeight + bottomPadding;
+  int chipListHeight = juce::jmax(
+      120,
+      static_cast<int>(
+          (currentZone ? currentZone->inputKeyCodes.size() : 0) * 28 + 16));
+
+  return topPadding + (numRows * (rowHeight + spacing)) + chipListHeight +
+         bottomPadding;
 }
 
 void ZonePropertiesPanel::setZone(std::shared_ptr<Zone> zone) {
@@ -916,6 +979,9 @@ void ZonePropertiesPanel::updateControlsFromZone() {
     displayModeSelector.setEnabled(false);
     polyphonyModeSelector.setEnabled(false);
     glideTimeSlider.setEnabled(false);
+    adaptiveGlideToggle.setEnabled(false);
+    maxGlideTimeSlider.setEnabled(false);
+    monoWarningLabel.setEnabled(false);
     channelSlider.setEnabled(false);
     colorButton.setEnabled(false);
     chipList.setEnabled(false);
@@ -936,23 +1002,27 @@ void ZonePropertiesPanel::updateControlsFromZone() {
   captureKeysButton.setEnabled(true);
   removeKeysButton.setEnabled(true);
   strategySelector.setEnabled(true);
-  gridIntervalSlider.setEnabled(currentZone->layoutStrategy == Zone::LayoutStrategy::Grid);
+  gridIntervalSlider.setEnabled(currentZone->layoutStrategy ==
+                                Zone::LayoutStrategy::Grid);
   chordTypeSelector.setEnabled(true);
   voicingSelector.setEnabled(true);
   playModeSelector.setEnabled(true);
   strumSpeedSlider.setEnabled(true);
   releaseBehaviorSelector.setEnabled(true);
-    releaseDurationSlider.setEnabled(true);
-    allowSustainToggle.setEnabled(true);
-    baseVelSlider.setEnabled(true);
-    randVelSlider.setEnabled(true);
-    strictGhostToggle.setEnabled(true);
-    ghostVelSlider.setEnabled(true);
-    bassToggle.setEnabled(true);
-    bassOctaveSlider.setEnabled(currentZone->addBassNote);
+  releaseDurationSlider.setEnabled(true);
+  allowSustainToggle.setEnabled(true);
+  baseVelSlider.setEnabled(true);
+  randVelSlider.setEnabled(true);
+  strictGhostToggle.setEnabled(true);
+  ghostVelSlider.setEnabled(true);
+  bassToggle.setEnabled(true);
+  bassOctaveSlider.setEnabled(currentZone->addBassNote);
     displayModeSelector.setEnabled(true);
     polyphonyModeSelector.setEnabled(true);
     glideTimeSlider.setEnabled(true);
+    adaptiveGlideToggle.setEnabled(true);
+    maxGlideTimeSlider.setEnabled(true);
+    monoWarningLabel.setEnabled(true);
     channelSlider.setEnabled(true);
   colorButton.setEnabled(true);
 
@@ -960,7 +1030,8 @@ void ZonePropertiesPanel::updateControlsFromZone() {
   nameEditor.setText(currentZone->name, juce::dontSendNotification);
 
   // Set alias selector (find matching alias hash)
-  // For Phase 11, we'll match by hash - in a full implementation, we'd store the alias name
+  // For Phase 11, we'll match by hash - in a full implementation, we'd store
+  // the alias name
   int aliasIndex = 0; // Default to "Any / Master"
   if (currentZone->targetAliasHash != 0 && deviceManager) {
     // Try to find matching alias
@@ -984,13 +1055,17 @@ void ZonePropertiesPanel::updateControlsFromZone() {
         break;
       }
     }
-    scaleSelector.setSelectedItemIndex(scaleIndex >= 0 ? scaleIndex : 0, juce::dontSendNotification);
+    scaleSelector.setSelectedItemIndex(scaleIndex >= 0 ? scaleIndex : 0,
+                                       juce::dontSendNotification);
   }
 
   rootSlider.setValue(currentZone->rootNote, juce::dontSendNotification);
-  chromaticOffsetSlider.setValue(currentZone->chromaticOffset, juce::dontSendNotification);
-  degreeOffsetSlider.setValue(currentZone->degreeOffset, juce::dontSendNotification);
-  transposeLockButton.setToggleState(currentZone->isTransposeLocked, juce::dontSendNotification);
+  chromaticOffsetSlider.setValue(currentZone->chromaticOffset,
+                                 juce::dontSendNotification);
+  degreeOffsetSlider.setValue(currentZone->degreeOffset,
+                              juce::dontSendNotification);
+  transposeLockButton.setToggleState(currentZone->isTransposeLocked,
+                                     juce::dontSendNotification);
 
   // Set strategy
   int strategyIndex = 0;
@@ -1001,68 +1076,109 @@ void ZonePropertiesPanel::updateControlsFromZone() {
   } else if (currentZone->layoutStrategy == Zone::LayoutStrategy::Piano) {
     strategyIndex = 2;
   }
-  strategySelector.setSelectedItemIndex(strategyIndex, juce::dontSendNotification);
-  
+  strategySelector.setSelectedItemIndex(strategyIndex,
+                                        juce::dontSendNotification);
+
   // Set grid interval
-  gridIntervalSlider.setValue(currentZone->gridInterval, juce::dontSendNotification);
-  gridIntervalSlider.setEnabled(currentZone->layoutStrategy == Zone::LayoutStrategy::Grid);
-  
+  gridIntervalSlider.setValue(currentZone->gridInterval,
+                              juce::dontSendNotification);
+  gridIntervalSlider.setEnabled(currentZone->layoutStrategy ==
+                                Zone::LayoutStrategy::Grid);
+
   // Show/hide piano help label
-  pianoHelpLabel.setVisible(currentZone->layoutStrategy == Zone::LayoutStrategy::Piano);
-  
+  pianoHelpLabel.setVisible(currentZone->layoutStrategy ==
+                            Zone::LayoutStrategy::Piano);
+
   // Set MIDI channel
   channelSlider.setValue(currentZone->midiChannel, juce::dontSendNotification);
 
   // Set zone color button
-  colorButton.setColour(juce::TextButton::buttonColourId, currentZone->zoneColor);
+  colorButton.setColour(juce::TextButton::buttonColourId,
+                        currentZone->zoneColor);
   colorButton.repaint();
 
   // Set chord type
   int chordTypeIndex = 0;
   switch (currentZone->chordType) {
-    case ChordUtilities::ChordType::None: chordTypeIndex = 0; break;
-    case ChordUtilities::ChordType::Triad: chordTypeIndex = 1; break;
-    case ChordUtilities::ChordType::Seventh: chordTypeIndex = 2; break;
-    case ChordUtilities::ChordType::Ninth: chordTypeIndex = 3; break;
-    case ChordUtilities::ChordType::Power5: chordTypeIndex = 4; break;
+  case ChordUtilities::ChordType::None:
+    chordTypeIndex = 0;
+    break;
+  case ChordUtilities::ChordType::Triad:
+    chordTypeIndex = 1;
+    break;
+  case ChordUtilities::ChordType::Seventh:
+    chordTypeIndex = 2;
+    break;
+  case ChordUtilities::ChordType::Ninth:
+    chordTypeIndex = 3;
+    break;
+  case ChordUtilities::ChordType::Power5:
+    chordTypeIndex = 4;
+    break;
   }
-  chordTypeSelector.setSelectedItemIndex(chordTypeIndex, juce::dontSendNotification);
+  chordTypeSelector.setSelectedItemIndex(chordTypeIndex,
+                                         juce::dontSendNotification);
 
   // Set voicing
   int voicingIndex = 0;
   switch (currentZone->voicing) {
-    case ChordUtilities::Voicing::RootPosition: voicingIndex = 0; break;
-    case ChordUtilities::Voicing::Smooth: voicingIndex = 1; break;
-    case ChordUtilities::Voicing::GuitarSpread: voicingIndex = 2; break;
-    case ChordUtilities::Voicing::SmoothFilled: voicingIndex = 3; break;
-    case ChordUtilities::Voicing::GuitarFilled: voicingIndex = 4; break;
-    default: voicingIndex = 0; break;
+  case ChordUtilities::Voicing::RootPosition:
+    voicingIndex = 0;
+    break;
+  case ChordUtilities::Voicing::Smooth:
+    voicingIndex = 1;
+    break;
+  case ChordUtilities::Voicing::GuitarSpread:
+    voicingIndex = 2;
+    break;
+  case ChordUtilities::Voicing::SmoothFilled:
+    voicingIndex = 3;
+    break;
+  case ChordUtilities::Voicing::GuitarFilled:
+    voicingIndex = 4;
+    break;
+  default:
+    voicingIndex = 0;
+    break;
   }
-  voicingSelector.setSelectedItemIndex(voicingIndex, juce::dontSendNotification);
+  voicingSelector.setSelectedItemIndex(voicingIndex,
+                                       juce::dontSendNotification);
 
   // Set play mode
   int playModeIndex = (currentZone->playMode == Zone::PlayMode::Direct) ? 0 : 1;
-  playModeSelector.setSelectedItemIndex(playModeIndex, juce::dontSendNotification);
+  playModeSelector.setSelectedItemIndex(playModeIndex,
+                                        juce::dontSendNotification);
 
   // Set strum speed
-  strumSpeedSlider.setValue(currentZone->strumSpeedMs, juce::dontSendNotification);
+  strumSpeedSlider.setValue(currentZone->strumSpeedMs,
+                            juce::dontSendNotification);
 
   // Set release behavior
-  int releaseBehaviorIndex = (currentZone->releaseBehavior == Zone::ReleaseBehavior::Normal) ? 0 : 1;
-  releaseBehaviorSelector.setSelectedItemIndex(releaseBehaviorIndex, juce::dontSendNotification);
+  int releaseBehaviorIndex =
+      (currentZone->releaseBehavior == Zone::ReleaseBehavior::Normal) ? 0 : 1;
+  releaseBehaviorSelector.setSelectedItemIndex(releaseBehaviorIndex,
+                                               juce::dontSendNotification);
 
   // Set release duration
-  releaseDurationSlider.setValue(currentZone->releaseDurationMs, juce::dontSendNotification);
+  releaseDurationSlider.setValue(currentZone->releaseDurationMs,
+                                 juce::dontSendNotification);
 
-  allowSustainToggle.setToggleState(currentZone->allowSustain, juce::dontSendNotification);
+  allowSustainToggle.setToggleState(currentZone->allowSustain,
+                                    juce::dontSendNotification);
   baseVelSlider.setValue(currentZone->baseVelocity, juce::dontSendNotification);
-  randVelSlider.setValue(currentZone->velocityRandom, juce::dontSendNotification);
-  strictGhostToggle.setToggleState(currentZone->strictGhostHarmony, juce::dontSendNotification);
-  ghostVelSlider.setValue(currentZone->ghostVelocityScale * 100.0, juce::dontSendNotification);
-  bassToggle.setToggleState(currentZone->addBassNote, juce::dontSendNotification);
-  bassOctaveSlider.setValue(currentZone->bassOctaveOffset, juce::dontSendNotification);
+  randVelSlider.setValue(currentZone->velocityRandom,
+                         juce::dontSendNotification);
+  strictGhostToggle.setToggleState(currentZone->strictGhostHarmony,
+                                   juce::dontSendNotification);
+  ghostVelSlider.setValue(currentZone->ghostVelocityScale * 100.0,
+                          juce::dontSendNotification);
+  bassToggle.setToggleState(currentZone->addBassNote,
+                            juce::dontSendNotification);
+  bassOctaveSlider.setValue(currentZone->bassOctaveOffset,
+                            juce::dontSendNotification);
   bassOctaveSlider.setEnabled(currentZone->addBassNote);
-  displayModeSelector.setSelectedId(currentZone->showRomanNumerals ? 2 : 1, juce::dontSendNotification);
+  displayModeSelector.setSelectedId(currentZone->showRomanNumerals ? 2 : 1,
+                                    juce::dontSendNotification);
 
   // Set polyphony mode
   int polyModeId = 1; // Default to Poly
@@ -1075,19 +1191,22 @@ void ZonePropertiesPanel::updateControlsFromZone() {
   polyphonyModeSelector.setSelectedId(polyModeId, juce::dontSendNotification);
 
   // Set glide time
-  glideTimeSlider.setValue(currentZone->glideTimeMs, juce::dontSendNotification);
+  glideTimeSlider.setValue(currentZone->glideTimeMs,
+                           juce::dontSendNotification);
 
   chipList.setKeys(currentZone->inputKeyCodes);
 
-  globalScaleToggle.setToggleState(currentZone->useGlobalScale, juce::dontSendNotification);
-  globalRootToggle.setToggleState(currentZone->useGlobalRoot, juce::dontSendNotification);
+  globalScaleToggle.setToggleState(currentZone->useGlobalScale,
+                                   juce::dontSendNotification);
+  globalRootToggle.setToggleState(currentZone->useGlobalRoot,
+                                  juce::dontSendNotification);
   updateVisibility();
 
   if (scaleLibrary && zoneManager)
     rebuildZoneCache();
 
   updateKeysAssignedLabel();
-  
+
   // Notify parent that resize might be needed
   if (onResizeRequested) {
     onResizeRequested();
@@ -1108,10 +1227,30 @@ void ZonePropertiesPanel::updateVisibility() {
   editScaleButton.setEnabled((!piano) && (!useGlobalScale));
   rootSlider.setEnabled(!useGlobalRoot);
   
-  // Show glide time slider only for Legato mode
+  // Show glide controls only for Legato mode
   bool isLegato = (currentZone->polyphonyMode == PolyphonyMode::Legato);
   glideTimeSlider.setVisible(isLegato);
   glideTimeLabel.setVisible(isLegato);
+  adaptiveGlideToggle.setVisible(isLegato);
+  
+  // Show max glide time slider only for Adaptive mode
+  bool isAdaptive = isLegato && currentZone->isAdaptiveGlide;
+  maxGlideTimeSlider.setVisible(isAdaptive);
+  maxGlideTimeLabel.setVisible(isAdaptive);
+  
+  // Update glide time label text based on adaptive mode
+  if (isLegato) {
+    if (currentZone->isAdaptiveGlide) {
+      glideTimeLabel.setText("Glide Time / Min:", juce::dontSendNotification);
+    } else {
+      glideTimeLabel.setText("Glide Time:", juce::dontSendNotification);
+    }
+  }
+  
+  // Show warning label for Mono/Legato modes (Phase 26.2)
+  bool isMonoOrLegato = (currentZone->polyphonyMode == PolyphonyMode::Mono || 
+                         currentZone->polyphonyMode == PolyphonyMode::Legato);
+  monoWarningLabel.setVisible(isMonoOrLegato);
 }
 
 void ZonePropertiesPanel::rebuildZoneCache() {
@@ -1123,7 +1262,8 @@ void ZonePropertiesPanel::rebuildZoneCache() {
     intervals = scaleLibrary->getIntervals(zoneManager->getGlobalScaleName());
   else {
     int idx = scaleSelector.getSelectedItemIndex();
-    juce::String name = (idx >= 0) ? scaleSelector.getItemText(idx) : currentZone->scaleName;
+    juce::String name =
+        (idx >= 0) ? scaleSelector.getItemText(idx) : currentZone->scaleName;
     intervals = scaleLibrary->getIntervals(name);
   }
   if (globalRootToggle.getToggleState())
@@ -1137,20 +1277,20 @@ void ZonePropertiesPanel::rebuildZoneCache() {
 void ZonePropertiesPanel::refreshAliasSelector() {
   aliasSelector.clear();
   aliasSelector.addItem("Any / Master", 1);
-  
+
   if (deviceManager) {
     auto aliases = deviceManager->getAllAliasNames();
     for (int i = 0; i < aliases.size(); ++i) {
       aliasSelector.addItem(aliases[i], i + 2);
     }
   }
-  
+
   aliasSelector.setSelectedItemIndex(0, juce::dontSendNotification);
 }
 
 void ZonePropertiesPanel::refreshScaleSelector() {
   scaleSelector.clear();
-  
+
   if (scaleLibrary) {
     auto scaleNames = scaleLibrary->getScaleNames();
     for (int i = 0; i < scaleNames.size(); ++i) {
@@ -1162,7 +1302,8 @@ void ZonePropertiesPanel::refreshScaleSelector() {
   }
 }
 
-void ZonePropertiesPanel::handleRawKeyEvent(uintptr_t deviceHandle, int keyCode, bool isDown) {
+void ZonePropertiesPanel::handleRawKeyEvent(uintptr_t deviceHandle, int keyCode,
+                                            bool isDown) {
   if (!currentZone)
     return;
 
@@ -1220,11 +1361,13 @@ void ZonePropertiesPanel::handleRawKeyEvent(uintptr_t deviceHandle, int keyCode,
   }
 }
 
-void ZonePropertiesPanel::handleAxisEvent(uintptr_t deviceHandle, int inputCode, float value) {
+void ZonePropertiesPanel::handleAxisEvent(uintptr_t deviceHandle, int inputCode,
+                                          float value) {
   // Ignore axis events during key capture
 }
 
-void ZonePropertiesPanel::changeListenerCallback(juce::ChangeBroadcaster *source) {
+void ZonePropertiesPanel::changeListenerCallback(
+    juce::ChangeBroadcaster *source) {
   if (source == deviceManager) {
     juce::MessageManager::callAsync([this] {
       refreshAliasSelector();

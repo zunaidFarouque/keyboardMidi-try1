@@ -16,6 +16,9 @@ public:
   // Check if a glide is currently active
   bool isActive() const { return active; }
 
+  // Get current Pitch Bend value (for smooth handoff in Legato mode)
+  int getCurrentValue() const { return static_cast<int>(currentPbValue); }
+
   // HighResolutionTimer callback
   void hiResTimerCallback() override;
 

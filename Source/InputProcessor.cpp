@@ -567,10 +567,18 @@ void InputProcessor::processEvent(InputID input, bool isDown) {
 
             if (zone->playMode == Zone::PlayMode::Direct) {
               int releaseMs = zone->releaseDurationMs;
+              
+              // Calculate adaptive glide speed if enabled (Phase 26.1)
+              int glideSpeed = zone->glideTimeMs; // Default to static time
+              if (zone->isAdaptiveGlide && zone->polyphonyMode == PolyphonyMode::Legato) {
+                rhythmAnalyzer.logTap(); // Log note onset
+                glideSpeed = rhythmAnalyzer.getAdaptiveSpeed(zone->glideTimeMs, zone->maxGlideTimeMs);
+              }
+              
               if (finalNotes.size() > 1) {
                 voiceManager.noteOn(input, finalNotes, finalVelocities,
                                     midiAction.channel, zone->strumSpeedMs,
-                                    allowSustain, releaseMs);
+                                    allowSustain, releaseMs, zone->polyphonyMode, glideSpeed);
                 // Track last note (use first note of chord)
                 if (!finalNotes.empty()) {
                   lastTriggeredNote = finalNotes.front();
@@ -578,15 +586,23 @@ void InputProcessor::processEvent(InputID input, bool isDown) {
               } else {
                 voiceManager.noteOn(input, finalNotes.front(),
                                     finalVelocities.front(), midiAction.channel,
-                                    allowSustain, releaseMs);
+                                    allowSustain, releaseMs, zone->polyphonyMode, glideSpeed);
                 // Track last note
                 lastTriggeredNote = finalNotes.front();
               }
             } else if (zone->playMode == Zone::PlayMode::Strum) {
               int strumMs = (zone->strumSpeedMs > 0) ? zone->strumSpeedMs : 50;
+              
+              // Calculate adaptive glide speed if enabled (Phase 26.1)
+              int glideSpeed = zone->glideTimeMs; // Default to static time
+              if (zone->isAdaptiveGlide && zone->polyphonyMode == PolyphonyMode::Legato) {
+                rhythmAnalyzer.logTap(); // Log note onset
+                glideSpeed = rhythmAnalyzer.getAdaptiveSpeed(zone->glideTimeMs, zone->maxGlideTimeMs);
+              }
+              
               voiceManager.handleKeyUp(lastStrumSource);
               voiceManager.noteOn(input, finalNotes, finalVelocities,
-                                  midiAction.channel, strumMs, allowSustain, 0, zone->polyphonyMode, zone->glideTimeMs);
+                                  midiAction.channel, strumMs, allowSustain, 0, zone->polyphonyMode, glideSpeed);
               lastStrumSource = input;
               // Track last note (use first note of chord for strum)
               if (!finalNotes.empty()) {

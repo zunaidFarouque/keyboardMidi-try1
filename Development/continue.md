@@ -9,26 +9,6 @@ is it possible?
 and will it harm my performance optimizations?
 
 
-
----
-
-===
-
----
-
-pitch bend conflict handling...
-
-scenario:
-```
-when another pitch bend is pressed (A) (from normal pitch bend or smart scale bend), and we press on another one (B), the B overrides A.
-if B is released while A is held, the pitch bend goes back to A.
-
-OR
-
-if A is released while B is held, A should not reset the pitch bend (it used to do it) because another key is held, and that has more priority.
-```
-
-
 ---
 
 ===
@@ -36,3 +16,13 @@ if A is released while B is held, A should not reset the pitch bend (it used to 
 ---
 
 THE Window uses 10% of my CPU at all the time. even if I dont use it. this is huge! why is that?
+
+
+---
+
+===
+
+---
+
+Thank you. now, as I will use HALion, I should be able to send PRNs to send the pitchbend range. that would be useful.
+an option/button to send the PRN data now would be useful too.
