@@ -26,5 +26,9 @@ private:
   ZonePropertiesPanel propertiesPanel;
   juce::Viewport propertiesViewport;
 
+  // Resizable layout for list and properties
+  juce::StretchableLayoutManager horizontalLayout;
+  juce::StretchableLayoutResizerBar resizerBar;
+
   JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(ZoneEditorComponent)
 };

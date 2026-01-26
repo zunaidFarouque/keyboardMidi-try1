@@ -13,8 +13,8 @@ public:
   ~VoiceManager() = default;
 
   // --- Note playback ---
-  void noteOn(InputID source, int note, int vel, int channel, bool allowSustain = true);
-  void noteOn(InputID source, const std::vector<int>& notes, const std::vector<int>& velocities, int channel, int strumSpeedMs, bool allowSustain = true);
+  void noteOn(InputID source, int note, int vel, int channel, bool allowSustain = true, int releaseMs = 0);
+  void noteOn(InputID source, const std::vector<int>& notes, const std::vector<int>& velocities, int channel, int strumSpeedMs, bool allowSustain = true, int releaseMs = 0);
 
   void strumNotes(const std::vector<int>& notes, int speedMs, bool downstroke);
 
@@ -50,6 +50,7 @@ private:
     InputID source;
     bool allowSustain;
     VoiceState state;
+    int releaseMs = 0; // Zone release envelope; 0 = instant NoteOff
   };
 
   void addVoiceFromStrum(InputID source, int note, int channel, bool allowSustain);
@@ -63,11 +64,18 @@ private:
     bool shouldSustain;
   };
 
+  struct PendingNoteOff {
+    int note;
+    int channel;
+    double targetTimeMs;
+  };
+
   MidiEngine& midiEngine;
   StrumEngine strumEngine;
   mutable std::vector<ActiveVoice> voices; // Mutable for const accessors
   mutable juce::CriticalSection voicesLock; // Mutable for const accessors
   std::unordered_map<InputID, PendingRelease> pendingReleases; // Track releases waiting for expiration
+  std::vector<PendingNoteOff> releaseQueue; // Delayed NoteOff (Phase 21.3)
   juce::CriticalSection releasesLock;
 
   bool globalSustainActive = false;

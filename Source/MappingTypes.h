@@ -7,7 +7,8 @@ enum class ActionType {
   Note,    // MIDI Note
   CC,     // MIDI Control Change
   Command,// Sustain/Latch/Panic (data1 = CommandID)
-  Macro   // Future: Custom macro actions
+  Macro,  // Future: Custom macro actions
+  Envelope// ADSR envelope (data1 = CC number or 0 for Pitch Bend, data2 = peak value)
 };
 
 // Command IDs for ActionType::Command (stored in MidiAction::data1)
@@ -35,6 +36,16 @@ namespace InputTypes {
   constexpr int PointerY   = 0x2001;
 }
 
+// ADSR envelope settings (Phase 23.1)
+struct AdsrSettings {
+  int attackMs = 10;   // Attack time in milliseconds
+  int decayMs = 10;    // Decay time in milliseconds
+  float sustainLevel = 0.7f; // Sustain level (0.0-1.0)
+  int releaseMs = 100; // Release time in milliseconds
+  bool isPitchBend = false; // If true, output Pitch Bend; else CC
+  int ccNumber = 1;    // CC number (if not Pitch Bend)
+};
+
 // Represents a MIDI action to be performed
 struct MidiAction {
   ActionType type;
@@ -42,6 +53,7 @@ struct MidiAction {
   int data1; // Note number or CC number
   int data2; // Velocity or CC value
   int velocityRandom = 0; // Velocity randomization range (0 = no randomization)
+  AdsrSettings adsrSettings; // ADSR settings (for ActionType::Envelope)
 };
 
 // Represents a unique input source (device + key)

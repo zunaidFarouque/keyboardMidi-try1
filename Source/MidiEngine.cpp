@@ -60,6 +60,15 @@ void MidiEngine::sendCC(int channel, int controller, int value) {
   }
 }
 
+void MidiEngine::sendPitchBend(int channel, int value) {
+  if (currentOutput) {
+    // Clamp value to valid range (0-16383)
+    value = juce::jlimit(0, 16383, value);
+    auto msg = juce::MidiMessage::pitchWheel(channel, value);
+    currentOutput->sendMessageNow(msg);
+  }
+}
+
 void MidiEngine::allNotesOff() {
   if (currentOutput) {
     for (int ch = 1; ch <= 16; ++ch) {

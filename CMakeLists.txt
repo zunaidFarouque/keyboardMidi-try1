@@ -55,6 +55,7 @@ target_sources(OmniKey PRIVATE
     Source/StartupManager.cpp
     Source/ChordUtilities.cpp
     Source/StrumEngine.cpp
+    Source/ExpressionEngine.cpp
 )
 
 # 5. Definitions (Fixes Macro Hell globally)

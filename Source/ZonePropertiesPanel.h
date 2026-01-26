@@ -49,9 +49,11 @@ private:
   juce::TextEditor nameEditor;
   juce::Label scaleLabel;
   juce::ComboBox scaleSelector;
+  juce::ToggleButton globalScaleToggle;
   juce::TextButton editScaleButton;
   juce::Label rootLabel;
   juce::Slider rootSlider;
+  juce::ToggleButton globalRootToggle;
   juce::Label chromaticOffsetLabel;
   juce::Slider chromaticOffsetSlider;
   juce::Label degreeOffsetLabel;
@@ -99,6 +101,8 @@ private:
   void refreshScaleSelector();
   void updateControlsFromZone();
   void updateKeysAssignedLabel();
+  void updateVisibility();
+  void rebuildZoneCache();
 
   // ChangeListener implementation
   void changeListenerCallback(juce::ChangeBroadcaster *source) override;

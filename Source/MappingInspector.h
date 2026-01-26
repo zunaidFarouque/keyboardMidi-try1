@@ -48,12 +48,31 @@ private:
   juce::Label commandLabel;
   juce::ComboBox commandSelector;
 
+  // ADSR controls (for Envelope type)
+  juce::Slider attackSlider;
+  juce::Slider decaySlider;
+  juce::Slider sustainSlider;
+  juce::Slider releaseSlider;
+  juce::Label attackLabel;
+  juce::Label decayLabel;
+  juce::Label sustainLabel;
+  juce::Label releaseLabel;
+  juce::ComboBox envTargetSelector;
+  juce::Label envTargetLabel;
+
+  // Pitch Bend musical controls (for Envelope with PitchBend target)
+  juce::Slider pbRangeSlider;
+  juce::Slider pbShiftSlider;
+  juce::Label pbRangeLabel;
+  juce::Label pbShiftLabel;
+
   // Helper methods
   void updateControlsFromSelection();
   void enableControls(bool enabled);
   bool allTreesHaveSameValue(const juce::Identifier &property);
   juce::var getCommonValue(const juce::Identifier &property);
   void refreshAliasSelector();
+  void updatePitchBendPeakValue(juce::ValueTree& tree); // Calculate and set data2 from pbRange/pbShift
 
   JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(MappingInspector)
 };

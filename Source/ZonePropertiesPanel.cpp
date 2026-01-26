@@ -69,13 +69,19 @@ ZonePropertiesPanel::ZonePropertiesPanel(ZoneManager *zoneMgr, DeviceManager *de
       if (selected >= 0) {
         juce::String scaleName = scaleSelector.getItemText(selected);
         currentZone->scaleName = scaleName;
-        // Rebuild cache when scale changes (Phase 21: pass intervals + root; keep local behavior)
-        if (zoneManager) {
-          std::vector<int> intervals = scaleLibrary->getIntervals(scaleName);
-          currentZone->rebuildCache(intervals, currentZone->rootNote);
-          zoneManager->sendChangeMessage();
-        }
+        if (zoneManager)
+          rebuildZoneCache();
       }
+    }
+  };
+
+  addAndMakeVisible(globalScaleToggle);
+  globalScaleToggle.setButtonText("Global");
+  globalScaleToggle.onClick = [this] {
+    if (currentZone && zoneManager) {
+      currentZone->useGlobalScale = globalScaleToggle.getToggleState();
+      updateVisibility();
+      rebuildZoneCache();
     }
   };
 
@@ -123,10 +129,17 @@ ZonePropertiesPanel::ZonePropertiesPanel(ZoneManager *zoneMgr, DeviceManager *de
   rootSlider.onValueChange = [this] {
     if (currentZone && scaleLibrary && zoneManager) {
       currentZone->rootNote = static_cast<int>(rootSlider.getValue());
-      // Rebuild cache when root note changes (Phase 21: pass intervals + root)
-      std::vector<int> intervals = scaleLibrary->getIntervals(currentZone->scaleName);
-      currentZone->rebuildCache(intervals, currentZone->rootNote);
-      zoneManager->sendChangeMessage();
+      rebuildZoneCache();
+    }
+  };
+
+  addAndMakeVisible(globalRootToggle);
+  globalRootToggle.setButtonText("Global");
+  globalRootToggle.onClick = [this] {
+    if (currentZone && zoneManager) {
+      currentZone->useGlobalRoot = globalRootToggle.getToggleState();
+      updateVisibility();
+      rebuildZoneCache();
     }
   };
 
@@ -166,10 +179,7 @@ ZonePropertiesPanel::ZonePropertiesPanel(ZoneManager *zoneMgr, DeviceManager *de
   degreeOffsetSlider.onValueChange = [this] {
     if (currentZone && scaleLibrary && zoneManager) {
       currentZone->degreeOffset = static_cast<int>(degreeOffsetSlider.getValue());
-      // Rebuild cache when degree offset changes (Phase 21: pass intervals + root)
-      std::vector<int> intervals = scaleLibrary->getIntervals(currentZone->scaleName);
-      currentZone->rebuildCache(intervals, currentZone->rootNote);
-      zoneManager->sendChangeMessage();
+      rebuildZoneCache();
     }
   };
 
@@ -219,20 +229,12 @@ ZonePropertiesPanel::ZonePropertiesPanel(ZoneManager *zoneMgr, DeviceManager *de
       } else if (selected == 2) {
         currentZone->layoutStrategy = Zone::LayoutStrategy::Piano;
       }
-      // Enable/disable grid interval slider based on strategy
       gridIntervalSlider.setEnabled(currentZone->layoutStrategy == Zone::LayoutStrategy::Grid);
-      // Enable/disable scale selector based on strategy (Piano ignores scale)
-      scaleSelector.setEnabled(currentZone->layoutStrategy != Zone::LayoutStrategy::Piano);
-      editScaleButton.setEnabled(currentZone->layoutStrategy != Zone::LayoutStrategy::Piano);
-      
-      // Show/hide piano help label based on strategy
       pianoHelpLabel.setVisible(currentZone->layoutStrategy == Zone::LayoutStrategy::Piano);
-      
-      // Rebuild cache when strategy changes (Phase 21: pass intervals + root)
+      updateVisibility();
       if (zoneManager && scaleLibrary) {
-        std::vector<int> intervals = scaleLibrary->getIntervals(currentZone->scaleName);
-        currentZone->rebuildCache(intervals, currentZone->rootNote);
-        zoneManager->rebuildLookupTable(); // Rebuild lookup table (keys might be reorganized)
+        rebuildZoneCache();
+        zoneManager->rebuildLookupTable();
         zoneManager->sendChangeMessage();
       }
       
@@ -294,10 +296,8 @@ ZonePropertiesPanel::ZonePropertiesPanel(ZoneManager *zoneMgr, DeviceManager *de
         } else if (selected == 4) {
           currentZone->chordType = ChordUtilities::ChordType::Power5;
         }
-        // Rebuild cache when chord type changes (Phase 21: pass intervals + root)
         if (zoneManager && scaleLibrary) {
-          std::vector<int> intervals = scaleLibrary->getIntervals(currentZone->scaleName);
-          currentZone->rebuildCache(intervals, currentZone->rootNote);
+          rebuildZoneCache();
           zoneManager->sendChangeMessage();
         }
       }
@@ -329,10 +329,8 @@ ZonePropertiesPanel::ZonePropertiesPanel(ZoneManager *zoneMgr, DeviceManager *de
         } else if (selected == 4) {
           currentZone->voicing = ChordUtilities::Voicing::GuitarFilled;
         }
-        // Rebuild cache when voicing changes (Phase 21: pass intervals + root)
         if (zoneManager && scaleLibrary) {
-          std::vector<int> intervals = scaleLibrary->getIntervals(currentZone->scaleName);
-          currentZone->rebuildCache(intervals, currentZone->rootNote);
+          rebuildZoneCache();
           zoneManager->sendChangeMessage();
         }
       }
@@ -407,7 +405,7 @@ ZonePropertiesPanel::ZonePropertiesPanel(ZoneManager *zoneMgr, DeviceManager *de
   releaseDurationLabel.attachToComponent(&releaseDurationSlider, true);
 
   addAndMakeVisible(releaseDurationSlider);
-  releaseDurationSlider.setRange(0, 2000, 1);
+  releaseDurationSlider.setRange(0, 5000, 1);
   releaseDurationSlider.setValue(0);
   releaseDurationSlider.setTextValueSuffix(" ms");
   releaseDurationSlider.onValueChange = [this] {
@@ -472,10 +470,8 @@ ZonePropertiesPanel::ZonePropertiesPanel(ZoneManager *zoneMgr, DeviceManager *de
   strictGhostToggle.onClick = [this] {
     if (currentZone) {
       currentZone->strictGhostHarmony = strictGhostToggle.getToggleState();
-      // Rebuild cache when ghost harmony mode changes (Phase 21: pass intervals + root)
       if (zoneManager && scaleLibrary) {
-        std::vector<int> intervals = scaleLibrary->getIntervals(currentZone->scaleName);
-        currentZone->rebuildCache(intervals, currentZone->rootNote);
+        rebuildZoneCache();
         zoneManager->sendChangeMessage();
       }
     }
@@ -507,10 +503,8 @@ ZonePropertiesPanel::ZonePropertiesPanel(ZoneManager *zoneMgr, DeviceManager *de
     if (currentZone) {
       currentZone->addBassNote = bassToggle.getToggleState();
       bassOctaveSlider.setEnabled(bassToggle.getToggleState());
-      // Rebuild cache when bass setting changes (Phase 21: pass intervals + root)
       if (zoneManager && scaleLibrary) {
-        std::vector<int> intervals = scaleLibrary->getIntervals(currentZone->scaleName);
-        currentZone->rebuildCache(intervals, currentZone->rootNote);
+        rebuildZoneCache();
         zoneManager->sendChangeMessage();
       }
     }
@@ -529,10 +523,8 @@ ZonePropertiesPanel::ZonePropertiesPanel(ZoneManager *zoneMgr, DeviceManager *de
   bassOctaveSlider.onValueChange = [this] {
     if (currentZone) {
       currentZone->bassOctaveOffset = static_cast<int>(bassOctaveSlider.getValue());
-      // Rebuild cache when bass octave changes (Phase 21: pass intervals + root)
       if (zoneManager && scaleLibrary) {
-        std::vector<int> intervals = scaleLibrary->getIntervals(currentZone->scaleName);
-        currentZone->rebuildCache(intervals, currentZone->rootNote);
+        rebuildZoneCache();
         zoneManager->sendChangeMessage();
       }
     }
@@ -550,10 +542,8 @@ ZonePropertiesPanel::ZonePropertiesPanel(ZoneManager *zoneMgr, DeviceManager *de
   displayModeSelector.onChange = [this] {
     if (currentZone) {
       currentZone->showRomanNumerals = (displayModeSelector.getSelectedId() == 2);
-      // Rebuild cache when display mode changes (Phase 21: pass intervals + root)
       if (zoneManager && scaleLibrary) {
-        std::vector<int> intervals = scaleLibrary->getIntervals(currentZone->scaleName);
-        currentZone->rebuildCache(intervals, currentZone->rootNote);
+        rebuildZoneCache();
         zoneManager->sendChangeMessage();
       }
     }
@@ -635,10 +625,8 @@ ZonePropertiesPanel::ZonePropertiesPanel(ZoneManager *zoneMgr, DeviceManager *de
       currentZone->removeKey(keyCode);
       chipList.setKeys(currentZone->inputKeyCodes);
       updateKeysAssignedLabel();
-      // Rebuild cache when keys are removed (Phase 21: pass intervals + root)
-      std::vector<int> intervals = scaleLibrary->getIntervals(currentZone->scaleName);
-      currentZone->rebuildCache(intervals, currentZone->rootNote);
-      zoneManager->rebuildLookupTable(); // Rebuild lookup table when keys change
+      rebuildZoneCache();
+      zoneManager->rebuildLookupTable();
       zoneManager->sendChangeMessage();
       // Notify parent that resize is needed
       if (onResizeRequested) {
@@ -695,14 +683,17 @@ void ZonePropertiesPanel::resized() {
   nameEditor.setBounds(leftMargin, y, width, rowHeight);
   y += rowHeight + spacing;
 
-  // Scale (selector + edit button)
+  // Scale (selector + Global toggle + edit button)
   auto scaleArea = juce::Rectangle<int>(leftMargin, y, width, rowHeight);
   editScaleButton.setBounds(scaleArea.removeFromRight(60).reduced(2));
+  globalScaleToggle.setBounds(scaleArea.removeFromRight(52).reduced(2));
   scaleSelector.setBounds(scaleArea);
   y += rowHeight + spacing;
 
-  // Root Note
-  rootSlider.setBounds(leftMargin, y, width, rowHeight);
+  // Root Note (+ Global toggle)
+  auto rootArea = juce::Rectangle<int>(leftMargin, y, width, rowHeight);
+  globalRootToggle.setBounds(rootArea.removeFromRight(52).reduced(2));
+  rootSlider.setBounds(rootArea);
   y += rowHeight + spacing;
 
   // Chromatic Offset
@@ -845,7 +836,9 @@ void ZonePropertiesPanel::updateControlsFromZone() {
     aliasSelector.setEnabled(false);
     nameEditor.setEnabled(false);
     scaleSelector.setEnabled(false);
+    globalScaleToggle.setEnabled(false);
     rootSlider.setEnabled(false);
+    globalRootToggle.setEnabled(false);
     chromaticOffsetSlider.setEnabled(false);
     degreeOffsetSlider.setEnabled(false);
     transposeLockButton.setEnabled(false);
@@ -878,7 +871,9 @@ void ZonePropertiesPanel::updateControlsFromZone() {
   aliasSelector.setEnabled(true);
   nameEditor.setEnabled(true);
   scaleSelector.setEnabled(true);
+  globalScaleToggle.setEnabled(true);
   rootSlider.setEnabled(true);
+  globalRootToggle.setEnabled(true);
   chromaticOffsetSlider.setEnabled(true);
   degreeOffsetSlider.setEnabled(true);
   transposeLockButton.setEnabled(true);
@@ -957,10 +952,6 @@ void ZonePropertiesPanel::updateControlsFromZone() {
   // Show/hide piano help label
   pianoHelpLabel.setVisible(currentZone->layoutStrategy == Zone::LayoutStrategy::Piano);
   
-  // Enable/disable scale selector based on strategy
-  scaleSelector.setEnabled(currentZone->layoutStrategy != Zone::LayoutStrategy::Piano);
-  editScaleButton.setEnabled(currentZone->layoutStrategy != Zone::LayoutStrategy::Piano);
-
   // Set MIDI channel
   channelSlider.setValue(currentZone->midiChannel, juce::dontSendNotification);
 
@@ -1015,15 +1006,15 @@ void ZonePropertiesPanel::updateControlsFromZone() {
   bassOctaveSlider.setEnabled(currentZone->addBassNote);
   displayModeSelector.setSelectedId(currentZone->showRomanNumerals ? 2 : 1, juce::dontSendNotification);
 
-  // Update chip list
   chipList.setKeys(currentZone->inputKeyCodes);
-  
-  // Rebuild cache when zone is set (Phase 21: pass intervals + root)
-  if (scaleLibrary && zoneManager) {
-    std::vector<int> intervals = scaleLibrary->getIntervals(currentZone->scaleName);
-    currentZone->rebuildCache(intervals, currentZone->rootNote);
-  }
-  
+
+  globalScaleToggle.setToggleState(currentZone->useGlobalScale, juce::dontSendNotification);
+  globalRootToggle.setToggleState(currentZone->useGlobalRoot, juce::dontSendNotification);
+  updateVisibility();
+
+  if (scaleLibrary && zoneManager)
+    rebuildZoneCache();
+
   updateKeysAssignedLabel();
   
   // Notify parent that resize might be needed
@@ -1034,6 +1025,37 @@ void ZonePropertiesPanel::updateControlsFromZone() {
 
 void ZonePropertiesPanel::updateKeysAssignedLabel() {
   // Label removed - chip list now shows keys visually
+}
+
+void ZonePropertiesPanel::updateVisibility() {
+  if (!currentZone)
+    return;
+  bool piano = (currentZone->layoutStrategy == Zone::LayoutStrategy::Piano);
+  bool useGlobalScale = globalScaleToggle.getToggleState();
+  bool useGlobalRoot = globalRootToggle.getToggleState();
+  scaleSelector.setEnabled((!piano) && (!useGlobalScale));
+  editScaleButton.setEnabled((!piano) && (!useGlobalScale));
+  rootSlider.setEnabled(!useGlobalRoot);
+}
+
+void ZonePropertiesPanel::rebuildZoneCache() {
+  if (!currentZone || !zoneManager || !scaleLibrary)
+    return;
+  std::vector<int> intervals;
+  int root;
+  if (globalScaleToggle.getToggleState())
+    intervals = scaleLibrary->getIntervals(zoneManager->getGlobalScaleName());
+  else {
+    int idx = scaleSelector.getSelectedItemIndex();
+    juce::String name = (idx >= 0) ? scaleSelector.getItemText(idx) : currentZone->scaleName;
+    intervals = scaleLibrary->getIntervals(name);
+  }
+  if (globalRootToggle.getToggleState())
+    root = zoneManager->getGlobalRootNote();
+  else
+    root = static_cast<int>(rootSlider.getValue());
+  currentZone->rebuildCache(intervals, root);
+  zoneManager->sendChangeMessage();
 }
 
 void ZonePropertiesPanel::refreshAliasSelector() {
@@ -1082,11 +1104,9 @@ void ZonePropertiesPanel::handleRawKeyEvent(uintptr_t deviceHandle, int keyCode,
       juce::MessageManager::callAsync([this] {
         chipList.setKeys(currentZone->inputKeyCodes);
         updateKeysAssignedLabel();
-        // Rebuild cache when keys are added (Phase 21: pass intervals + root)
         if (scaleLibrary && zoneManager) {
-          std::vector<int> intervals = scaleLibrary->getIntervals(currentZone->scaleName);
-          currentZone->rebuildCache(intervals, currentZone->rootNote);
-          zoneManager->rebuildLookupTable(); // Rebuild lookup table when keys change
+          rebuildZoneCache();
+          zoneManager->rebuildLookupTable();
           zoneManager->sendChangeMessage();
         }
         // Notify parent that resize is needed
@@ -1109,11 +1129,9 @@ void ZonePropertiesPanel::handleRawKeyEvent(uintptr_t deviceHandle, int keyCode,
       juce::MessageManager::callAsync([this] {
         chipList.setKeys(currentZone->inputKeyCodes);
         updateKeysAssignedLabel();
-        // Rebuild cache when keys are removed (Phase 21: pass intervals + root)
         if (scaleLibrary && zoneManager) {
-          std::vector<int> intervals = scaleLibrary->getIntervals(currentZone->scaleName);
-          currentZone->rebuildCache(intervals, currentZone->rootNote);
-          zoneManager->rebuildLookupTable(); // Rebuild lookup table when keys change
+          rebuildZoneCache();
+          zoneManager->rebuildLookupTable();
           zoneManager->sendChangeMessage();
         }
         // Notify parent that resize is needed

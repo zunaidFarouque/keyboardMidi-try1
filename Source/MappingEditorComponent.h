@@ -57,5 +57,9 @@ private:
   MappingInspector inspector;
   juce::Viewport inspectorViewport;
 
+  // Resizable layout for table and inspector
+  juce::StretchableLayoutManager horizontalLayout;
+  juce::StretchableLayoutResizerBar resizerBar;
+
   JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(MappingEditorComponent)
 };

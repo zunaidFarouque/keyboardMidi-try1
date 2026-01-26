@@ -45,6 +45,172 @@ MappingInspector::MappingInspector(juce::UndoManager *undoMgr, DeviceManager *de
   addAndMakeVisible(aliasLabel);
   addAndMakeVisible(aliasSelector);
 
+  // Setup ADSR controls (initially hidden)
+  attackLabel.setText("A:", juce::dontSendNotification);
+  attackLabel.attachToComponent(&attackSlider, true);
+  addAndMakeVisible(attackLabel);
+  addAndMakeVisible(attackSlider);
+  attackSlider.setRange(0, 5000, 1);
+  attackSlider.setTextValueSuffix(" ms");
+  attackSlider.setVisible(false);
+  attackLabel.setVisible(false);
+
+  decayLabel.setText("D:", juce::dontSendNotification);
+  decayLabel.attachToComponent(&decaySlider, true);
+  addAndMakeVisible(decayLabel);
+  addAndMakeVisible(decaySlider);
+  decaySlider.setRange(0, 5000, 1);
+  decaySlider.setTextValueSuffix(" ms");
+  decaySlider.setVisible(false);
+  decayLabel.setVisible(false);
+
+  sustainLabel.setText("S:", juce::dontSendNotification);
+  sustainLabel.attachToComponent(&sustainSlider, true);
+  addAndMakeVisible(sustainLabel);
+  addAndMakeVisible(sustainSlider);
+  sustainSlider.setRange(0, 127, 1);
+  sustainSlider.setTextValueSuffix("");
+  sustainSlider.setVisible(false);
+  sustainLabel.setVisible(false);
+
+  releaseLabel.setText("R:", juce::dontSendNotification);
+  releaseLabel.attachToComponent(&releaseSlider, true);
+  addAndMakeVisible(releaseLabel);
+  addAndMakeVisible(releaseSlider);
+  releaseSlider.setRange(0, 5000, 1);
+  releaseSlider.setTextValueSuffix(" ms");
+  releaseSlider.setVisible(false);
+  releaseLabel.setVisible(false);
+
+  envTargetLabel.setText("Target:", juce::dontSendNotification);
+  envTargetLabel.attachToComponent(&envTargetSelector, true);
+  addAndMakeVisible(envTargetLabel);
+  addAndMakeVisible(envTargetSelector);
+  envTargetSelector.addItem("CC", 1);
+  envTargetSelector.addItem("Pitch Bend", 2);
+  envTargetSelector.setVisible(false);
+  envTargetLabel.setVisible(false);
+
+  // ADSR slider callbacks
+  attackSlider.onValueChange = [this] {
+    if (selectedTrees.empty())
+      return;
+    if (attackSlider.getTextValueSuffix().contains("---"))
+      return;
+    undoManager->beginNewTransaction("Change ADSR Attack");
+    int value = static_cast<int>(attackSlider.getValue());
+    for (auto &tree : selectedTrees) {
+      if (tree.isValid())
+        tree.setProperty("adsrAttack", value, undoManager);
+    }
+  };
+
+  decaySlider.onValueChange = [this] {
+    if (selectedTrees.empty())
+      return;
+    if (decaySlider.getTextValueSuffix().contains("---"))
+      return;
+    undoManager->beginNewTransaction("Change ADSR Decay");
+    int value = static_cast<int>(decaySlider.getValue());
+    for (auto &tree : selectedTrees) {
+      if (tree.isValid())
+        tree.setProperty("adsrDecay", value, undoManager);
+    }
+  };
+
+  sustainSlider.onValueChange = [this] {
+    if (selectedTrees.empty())
+      return;
+    if (sustainSlider.getTextValueSuffix().contains("---"))
+      return;
+    undoManager->beginNewTransaction("Change ADSR Sustain");
+    int value = static_cast<int>(sustainSlider.getValue());
+    for (auto &tree : selectedTrees) {
+      if (tree.isValid())
+        tree.setProperty("adsrSustain", value, undoManager);
+    }
+  };
+
+  releaseSlider.onValueChange = [this] {
+    if (selectedTrees.empty())
+      return;
+    if (releaseSlider.getTextValueSuffix().contains("---"))
+      return;
+    undoManager->beginNewTransaction("Change ADSR Release");
+    int value = static_cast<int>(releaseSlider.getValue());
+    for (auto &tree : selectedTrees) {
+      if (tree.isValid())
+        tree.setProperty("adsrRelease", value, undoManager);
+    }
+  };
+
+  envTargetSelector.onChange = [this] {
+    if (selectedTrees.empty())
+      return;
+    if (envTargetSelector.getSelectedId() < 1 || envTargetSelector.getSelectedId() > 2)
+      return;
+    undoManager->beginNewTransaction("Change Envelope Target");
+    juce::String targetStr = (envTargetSelector.getSelectedId() == 1) ? "CC" : "PitchBend";
+    for (auto &tree : selectedTrees) {
+      if (tree.isValid())
+        tree.setProperty("adsrTarget", targetStr, undoManager);
+    }
+    // Update visibility when target changes
+    updateControlsFromSelection();
+  };
+
+  // Setup Pitch Bend musical controls (initially hidden)
+  pbRangeLabel.setText("PB Range:", juce::dontSendNotification);
+  pbRangeLabel.attachToComponent(&pbRangeSlider, true);
+  addAndMakeVisible(pbRangeLabel);
+  addAndMakeVisible(pbRangeSlider);
+  pbRangeSlider.setRange(1, 48, 1);
+  pbRangeSlider.setTextValueSuffix(" semitones");
+  pbRangeSlider.setVisible(false);
+  pbRangeLabel.setVisible(false);
+
+  pbShiftLabel.setText("PB Shift:", juce::dontSendNotification);
+  pbShiftLabel.attachToComponent(&pbShiftSlider, true);
+  addAndMakeVisible(pbShiftLabel);
+  addAndMakeVisible(pbShiftSlider);
+  pbShiftSlider.setRange(-24, 24, 1);
+  pbShiftSlider.setTextValueSuffix(" semitones");
+  pbShiftSlider.setVisible(false);
+  pbShiftLabel.setVisible(false);
+
+  // Pitch Bend slider callbacks
+  pbRangeSlider.onValueChange = [this] {
+    if (selectedTrees.empty())
+      return;
+    if (pbRangeSlider.getTextValueSuffix().contains("---"))
+      return;
+    undoManager->beginNewTransaction("Change PB Range");
+    int value = static_cast<int>(pbRangeSlider.getValue());
+    for (auto &tree : selectedTrees) {
+      if (tree.isValid()) {
+        tree.setProperty("pbRange", value, undoManager);
+        // Recalculate and update data2 (peak value)
+        updatePitchBendPeakValue(tree);
+      }
+    }
+  };
+
+  pbShiftSlider.onValueChange = [this] {
+    if (selectedTrees.empty())
+      return;
+    if (pbShiftSlider.getTextValueSuffix().contains("---"))
+      return;
+    undoManager->beginNewTransaction("Change PB Shift");
+    int value = static_cast<int>(pbShiftSlider.getValue());
+    for (auto &tree : selectedTrees) {
+      if (tree.isValid()) {
+        tree.setProperty("pbShift", value, undoManager);
+        // Recalculate and update data2 (peak value)
+        updatePitchBendPeakValue(tree);
+      }
+    }
+  };
+
   // Setup Alias Selector
   refreshAliasSelector();
   aliasSelector.onChange = [this] {
@@ -82,6 +248,7 @@ MappingInspector::MappingInspector(juce::UndoManager *undoMgr, DeviceManager *de
   typeSelector.addItem("CC", 2);
   typeSelector.addItem("Command", 3);
   typeSelector.addItem("Macro", 4);
+  typeSelector.addItem("Envelope", 5);
   typeSelector.onChange = [this] {
     if (selectedTrees.empty())
       return;
@@ -96,6 +263,8 @@ MappingInspector::MappingInspector(juce::UndoManager *undoMgr, DeviceManager *de
       typeStr = "Command";
     else if (selectedId == 4)
       typeStr = "Macro";
+    else if (selectedId == 5)
+      typeStr = "Envelope";
     else
       return; // Invalid selection
 
@@ -309,6 +478,32 @@ void MappingInspector::resized() {
     y += controlHeight + spacing;
   }
 
+  // ADSR controls (for Envelope type) - layout in a 2x2 grid
+  if (attackSlider.isVisible()) {
+    int adsrY = y;
+    int adsrWidth = (width - spacing) / 2;
+    
+    attackSlider.setBounds(leftMargin, adsrY, adsrWidth, controlHeight);
+    decaySlider.setBounds(leftMargin + adsrWidth + spacing, adsrY, adsrWidth, controlHeight);
+    adsrY += controlHeight + spacing;
+    
+    sustainSlider.setBounds(leftMargin, adsrY, adsrWidth, controlHeight);
+    releaseSlider.setBounds(leftMargin + adsrWidth + spacing, adsrY, adsrWidth, controlHeight);
+    adsrY += controlHeight + spacing;
+    
+    envTargetSelector.setBounds(leftMargin, adsrY, width, controlHeight);
+    adsrY += controlHeight + spacing;
+    
+    // Pitch Bend controls (if visible)
+    if (pbRangeSlider.isVisible()) {
+      pbRangeSlider.setBounds(leftMargin, adsrY, adsrWidth, controlHeight);
+      pbShiftSlider.setBounds(leftMargin + adsrWidth + spacing, adsrY, adsrWidth, controlHeight);
+      adsrY += controlHeight + spacing;
+    }
+    
+    y = adsrY;
+  }
+
   y += 10; // Bottom padding
 
   // Set component size based on calculated height
@@ -367,6 +562,8 @@ void MappingInspector::updateControlsFromSelection() {
       typeSelector.setSelectedId(3, juce::dontSendNotification);
     else if (typeStr == "Macro")
       typeSelector.setSelectedId(4, juce::dontSendNotification);
+    else if (typeStr == "Envelope")
+      typeSelector.setSelectedId(5, juce::dontSendNotification);
     else
       typeSelector.setSelectedId(-1, juce::dontSendNotification);
   } else {
@@ -378,18 +575,50 @@ void MappingInspector::updateControlsFromSelection() {
   bool isCommand = (typeStr == "Command");
   bool isNoteOrCC = (typeStr == "Note" || typeStr == "CC" || typeStr == "Macro");
   bool isNote = (typeStr == "Note");
+  bool isEnvelope = (typeStr == "Envelope");
 
-  channelSlider.setVisible(isNoteOrCC);
-  channelLabel.setVisible(isNoteOrCC);
-  data1Slider.setVisible(isNoteOrCC);
-  data1Label.setVisible(isNoteOrCC);
-  data2Slider.setVisible(isNoteOrCC);
-  data2Label.setVisible(isNoteOrCC);
+  channelSlider.setVisible(isNoteOrCC || isEnvelope);
+  channelLabel.setVisible(isNoteOrCC || isEnvelope);
+  // data1Slider visibility for Envelope will be set later based on target
+  if (!isEnvelope) {
+    data1Slider.setVisible(isNoteOrCC);
+    data1Label.setVisible(isNoteOrCC);
+  }
+  data2Slider.setVisible(isNoteOrCC || isEnvelope);
+  data2Label.setVisible(isNoteOrCC || isEnvelope);
   randVelSlider.setVisible(isNote);
   randVelLabel.setVisible(isNote);
 
   commandSelector.setVisible(isCommand);
   commandLabel.setVisible(isCommand);
+
+  // ADSR controls visibility
+  attackSlider.setVisible(isEnvelope);
+  attackLabel.setVisible(isEnvelope);
+  decaySlider.setVisible(isEnvelope);
+  decayLabel.setVisible(isEnvelope);
+  sustainSlider.setVisible(isEnvelope);
+  sustainLabel.setVisible(isEnvelope);
+  releaseSlider.setVisible(isEnvelope);
+  releaseLabel.setVisible(isEnvelope);
+  envTargetSelector.setVisible(isEnvelope);
+  envTargetLabel.setVisible(isEnvelope);
+
+  // Pitch Bend controls visibility (only for Envelope with PitchBend target)
+  juce::String target = allTreesHaveSameValue("adsrTarget") ? getCommonValue("adsrTarget").toString() : "";
+  bool isPitchBend = (isEnvelope && target == "PitchBend");
+  pbRangeSlider.setVisible(isPitchBend);
+  pbRangeLabel.setVisible(isPitchBend);
+  pbShiftSlider.setVisible(isPitchBend);
+  pbShiftLabel.setVisible(isPitchBend);
+  
+  // Hide data1Slider and data2Slider for Pitch Bend (use musical controls instead)
+  if (isPitchBend) {
+    data1Slider.setVisible(false);
+    data1Label.setVisible(false);
+    data2Slider.setVisible(false);
+    data2Label.setVisible(false);
+  }
 
   // Configure Data1 slider based on type (only for Note/CC/Macro)
   if (typeStr == "Note") {
@@ -417,7 +646,25 @@ void MappingInspector::updateControlsFromSelection() {
     data1Slider.textFromValueFunction = nullptr;
     data1Slider.valueFromTextFunction = nullptr;
     data1Slider.updateText();
-  } else if (typeStr == "Command") {
+  } else if (typeStr == "Envelope") {
+    // For Envelope: data1 = CC number (if target is CC), data2 = peak value
+    data1Label.setText("CC Number:", juce::dontSendNotification);
+    data1Slider.setEnabled(true);
+    data1Slider.textFromValueFunction = nullptr;
+    data1Slider.valueFromTextFunction = nullptr;
+    data1Slider.updateText();
+    data2Label.setText("Peak Value:", juce::dontSendNotification);
+    data2Slider.setRange(0, 16383, 1); // Allow up to Pitch Bend range
+    data2Slider.updateText();
+  } else {
+    // Reset data2Slider range for non-Envelope types
+    if (data2Slider.getMaximum() > 127) {
+      data2Slider.setRange(0, 127, 1);
+      data2Slider.updateText();
+    }
+  }
+  
+  if (typeStr == "Command") {
     // Command type - update commandSelector from data1
     if (allTreesHaveSameValue("data1")) {
       int data1 = static_cast<int>(getCommonValue("data1"));
@@ -535,6 +782,90 @@ void MappingInspector::updateControlsFromSelection() {
     }
   }
 
+  // Update ADSR controls (only for Envelope type)
+  if (isEnvelope) {
+    // Update Attack
+    if (allTreesHaveSameValue("adsrAttack")) {
+      int attack = static_cast<int>(getCommonValue("adsrAttack"));
+      attackSlider.setValue(attack, juce::dontSendNotification);
+      attackSlider.setTextValueSuffix(" ms");
+    } else {
+      attackSlider.setValue(50, juce::dontSendNotification);
+      attackSlider.setTextValueSuffix(" ms (---)");
+    }
+
+    // Update Decay
+    if (allTreesHaveSameValue("adsrDecay")) {
+      int decay = static_cast<int>(getCommonValue("adsrDecay"));
+      decaySlider.setValue(decay, juce::dontSendNotification);
+      decaySlider.setTextValueSuffix(" ms");
+    } else {
+      decaySlider.setValue(0, juce::dontSendNotification);
+      decaySlider.setTextValueSuffix(" ms (---)");
+    }
+
+    // Update Sustain
+    if (allTreesHaveSameValue("adsrSustain")) {
+      int sustain = static_cast<int>(getCommonValue("adsrSustain"));
+      sustainSlider.setValue(sustain, juce::dontSendNotification);
+      sustainSlider.setTextValueSuffix("");
+    } else {
+      sustainSlider.setValue(127, juce::dontSendNotification);
+      sustainSlider.setTextValueSuffix(" (---)");
+    }
+
+    // Update Release
+    if (allTreesHaveSameValue("adsrRelease")) {
+      int release = static_cast<int>(getCommonValue("adsrRelease"));
+      releaseSlider.setValue(release, juce::dontSendNotification);
+      releaseSlider.setTextValueSuffix(" ms");
+    } else {
+      releaseSlider.setValue(50, juce::dontSendNotification);
+      releaseSlider.setTextValueSuffix(" ms (---)");
+    }
+
+    // Update Target Selector
+    if (allTreesHaveSameValue("adsrTarget")) {
+      juce::String target = getCommonValue("adsrTarget").toString();
+      if (target == "CC" || target.isEmpty())
+        envTargetSelector.setSelectedId(1, juce::dontSendNotification);
+      else if (target == "PitchBend")
+        envTargetSelector.setSelectedId(2, juce::dontSendNotification);
+      else
+        envTargetSelector.setSelectedId(-1, juce::dontSendNotification);
+    } else {
+      envTargetSelector.setSelectedId(-1, juce::dontSendNotification);
+    }
+
+    // Update Pitch Bend sliders
+    if (target == "PitchBend") {
+      // Update PB Range
+      if (allTreesHaveSameValue("pbRange")) {
+        int pbRange = static_cast<int>(getCommonValue("pbRange"));
+        pbRangeSlider.setValue(pbRange, juce::dontSendNotification);
+        pbRangeSlider.setTextValueSuffix(" semitones");
+      } else {
+        pbRangeSlider.setValue(12, juce::dontSendNotification);
+        pbRangeSlider.setTextValueSuffix(" semitones (---)");
+      }
+
+      // Update PB Shift
+      if (allTreesHaveSameValue("pbShift")) {
+        int pbShift = static_cast<int>(getCommonValue("pbShift"));
+        pbShiftSlider.setValue(pbShift, juce::dontSendNotification);
+        pbShiftSlider.setTextValueSuffix(" semitones");
+      } else {
+        pbShiftSlider.setValue(0, juce::dontSendNotification);
+        pbShiftSlider.setTextValueSuffix(" semitones (---)");
+      }
+    }
+
+    // Update data1Slider visibility based on target
+    bool showData1 = (target != "PitchBend");
+    data1Slider.setVisible(showData1);
+    data1Label.setVisible(showData1);
+  }
+
   // Trigger layout update after visibility changes
   resized();
 }
@@ -567,12 +898,32 @@ juce::var MappingInspector::getCommonValue(const juce::Identifier &property) {
   return juce::var();
 }
 
+void MappingInspector::updatePitchBendPeakValue(juce::ValueTree& tree) {
+  if (!tree.isValid())
+    return;
+  
+  int pbRange = tree.getProperty("pbRange", 12);
+  int pbShift = tree.getProperty("pbShift", 0);
+  
+  // Calculate target MIDI value: 8192 (center) + (shift * steps per semitone)
+  double stepsPerSemitone = 8192.0 / static_cast<double>(pbRange);
+  int calculatedPeak = static_cast<int>(8192.0 + (pbShift * stepsPerSemitone));
+  calculatedPeak = juce::jlimit(0, 16383, calculatedPeak);
+  
+  // Update data2 with calculated peak value
+  tree.setProperty("data2", calculatedPeak, undoManager);
+}
+
 void MappingInspector::valueTreePropertyChanged(juce::ValueTree &tree,
                                                  const juce::Identifier &property) {
   // Update UI if the changed property is one we're displaying
   if (property == juce::Identifier("type") || property == juce::Identifier("channel") ||
       property == juce::Identifier("data1") || property == juce::Identifier("data2") ||
-      property == juce::Identifier("inputAlias") || property == juce::Identifier("deviceHash")) {
+      property == juce::Identifier("inputAlias") || property == juce::Identifier("deviceHash") ||
+      property == juce::Identifier("adsrAttack") || property == juce::Identifier("adsrDecay") ||
+      property == juce::Identifier("adsrSustain") || property == juce::Identifier("adsrRelease") ||
+      property == juce::Identifier("adsrTarget") || property == juce::Identifier("pbRange") ||
+      property == juce::Identifier("pbShift")) {
     updateControlsFromSelection();
   }
 }

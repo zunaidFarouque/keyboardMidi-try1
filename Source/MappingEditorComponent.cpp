@@ -12,7 +12,9 @@ static uintptr_t parseDeviceHash(const juce::var &var) {
 MappingEditorComponent::MappingEditorComponent(PresetManager &pm,
                                                RawInputManager &rawInputMgr,
                                                DeviceManager &deviceMgr)
-    : presetManager(pm), rawInputManager(rawInputMgr), deviceManager(deviceMgr), inspector(&undoManager, &deviceManager) {
+    : presetManager(pm), rawInputManager(rawInputMgr), deviceManager(deviceMgr), 
+      inspector(&undoManager, &deviceManager),
+      resizerBar(&horizontalLayout, 1, true) { // Item index 1, vertical bar
   // Setup Headers
   table.getHeader().addColumn("Key", 1, 50);
   table.getHeader().addColumn("Device", 2, 70);
@@ -29,6 +31,14 @@ MappingEditorComponent::MappingEditorComponent(PresetManager &pm,
   addAndMakeVisible(inspectorViewport);
   inspectorViewport.setViewedComponent(&inspector, false);
   inspectorViewport.setScrollBarsShown(true, false); // Vertical only
+
+  // Add resizer bar
+  addAndMakeVisible(resizerBar);
+
+  // Setup horizontal layout: Table | Bar | Inspector
+  horizontalLayout.setItemLayout(0, -0.3, -0.7, -0.5); // Item 0 (Table): Min 30%, Max 70%, Preferred 50%
+  horizontalLayout.setItemLayout(1, 5, 5, 5);          // Item 1 (Bar): Fixed 5px width
+  horizontalLayout.setItemLayout(2, -0.3, -0.7, -0.5); // Item 2 (Inspector): Min 30%, Max 70%, Preferred 50%
 
   // Setup Add Button with Popup Menu
   addButton.setButtonText("+");
@@ -197,20 +207,16 @@ void MappingEditorComponent::resized() {
   header.removeFromRight(4);
   learnButton.setBounds(header.removeFromRight(60));
   
-  // Side-by-side layout: Table on left, Inspector viewport on right
-  auto inspectorWidth = 250;
-  auto inspectorArea = area.removeFromRight(inspectorWidth);
-  area.removeFromRight(4); // Gap
-  
-  // Set viewport bounds
-  inspectorViewport.setBounds(inspectorArea);
+  // Use StretchableLayoutManager for horizontal split: Table | Bar | Inspector
+  juce::Component* horizontalComps[] = { &table, &resizerBar, &inspectorViewport };
+  horizontalLayout.layOutComponents(
+    horizontalComps, 3, area.getX(), area.getY(), area.getWidth(), area.getHeight(),
+    false, true); // false = horizontal layout (left to right)
   
   // Set inspector content bounds (accounting for scrollbar width of 15px)
   int contentWidth = inspectorViewport.getWidth() - 15;
   int contentHeight = inspector.getRequiredHeight();
   inspector.setBounds(0, 0, contentWidth, contentHeight);
-  
-  table.setBounds(area);
 }
 
 int MappingEditorComponent::getNumRows() {

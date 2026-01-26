@@ -1,16 +1,16 @@
 #pragma once
+#include "DetachableContainer.h"
+#include "DeviceManager.h"
 #include "InputProcessor.h"
 #include "LogComponent.h" // <--- NEW
 #include "MappingEditorComponent.h"
-#include "ZoneEditorComponent.h"
-#include "VisualizerComponent.h"
-#include "DetachableContainer.h"
 #include "MidiEngine.h"
 #include "PresetManager.h"
 #include "RawInputManager.h"
-#include "DeviceManager.h"
-#include "StartupManager.h"
 #include "ScaleLibrary.h"
+#include "StartupManager.h"
+#include "VisualizerComponent.h"
+#include "ZoneEditorComponent.h"
 
 #include <JuceHeader.h>
 #include <vector>
@@ -44,7 +44,8 @@ public:
 
 private:
   MidiEngine midiEngine;
-  DeviceManager deviceManager; // Must be before presetManager and inputProcessor
+  DeviceManager
+      deviceManager; // Must be before presetManager and inputProcessor
   PresetManager presetManager;
   ScaleLibrary scaleLibrary; // Must be before ZoneManager/InputProcessor
   VoiceManager voiceManager;
@@ -55,7 +56,8 @@ private:
   RawInputManager rawInputManager;
   bool isInputInitialized = false;
 
-  // Async logging: Input thread pushes POD only; timer processes batches (Phase 21.1)
+  // Async logging: Input thread pushes POD only; timer processes batches
+  // (Phase 21.1)
   struct PendingEvent {
     uintptr_t device;
     int keyCode;
@@ -104,7 +106,8 @@ private:
 
   // MenuBarModel implementation
   juce::StringArray getMenuBarNames() override;
-  juce::PopupMenu getMenuForIndex(int topLevelMenuIndex, const juce::String &menuName) override;
+  juce::PopupMenu getMenuForIndex(int topLevelMenuIndex,
+                                  const juce::String &menuName) override;
   void menuItemSelected(int menuItemID, int topLevelMenuIndex) override;
 
   // File menu items

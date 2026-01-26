@@ -1,10 +1,14 @@
 #include "InputProcessor.h"
-#include "ScaleLibrary.h"
 #include "ChordUtilities.h"
 #include "MappingTypes.h"
+#include "ScaleLibrary.h"
+#include "MidiEngine.h"
 
-InputProcessor::InputProcessor(VoiceManager &voiceMgr, PresetManager &presetMgr, DeviceManager &deviceMgr, ScaleLibrary &scaleLib)
-    : voiceManager(voiceMgr), presetManager(presetMgr), deviceManager(deviceMgr), zoneManager(scaleLib), scaleLibrary(scaleLib) {
+InputProcessor::InputProcessor(VoiceManager &voiceMgr, PresetManager &presetMgr,
+                               DeviceManager &deviceMgr, ScaleLibrary &scaleLib, MidiEngine &midiEng)
+    : voiceManager(voiceMgr), presetManager(presetMgr),
+      deviceManager(deviceMgr), zoneManager(scaleLib), scaleLibrary(scaleLib),
+      expressionEngine(midiEng) {
   // Add listeners
   presetManager.getRootNode().addListener(this);
   deviceManager.addChangeListener(this);
@@ -37,8 +41,8 @@ void InputProcessor::rebuildMapFromTree() {
 
   // State flush: reset Sustain/Latch, then re-evaluate SustainInverse
   voiceManager.resetPerformanceState();
-  for (const auto& pair : keyMapping) {
-    const MidiAction& action = pair.second;
+  for (const auto &pair : keyMapping) {
+    const MidiAction &action = pair.second;
     if (action.type == ActionType::Command &&
         action.data1 == static_cast<int>(OmniKey::CommandID::SustainInverse)) {
       voiceManager.setSustain(true);
@@ -59,10 +63,10 @@ void InputProcessor::addMappingFromTree(juce::ValueTree mappingNode) {
     return;
 
   int inputKey = mappingNode.getProperty("inputKey", 0);
-  
+
   // Get alias name from mapping (new approach)
   juce::String aliasName = mappingNode.getProperty("inputAlias", "").toString();
-  
+
   // Parse Type
   juce::var typeVar = mappingNode.getProperty("type");
   ActionType actionType = ActionType::Note;
@@ -75,6 +79,8 @@ void InputProcessor::addMappingFromTree(juce::ValueTree mappingNode) {
       actionType = ActionType::Command;
     else if (t == "Macro")
       actionType = ActionType::Macro;
+    else if (t == "Envelope")
+      actionType = ActionType::Envelope;
   } else if (typeVar.isInt()) {
     int t = static_cast<int>(typeVar);
     if (t == 1)
@@ -83,6 +89,8 @@ void InputProcessor::addMappingFromTree(juce::ValueTree mappingNode) {
       actionType = ActionType::Macro;
     else if (t == 3)
       actionType = ActionType::Command;
+    else if (t == 4)
+      actionType = ActionType::Envelope;
   }
 
   int channel = mappingNode.getProperty("channel", 1);
@@ -97,10 +105,43 @@ void InputProcessor::addMappingFromTree(juce::ValueTree mappingNode) {
   action.data2 = data2;
   action.velocityRandom = velocityRandom;
 
+  // Load ADSR settings if type is Envelope
+  if (actionType == ActionType::Envelope) {
+    // Read ADSR properties (convert from UI format to internal format)
+    int adsrAttack = mappingNode.getProperty("adsrAttack", 50);
+    int adsrDecay = mappingNode.getProperty("adsrDecay", 0);
+    int adsrSustain = mappingNode.getProperty("adsrSustain", 127); // 0-127
+    int adsrRelease = mappingNode.getProperty("adsrRelease", 50);
+    juce::String adsrTarget = mappingNode.getProperty("adsrTarget", "CC").toString();
+    
+    action.adsrSettings.attackMs = adsrAttack;
+    action.adsrSettings.decayMs = adsrDecay;
+    action.adsrSettings.sustainLevel = adsrSustain / 127.0f; // Convert 0-127 to 0.0-1.0
+    action.adsrSettings.releaseMs = adsrRelease;
+    action.adsrSettings.isPitchBend = (adsrTarget == "PitchBend");
+    action.adsrSettings.ccNumber = data1; // Use data1 for CC number
+    
+    // If Pitch Bend, calculate peak value from musical parameters
+    if (action.adsrSettings.isPitchBend) {
+      // Read optional musical parameters (defaults: range=12, shift=0)
+      int pbRange = mappingNode.getProperty("pbRange", 12);
+      int pbShift = mappingNode.getProperty("pbShift", 0);
+      
+      // Calculate target MIDI value: 8192 (center) + (shift * steps per semitone)
+      double stepsPerSemitone = 8192.0 / static_cast<double>(pbRange);
+      int calculatedPeak = static_cast<int>(8192.0 + (pbShift * stepsPerSemitone));
+      calculatedPeak = juce::jlimit(0, 16383, calculatedPeak);
+      
+      // Overwrite data2 with calculated peak value (ensures consistency)
+      action.data2 = calculatedPeak;
+    }
+  }
+
   // Compile alias into hardware IDs
   if (!aliasName.isEmpty()) {
-    juce::Array<uintptr_t> hardwareIds = deviceManager.getHardwareForAlias(aliasName);
-    
+    juce::Array<uintptr_t> hardwareIds =
+        deviceManager.getHardwareForAlias(aliasName);
+
     // For each hardware ID in the alias, create a mapping entry
     for (uintptr_t hardwareId : hardwareIds) {
       InputID inputId = {hardwareId, inputKey};
@@ -112,34 +153,38 @@ void InputProcessor::addMappingFromTree(juce::ValueTree mappingNode) {
     juce::var deviceHashVar = mappingNode.getProperty("deviceHash");
     if (!deviceHashVar.isVoid() && !deviceHashVar.toString().isEmpty()) {
       uintptr_t deviceHash = parseDeviceHash(deviceHashVar);
-      
+
       // Try to find an alias for this hardware ID
       juce::String foundAlias = deviceManager.getAliasForHardware(deviceHash);
-      
+
       if (foundAlias != "Unassigned") {
         // Hardware is already assigned to an alias, use that alias
-        juce::Array<uintptr_t> hardwareIds = deviceManager.getHardwareForAlias(foundAlias);
+        juce::Array<uintptr_t> hardwareIds =
+            deviceManager.getHardwareForAlias(foundAlias);
         for (uintptr_t hardwareId : hardwareIds) {
           InputID inputId = {hardwareId, inputKey};
           keyMapping[inputId] = action;
         }
       } else {
         // Legacy preset: hardware not assigned to any alias
-        // Create a "Master Input" alias if it doesn't exist and assign this hardware
+        // Create a "Master Input" alias if it doesn't exist and assign this
+        // hardware
         if (!deviceManager.aliasExists("Master Input")) {
           deviceManager.createAlias("Master Input");
         }
         deviceManager.assignHardware("Master Input", deviceHash);
-        
+
         // Now use the alias
-        juce::Array<uintptr_t> hardwareIds = deviceManager.getHardwareForAlias("Master Input");
+        juce::Array<uintptr_t> hardwareIds =
+            deviceManager.getHardwareForAlias("Master Input");
         for (uintptr_t hardwareId : hardwareIds) {
           InputID inputId = {hardwareId, inputKey};
           keyMapping[inputId] = action;
         }
       }
     }
-    // If neither aliasName nor deviceHash exists, the mapping is invalid and will be silently dropped
+    // If neither aliasName nor deviceHash exists, the mapping is invalid and
+    // will be silently dropped
   }
 }
 
@@ -148,19 +193,22 @@ void InputProcessor::removeMappingFromTree(juce::ValueTree mappingNode) {
     return;
 
   int inputKey = mappingNode.getProperty("inputKey", 0);
-  
-  // Remove all entries for this mapping (could be multiple if alias has multiple hardware IDs)
+
+  // Remove all entries for this mapping (could be multiple if alias has
+  // multiple hardware IDs)
   juce::String aliasName = mappingNode.getProperty("inputAlias", "").toString();
-  
+
   if (!aliasName.isEmpty()) {
-    juce::Array<uintptr_t> hardwareIds = deviceManager.getHardwareForAlias(aliasName);
+    juce::Array<uintptr_t> hardwareIds =
+        deviceManager.getHardwareForAlias(aliasName);
     for (uintptr_t hardwareId : hardwareIds) {
       InputID inputId = {hardwareId, inputKey};
       keyMapping.erase(inputId);
     }
   } else {
     // Fallback: legacy deviceHash
-    uintptr_t deviceHash = parseDeviceHash(mappingNode.getProperty("deviceHash"));
+    uintptr_t deviceHash =
+        parseDeviceHash(mappingNode.getProperty("deviceHash"));
     InputID inputId = {deviceHash, inputKey};
     keyMapping.erase(inputId);
   }
@@ -210,9 +258,10 @@ void InputProcessor::valueTreePropertyChanged(
   auto parent = treeWhosePropertyHasChanged.getParent();
 
   if (parent.isEquivalentTo(mappingsNode)) {
-    // When a mapping property changes (e.g., inputKey/keyCode), we need to rebuild
-    // the entire map because we can't know the old value to remove the old entries.
-    // This is especially important for keyCode changes (via "learn" feature).
+    // When a mapping property changes (e.g., inputKey/keyCode), we need to
+    // rebuild the entire map because we can't know the old value to remove the
+    // old entries. This is especially important for keyCode changes (via
+    // "learn" feature).
     juce::ScopedWriteLock lock(mapLock);
     rebuildMapFromTree();
   } else if (treeWhosePropertyHasChanged.isEquivalentTo(mappingsNode)) {
@@ -247,25 +296,27 @@ const MidiAction *InputProcessor::getMappingForInput(InputID input) {
 
 // Helper to convert alias name to hash (simple string hash)
 static uintptr_t aliasNameToHash(const juce::String &aliasName) {
-  if (aliasName.isEmpty() || aliasName == "Any / Master" || aliasName == "Unassigned")
+  if (aliasName.isEmpty() || aliasName == "Any / Master" ||
+      aliasName == "Unassigned")
     return 0; // Hash 0 = "Any / Master"
-  
+
   // Simple hash: use std::hash on the string
   return static_cast<uintptr_t>(std::hash<juce::String>{}(aliasName));
 }
 
 // Shared lookup logic for processEvent and simulateInput
 // Returns: {action, sourceDescription}
-std::pair<std::optional<MidiAction>, juce::String> InputProcessor::lookupAction(uintptr_t deviceHandle, int keyCode) {
+std::pair<std::optional<MidiAction>, juce::String>
+InputProcessor::lookupAction(uintptr_t deviceHandle, int keyCode) {
   // Step 1: Get alias name for hardware ID
   juce::String aliasName = deviceManager.getAliasForHardware(deviceHandle);
-  
+
   // Convert alias name to hash
   uintptr_t aliasHash = 0;
   if (aliasName != "Unassigned" && !aliasName.isEmpty()) {
     aliasHash = aliasNameToHash(aliasName);
   }
-  
+
   // Step 2: Check specific alias zones first
   if (aliasHash != 0) {
     InputID aliasInputID = {aliasHash, keyCode};
@@ -274,14 +325,15 @@ std::pair<std::optional<MidiAction>, juce::String> InputProcessor::lookupAction(
       return {zoneAction, "Zone: " + zoneName};
     }
   }
-  
+
   // Step 3: Check wildcard zone (hash 0 = "Any / Master")
   InputID wildcardInputID = {0, keyCode};
-  auto [zoneAction, zoneName] = zoneManager.handleInputWithName(wildcardInputID);
+  auto [zoneAction, zoneName] =
+      zoneManager.handleInputWithName(wildcardInputID);
   if (zoneAction.has_value()) {
     return {zoneAction, "Zone: " + zoneName};
   }
-  
+
   // Step 4: Check manual mappings (specific alias first)
   InputID input = {deviceHandle, keyCode};
   juce::ScopedReadLock lock(mapLock);
@@ -289,7 +341,7 @@ std::pair<std::optional<MidiAction>, juce::String> InputProcessor::lookupAction(
   if (action != nullptr) {
     return {*action, "Mapping"};
   }
-  
+
   // Step 5: Check manual mappings (wildcard)
   if (deviceHandle != 0) {
     InputID anyDevice = {0, keyCode};
@@ -298,7 +350,7 @@ std::pair<std::optional<MidiAction>, juce::String> InputProcessor::lookupAction(
       return {*action, "Mapping"};
     }
   }
-  
+
   return {std::nullopt, ""};
 }
 
@@ -308,21 +360,24 @@ std::pair<std::optional<MidiAction>, juce::String> InputProcessor::lookupAction(
 int InputProcessor::calculateVelocity(int base, int range) {
   if (range <= 0)
     return base;
-  
+
   // Generate random delta in range [-range, +range]
   int delta = random.nextInt(range * 2 + 1) - range;
-  
+
   // Clamp result between 1 and 127
   return juce::jlimit(1, 127, base + delta);
 }
 
 std::shared_ptr<Zone> InputProcessor::getZoneForInputResolved(InputID input) {
-  juce::String aliasName = deviceManager.getAliasForHardware(input.deviceHandle);
+  juce::String aliasName =
+      deviceManager.getAliasForHardware(input.deviceHandle);
   uintptr_t aliasHash = (aliasName != "Unassigned" && !aliasName.isEmpty())
-      ? aliasNameToHash(aliasName) : 0;
+                            ? aliasNameToHash(aliasName)
+                            : 0;
   if (aliasHash != 0) {
     auto z = zoneManager.getZoneForInput(InputID{aliasHash, input.keyCode});
-    if (z) return z;
+    if (z)
+      return z;
   }
   return zoneManager.getZoneForInput(InputID{0, input.keyCode});
 }
@@ -338,15 +393,21 @@ void InputProcessor::processEvent(InputID input, bool isDown) {
       else if (cmd == static_cast<int>(OmniKey::CommandID::SustainInverse))
         voiceManager.setSustain(true);
     }
+    // Envelope key-up: release envelope
+    if (action.has_value() && action->type == ActionType::Envelope) {
+      expressionEngine.releaseEnvelope(input);
+      return;
+    }
     if (action.has_value() && source.startsWith("Zone: ")) {
       auto zone = getZoneForInputResolved(input);
       if (zone && zone->playMode == Zone::PlayMode::Strum) {
         juce::ScopedWriteLock lock(bufferLock);
         noteBuffer.clear();
         bufferedStrumSpeedMs = 50;
-        
+
         // Use zone's release behavior
-        bool shouldSustain = (zone->releaseBehavior == Zone::ReleaseBehavior::Sustain);
+        bool shouldSustain =
+            (zone->releaseBehavior == Zone::ReleaseBehavior::Sustain);
         voiceManager.handleKeyUp(input, zone->releaseDurationMs, shouldSustain);
       } else {
         voiceManager.handleKeyUp(input);
@@ -359,9 +420,18 @@ void InputProcessor::processEvent(InputID input, bool isDown) {
 
   // Use shared lookup logic
   auto [action, source] = lookupAction(input.deviceHandle, input.keyCode);
-  
+
   if (action.has_value()) {
     const auto &midiAction = action.value();
+
+    if (midiAction.type == ActionType::Envelope) {
+      // Use data2 as peak value (pre-calculated by UI/InputProcessor)
+      // For Pitch Bend: data2 contains the calculated target (e.g., 9000)
+      // For CC: data2 contains the peak value (0-127)
+      int peakValue = midiAction.data2;
+      expressionEngine.triggerEnvelope(input, midiAction.channel, midiAction.adsrSettings, peakValue);
+      return;
+    }
 
     if (midiAction.type == ActionType::Command) {
       int cmd = midiAction.data1;
@@ -401,41 +471,49 @@ void InputProcessor::processEvent(InputID input, bool isDown) {
       if (source.startsWith("Zone: ")) {
         auto zone = getZoneForInputResolved(input);
         if (zone) {
-          auto chordNotes = zone->getNotesForKey(input.keyCode, 
-                                                  zoneManager.getGlobalChromaticTranspose(),
-                                                  zoneManager.getGlobalDegreeTranspose());
+          auto chordNotes = zone->getNotesForKey(
+              input.keyCode, zoneManager.getGlobalChromaticTranspose(),
+              zoneManager.getGlobalDegreeTranspose());
           bool allowSustain = zone->allowSustain;
 
           if (chordNotes.has_value() && !chordNotes->empty()) {
             // Calculate per-note velocities with ghost note scaling
-            int mainVelocity = calculateVelocity(zone->baseVelocity, zone->velocityRandom);
-            
+            int mainVelocity =
+                calculateVelocity(zone->baseVelocity, zone->velocityRandom);
+
             std::vector<int> finalNotes;
             std::vector<int> finalVelocities;
             finalNotes.reserve(chordNotes->size());
             finalVelocities.reserve(chordNotes->size());
-            
-            for (const auto& cn : *chordNotes) {
+
+            for (const auto &cn : *chordNotes) {
               finalNotes.push_back(cn.pitch);
               if (cn.isGhost) {
                 // Ghost notes use scaled velocity
-                int ghostVel = static_cast<int>(mainVelocity * zone->ghostVelocityScale);
+                int ghostVel =
+                    static_cast<int>(mainVelocity * zone->ghostVelocityScale);
                 finalVelocities.push_back(juce::jlimit(1, 127, ghostVel));
               } else {
                 finalVelocities.push_back(mainVelocity);
               }
             }
-            
+
             if (zone->playMode == Zone::PlayMode::Direct) {
+              int releaseMs = zone->releaseDurationMs;
               if (finalNotes.size() > 1) {
-                voiceManager.noteOn(input, finalNotes, finalVelocities, midiAction.channel, zone->strumSpeedMs, allowSustain);
+                voiceManager.noteOn(input, finalNotes, finalVelocities,
+                                    midiAction.channel, zone->strumSpeedMs,
+                                    allowSustain, releaseMs);
               } else {
-                voiceManager.noteOn(input, finalNotes.front(), finalVelocities.front(), midiAction.channel, allowSustain);
+                voiceManager.noteOn(input, finalNotes.front(),
+                                    finalVelocities.front(), midiAction.channel,
+                                    allowSustain, releaseMs);
               }
             } else if (zone->playMode == Zone::PlayMode::Strum) {
               int strumMs = (zone->strumSpeedMs > 0) ? zone->strumSpeedMs : 50;
               voiceManager.handleKeyUp(lastStrumSource);
-              voiceManager.noteOn(input, finalNotes, finalVelocities, midiAction.channel, strumMs, allowSustain);
+              voiceManager.noteOn(input, finalNotes, finalVelocities,
+                                  midiAction.channel, strumMs, allowSustain);
               lastStrumSource = input;
               {
                 juce::ScopedWriteLock bufferWriteLock(bufferLock);
@@ -446,18 +524,24 @@ void InputProcessor::processEvent(InputID input, bool isDown) {
             }
           } else {
             // Fallback: use mapping velocity with randomization
-            int vel = calculateVelocity(midiAction.data2, midiAction.velocityRandom);
-            voiceManager.noteOn(input, midiAction.data1, vel, midiAction.channel, allowSustain);
+            int vel =
+                calculateVelocity(midiAction.data2, midiAction.velocityRandom);
+            voiceManager.noteOn(input, midiAction.data1, vel,
+                                midiAction.channel, allowSustain);
           }
         } else {
           // Fallback: use mapping velocity with randomization
-          int vel = calculateVelocity(midiAction.data2, midiAction.velocityRandom);
-          voiceManager.noteOn(input, midiAction.data1, vel, midiAction.channel, true);
+          int vel =
+              calculateVelocity(midiAction.data2, midiAction.velocityRandom);
+          voiceManager.noteOn(input, midiAction.data1, vel, midiAction.channel,
+                              true);
         }
       } else {
         // Manual mapping: use mapping velocity with randomization
-        int vel = calculateVelocity(midiAction.data2, midiAction.velocityRandom);
-        voiceManager.noteOn(input, midiAction.data1, vel, midiAction.channel, true);
+        int vel =
+            calculateVelocity(midiAction.data2, midiAction.velocityRandom);
+        voiceManager.noteOn(input, midiAction.data1, vel, midiAction.channel,
+                            true);
       }
     }
   }
@@ -470,7 +554,7 @@ std::vector<int> InputProcessor::getBufferedNotes() {
 
 bool InputProcessor::hasManualMappingForKey(int keyCode) {
   juce::ScopedReadLock lock(mapLock);
-  for (const auto& p : keyMapping) {
+  for (const auto &p : keyMapping) {
     if (p.first.keyCode == keyCode)
       return true;
   }
@@ -482,7 +566,8 @@ void InputProcessor::forceRebuildMappings() {
   rebuildMapFromTree();
 }
 
-std::pair<std::optional<MidiAction>, juce::String> InputProcessor::simulateInput(uintptr_t deviceHandle, int keyCode) {
+std::pair<std::optional<MidiAction>, juce::String>
+InputProcessor::simulateInput(uintptr_t deviceHandle, int keyCode) {
   return lookupAction(deviceHandle, keyCode);
 }
 
@@ -516,7 +601,8 @@ void InputProcessor::handleAxisEvent(uintptr_t deviceHandle, int inputCode,
     currentVal = value * 127.0f;
   }
 
-  int ccValue = static_cast<int>(std::round(std::clamp(currentVal, 0.0f, 127.0f)));
+  int ccValue =
+      static_cast<int>(std::round(std::clamp(currentVal, 0.0f, 127.0f)));
 
   // Send MIDI CC message
   voiceManager.sendCC(action->channel, action->data1, ccValue);

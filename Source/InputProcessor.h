@@ -4,13 +4,15 @@
 #include "VoiceManager.h"
 #include "DeviceManager.h"
 #include "ZoneManager.h"
+#include "ExpressionEngine.h"
 #include <JuceHeader.h>
 
 class ScaleLibrary;
+class MidiEngine;
 
 class InputProcessor : public juce::ValueTree::Listener, public juce::ChangeListener {
 public:
-  InputProcessor(VoiceManager &voiceMgr, PresetManager &presetMgr, DeviceManager &deviceMgr, ScaleLibrary &scaleLib);
+  InputProcessor(VoiceManager &voiceMgr, PresetManager &presetMgr, DeviceManager &deviceMgr, ScaleLibrary &scaleLib, MidiEngine &midiEng);
   ~InputProcessor() override;
 
   // The main entry point for key events
@@ -49,6 +51,7 @@ private:
   DeviceManager &deviceManager;
   ScaleLibrary &scaleLibrary;
   ZoneManager zoneManager;
+  ExpressionEngine expressionEngine;
 
   // Thread Safety
   juce::ReadWriteLock mapLock;

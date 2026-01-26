@@ -6,7 +6,8 @@ ZoneEditorComponent::ZoneEditorComponent(ZoneManager *zoneMgr, DeviceManager *de
       rawInputManager(rawInputMgr),
       globalPanel(zoneMgr),
       listPanel(zoneMgr),
-      propertiesPanel(zoneMgr, deviceMgr, rawInputMgr, scaleLib) {
+      propertiesPanel(zoneMgr, deviceMgr, rawInputMgr, scaleLib),
+      resizerBar(&horizontalLayout, 1, true) { // Item index 1, vertical bar
   
   addAndMakeVisible(globalPanel);
   addAndMakeVisible(listPanel);
@@ -15,6 +16,14 @@ ZoneEditorComponent::ZoneEditorComponent(ZoneManager *zoneMgr, DeviceManager *de
   addAndMakeVisible(propertiesViewport);
   propertiesViewport.setViewedComponent(&propertiesPanel, false);
   propertiesViewport.setScrollBarsShown(true, false); // Vertical only
+
+  // Add resizer bar
+  addAndMakeVisible(resizerBar);
+
+  // Setup horizontal layout: List | Bar | Properties
+  horizontalLayout.setItemLayout(0, -0.2, -0.6, -0.3); // Item 0 (List): Min 20%, Max 60%, Preferred 30%
+  horizontalLayout.setItemLayout(1, 5, 5, 5);          // Item 1 (Bar): Fixed 5px width
+  horizontalLayout.setItemLayout(2, -0.4, -0.8, -0.7); // Item 2 (Properties): Min 40%, Max 80%, Preferred 70%
   
   // Wire up resize callback
   propertiesPanel.onResizeRequested = [this] {
@@ -42,14 +51,11 @@ void ZoneEditorComponent::resized() {
   globalPanel.setBounds(area.removeFromTop(50));
   area.removeFromTop(4);
 
-  // Split remaining space: left = list, right = properties viewport
-  auto leftArea = area.removeFromLeft(250);
-  listPanel.setBounds(leftArea);
-  
-  area.removeFromLeft(4);
-  
-  // Set viewport bounds
-  propertiesViewport.setBounds(area);
+  // Use StretchableLayoutManager for horizontal split: List | Bar | Properties
+  juce::Component* horizontalComps[] = { &listPanel, &resizerBar, &propertiesViewport };
+  horizontalLayout.layOutComponents(
+    horizontalComps, 3, area.getX(), area.getY(), area.getWidth(), area.getHeight(),
+    false, true); // false = horizontal layout (left to right)
   
   // Set content bounds (accounting for scrollbar width of 15px)
   int contentWidth = propertiesViewport.getWidth() - 15;

@@ -1,31 +1,38 @@
 #include "MainComponent.h"
+#include "ChordUtilities.h"
+#include "DeviceSetupComponent.h"
 #include "KeyNameUtilities.h"
 #include "MappingTypes.h"
-#include "DeviceSetupComponent.h"
-#include "Zone.h"
-#include "ScaleUtilities.h"
 #include "MidiNoteUtilities.h"
-#include "ChordUtilities.h"
+#include "ScaleUtilities.h"
+#include "Zone.h"
 
 // Windows header needed for cursor locking
 #include <windows.h>
 
 MainComponent::MainComponent()
-    : voiceManager(midiEngine), 
-      inputProcessor(voiceManager, presetManager, deviceManager, scaleLibrary),
-      startupManager(&presetManager, &deviceManager, &inputProcessor.getZoneManager()),
+    : voiceManager(midiEngine),
+      inputProcessor(voiceManager, presetManager, deviceManager, scaleLibrary, midiEngine),
+      startupManager(&presetManager, &deviceManager,
+                     &inputProcessor.getZoneManager()),
       mappingEditor(presetManager, rawInputManager, deviceManager),
       mainTabs(juce::TabbedButtonBar::TabsAtTop),
-      zoneEditor(&inputProcessor.getZoneManager(), &deviceManager, &rawInputManager, &scaleLibrary),
-      visualizer(&inputProcessor.getZoneManager(), &deviceManager, voiceManager, &presetManager, &inputProcessor),
+      zoneEditor(&inputProcessor.getZoneManager(), &deviceManager,
+                 &rawInputManager, &scaleLibrary),
+      visualizer(&inputProcessor.getZoneManager(), &deviceManager, voiceManager,
+                 &presetManager, &inputProcessor),
       visualizerContainer("Visualizer", visualizer),
       editorContainer("Mapping / Zones", mainTabs),
       logContainer("Log", logComponent),
-      verticalBar(&verticalLayout, 1, false),  // false = horizontal bar for vertical layout (drag up/down)
-      horizontalBar(&horizontalLayout, 1, true) {  // true = vertical bar for horizontal layout (drag left/right)
+      verticalBar(
+          &verticalLayout, 1,
+          false), // false = horizontal bar for vertical layout (drag up/down)
+      horizontalBar(
+          &horizontalLayout, 1,
+          true) { // true = vertical bar for horizontal layout (drag left/right)
   // Initialize application (load or create factory default)
   startupManager.initApp();
-  
+
   // Setup Command Manager for Undo/Redo
   commandManager.registerAllCommandsForTarget(this);
   commandManager.setFirstCommandTarget(this);
@@ -82,7 +89,8 @@ MainComponent::MainComponent()
   deviceSetupButton.setButtonText("Device Setup");
   deviceSetupButton.onClick = [this] {
     juce::DialogWindow::LaunchOptions options;
-    auto* setupComponent = new DeviceSetupComponent(deviceManager, rawInputManager);
+    auto *setupComponent =
+        new DeviceSetupComponent(deviceManager, rawInputManager);
     options.content.setOwned(setupComponent);
     options.content->setSize(600, 400);
     options.dialogTitle = "Rig Configuration";
@@ -108,12 +116,13 @@ MainComponent::MainComponent()
   // Vertical: Visualizer (150-300px) | Bar | Bottom Area (rest)
   verticalLayout.setItemLayout(0, 150, 300, 200); // Visualizer
   verticalLayout.setItemLayout(1, 4, 4, 4);       // Resizer bar
-  verticalLayout.setItemLayout(2, -0.1, -1.0, -0.6); // Bottom area (stretchable)
+  verticalLayout.setItemLayout(2, -0.1, -1.0,
+                               -0.6); // Bottom area (stretchable)
 
-  // Horizontal: Editors (50%-70%) | Bar | Log (30%-50%)
-  horizontalLayout.setItemLayout(0, -0.5, -0.7, -0.6); // Editors
-  horizontalLayout.setItemLayout(1, 4, 4, 4);          // Resizer bar
-  horizontalLayout.setItemLayout(2, -0.3, -0.5, -0.4); // Log
+  // Horizontal: Editors | Bar | Log
+  horizontalLayout.setItemLayout(0, -0.1, -0.9, -0.7); // Item 0 (Left/Editors): Min 10%, Max 90%, Preferred 70%
+  horizontalLayout.setItemLayout(1, 5, 5, 5);          // Item 1 (Bar): Fixed 5px width
+  horizontalLayout.setItemLayout(2, -0.1, -0.9, -0.3); // Item 2 (Right/Log): Min 10%, Max 90%, Preferred 30%
 
   // --- Log Controls ---
   addAndMakeVisible(clearButton);
@@ -170,28 +179,25 @@ MainComponent::MainComponent()
   loadLayoutPositions();
 
   // Setup visibility callbacks
-  visualizerContainer.onVisibilityChanged = [this](DetachableContainer* container, bool hidden) {
-    resized();
-  };
-  editorContainer.onVisibilityChanged = [this](DetachableContainer* container, bool hidden) {
-    resized();
-  };
-  logContainer.onVisibilityChanged = [this](DetachableContainer* container, bool hidden) {
-    resized();
-  };
+  visualizerContainer.onVisibilityChanged =
+      [this](DetachableContainer *container, bool hidden) { resized(); };
+  editorContainer.onVisibilityChanged = [this](DetachableContainer *container,
+                                               bool hidden) { resized(); };
+  logContainer.onVisibilityChanged = [this](DetachableContainer *container,
+                                            bool hidden) { resized(); };
 }
 
 MainComponent::~MainComponent() {
   // Save layout positions to DeviceManager
   saveLayoutPositions();
-  
+
   // Save immediately on close (flush pending saves)
   startupManager.saveImmediate();
-  
+
   stopTimer();
   rawInputManager.removeListener(this);
   rawInputManager.shutdown();
-  
+
   // Ensure cursor is unlocked on exit
   if (performanceModeButton.getToggleState()) {
     ::ShowCursor(TRUE);
@@ -228,13 +234,15 @@ void MainComponent::logEvent(uintptr_t device, int keyCode, bool isDown) {
     logLine += " -> [MIDI] ";
 
     if (midiAction.type == ActionType::Note) {
-      juce::String noteName = MidiNoteUtilities::getMidiNoteName(midiAction.data1);
-      logLine += "Note " + juce::String(midiAction.data1) + " (" + noteName + ")";
+      juce::String noteName =
+          MidiNoteUtilities::getMidiNoteName(midiAction.data1);
+      logLine +=
+          "Note " + juce::String(midiAction.data1) + " (" + noteName + ")";
     } else if (midiAction.type == ActionType::CC) {
       logLine += "CC " + juce::String(midiAction.data1) +
                  " | val: " + juce::String(midiAction.data2);
     }
-    
+
     // Add source description
     if (!source.isEmpty()) {
       logLine += " | Source: " + source;
@@ -251,7 +259,7 @@ void MainComponent::getAllCommands(juce::Array<juce::CommandID> &commands) {
 }
 
 void MainComponent::getCommandInfo(juce::CommandID commandID,
-                                    juce::ApplicationCommandInfo &result) {
+                                   juce::ApplicationCommandInfo &result) {
   if (commandID == juce::StandardApplicationCommandIDs::undo) {
     result.setInfo("Undo", "Undo last action", "Edit", 0);
     result.addDefaultKeypress('Z', juce::ModifierKeys::ctrlModifier);
@@ -283,7 +291,8 @@ juce::ApplicationCommandTarget *MainComponent::getNextCommandTarget() {
 void MainComponent::handleRawKeyEvent(uintptr_t deviceHandle, int keyCode,
                                       bool isDown) {
   // Safety: Check for Escape key to unlock cursor
-  if (isDown && keyCode == VK_ESCAPE && performanceModeButton.getToggleState()) {
+  if (isDown && keyCode == VK_ESCAPE &&
+      performanceModeButton.getToggleState()) {
     performanceModeButton.setToggleState(false, juce::dontSendNotification);
     ::ShowCursor(TRUE);
     ClipCursor(nullptr);
@@ -292,8 +301,9 @@ void MainComponent::handleRawKeyEvent(uintptr_t deviceHandle, int keyCode,
   }
 
   // Check if this is a scroll event
-  bool isScrollEvent = (keyCode == InputTypes::ScrollUp || keyCode == InputTypes::ScrollDown);
-  
+  bool isScrollEvent =
+      (keyCode == InputTypes::ScrollUp || keyCode == InputTypes::ScrollDown);
+
   // For scroll events, only process and queue log if mapping exists
   if (isScrollEvent) {
     InputID id = {deviceHandle, keyCode};
@@ -308,7 +318,8 @@ void MainComponent::handleRawKeyEvent(uintptr_t deviceHandle, int keyCode,
     return;
   }
 
-  // For regular keys: push to log queue (no string formatting here), then process MIDI
+  // For regular keys: push to log queue (no string formatting here), then
+  // process MIDI
   {
     juce::ScopedLock lock(queueLock);
     eventQueue.push_back({deviceHandle, keyCode, isDown});
@@ -321,23 +332,25 @@ void MainComponent::handleAxisEvent(uintptr_t deviceHandle, int inputCode,
                                     float value) {
   // Log axis events with value information
   juce::String devStr =
-      "Dev: " + juce::String::toHexString((juce::int64)deviceHandle).toUpperCase();
+      "Dev: " +
+      juce::String::toHexString((juce::int64)deviceHandle).toUpperCase();
   juce::String keyName = KeyNameUtilities::getKeyName(inputCode);
-  juce::String keyInfo = "(" + juce::String::toHexString(inputCode).toUpperCase() + ") " + keyName;
+  juce::String keyInfo =
+      "(" + juce::String::toHexString(inputCode).toUpperCase() + ") " + keyName;
   keyInfo = keyInfo.paddedRight(' ', 20);
-  
-  juce::String logLine = devStr + " | VAL  | " + keyInfo + " | val: " + 
-                         juce::String(value, 3);
-  
+
+  juce::String logLine =
+      devStr + " | VAL  | " + keyInfo + " | val: " + juce::String(value, 3);
+
   // Check for MIDI mapping
   InputID id = {deviceHandle, inputCode};
   const MidiAction *action = inputProcessor.getMappingForInput(id);
-  
+
   if (action != nullptr && action->type == ActionType::CC) {
-    logLine += " -> [MIDI] CC " + juce::String(action->data1) + 
+    logLine += " -> [MIDI] CC " + juce::String(action->data1) +
                " | ch: " + juce::String(action->channel);
   }
-  
+
   logComponent.addEntry(logLine);
 
   // Forward axis events to InputProcessor
@@ -367,10 +380,11 @@ void MainComponent::saveLayoutPositions() {
 }
 
 juce::StringArray MainComponent::getMenuBarNames() {
-  return { "File", "Edit", "Window", "Help" };
+  return {"File", "Edit", "Window", "Help"};
 }
 
-juce::PopupMenu MainComponent::getMenuForIndex(int topLevelMenuIndex, const juce::String &menuName) {
+juce::PopupMenu MainComponent::getMenuForIndex(int topLevelMenuIndex,
+                                               const juce::String &menuName) {
   juce::PopupMenu result;
 
   if (topLevelMenuIndex == 0) {
@@ -384,13 +398,17 @@ juce::PopupMenu MainComponent::getMenuForIndex(int topLevelMenuIndex, const juce
     result.addItem(FileExit, "Exit");
   } else if (topLevelMenuIndex == 1) {
     // Edit menu (placeholder)
-    result.addCommandItem(&commandManager, juce::StandardApplicationCommandIDs::undo);
-    result.addCommandItem(&commandManager, juce::StandardApplicationCommandIDs::redo);
+    result.addCommandItem(&commandManager,
+                          juce::StandardApplicationCommandIDs::undo);
+    result.addCommandItem(&commandManager,
+                          juce::StandardApplicationCommandIDs::redo);
   } else if (topLevelMenuIndex == 2) {
     // Window menu - show all windows, tick when visible (not hidden)
     // Menu item shows tick when container is visible
-    result.addItem(WindowShowVisualizer, "Visualizer", true, !visualizerContainer.isHidden());
-    result.addItem(WindowShowEditors, "Mapping / Zones", true, !editorContainer.isHidden());
+    result.addItem(WindowShowVisualizer, "Visualizer", true,
+                   !visualizerContainer.isHidden());
+    result.addItem(WindowShowEditors, "Mapping / Zones", true,
+                   !editorContainer.isHidden());
     result.addItem(WindowShowLog, "Event Log", true, !logContainer.isHidden());
   } else if (topLevelMenuIndex == 3) {
     // Help menu (placeholder)
@@ -410,33 +428,32 @@ void MainComponent::menuItemSelected(int menuItemID, int topLevelMenuIndex) {
     case FileLoadPreset:
       loadButton.triggerClick();
       break;
-      case FileExportVoicingReport: {
-        juce::File targetFile = juce::File::getSpecialLocation(juce::File::userDesktopDirectory)
-                                   .getChildFile("OmniKey_Voicings.txt");
-        ChordUtilities::dumpDebugReport(targetFile);
-        logComponent.addEntry("Voicing report exported to: " + targetFile.getFullPathName());
-        break;
-      }
-      case FileResetEverything:
+    case FileExportVoicingReport: {
+      juce::File targetFile =
+          juce::File::getSpecialLocation(juce::File::userDesktopDirectory)
+              .getChildFile("OmniKey_Voicings.txt");
+      ChordUtilities::dumpDebugReport(targetFile);
+      logComponent.addEntry("Voicing report exported to: " +
+                            targetFile.getFullPathName());
+      break;
+    }
+    case FileResetEverything:
       juce::AlertWindow::showOkCancelBox(
-        juce::AlertWindow::WarningIcon,
-        "Reset Everything",
-        "This will reset all mappings and zones to factory defaults.\n\n"
-        "This action cannot be undone. Continue?",
-        "Reset",
-        "Cancel",
-        this,
-        juce::ModalCallbackFunction::create([this](int result) {
-          if (result == 1) { // OK clicked
-            startupManager.createFactoryDefault();
-            // Force InputProcessor to rebuild its keyMapping (ensures conflict detection is accurate)
-            inputProcessor.forceRebuildMappings();
-            // Trigger visualizer repaint to update conflict indicators
-            visualizer.repaint();
-            logComponent.addEntry("Reset to factory defaults");
-          }
-        })
-      );
+          juce::AlertWindow::WarningIcon, "Reset Everything",
+          "This will reset all mappings and zones to factory defaults.\n\n"
+          "This action cannot be undone. Continue?",
+          "Reset", "Cancel", this,
+          juce::ModalCallbackFunction::create([this](int result) {
+            if (result == 1) { // OK clicked
+              startupManager.createFactoryDefault();
+              // Force InputProcessor to rebuild its keyMapping (ensures
+              // conflict detection is accurate)
+              inputProcessor.forceRebuildMappings();
+              // Trigger visualizer repaint to update conflict indicators
+              visualizer.repaint();
+              logComponent.addEntry("Reset to factory defaults");
+            }
+          }));
       break;
     case FileExit:
       juce::JUCEApplication::getInstance()->systemRequestedQuit();
@@ -490,18 +507,21 @@ void MainComponent::resized() {
   area.removeFromTop(4);
 
   // Use StretchableLayoutManager for vertical split: Visualizer | Bar | Bottom
-  // Layout manager items: 0 = Visualizer, 1 = Bar, 2 = Bottom area (placeholder)
-  
+  // Layout manager items: 0 = Visualizer, 1 = Bar, 2 = Bottom area
+  // (placeholder)
+
   juce::Rectangle<int> bottomArea;
-  
+
   if (!visualizerContainer.isHidden()) {
-    // Include visualizer and bar in the layout (use nullptr for item 2 as placeholder)
-    juce::Component* verticalComps[] = { &visualizerContainer, &verticalBar, nullptr };
-    verticalLayout.layOutComponents(verticalComps, 3,
-                                     area.getX(), area.getY(),
-                                     area.getWidth(), area.getHeight(),
-                                     true, true);  // true = vertical layout (stack top to bottom)
-    
+    // Include visualizer and bar in the layout (use nullptr for item 2 as
+    // placeholder)
+    juce::Component *verticalComps[] = {&visualizerContainer, &verticalBar,
+                                        nullptr};
+    verticalLayout.layOutComponents(
+        verticalComps, 3, area.getX(), area.getY(), area.getWidth(),
+        area.getHeight(), true,
+        true); // true = vertical layout (stack top to bottom)
+
     // Bottom area starts after the bar
     bottomArea = area.withTop(verticalBar.getBottom());
   } else {
@@ -510,22 +530,22 @@ void MainComponent::resized() {
   }
 
   // Inside bottom area, use horizontal split: Editors | Bar | Log
-  juce::Array<juce::Component*> horizontalComponents;
+  juce::Array<juce::Component *> horizontalComponents;
   if (!editorContainer.isHidden())
     horizontalComponents.add(&editorContainer);
   if (!editorContainer.isHidden() && !logContainer.isHidden())
     horizontalComponents.add(&horizontalBar);
   if (!logContainer.isHidden())
     horizontalComponents.add(&logContainer);
-  
+
   auto logButtonArea = bottomArea.removeFromBottom(30);
   clearButton.setBounds(logButtonArea.removeFromRight(100).reduced(2));
 
   if (horizontalComponents.size() > 0) {
-    horizontalLayout.layOutComponents(horizontalComponents.getRawDataPointer(), horizontalComponents.size(),
-                                       bottomArea.getX(), bottomArea.getY(),
-                                       bottomArea.getWidth(), bottomArea.getHeight(),
-                                       false, true);
+    horizontalLayout.layOutComponents(
+        horizontalComponents.getRawDataPointer(), horizontalComponents.size(),
+        bottomArea.getX(), bottomArea.getY(), bottomArea.getWidth(),
+        bottomArea.getHeight(), false, true);
   }
 }
 
@@ -541,7 +561,8 @@ void MainComponent::timerCallback() {
     }
   }
 
-  // Process log batch (Phase 21.1: fire-and-forget logging on timer, not input thread)
+  // Process log batch (Phase 21.1: fire-and-forget logging on timer, not input
+  // thread)
   std::vector<PendingEvent> tempQueue;
   {
     juce::ScopedLock lock(queueLock);
