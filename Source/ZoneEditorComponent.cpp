@@ -4,9 +4,9 @@ ZoneEditorComponent::ZoneEditorComponent(ZoneManager *zoneMgr, DeviceManager *de
     : zoneManager(zoneMgr),
       deviceManager(deviceMgr),
       rawInputManager(rawInputMgr),
-      globalPanel(zoneMgr),
       listPanel(zoneMgr),
       propertiesPanel(zoneMgr, deviceMgr, rawInputMgr, scaleLib),
+      globalPanel(zoneMgr),
       resizerBar(&horizontalLayout, 1, true) { // Item index 1, vertical bar
   
   addAndMakeVisible(globalPanel);

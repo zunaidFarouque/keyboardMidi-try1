@@ -17,13 +17,17 @@ public:
   void resized() override;
 
 private:
+  // 1. Data/Managers
   ZoneManager *zoneManager;
   DeviceManager *deviceManager;
   RawInputManager *rawInputManager;
 
-  GlobalPerformancePanel globalPanel;
+  // 2. Content Components (Must live longer than containers)
   ZoneListPanel listPanel;
   ZonePropertiesPanel propertiesPanel;
+  GlobalPerformancePanel globalPanel;
+
+  // 3. Containers (Must die first)
   juce::Viewport propertiesViewport;
 
   // Resizable layout for list and properties

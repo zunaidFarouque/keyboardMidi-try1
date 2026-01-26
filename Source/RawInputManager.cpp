@@ -8,8 +8,8 @@
 // (We removed the #defines because CMake already sets them)
 #include <windows.h>
 
-// Static storage
-void *RawInputManager::originalWndProc = nullptr;
+// Static storage (file-scope for safety during destruction)
+static WNDPROC globalOriginalWndProc = nullptr; // Store the old proc here (survives class destruction)
 RawInputManager *RawInputManager::globalManagerInstance = nullptr;
 
 // Helper class to forward pointer events to RawInputManager listeners
@@ -33,8 +33,8 @@ private:
 RawInputManager::RawInputManager()
     : pointerInputManager(std::make_unique<PointerInputManager>()),
       pointerEventForwarder(std::make_unique<PointerEventForwarder>(this)) {
-  globalManagerInstance = this;
   pointerInputManager->addListener(pointerEventForwarder.get());
+  // Note: globalManagerInstance is set in initialize() after window subclassing
 }
 
 RawInputManager::~RawInputManager() { shutdown(); }
@@ -73,21 +73,32 @@ void RawInputManager::initialize(void *nativeWindowHandle, SettingsManager* sett
   }
 
   // Subclass the window
-  originalWndProc =
-      (void *)SetWindowLongPtr(hwnd, GWLP_WNDPROC, (LONG_PTR)rawInputWndProc);
+  LONG_PTR oldProc = SetWindowLongPtr(hwnd, GWLP_WNDPROC, (LONG_PTR)rawInputWndProc);
+  globalOriginalWndProc = (WNDPROC)oldProc;
+  
+  // Store global pointer
+  globalManagerInstance = this;
 
-  if (originalWndProc) {
+  if (globalOriginalWndProc) {
     isInitialized = true;
     DBG("RawInputManager: Window subclassed successfully. Initialized with RIDEV_INPUTSINK.");
   }
 }
 
 void RawInputManager::shutdown() {
-  if (isInitialized && targetHwnd) {
+  // 1. CUT THE CORD IMMEDIATELY
+  // This prevents the static proc from touching 'this' ever again.
+  globalManagerInstance = nullptr;
+
+  // 2. Restore the window (Unsubclass)
+  if (isInitialized && targetHwnd && globalOriginalWndProc) {
     HWND hwnd = static_cast<HWND>(targetHwnd);
-    SetWindowLongPtr(hwnd, GWLP_WNDPROC, (LONG_PTR)originalWndProc);
+    SetWindowLongPtr(hwnd, GWLP_WNDPROC, (LONG_PTR)globalOriginalWndProc);
     isInitialized = false;
   }
+
+  // 3. Clean up static state
+  // globalOriginalWndProc = nullptr; // Optional, maybe keep it safe in case a lagging message hits
 
   // Clear device key states
   deviceKeyStates.clear();
@@ -143,6 +154,15 @@ static void forceForegroundWindow(HWND hwnd) {
 int64_t __stdcall RawInputManager::rawInputWndProc(void *hwnd, unsigned int msg,
                                                    uint64_t wParam,
                                                    int64_t lParam) {
+  // 1. SAFETY CHECK: If the class is dead, just pass through.
+  if (globalManagerInstance == nullptr) {
+    if (globalOriginalWndProc) {
+      return CallWindowProc(globalOriginalWndProc, (HWND)hwnd, (UINT)msg, (WPARAM)wParam, (LPARAM)lParam);
+    }
+    return DefWindowProc((HWND)hwnd, (UINT)msg, (WPARAM)wParam, (LPARAM)lParam);
+  }
+
+  // 2. Normal Processing
   if (msg == WM_INPUT) {
     // DIAGNOSTIC LOG
     // GET_RAWINPUT_CODE_WPARAM is a macro to extract the input type
@@ -276,8 +296,11 @@ int64_t __stdcall RawInputManager::rawInputWndProc(void *hwnd, unsigned int msg,
     }
   }
 
-  return CallWindowProc((WNDPROC)originalWndProc, (HWND)hwnd, msg, wParam,
-                        lParam);
+  // 3. Pass to original
+  if (globalOriginalWndProc) {
+    return CallWindowProc(globalOriginalWndProc, (HWND)hwnd, (UINT)msg, (WPARAM)wParam, (LPARAM)lParam);
+  }
+  return DefWindowProc((HWND)hwnd, (UINT)msg, (WPARAM)wParam, (LPARAM)lParam);
 }
 
 juce::String RawInputManager::getKeyName(int virtualKey) {

@@ -29,27 +29,28 @@ void LogComponent::paint(juce::Graphics &g) {
 void LogComponent::resized() { console.setBounds(getLocalBounds().reduced(1)); }
 
 void LogComponent::addEntry(const juce::String &text) {
-  // Always update UI on the Message Thread
-  juce::MessageManager::callAsync([this, text]() {
-    // 1. Add to buffer
-    logBuffer.push_back(text);
+  // Create a SafePointer to 'this'
+  // If LogComponent is deleted, safeThis becomes null automatically.
+  juce::Component::SafePointer<LogComponent> safeThis(this);
 
-    // 2. Trim old lines if we exceeded the limit
-    while (logBuffer.size() > maxLines) {
-      logBuffer.pop_front();
+  juce::MessageManager::callAsync([safeThis, text]() {
+    // Check if we are still alive
+    if (safeThis == nullptr) return;
+
+    // Use safeThis-> instead of implicit this->
+    safeThis->logBuffer.push_back(text);
+
+    while (safeThis->logBuffer.size() > safeThis->maxLines) {
+      safeThis->logBuffer.pop_front();
     }
 
-    // 3. Reconstruct the text block
-    // (This is much faster than manipulating the TextEditor directly for small
-    // N)
     juce::String combinedText;
-    for (const auto &line : logBuffer) {
+    for (const auto &line : safeThis->logBuffer) {
       combinedText += line + "\n";
     }
 
-    // 4. Update UI
-    console.setText(combinedText, false); // false = don't send change message
-    console.moveCaretToEnd();
+    safeThis->console.setText(combinedText, false);
+    safeThis->console.moveCaretToEnd();
   });
 }
 

@@ -47,38 +47,36 @@ public:
   juce::ApplicationCommandTarget *getNextCommandTarget() override;
 
 private:
-  // 1. Core Hardware & Config (Must die LAST)
+  // 1. Core Engines & Inputs (Must die LAST)
   SettingsManager settingsManager;
   DeviceManager deviceManager;
   MidiEngine midiEngine;
   ScaleLibrary scaleLibrary;
+  std::unique_ptr<RawInputManager> rawInputManager; // MOVED UP (Was #5) - Must be before UI components that reference it
 
-  // 2. Logic Managers (Depend on Core)
+  // 2. Logic Managers
   VoiceManager voiceManager; // Depends on MidiEngine, SettingsManager
   PresetManager presetManager;
 
-  // 3. Processors (Depend on Managers)
+  // 3. Processors
   InputProcessor inputProcessor; // Listens to Preset/Device/Zone
 
-  // 4. Persistence Helper
+  // 4. Persistence
   StartupManager startupManager;
 
-  // 5. Input Source (Raw Input) - Must be before UI components that reference it
-  std::unique_ptr<RawInputManager> rawInputManager;
-  bool isInputInitialized = false;
-
-  // 6. UI Components (Depend on everything)
+  // 5. Content Components (Must live longer than containers)
   VisualizerComponent visualizer; // Listens to RawInput/Voice/Zone
-  MappingEditorComponent mappingEditor;
+  MappingEditorComponent mappingEditor; // CONTENT for Tab
+  ZoneEditorComponent zoneEditor;       // CONTENT for Tab
+  SettingsPanel settingsPanel;          // CONTENT for Tab
   LogComponent logComponent;
-  juce::TabbedComponent mainTabs;
-  ZoneEditorComponent zoneEditor;
-  SettingsPanel settingsPanel;
 
-  // 7. Containers/Widgets
+  // 6. Containers / Wrappers (Must die first)
+  juce::TabbedComponent mainTabs;
   DetachableContainer visualizerContainer;
   DetachableContainer editorContainer;
   DetachableContainer logContainer;
+  bool isInputInitialized = false;
   juce::TextButton clearButton;
   juce::ComboBox midiSelector;
   juce::TextButton saveButton;

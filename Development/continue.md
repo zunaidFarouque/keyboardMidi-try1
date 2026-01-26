@@ -1,11 +1,3 @@
-THE Window uses 10% of my CPU at all the time. even if I dont use it. this is huge! why is that?
-
----
-
-===
-
----
-
 please introduce state banks, and modifier keys.
 for example, if I press "Q", it plays "C4". hold shift and play to play "C5". or "C4" in but another channel. or a CC, or command... or anything. or trigger something (e.g. set zone playmode to poly instead of mono)
 basically shift or any other button could act as a way to modify.

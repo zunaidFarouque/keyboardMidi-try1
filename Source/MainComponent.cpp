@@ -240,29 +240,34 @@ MainComponent::MainComponent()
 }
 
 MainComponent::~MainComponent() {
-  // 1. Stop Events immediately
-  stopTimer(); // Stop logging timer
-  
-  // 2. Stop Input
-  if (rawInputManager) {
-    rawInputManager->removeListener(this);
-    rawInputManager->shutdown(); // Unhooks window, stops sending callbacks
-  }
+  // 1. Stop any pending UI updates
+  stopTimer();
 
-  // 3. Force Save
-  saveLayoutPositions(); // Save layout positions to DeviceManager
-  startupManager.saveImmediate();
+  // 2. CRITICAL: Manually clear tabs.
+  // This detaches the MappingEditor/ZoneEditor/SettingsPanel safely so the TabbedComponent
+  // doesn't try to delete them (even if we set the flag to false, this is safer).
+  mainTabs.clearTabs();
 
-  // 4. Close Child Windows
+  // 3. Close Popups
   if (miniWindow) {
     miniWindow->setVisible(false);
     miniWindow = nullptr;
   }
 
-  // 5. Remove listeners
+  // 4. Force Save
+  saveLayoutPositions();
+  startupManager.saveImmediate();
+
+  // 5. Stop Input (Explicitly)
+  if (rawInputManager) {
+    rawInputManager->removeListener(this);
+    rawInputManager->shutdown();
+  }
+
+  // 6. Remove listeners
   settingsManager.removeChangeListener(this);
 
-  // 6. Ensure cursor is unlocked on exit
+  // 7. Ensure cursor is unlocked on exit
   if (performanceModeButton.getToggleState()) {
     ::ShowCursor(TRUE);
     ClipCursor(nullptr);

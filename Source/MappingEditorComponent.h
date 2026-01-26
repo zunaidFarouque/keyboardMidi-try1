@@ -46,9 +46,12 @@ public:
   void valueTreeParentChanged(juce::ValueTree &) override;
 
 private:
+  // 1. Data/Managers
   PresetManager &presetManager;
   RawInputManager &rawInputManager;
   DeviceManager &deviceManager;
+
+  // 2. Content Components (Must live longer than containers)
   juce::TableListBox table;
   juce::TextButton addButton;
   juce::TextButton duplicateButton;
@@ -56,6 +59,8 @@ private:
   juce::ToggleButton learnButton;
   juce::UndoManager undoManager;
   MappingInspector inspector;
+
+  // 3. Containers (Must die first)
   juce::Viewport inspectorViewport;
 
   // Resizable layout for table and inspector

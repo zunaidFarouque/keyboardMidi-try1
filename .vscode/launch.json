@@ -2,16 +2,60 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "Debug OmniKey (Windows)",
-            "type": "cppvsdbg",
+            "name": "Debug OmniKey (CodeLLDB)",
+            "type": "lldb",
             "request": "launch",
-            // This asks CMake where the exe is automatically
-            "program": "${command:cmake.launchTargetPath}",
+            "program": "${workspaceFolder}/build/OmniKey_artefacts/Debug/OmniKey.exe",
+            "args": [],
+            "cwd": "${workspaceFolder}",
+            "preLaunchTask": "build-debug"
+        },
+        {
+            "name": "Run OmniKey",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/build/OmniKey_artefacts/Debug/OmniKey.exe",
             "args": [],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}",
             "environment": [],
-            "console": "externalTerminal"
+            "externalConsole": true,
+            "preLaunchTask": "build-debug",
+            "noDebug": true
+        },
+        {
+            "name": "Debug OmniKey (GDB)",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/build/OmniKey_artefacts/Debug/OmniKey.exe",
+            "args": [],
+            "stopAtEntry": false,
+            "cwd": "${workspaceFolder}",
+            "environment": [],
+            "externalConsole": true,
+            "MIMode": "gdb",
+            "miDebuggerPath": "gdb.exe",
+            "setupCommands": [
+                {
+                    "description": "Enable pretty-printing for gdb",
+                    "text": "-enable-pretty-printing",
+                    "ignoreFailures": true
+                }
+            ],
+            "preLaunchTask": "build-debug"
+        },
+        {
+            "name": "Debug OmniKey (VS Code - cppvsdbg)",
+            "type": "cppvsdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/build/OmniKey_artefacts/Debug/OmniKey.exe",
+            "args": [],
+            "stopAtEntry": false,
+            "cwd": "${workspaceFolder}",
+            "environment": [],
+            "console": "externalTerminal",
+            "preLaunchTask": "build-debug",
+            "symbolSearchPath": "${workspaceFolder}/build"
         }
     ]
 }

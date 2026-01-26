@@ -59,6 +59,5 @@ private:
   // Static WNDPROC wrapper
   static int64_t __stdcall rawInputWndProc(void *hwnd, unsigned int msg,
                                            uint64_t wParam, int64_t lParam);
-  static void *originalWndProc;
   static RawInputManager *globalManagerInstance;
 };

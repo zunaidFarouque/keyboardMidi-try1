@@ -450,7 +450,9 @@ void VisualizerComponent::changeListenerCallback(juce::ChangeBroadcaster *source
   if (source == zoneManager || source == settingsManager) {
     cacheValid = false; // Invalidate cache on zone/transpose changes
     needsRepaint = true;
-    juce::MessageManager::callAsync([this] {
+    juce::Component::SafePointer<VisualizerComponent> safeThis(this);
+    juce::MessageManager::callAsync([safeThis] {
+      if (safeThis == nullptr) return;
       // Repaint will be triggered by vBlank callback if needed
     });
   }
@@ -462,8 +464,11 @@ void VisualizerComponent::valueTreeChildAdded(juce::ValueTree &parentTree, juce:
   if (parentTree.isEquivalentTo(mappingsNode) || parentTree.getParent().isEquivalentTo(mappingsNode)) {
     needsRepaint = true;
     // Small delay to ensure InputProcessor has finished updating keyMapping
-    juce::MessageManager::callAsync([this] {
-      juce::MessageManager::callAsync([this] {
+    juce::Component::SafePointer<VisualizerComponent> safeThis(this);
+    juce::MessageManager::callAsync([safeThis] {
+      if (safeThis == nullptr) return;
+      juce::MessageManager::callAsync([safeThis] {
+        if (safeThis == nullptr) return;
         // Repaint will be triggered by vBlank callback if needed
       });
     });
@@ -476,8 +481,11 @@ void VisualizerComponent::valueTreeChildRemoved(juce::ValueTree &parentTree, juc
   if (parentTree.isEquivalentTo(mappingsNode) || parentTree.getParent().isEquivalentTo(mappingsNode)) {
     needsRepaint = true;
     // Small delay to ensure InputProcessor has finished updating keyMapping
-    juce::MessageManager::callAsync([this] {
-      juce::MessageManager::callAsync([this] {
+    juce::Component::SafePointer<VisualizerComponent> safeThis(this);
+    juce::MessageManager::callAsync([safeThis] {
+      if (safeThis == nullptr) return;
+      juce::MessageManager::callAsync([safeThis] {
+        if (safeThis == nullptr) return;
         // Repaint will be triggered by vBlank callback if needed
       });
     });
@@ -490,8 +498,11 @@ void VisualizerComponent::valueTreePropertyChanged(juce::ValueTree &treeWhosePro
   if (treeWhosePropertyHasChanged.getParent().isEquivalentTo(mappingsNode)) {
     needsRepaint = true;
     // Small delay to ensure InputProcessor has finished updating keyMapping
-    juce::MessageManager::callAsync([this] {
-      juce::MessageManager::callAsync([this] {
+    juce::Component::SafePointer<VisualizerComponent> safeThis(this);
+    juce::MessageManager::callAsync([safeThis] {
+      if (safeThis == nullptr) return;
+      juce::MessageManager::callAsync([safeThis] {
+        if (safeThis == nullptr) return;
         // Repaint will be triggered by vBlank callback if needed
       });
     });
