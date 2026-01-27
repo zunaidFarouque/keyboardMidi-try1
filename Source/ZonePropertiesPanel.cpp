@@ -7,6 +7,7 @@
 // Helper to convert alias name to hash (same as in InputProcessor)
 static uintptr_t aliasNameToHash(const juce::String &aliasName) {
   if (aliasName.isEmpty() || aliasName == "Any / Master" ||
+      aliasName == "Global (All Devices)" || aliasName == "Global" ||
       aliasName == "Unassigned")
     return 0;
   return static_cast<uintptr_t>(std::hash<juce::String>{}(aliasName));
@@ -15,7 +16,7 @@ static uintptr_t aliasNameToHash(const juce::String &aliasName) {
 // Helper to convert alias hash to name (for display)
 static juce::String aliasHashToName(uintptr_t hash, DeviceManager *deviceMgr) {
   if (hash == 0)
-    return "Any / Master";
+    return "Global (All Devices)";
 
   // We can't easily reverse the hash, so we'll need to check all aliases
   // For now, just return "Unknown" - in practice, we should store the alias
@@ -1032,13 +1033,13 @@ void ZonePropertiesPanel::updateControlsFromZone() {
   // Set alias selector (find matching alias hash)
   // For Phase 11, we'll match by hash - in a full implementation, we'd store
   // the alias name
-  int aliasIndex = 0; // Default to "Any / Master"
+  int aliasIndex = 0; // Default to "Global (All Devices)"
   if (currentZone->targetAliasHash != 0 && deviceManager) {
     // Try to find matching alias
     auto aliases = deviceManager->getAllAliasNames();
     for (int i = 0; i < aliases.size(); ++i) {
       if (aliasNameToHash(aliases[i]) == currentZone->targetAliasHash) {
-        aliasIndex = i + 1; // +1 because index 0 is "Any / Master"
+        aliasIndex = i + 1; // +1 because index 0 is "Global (All Devices)"
         break;
       }
     }
@@ -1276,7 +1277,7 @@ void ZonePropertiesPanel::rebuildZoneCache() {
 
 void ZonePropertiesPanel::refreshAliasSelector() {
   aliasSelector.clear();
-  aliasSelector.addItem("Any / Master", 1);
+  aliasSelector.addItem("Global (All Devices)", 1);
 
   if (deviceManager) {
     auto aliases = deviceManager->getAllAliasNames();

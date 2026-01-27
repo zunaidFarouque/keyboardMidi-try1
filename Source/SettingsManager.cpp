@@ -6,6 +6,7 @@ SettingsManager::SettingsManager() {
   rootNode.setProperty("midiModeActive", false, nullptr);
   rootNode.setProperty("toggleKeyCode", 0x91, nullptr); // VK_SCROLL
   rootNode.setProperty("lastMidiDevice", "", nullptr);
+  rootNode.setProperty("studioMode", false, nullptr); // Default: Studio Mode OFF
   rootNode.addListener(this);
 }
 
@@ -46,6 +47,15 @@ juce::String SettingsManager::getLastMidiDevice() const {
 
 void SettingsManager::setLastMidiDevice(const juce::String& name) {
   rootNode.setProperty("lastMidiDevice", name, nullptr);
+  sendChangeMessage();
+}
+
+bool SettingsManager::isStudioMode() const {
+  return rootNode.getProperty("studioMode", false);
+}
+
+void SettingsManager::setStudioMode(bool active) {
+  rootNode.setProperty("studioMode", active, nullptr);
   sendChangeMessage();
 }
 
@@ -121,6 +131,7 @@ void SettingsManager::loadFromXml(juce::File file) {
         rootNode.setProperty("midiModeActive", false, nullptr);
         rootNode.setProperty("toggleKeyCode", 0x91, nullptr);
         rootNode.setProperty("lastMidiDevice", "", nullptr);
+        rootNode.setProperty("studioMode", false, nullptr);
       }
       rootNode.addListener(this);
       sendChangeMessage();

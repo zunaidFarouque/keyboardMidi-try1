@@ -235,15 +235,15 @@ MappingInspector::MappingInspector(juce::UndoManager *undoMgr, DeviceManager *de
 
     juce::String aliasName = aliasSelector.getText();
     
-    // Special case: "Any / Master" means empty or hash 0
-    if (aliasName == "Any / Master")
+    // Special case: "Global (All Devices)" means empty or hash 0
+    if (aliasName == "Global (All Devices)")
       aliasName = "";
 
     undoManager->beginNewTransaction("Change Alias");
     for (auto &tree : selectedTrees) {
       if (tree.isValid()) {
         if (aliasName.isEmpty()) {
-          // Set both inputAlias (empty) and deviceHash (0) for legacy compatibility
+          // Set both inputAlias (empty) and deviceHash ("0" as string) for Global
           tree.setProperty("inputAlias", "", undoManager);
           tree.setProperty("deviceHash", "0", undoManager);
         } else {
@@ -427,8 +427,8 @@ void MappingInspector::refreshAliasSelector() {
   if (deviceManager == nullptr)
     return;
 
-  // Add "Any / Master" option (hash 0)
-  aliasSelector.addItem("Any / Master", 1);
+  // Add "Global (All Devices)" option (hash 0)
+  aliasSelector.addItem("Global (All Devices)", 1);
   
   // Add all aliases
   auto aliases = deviceManager->getAllAliasNames();
@@ -727,7 +727,7 @@ void MappingInspector::updateControlsFromSelection() {
     if (allTreesHaveSameValue("inputAlias")) {
       aliasName = getCommonValue("inputAlias").toString();
       if (aliasName.isEmpty()) {
-        aliasName = "Any / Master";
+        aliasName = "Global (All Devices)";
       }
     } else {
       // Try legacy deviceHash property
@@ -735,13 +735,18 @@ void MappingInspector::updateControlsFromSelection() {
         uintptr_t deviceHash = 0;
         juce::var hashVar = getCommonValue("deviceHash");
         if (hashVar.isString()) {
-          deviceHash = static_cast<uintptr_t>(hashVar.toString().getHexValue64());
+          juce::String hashStr = hashVar.toString();
+          if (hashStr == "0") {
+            deviceHash = 0;
+          } else {
+            deviceHash = static_cast<uintptr_t>(hashStr.getHexValue64());
+          }
         } else if (hashVar.isInt()) {
           deviceHash = static_cast<uintptr_t>(static_cast<juce::int64>(hashVar));
         }
         
         if (deviceHash == 0) {
-          aliasName = "Any / Master";
+          aliasName = "Global (All Devices)";
         } else {
           aliasName = deviceManager->getAliasName(deviceHash);
         }
@@ -754,7 +759,7 @@ void MappingInspector::updateControlsFromSelection() {
     // Set selection if we found a single alias
     if (!aliasName.isEmpty() && aliasName != "Unknown") {
       // Find the ID for this alias name
-      if (aliasName == "Any / Master") {
+      if (aliasName == "Global (All Devices)") {
         aliasSelector.setSelectedId(1, juce::dontSendNotification);
       } else {
         auto aliases = deviceManager->getAllAliasNames();

@@ -39,12 +39,16 @@ public:
   // Focus target callback for dynamic window selection
   void setFocusTargetCallback(std::function<void*()> cb);
 
+  // Device change callback for hardware hygiene
+  void setOnDeviceChangeCallback(std::function<void()> cb);
+
   static juce::String getKeyName(int virtualKey);
 
 private:
   void *targetHwnd = nullptr;
   SettingsManager* settingsManager = nullptr;
   std::function<void*()> focusTargetCallback;
+  std::function<void()> onDeviceChangeCallback;
   juce::ListenerList<Listener> listeners;
   bool isInitialized = false;
   std::unique_ptr<PointerInputManager> pointerInputManager;

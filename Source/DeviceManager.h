@@ -32,7 +32,7 @@ public:
   juce::StringArray getAllAliases() const;
 
   // Get alias name for a hardware hash (for display)
-  // Returns "Any / Master" for hash 0, "Unknown" if not found
+  // Returns "Global" for hash 0, "Unknown" if not found
   juce::String getAliasName(uintptr_t hardwareHash) const;
 
   // Get all alias names (alias for getAllAliases for consistency)
@@ -40,6 +40,12 @@ public:
 
   // Check if alias exists
   bool aliasExists(const juce::String &aliasName) const;
+
+  // Validate connected devices and remove dead handles
+  void validateConnectedDevices();
+
+  // Phase 9.6: Get aliases that have no hardware assigned
+  juce::StringArray getEmptyAliases(const std::vector<uintptr_t>& requiredAliasHashes);
 
   // Save/Load configuration
   void saveConfig();

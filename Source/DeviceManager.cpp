@@ -1,6 +1,8 @@
 #include "DeviceManager.h"
 #include "PresetManager.h"
 #include <vector>
+#include <set>
+#include <windows.h>
 
 DeviceManager::DeviceManager() {
   loadConfig();
@@ -235,9 +237,9 @@ juce::StringArray DeviceManager::getAllAliases() const {
 }
 
 juce::String DeviceManager::getAliasName(uintptr_t hardwareHash) const {
-  // Edge case: hash is 0 means "Any / Master"
+  // Edge case: hash is 0 means "Global"
   if (hardwareHash == 0)
-    return "Any / Master";
+    return "Global";
 
   // Look up which alias this hardware ID belongs to
   juce::String alias = getAliasForHardware(hardwareHash);
@@ -299,6 +301,112 @@ juce::ValueTree DeviceManager::findOrCreateAliasNode(const juce::String &aliasNa
   aliasNode.setProperty("name", aliasName, nullptr);
   globalConfig.addChild(aliasNode, -1, nullptr);
   return aliasNode;
+}
+
+juce::StringArray DeviceManager::getEmptyAliases(const std::vector<uintptr_t>& requiredAliasHashes) {
+  juce::StringArray emptyAliases;
+  
+  // Iterate through required alias hashes
+  for (uintptr_t requiredHash : requiredAliasHashes) {
+    // Skip hash 0 (Global)
+    if (requiredHash == 0)
+      continue;
+    
+    // Find alias name by iterating all aliases and computing their hash
+    juce::String aliasName;
+    for (int i = 0; i < globalConfig.getNumChildren(); ++i) {
+      auto aliasNode = globalConfig.getChild(i);
+      if (!aliasNode.hasType("Alias"))
+        continue;
+      
+      juce::String name = aliasNode.getProperty("name").toString();
+      uintptr_t hash = getAliasHash(name);
+      
+      if (hash == requiredHash) {
+        aliasName = name;
+        break;
+      }
+    }
+    
+    // If alias doesn't exist, create it
+    if (aliasName.isEmpty()) {
+      // Generate a default name from hash (fallback)
+      aliasName = "Alias_" + juce::String::toHexString((juce::int64)requiredHash).substring(0, 8);
+      createAlias(aliasName);
+    }
+    
+    // Check if alias has hardware assigned
+    juce::Array<uintptr_t> hardwareIds = getHardwareForAlias(aliasName);
+    if (hardwareIds.size() == 0) {
+      emptyAliases.add(aliasName);
+    }
+  }
+  
+  return emptyAliases;
+}
+
+void DeviceManager::validateConnectedDevices() {
+  // Step 1: Get list of currently live devices using GetRawInputDeviceList
+  UINT numDevices = 0;
+  if (GetRawInputDeviceList(nullptr, &numDevices, sizeof(RAWINPUTDEVICELIST)) != 0) {
+    // Error getting device count
+    return;
+  }
+
+  if (numDevices == 0) {
+    // No devices, but we can still clean up dead handles
+    numDevices = 0;
+  }
+
+  std::vector<RAWINPUTDEVICELIST> deviceList(numDevices);
+  if (GetRawInputDeviceList(deviceList.data(), &numDevices, sizeof(RAWINPUTDEVICELIST)) == static_cast<UINT>(-1)) {
+    // Error getting device list
+    return;
+  }
+
+  // Step 2: Extract valid hDevice handles into a set
+  std::set<uintptr_t> liveHandles;
+  for (const auto& device : deviceList) {
+    // Only include keyboard devices (RIM_TYPEKEYBOARD = 1)
+    if (device.dwType == RIM_TYPEKEYBOARD) {
+      uintptr_t handle = reinterpret_cast<uintptr_t>(device.hDevice);
+      liveHandles.insert(handle);
+    }
+  }
+
+  // Step 3: Iterate through all aliases and their hardware IDs
+  bool changesMade = false;
+  for (int i = 0; i < globalConfig.getNumChildren(); ++i) {
+    auto aliasNode = globalConfig.getChild(i);
+    if (!aliasNode.hasType("Alias"))
+      continue;
+
+    juce::String aliasName = aliasNode.getProperty("name").toString();
+
+    // Step 4: Check each hardware ID in this alias
+    for (int j = aliasNode.getNumChildren() - 1; j >= 0; --j) {
+      auto hardwareNode = aliasNode.getChild(j);
+      if (!hardwareNode.hasType("Hardware"))
+        continue;
+
+      juce::String idStr = hardwareNode.getProperty("id").toString();
+      uintptr_t id = static_cast<uintptr_t>(idStr.getHexValue64());
+
+      // Step 5: Remove if id != 0 AND id is NOT in liveHandles
+      if (id != 0 && liveHandles.find(id) == liveHandles.end()) {
+        // Dead device - remove it
+        DBG("DeviceManager: Removed dead device " + juce::String::toHexString((juce::int64)id) + " from Alias \"" + aliasName + "\"");
+        aliasNode.removeChild(hardwareNode, nullptr);
+        changesMade = true;
+      }
+    }
+  }
+
+  // Step 6: If changes were made, send change message and save
+  if (changesMade) {
+    sendChangeMessage();
+    saveConfig();
+  }
 }
 
 juce::File DeviceManager::getConfigFile() const {

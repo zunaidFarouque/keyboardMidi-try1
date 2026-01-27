@@ -1,3 +1,5 @@
+# Doing
+
 please introduce state banks, and modifier keys.
 for example, if I press "Q", it plays "C4". hold shift and play to play "C5". or "C4" in but another channel. or a CC, or command... or anything. or trigger something (e.g. set zone playmode to poly instead of mono)
 basically shift or any other button could act as a way to modify.
@@ -9,20 +11,7 @@ there could also be banks. banks could be like a state of the layout/bindings. e
 
 I dont know which will be better to implement first... we need to do brainstorming.
 
-
----
-
-===
-
----
-
-we need to add icon to our software.
-
----
-
-===
-
----
+=== AND ===
 
 the keyboard visualizer should have alias-wise keyboard.
 for example, I should be able to choose which keyboard mapping is being shown.
@@ -30,3 +19,31 @@ e.g. when I select the laptop keyboard to be shown, the keyboard mappings will b
 if I select the external keyboard alias, the keyboard mappings will be shown for external And the any/master aliases.
 if I select any/master alias, it will only show mapping for that only.
 if I select ALL, it will show from all keyboards (starting from any/master bindings and going down chronologically. it will not try to override if a key already shows as "bound". )
+
+---
+
+===
+
+---
+
+## Regarding mouse/trackpage
+
+what if we do this:
+we visualize the trackpad finger position for each finger...?
+
+then, what if we make a system:
+1. always keep mouse pointer in a location (e.g. over the midi mini window) so that it cannot go out and click randomly.
+2. in the meanwhile we can track fingers.
+3. we can exit from that mouse lock state using a mapped command button in keyboard
+
+---
+
+===
+
+---
+
+## Brand:
+
+we need to add icon to our software.
+
+

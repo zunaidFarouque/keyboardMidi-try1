@@ -43,7 +43,8 @@ void InputProcessor::changeListenerCallback(juce::ChangeBroadcaster *source) {
 
 void InputProcessor::rebuildMapFromTree() {
   juce::ScopedWriteLock lock(mapLock);
-  keyMapping.clear();
+  compiledMap.clear();
+  configMap.clear(); // Clear the UI map too (Phase 39.3)
 
   auto mappingsNode = presetManager.getMappingsNode();
   for (int i = 0; i < mappingsNode.getNumChildren(); ++i) {
@@ -52,7 +53,7 @@ void InputProcessor::rebuildMapFromTree() {
 
   // State flush: reset Sustain/Latch, then re-evaluate SustainInverse
   voiceManager.resetPerformanceState();
-  for (const auto &pair : keyMapping) {
+  for (const auto &pair : compiledMap) {
     const MidiAction &action = pair.second;
     if (action.type == ActionType::Command &&
         action.data1 == static_cast<int>(OmniKey::CommandID::SustainInverse)) {
@@ -67,6 +68,17 @@ uintptr_t parseDeviceHash(const juce::var &var) {
   if (var.isString())
     return (uintptr_t)var.toString().getHexValue64();
   return (uintptr_t)static_cast<juce::int64>(var);
+}
+
+// Helper to convert alias name to hash (simple string hash)
+static uintptr_t aliasNameToHash(const juce::String &aliasName) {
+  if (aliasName.isEmpty() || aliasName == "Any / Master" ||
+      aliasName == "Global (All Devices)" || aliasName == "Global" ||
+      aliasName == "Unassigned")
+    return 0; // Hash 0 = Global (All Devices)
+
+  // Simple hash: use std::hash on the string
+  return static_cast<uintptr_t>(std::hash<juce::String>{}(aliasName));
 }
 
 void InputProcessor::addMappingFromTree(juce::ValueTree mappingNode) {
@@ -195,15 +207,34 @@ void InputProcessor::addMappingFromTree(juce::ValueTree mappingNode) {
     }
   }
 
-  // Compile alias into hardware IDs
+  // Phase 39.3: Populate both maps
+  
+  // Calculate alias hash for configMap (Phase 39.3)
+  uintptr_t aliasHash = 0;
+  if (!aliasName.isEmpty() && aliasName != "Global (All Devices)" && aliasName != "Any / Master" && aliasName != "Global") {
+    aliasHash = aliasNameToHash(aliasName);
+  }
+  // If aliasName is empty, aliasHash remains 0 (Global)
+  
+  // Populate configMap (UI/Visualization) - One entry per mapping using alias hash
+  InputID configInputId = {aliasHash, inputKey};
+  configMap[configInputId] = action;
+  
+  // Compile alias into hardware IDs for compiledMap (Audio processing)
   if (!aliasName.isEmpty()) {
     juce::Array<uintptr_t> hardwareIds =
         deviceManager.getHardwareForAlias(aliasName);
 
-    // For each hardware ID in the alias, create a mapping entry
+    // For each hardware ID in the alias, create a mapping entry in compiledMap
     for (uintptr_t hardwareId : hardwareIds) {
       InputID inputId = {hardwareId, inputKey};
-      keyMapping[inputId] = action;
+      compiledMap[inputId] = action;
+    }
+    
+    // Also add to compiledMap with hash 0 if this is a global mapping
+    if (aliasHash == 0) {
+      InputID globalInputId = {0, inputKey};
+      compiledMap[globalInputId] = action;
     }
   } else {
     // Fallback: support legacy deviceHash property for backward compatibility
@@ -217,11 +248,24 @@ void InputProcessor::addMappingFromTree(juce::ValueTree mappingNode) {
 
       if (foundAlias != "Unassigned") {
         // Hardware is already assigned to an alias, use that alias
+        uintptr_t foundAliasHash = aliasNameToHash(foundAlias);
+        
+        // Add to configMap
+        InputID configInputId = {foundAliasHash, inputKey};
+        configMap[configInputId] = action;
+        
+        // Add to compiledMap
         juce::Array<uintptr_t> hardwareIds =
             deviceManager.getHardwareForAlias(foundAlias);
         for (uintptr_t hardwareId : hardwareIds) {
           InputID inputId = {hardwareId, inputKey};
-          keyMapping[inputId] = action;
+          compiledMap[inputId] = action;
+        }
+        
+        // Also add global entry if alias hash is 0
+        if (foundAliasHash == 0) {
+          InputID globalInputId = {0, inputKey};
+          compiledMap[globalInputId] = action;
         }
       } else {
         // Legacy preset: hardware not assigned to any alias
@@ -233,13 +277,29 @@ void InputProcessor::addMappingFromTree(juce::ValueTree mappingNode) {
         deviceManager.assignHardware("Master Input", deviceHash);
 
         // Now use the alias
+        uintptr_t masterAliasHash = aliasNameToHash("Master Input");
+        
+        // Add to configMap
+        InputID configInputId = {masterAliasHash, inputKey};
+        configMap[configInputId] = action;
+        
+        // Add to compiledMap
         juce::Array<uintptr_t> hardwareIds =
             deviceManager.getHardwareForAlias("Master Input");
         for (uintptr_t hardwareId : hardwareIds) {
           InputID inputId = {hardwareId, inputKey};
-          keyMapping[inputId] = action;
+          compiledMap[inputId] = action;
         }
       }
+    } else {
+      // Legacy: deviceHash is 0 (Global)
+      // Add to configMap with hash 0
+      InputID configInputId = {0, inputKey};
+      configMap[configInputId] = action;
+      
+      // Add to compiledMap with hash 0
+      InputID globalInputId = {0, inputKey};
+      compiledMap[globalInputId] = action;
     }
     // If neither aliasName nor deviceHash exists, the mapping is invalid and
     // will be silently dropped
@@ -252,23 +312,58 @@ void InputProcessor::removeMappingFromTree(juce::ValueTree mappingNode) {
 
   int inputKey = mappingNode.getProperty("inputKey", 0);
 
-  // Remove all entries for this mapping (could be multiple if alias has
-  // multiple hardware IDs)
+  // Phase 39.3: Remove from both maps
+  
+  // Calculate alias hash for configMap removal
   juce::String aliasName = mappingNode.getProperty("inputAlias", "").toString();
+  uintptr_t aliasHash = 0;
+  if (!aliasName.isEmpty() && aliasName != "Global (All Devices)" && aliasName != "Any / Master" && aliasName != "Global") {
+    aliasHash = aliasNameToHash(aliasName);
+  }
+  
+  // Remove from configMap
+  InputID configInputId = {aliasHash, inputKey};
+  configMap.erase(configInputId);
 
+  // Remove from compiledMap (all hardware IDs for this alias)
   if (!aliasName.isEmpty()) {
     juce::Array<uintptr_t> hardwareIds =
         deviceManager.getHardwareForAlias(aliasName);
     for (uintptr_t hardwareId : hardwareIds) {
       InputID inputId = {hardwareId, inputKey};
-      keyMapping.erase(inputId);
+      compiledMap.erase(inputId);
+    }
+    
+    // Also remove global entry if alias hash is 0
+    if (aliasHash == 0) {
+      InputID globalInputId = {0, inputKey};
+      compiledMap.erase(globalInputId);
     }
   } else {
     // Fallback: legacy deviceHash
-    uintptr_t deviceHash =
-        parseDeviceHash(mappingNode.getProperty("deviceHash"));
-    InputID inputId = {deviceHash, inputKey};
-    keyMapping.erase(inputId);
+    juce::var deviceHashVar = mappingNode.getProperty("deviceHash");
+    if (!deviceHashVar.isVoid() && !deviceHashVar.toString().isEmpty()) {
+      uintptr_t deviceHash = parseDeviceHash(deviceHashVar);
+      
+      // Try to find alias for this hardware
+      juce::String foundAlias = deviceManager.getAliasForHardware(deviceHash);
+      if (foundAlias != "Unassigned") {
+        juce::Array<uintptr_t> hardwareIds =
+            deviceManager.getHardwareForAlias(foundAlias);
+        for (uintptr_t hardwareId : hardwareIds) {
+          InputID inputId = {hardwareId, inputKey};
+          compiledMap.erase(inputId);
+        }
+      } else {
+        // Direct hardware ID removal (legacy)
+        InputID inputId = {deviceHash, inputKey};
+        compiledMap.erase(inputId);
+      }
+    } else {
+      // No alias or deviceHash - remove global entry
+      InputID globalInputId = {0, inputKey};
+      compiledMap.erase(globalInputId);
+    }
   }
 }
 
@@ -297,7 +392,8 @@ void InputProcessor::valueTreeChildRemoved(
   // Case A: The "Mappings" folder was removed (e.g. Loading start)
   if (childWhichHasBeenRemoved.hasType("Mappings")) {
     juce::ScopedWriteLock lock(mapLock);
-    keyMapping.clear();
+    compiledMap.clear();
+    configMap.clear(); // Phase 39.3: Clear both maps
     return;
   }
 
@@ -344,15 +440,16 @@ void InputProcessor::valueTreePropertyChanged(
 }
 
 const MidiAction *InputProcessor::findMapping(const InputID &input) {
-  auto it = keyMapping.find(input);
-  if (it != keyMapping.end()) {
+  // Phase 39.3: Use compiledMap for audio processing
+  auto it = compiledMap.find(input);
+  if (it != compiledMap.end()) {
     return &it->second;
   }
 
   if (input.deviceHandle != 0) {
     InputID anyDevice = {0, input.keyCode};
-    it = keyMapping.find(anyDevice);
-    if (it != keyMapping.end()) {
+    it = compiledMap.find(anyDevice);
+    if (it != compiledMap.end()) {
       return &it->second;
     }
   }
@@ -367,22 +464,18 @@ const MidiAction *InputProcessor::getMappingForInput(InputID input) {
 }
 // -------------------------------------------------------------
 
-// Helper to convert alias name to hash (simple string hash)
-static uintptr_t aliasNameToHash(const juce::String &aliasName) {
-  if (aliasName.isEmpty() || aliasName == "Any / Master" ||
-      aliasName == "Unassigned")
-    return 0; // Hash 0 = "Any / Master"
-
-  // Simple hash: use std::hash on the string
-  return static_cast<uintptr_t>(std::hash<juce::String>{}(aliasName));
-}
-
 // Shared lookup logic for processEvent and simulateInput
 // Returns: {action, sourceDescription}
 std::pair<std::optional<MidiAction>, juce::String>
 InputProcessor::lookupAction(uintptr_t deviceHandle, int keyCode) {
+  // LOGIC CHANGE: Studio Mode Check - Force Global ID if Studio Mode is OFF
+  uintptr_t effectiveDevice = deviceHandle;
+  if (!settingsManager.isStudioMode()) {
+    effectiveDevice = 0; // Force Global ID
+  }
+
   // Step 1: Get alias name for hardware ID
-  juce::String aliasName = deviceManager.getAliasForHardware(deviceHandle);
+  juce::String aliasName = deviceManager.getAliasForHardware(effectiveDevice);
 
   // Convert alias name to hash
   uintptr_t aliasHash = 0;
@@ -399,7 +492,7 @@ InputProcessor::lookupAction(uintptr_t deviceHandle, int keyCode) {
     }
   }
 
-  // Step 3: Check wildcard zone (hash 0 = "Any / Master")
+  // Step 3: Check wildcard zone (hash 0 = Global)
   InputID wildcardInputID = {0, keyCode};
   auto [zoneAction, zoneName] =
       zoneManager.handleInputWithName(wildcardInputID);
@@ -408,7 +501,7 @@ InputProcessor::lookupAction(uintptr_t deviceHandle, int keyCode) {
   }
 
   // Step 4: Check manual mappings (specific alias first)
-  InputID input = {deviceHandle, keyCode};
+  InputID input = {effectiveDevice, keyCode};
   juce::ScopedReadLock lock(mapLock);
   const MidiAction *action = findMapping(input);
   if (action != nullptr) {
@@ -416,7 +509,7 @@ InputProcessor::lookupAction(uintptr_t deviceHandle, int keyCode) {
   }
 
   // Step 5: Check manual mappings (wildcard)
-  if (deviceHandle != 0) {
+  if (effectiveDevice != 0) {
     InputID anyDevice = {0, keyCode};
     action = findMapping(anyDevice);
     if (action != nullptr) {
@@ -442,8 +535,14 @@ int InputProcessor::calculateVelocity(int base, int range) {
 }
 
 std::shared_ptr<Zone> InputProcessor::getZoneForInputResolved(InputID input) {
+  // LOGIC CHANGE: Studio Mode Check - Force Global ID if Studio Mode is OFF
+  uintptr_t effectiveDevice = input.deviceHandle;
+  if (!settingsManager.isStudioMode()) {
+    effectiveDevice = 0; // Force Global ID
+  }
+
   juce::String aliasName =
-      deviceManager.getAliasForHardware(input.deviceHandle);
+      deviceManager.getAliasForHardware(effectiveDevice);
   uintptr_t aliasHash = (aliasName != "Unassigned" && !aliasName.isEmpty())
                             ? aliasNameToHash(aliasName)
                             : 0;
@@ -673,7 +772,8 @@ std::vector<int> InputProcessor::getBufferedNotes() {
 
 bool InputProcessor::hasManualMappingForKey(int keyCode) {
   juce::ScopedReadLock lock(mapLock);
-  for (const auto &p : keyMapping) {
+  // Phase 39.3: Check compiledMap (used for conflict detection)
+  for (const auto &p : compiledMap) {
     if (p.first.keyCode == keyCode)
       return true;
   }
@@ -682,18 +782,14 @@ bool InputProcessor::hasManualMappingForKey(int keyCode) {
 
 std::optional<ActionType> InputProcessor::getMappingType(int keyCode, uintptr_t aliasHash) {
   juce::ScopedReadLock lock(mapLock);
+  // Phase 39.3: Use configMap for UI/visualizer queries
   InputID id{aliasHash, keyCode};
-  auto it = keyMapping.find(id);
-  if (it != keyMapping.end())
+  auto it = configMap.find(id);
+  if (it != configMap.end())
     return it->second.type;
-  it = keyMapping.find(InputID{0, keyCode});
-  if (it != keyMapping.end())
+  it = configMap.find(InputID{0, keyCode});
+  if (it != configMap.end())
     return it->second.type;
-  if (aliasHash == 0) {
-    for (const auto &p : keyMapping)
-      if (p.first.keyCode == keyCode)
-        return p.second.type;
-  }
   return std::nullopt;
 }
 
@@ -702,9 +798,124 @@ void InputProcessor::forceRebuildMappings() {
   rebuildMapFromTree();
 }
 
-std::pair<std::optional<MidiAction>, juce::String>
-InputProcessor::simulateInput(uintptr_t deviceHandle, int keyCode) {
-  return lookupAction(deviceHandle, keyCode);
+SimulationResult InputProcessor::simulateInput(uintptr_t viewDeviceHash, int keyCode) {
+  SimulationResult result;
+  juce::ScopedReadLock lock(mapLock);
+  
+  // Phase 9.5: Studio Mode Check - Force Global ID if Studio Mode is OFF
+  if (!settingsManager.isStudioMode()) {
+    viewDeviceHash = 0; // Force Global ID
+  }
+  
+  // viewDeviceHash is already an alias hash (0 = Global, or specific alias hash)
+  // Strict 4-layer hierarchy check (Phase 39.1)
+  
+  // Phase 39.3: Use configMap for visualization (alias-based lookup)
+  // 1. Check Specific Manual
+  InputID specificInput = {viewDeviceHash, keyCode};
+  auto specificMap = (viewDeviceHash != 0) ? configMap.find(specificInput) : configMap.end();
+  bool hasSpecificMap = (specificMap != configMap.end());
+  
+  // 2. Check Global Manual
+  InputID globalInput = {0, keyCode};
+  auto globalMap = configMap.find(globalInput);
+  bool hasGlobalMap = (globalMap != configMap.end());
+  
+  // 3. Check Specific Zone
+  std::optional<MidiAction> specificZone;
+  if (viewDeviceHash != 0) {
+    auto zoneResult = zoneManager.handleInput(specificInput);
+    if (zoneResult.has_value()) {
+      specificZone = zoneResult;
+    }
+  }
+  
+  // 4. Check Global Zone
+  auto globalZone = zoneManager.handleInput(globalInput);
+  
+  // --- LOGIC TREE (Phase 39.1) ---
+  
+  if (viewDeviceHash == 0) {
+    // MASTER VIEW: Only check Global (strict isolation)
+    if (hasGlobalMap) {
+      result.action = globalMap->second;
+      result.state = VisualState::Active;
+      result.sourceName = "Mapping";
+      result.isZone = false;
+    } else if (globalZone.has_value()) {
+      result.action = globalZone;
+      result.state = VisualState::Active;
+      result.sourceName = "Zone";
+      result.isZone = true;
+    }
+    // else: Empty state (default)
+  } else {
+    // SPECIFIC VIEW
+    
+    // A. Specific Manual (Highest Priority)
+    if (hasSpecificMap) {
+      result.action = specificMap->second;
+      result.sourceName = "Mapping";
+      result.isZone = false;
+      
+      // Phase 39.8: Manual vs Zone Conflict Detection
+      // CRITICAL CHECK: Manual vs Zone Collision
+      
+      // 1. Same Layer Collision (Local vs Local) -> Red Conflict
+      if (specificZone.has_value()) {
+        result.state = VisualState::Conflict;
+        result.sourceName = "Conflict: Mapping + Zone";
+      }
+      // 2. Hierarchy Override (Local vs Global) -> Orange Override
+      else if (hasGlobalMap || globalZone.has_value()) {
+        result.state = VisualState::Override;
+      }
+      // 3. Clean
+      else {
+        result.state = VisualState::Active;
+      }
+    }
+    // B. Global Manual (Inheritance)
+    else if (hasGlobalMap) {
+      result.action = globalMap->second;
+      result.state = VisualState::Inherited;
+      result.sourceName = "Mapping";
+      result.isZone = false;
+    }
+    // C. Specific Zone
+    else if (specificZone.has_value()) {
+      result.action = specificZone;
+      result.sourceName = "Zone";
+      result.isZone = true;
+      if (globalZone.has_value()) {
+        result.state = VisualState::Override;
+      } else {
+        result.state = VisualState::Active;
+      }
+    }
+    // D. Global Zone (Inheritance)
+    else if (globalZone.has_value()) {
+      result.action = globalZone;
+      result.state = VisualState::Inherited;
+      result.sourceName = "Zone";
+      result.isZone = true;
+    }
+    // else: Empty state (default)
+  }
+  
+  // Phase 39.7: Conflict Detection
+  // Check for zone overlaps if result is a zone
+  if (result.isZone && result.state != VisualState::Empty) {
+    int zoneCount = zoneManager.getZoneCountForKey(keyCode, viewDeviceHash);
+    if (zoneCount > 1) {
+      result.state = VisualState::Conflict;
+    }
+  }
+  
+  // Update legacy fields for backward compatibility
+  result.updateLegacyFields();
+  
+  return result;
 }
 
 void InputProcessor::handleAxisEvent(uintptr_t deviceHandle, int inputCode,
@@ -746,7 +957,8 @@ void InputProcessor::handleAxisEvent(uintptr_t deviceHandle, int inputCode,
 
 bool InputProcessor::hasPointerMappings() {
   juce::ScopedReadLock lock(mapLock);
-  for (const auto &pair : keyMapping) {
+  // Phase 39.3: Check compiledMap (or configMap - both should have same entries)
+  for (const auto &pair : compiledMap) {
     int keyCode = pair.first.keyCode;
     if (keyCode == 0x2000 || keyCode == 0x2001) // PointerX or PointerY
       return true;

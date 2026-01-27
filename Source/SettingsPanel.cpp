@@ -94,6 +94,14 @@ SettingsPanel::SettingsPanel(SettingsManager& settingsMgr, MidiEngine& midiEng, 
           }
         }));
   };
+
+  // Setup Studio Mode Toggle
+  studioModeToggle.setButtonText("Studio Mode (Multi-Device Support)");
+  studioModeToggle.setToggleState(settingsManager.isStudioMode(), juce::dontSendNotification);
+  studioModeToggle.onClick = [this] {
+    settingsManager.setStudioMode(studioModeToggle.getToggleState());
+  };
+  addAndMakeVisible(studioModeToggle);
 }
 
 SettingsPanel::~SettingsPanel() {
@@ -104,8 +112,11 @@ SettingsPanel::~SettingsPanel() {
 }
 
 void SettingsPanel::changeListenerCallback(juce::ChangeBroadcaster* source) {
-  if (source == &settingsManager)
+  if (source == &settingsManager) {
     refreshTypeColorButtons();
+    // Update Studio Mode toggle state
+    studioModeToggle.setToggleState(settingsManager.isStudioMode(), juce::dontSendNotification);
+  }
 }
 
 void SettingsPanel::refreshTypeColorButtons() {
@@ -196,6 +207,10 @@ void SettingsPanel::resized() {
   int resetButtonWidth = 80;
   toggleKeyButton.setBounds(leftMargin, y, toggleKeyButtonWidth, controlHeight);
   resetToggleKeyButton.setBounds(leftMargin + toggleKeyButtonWidth + spacing, y, resetButtonWidth, controlHeight);
+  y += controlHeight + spacing;
+
+  // Studio Mode Toggle
+  studioModeToggle.setBounds(leftMargin, y, width, controlHeight);
   y += controlHeight + spacing;
 
   // Mapping Colors group (panel coordinates)

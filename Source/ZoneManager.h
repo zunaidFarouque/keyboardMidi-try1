@@ -46,6 +46,9 @@ public:
 
   // Number of zones that contain this key (for conflict detection in visualizer)
   int getZoneCountForKey(int keyCode) const;
+  
+  // Number of zones that contain this key for a specific alias hash (Phase 39.7)
+  int getZoneCountForKey(int keyCode, uintptr_t aliasHash) const;
 
   // Set global transpose values
   void setGlobalTranspose(int chromatic, int degree);

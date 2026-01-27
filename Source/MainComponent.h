@@ -14,6 +14,7 @@
 #include "VisualizerComponent.h"
 #include "ZoneEditorComponent.h"
 #include "MiniStatusWindow.h"
+#include "QuickSetupWizard.h"
 
 #include <JuceHeader.h>
 #include <vector>
@@ -92,6 +93,9 @@ private:
 
   // 9. Windows
   std::unique_ptr<MiniStatusWindow> miniWindow;
+  
+  // 10. Quick Setup Wizard (Phase 9.6)
+  QuickSetupWizard setupWizard;
 
   // Async logging: Input thread pushes POD only; timer processes batches
   // (Phase 21.1)

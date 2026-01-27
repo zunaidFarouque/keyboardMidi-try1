@@ -76,7 +76,7 @@ void ZoneManager::removeZone(std::shared_ptr<Zone> zone) {
 std::shared_ptr<Zone> ZoneManager::createDefaultZone() {
   auto zone = std::make_shared<Zone>();
   zone->name = "New Zone";
-  zone->targetAliasHash = 0; // "Any / Master"
+  zone->targetAliasHash = 0; // Global (All Devices)
   zone->rootNote = 60; // C4
   zone->scaleName = "Major";
   zone->chromaticOffset = 0;
@@ -212,22 +212,19 @@ std::shared_ptr<Zone> ZoneManager::getZoneForInput(InputID input) {
 }
 
 std::optional<juce::Colour> ZoneManager::getZoneColorForKey(int keyCode, uintptr_t aliasHash) {
-  juce::ScopedReadLock lock(zoneLock);
-
-  // Iterate through zones to find one that contains this key
-  for (const auto &zone : zones) {
-    if (zone->targetAliasHash != aliasHash)
-      continue;
-
-    // Check if key is in this zone's inputKeyCodes
-    auto it = std::find(zone->inputKeyCodes.begin(), zone->inputKeyCodes.end(), keyCode);
-    if (it != zone->inputKeyCodes.end()) {
-      // Found a zone containing this key
-      if (zone->zoneColor != juce::Colours::transparentBlack && 
-          zone->zoneColor.getAlpha() > 0) {
-        return zone->zoneColor;
-      }
-    }
+  // Use the exact same lookup logic as handleInput()
+  // This ensures that if it plays, it paints.
+  
+  juce::ScopedReadLock sl(zoneLock);
+  
+  InputID id { aliasHash, keyCode };
+  
+  auto it = zoneLookupTable.find(id);
+  if (it != zoneLookupTable.end())
+  {
+    // Found the active zone for this key/device
+    if (it->second)
+      return it->second->zoneColor;
   }
 
   return std::nullopt;
@@ -241,6 +238,25 @@ int ZoneManager::getZoneCountForKey(int keyCode) const {
       ++n;
   }
   return n;
+}
+
+int ZoneManager::getZoneCountForKey(int keyCode, uintptr_t aliasHash) const {
+  juce::ScopedReadLock lock(zoneLock);
+  int count = 0;
+  
+  // Iterate zones vector (NOT lookup table, because lookup table only stores the winner)
+  for (const auto& zone : zones) {
+    // Check if targetAliasHash matches
+    if (zone->targetAliasHash != aliasHash)
+      continue;
+    
+    // Check if inputKeyCodes contains this keyCode
+    if (std::find(zone->inputKeyCodes.begin(), zone->inputKeyCodes.end(), keyCode) != zone->inputKeyCodes.end()) {
+      count++;
+    }
+  }
+  
+  return count;
 }
 
 juce::ValueTree ZoneManager::toValueTree() const {

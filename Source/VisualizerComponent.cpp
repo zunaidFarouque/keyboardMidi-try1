@@ -31,6 +31,29 @@ VisualizerComponent::VisualizerComponent(ZoneManager *zoneMgr, DeviceManager *de
     // Also listen to root node changes (in case mappings node is recreated)
     presetManager->getRootNode().addListener(this);
   }
+  if (deviceManager) {
+    deviceManager->addChangeListener(this);
+  }
+  
+  // Setup View Selector (Phase 39)
+  addAndMakeVisible(viewSelector);
+  viewSelector.onChange = [this] { onViewSelectorChanged(); };
+  updateViewSelector();
+  // Ensure selector is on top to receive mouse events
+  viewSelector.toFront(false);
+  
+  // Hide view selector if Studio Mode is OFF (Phase 9.5)
+  if (settingsManager) {
+    viewSelector.setVisible(settingsManager->isStudioMode());
+    if (!settingsManager->isStudioMode()) {
+      // Lock to Global view
+      currentViewHash = 0;
+      viewSelector.setSelectedId(1, juce::dontSendNotification);
+    }
+  }
+  
+  // Initial positioning (will be updated in resized(), but set initial bounds)
+  viewSelector.setBounds(0, 0, 200, 25);
   vBlankAttachment = std::make_unique<juce::VBlankAttachment>(this, [this] {
     // OPTIMIZATION: Stop all processing if window is minimized
     if (auto* peer = getPeer()) {
@@ -72,6 +95,9 @@ VisualizerComponent::~VisualizerComponent() {
       mappingsNode.removeListener(this);
     }
     presetManager->getRootNode().removeListener(this);
+  }
+  if (deviceManager) {
+    deviceManager->removeChangeListener(this);
   }
   // VoiceManager doesn't have a listener interface, it's polled.
 }
@@ -166,34 +192,82 @@ void VisualizerComponent::refreshCache() {
     float padding = keySize * 0.1f;
     auto keyBounds = fullBounds.reduced(padding);
 
-    // --- 3. Get Data from Engine (Static Only) ---
-    int zoneCount = zoneManager->getZoneCountForKey(keyCode);
-    bool hasManual = inputProcessor && inputProcessor->hasManualMappingForKey(keyCode);
-    bool isConflict = (zoneCount >= 2) || (zoneCount >= 1 && hasManual);
-
-    // A. Underlay Color: Manual Mapping first, else Zone (Phase 38)
+    // --- 3. Get Data from Engine using SimulationResult (Phase 39.1/39.5) ---
+    SimulationResult simResult;
     juce::Colour underlayColor = juce::Colours::transparentBlack;
-    if (isConflict) {
-      underlayColor = juce::Colours::red.withAlpha(0.7f);
+    juce::Colour borderColor = juce::Colours::grey;
+    float borderWidth = 1.0f;
+    float alpha = 1.0f;
+    
+    if (inputProcessor && settingsManager) {
+      // Phase 9.5: When Studio Mode is OFF, simulateInput will force viewDeviceHash to 0
+      // So we can always call it, but use currentViewHash (which is 0 when Studio Mode is OFF)
+      simResult = inputProcessor->simulateInput(currentViewHash, keyCode);
+      
+      // Phase 39.5: Fix color determination logic
+      // Note: When Studio Mode is OFF, simulateInput forces viewDeviceHash to 0, so this works correctly
+      if (simResult.state != VisualState::Empty) {
+        // 1. Determine Base Color
+        if (simResult.isZone) {
+          // Try to get color for the current view
+          auto zColor = zoneManager->getZoneColorForKey(keyCode, currentViewHash);
+          
+          // If not found and it's Inherited, check Global (0) to get the inherited zone color
+          if (!zColor.has_value() && simResult.state == VisualState::Inherited) {
+            zColor = zoneManager->getZoneColorForKey(keyCode, 0);
+          }
+          
+          if (zColor.has_value()) {
+            underlayColor = zColor.value();
+          }
+        } else if (simResult.action.has_value()) {
+          // Manual Mapping: use type color
+          underlayColor = settingsManager->getTypeColor(simResult.action->type);
+        }
+        
+        // 2. Determine Alpha / Style
+        if (simResult.state == VisualState::Conflict) {
+          // Phase 39.7/39.8: Conflict state (zone overlaps or Manual vs Zone collision)
+          // Force Red - overwrites base color
+          underlayColor = juce::Colours::red;
+          borderColor = juce::Colours::red;
+          alpha = 1.0f;
+          borderWidth = 2.0f;
+        } else if (simResult.state == VisualState::Inherited) {
+          alpha = 0.3f; // Dim for inherited
+          borderColor = juce::Colours::darkgrey;
+          borderWidth = 1.0f;
+        } else if (simResult.state == VisualState::Override) {
+          alpha = 1.0f;
+          borderColor = juce::Colours::orange; // Highlight override
+          borderWidth = 2.0f;
+        } else if (simResult.state == VisualState::Active) {
+          alpha = 1.0f;
+          borderColor = juce::Colours::lightgrey;
+          borderWidth = 1.0f;
+        }
+        
+        // Apply Alpha
+        underlayColor = underlayColor.withAlpha(alpha);
+      }
     } else {
-      auto manualType = (inputProcessor && settingsManager)
-          ? inputProcessor->getMappingType(keyCode, 0)
-          : std::optional<ActionType>{};
-      if (manualType.has_value()) {
-        underlayColor = settingsManager->getTypeColor(manualType.value());
+      // Fallback for non-Studio Mode (use old logic)
+      int zoneCount = zoneManager->getZoneCountForKey(keyCode);
+      bool hasManual = inputProcessor && inputProcessor->hasManualMappingForKey(keyCode);
+      bool isConflict = (zoneCount >= 2) || (zoneCount >= 1 && hasManual);
+      
+      if (isConflict) {
+        underlayColor = juce::Colours::red.withAlpha(0.7f);
       } else {
-        auto zoneColor = zoneManager->getZoneColorForKey(keyCode, 0);
-        if (zoneColor.has_value()) {
-          underlayColor = zoneColor.value();
-        } else if (deviceManager) {
-          auto aliases = deviceManager->getAllAliasNames();
-          for (const auto &aliasName : aliases) {
-            uintptr_t aliasHash = aliasNameToHash(aliasName);
-            zoneColor = zoneManager->getZoneColorForKey(keyCode, aliasHash);
-            if (zoneColor.has_value()) {
-              underlayColor = zoneColor.value();
-              break;
-            }
+        auto manualType = (inputProcessor && settingsManager)
+            ? inputProcessor->getMappingType(keyCode, 0)
+            : std::optional<ActionType>{};
+        if (manualType.has_value()) {
+          underlayColor = settingsManager->getTypeColor(manualType.value());
+        } else {
+          auto zoneColor = zoneManager->getZoneColorForKey(keyCode, 0);
+          if (zoneColor.has_value()) {
+            underlayColor = zoneColor.value();
           }
         }
       }
@@ -232,9 +306,9 @@ void VisualizerComponent::refreshCache() {
 
     // --- 4. Render Static Layers (Off State) ---
     
-    // Layer 1: Underlay (Zone Color)
+    // Layer 1: Underlay (Zone Color) - Phase 39.5: Alpha already applied
     if (!underlayColor.isTransparent()) {
-      g.setColour(underlayColor.withAlpha(0.6f));
+      g.setColour(underlayColor);
       g.fillRect(fullBounds);
     }
 
@@ -242,12 +316,14 @@ void VisualizerComponent::refreshCache() {
     g.setColour(juce::Colour(0xff333333));
     g.fillRoundedRectangle(keyBounds, 6.0f);
 
-    // Layer 3: Border
-    g.setColour(juce::Colours::grey);
-    g.drawRoundedRectangle(keyBounds, 6.0f, 2.0f);
+    // Layer 3: Border (Phase 39.1: Use VisualState)
+    g.setColour(borderColor);
+    g.drawRoundedRectangle(keyBounds, 6.0f, borderWidth);
 
-    // Layer 4: Text (white for off state, red if conflict)
-    juce::Colour textColor = isConflict ? juce::Colours::red : juce::Colours::white;
+    // Layer 4: Text (white for off state, red if override/conflict)
+    juce::Colour textColor = (simResult.state == VisualState::Override || simResult.state == VisualState::Conflict) 
+        ? juce::Colours::red 
+        : juce::Colours::white;
     g.setColour(textColor);
     g.setFont(keySize * 0.4f);
     g.drawText(labelText, keyBounds, juce::Justification::centred, false);
@@ -360,10 +436,12 @@ void VisualizerComponent::paint(juce::Graphics &g) {
     bool isPressed = (activeKeysSnapshot.find(keyCode) != activeKeysSnapshot.end());
     bool isLatched = voiceManager.isKeyLatched(keyCode);
     
-    // Get conflict state (needed for text color)
-    int zoneCount = zoneManager->getZoneCountForKey(keyCode);
-    bool hasManual = inputProcessor && inputProcessor->hasManualMappingForKey(keyCode);
-    bool isConflict = (zoneCount >= 2) || (zoneCount >= 1 && hasManual);
+    // Get simulation result for dynamic rendering (Phase 39.1)
+    SimulationResult dynamicSimResult;
+    if (inputProcessor && settingsManager) {
+      // Phase 9.5: When Studio Mode is OFF, simulateInput will force viewDeviceHash to 0
+      dynamicSimResult = inputProcessor->simulateInput(currentViewHash, keyCode);
+    }
     
     // Get label text (same logic as refreshCache)
     juce::String labelText = geometry.label;
@@ -407,13 +485,33 @@ void VisualizerComponent::paint(juce::Graphics &g) {
       g.fillRoundedRectangle(keyBounds, 6.0f);
     }
 
-    // Redraw Border
-    g.setColour(juce::Colours::grey);
-    g.drawRoundedRectangle(keyBounds, 6.0f, 2.0f);
+    // Redraw Border (Phase 39.1: Use VisualState)
+    juce::Colour dynamicBorderColor = juce::Colours::grey;
+    float dynamicBorderWidth = 1.0f;
+    if (inputProcessor && settingsManager) {
+      if (dynamicSimResult.state == VisualState::Override) {
+        dynamicBorderColor = juce::Colours::orange;
+        dynamicBorderWidth = 2.0f;
+      } else if (dynamicSimResult.state == VisualState::Active) {
+        dynamicBorderColor = juce::Colours::lightgrey;
+        dynamicBorderWidth = 1.0f;
+      } else if (dynamicSimResult.state == VisualState::Inherited) {
+        dynamicBorderColor = juce::Colours::darkgrey;
+        dynamicBorderWidth = 1.0f;
+      }
+    }
+    g.setColour(dynamicBorderColor);
+    g.drawRoundedRectangle(keyBounds, 6.0f, dynamicBorderWidth);
 
     // Redraw Text (Important: text must be on top of highlight)
-    juce::Colour textColor = isConflict ? juce::Colours::red
-        : (isPressed ? juce::Colours::black : juce::Colours::white);
+    juce::Colour textColor;
+    if (dynamicSimResult.state == VisualState::Override) {
+      textColor = juce::Colours::red;
+    } else if (isPressed) {
+      textColor = juce::Colours::black;
+    } else {
+      textColor = juce::Colours::white;
+    }
     g.setColour(textColor);
     g.setFont(keySize * 0.4f);
     g.drawText(labelText, keyBounds, juce::Justification::centred, false);
@@ -435,6 +533,16 @@ void VisualizerComponent::paint(juce::Graphics &g) {
 }
 
 void VisualizerComponent::resized() {
+  // Position View Selector (Phase 39) - Below status bar
+  if (viewSelector.isVisible()) {
+    int headerHeight = 30; // Status bar height
+    int selectorWidth = 200;
+    int selectorHeight = 25;
+    int margin = 10;
+    int selectorY = headerHeight + margin; // Position below status bar
+    viewSelector.setBounds(getWidth() - selectorWidth - margin, selectorY, selectorWidth, selectorHeight);
+  }
+  
   cacheValid = false; // Invalidate cache on resize
   needsRepaint = true;
   repaint(); // Resize needs immediate repaint
@@ -457,12 +565,103 @@ void VisualizerComponent::changeListenerCallback(juce::ChangeBroadcaster *source
   if (source == zoneManager || source == settingsManager) {
     cacheValid = false; // Invalidate cache on zone/transpose changes
     needsRepaint = true;
+    
+    // Update view selector visibility based on Studio Mode (Phase 9.5)
+    if (source == settingsManager && settingsManager) {
+      bool studioMode = settingsManager->isStudioMode();
+      viewSelector.setVisible(studioMode);
+      // Update selector state (enables/disables and populates correctly)
+      updateViewSelector();
+      // Reposition selector when visibility changes
+      resized();
+      // Ensure selector is on top to receive mouse events (after layout)
+      viewSelector.toFront(false);
+    }
+    
     juce::Component::SafePointer<VisualizerComponent> safeThis(this);
     juce::MessageManager::callAsync([safeThis] {
       if (safeThis == nullptr) return;
       // Repaint will be triggered by vBlank callback if needed
     });
+  } else if (source == deviceManager) {
+    // Device alias configuration changed, refresh view selector
+    updateViewSelector();
   }
+}
+
+void VisualizerComponent::updateViewSelector() {
+  // Phase 9.5: Studio Mode Check
+  if (settingsManager && !settingsManager->isStudioMode()) {
+    // Studio Mode OFF: Only show Global, disable selector
+    viewSelector.clear(juce::dontSendNotification);
+    viewHashes.clear();
+    viewSelector.addItem("Global (All Devices)", 1);
+    viewHashes.push_back(0);
+    viewSelector.setSelectedItemIndex(0, juce::dontSendNotification);
+    viewSelector.setEnabled(false);
+    currentViewHash = 0;
+    return;
+  }
+  
+  // Studio Mode ON: Enable selector and populate normally
+  viewSelector.setEnabled(true);
+  
+  // Phase 39.2: Save current selection using index
+  uintptr_t currentHash = 0;
+  int currentIndex = viewSelector.getSelectedItemIndex();
+  if (currentIndex >= 0 && currentIndex < static_cast<int>(viewHashes.size())) {
+    currentHash = viewHashes[currentIndex];
+  }
+  
+  // Clear
+  viewSelector.clear(juce::dontSendNotification);
+  viewHashes.clear();
+  
+  if (deviceManager == nullptr) {
+    // Add only Global option
+    viewSelector.addItem("Global (All Devices)", 1);
+    viewHashes.push_back(0);
+    viewSelector.setSelectedItemIndex(0, juce::dontSendNotification);
+    currentViewHash = 0;
+    return;
+  }
+  
+  // Add "Global (All Devices)" option (Index 0)
+  viewSelector.addItem("Global (All Devices)", 1);
+  viewHashes.push_back(0);
+  
+  // Add all aliases (Phase 39.2: Store full 64-bit hashes)
+  auto aliases = deviceManager->getAllAliasNames();
+  for (int i = 0; i < aliases.size(); ++i) {
+    uintptr_t aliasHash = aliasNameToHash(aliases[i]);
+    viewSelector.addItem(aliases[i], i + 2); // Start IDs from 2
+    viewHashes.push_back(aliasHash);
+  }
+  
+  // Restore selection if possible (Phase 39.2: Use index-based lookup)
+  int restoreIndex = 0;
+  for (size_t i = 0; i < viewHashes.size(); ++i) {
+    if (viewHashes[i] == currentHash) {
+      restoreIndex = static_cast<int>(i);
+      break;
+    }
+  }
+  viewSelector.setSelectedItemIndex(restoreIndex, juce::dontSendNotification);
+  currentViewHash = viewHashes[restoreIndex];
+}
+
+void VisualizerComponent::onViewSelectorChanged() {
+  // Phase 39.2: Use index-based lookup to get full 64-bit hash
+  int index = viewSelector.getSelectedItemIndex();
+  if (index >= 0 && index < static_cast<int>(viewHashes.size())) {
+    currentViewHash = viewHashes[index];
+  } else {
+    currentViewHash = 0;
+  }
+  
+  // Invalidate cache and repaint
+  cacheValid = false;
+  needsRepaint = true;
 }
 
 void VisualizerComponent::valueTreeChildAdded(juce::ValueTree &parentTree, juce::ValueTree &childWhichHasBeenAdded) {

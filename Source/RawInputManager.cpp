@@ -118,6 +118,10 @@ void RawInputManager::setFocusTargetCallback(std::function<void*()> cb) {
   focusTargetCallback = cb;
 }
 
+void RawInputManager::setOnDeviceChangeCallback(std::function<void()> cb) {
+  onDeviceChangeCallback = cb;
+}
+
 // Helper function to force a window to the foreground, bypassing Windows restrictions
 static void forceForegroundWindow(HWND hwnd) {
   if (GetForegroundWindow() == hwnd) return;
@@ -323,6 +327,21 @@ int64_t __stdcall RawInputManager::rawInputWndProc(void *hwnd, unsigned int msg,
       globalManagerInstance->pointerInputManager->processPointerMessage(
           wParam, lParam, hwnd);
     }
+  } else if (msg == WM_INPUT_DEVICE_CHANGE) {
+    // Device plug/unplug event (0x00FE)
+    if (globalManagerInstance && globalManagerInstance->onDeviceChangeCallback) {
+      // Call the callback asynchronously to avoid blocking the message loop
+      juce::MessageManager::callAsync([instance = globalManagerInstance]() {
+        if (instance && instance->onDeviceChangeCallback) {
+          instance->onDeviceChangeCallback();
+        }
+      });
+    }
+    // Return 0 to indicate we handled it
+    if (globalOriginalWndProc) {
+      return CallWindowProc(globalOriginalWndProc, (HWND)hwnd, (UINT)msg, (WPARAM)wParam, (LPARAM)lParam);
+    }
+    return DefWindowProc((HWND)hwnd, (UINT)msg, (WPARAM)wParam, (LPARAM)lParam);
   }
 
   // 3. Pass to original

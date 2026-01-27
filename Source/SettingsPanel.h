@@ -33,6 +33,8 @@ private:
   juce::TextButton resetToggleKeyButton; // Button to reset toggle key to F12
   bool isLearningToggleKey = false;
 
+  juce::ToggleButton studioModeToggle; // Studio Mode (Multi-Device Support)
+
   juce::GroupComponent mappingColorsGroup;
   std::array<juce::TextButton, 5> typeColorButtons;
   

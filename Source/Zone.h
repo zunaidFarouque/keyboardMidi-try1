@@ -26,7 +26,7 @@ public:
   // Properties
   juce::String name;
   uintptr_t
-      targetAliasHash; // The Alias this zone listens to (0 = "Any / Master")
+      targetAliasHash; // The Alias this zone listens to (0 = Global / All Devices)
   std::vector<int> inputKeyCodes; // The physical keys, ordered
   int rootNote;                   // Base MIDI note
   juce::String scaleName;         // Scale name (looked up from ScaleLibrary)

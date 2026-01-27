@@ -38,6 +38,7 @@ target_sources(OmniKey PRIVATE
     Source/PointerInputManager.cpp
     Source/DeviceManager.cpp
     Source/DeviceSetupComponent.cpp
+    Source/QuickSetupWizard.cpp
     Source/ScaleUtilities.cpp
     Source/ScaleLibrary.cpp
     Source/ScaleEditorComponent.cpp

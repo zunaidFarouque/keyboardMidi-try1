@@ -32,9 +32,8 @@ public:
   // NEW: Helper for the Logger to peek at what will happen
   const MidiAction *getMappingForInput(InputID input);
 
-  // Simulate input and return action with source description
-  std::pair<std::optional<MidiAction>, juce::String>
-  simulateInput(uintptr_t deviceHandle, int keyCode);
+  // Simulate input and return action with source description (Phase 39: returns SimulationResult)
+  SimulationResult simulateInput(uintptr_t viewDeviceHash, int keyCode);
 
   // Zone management
   ZoneManager &getZoneManager() { return zoneManager; }
@@ -70,8 +69,11 @@ private:
   juce::ReadWriteLock mapLock;
   juce::ReadWriteLock bufferLock;
 
-  // The Fast Lookup Cache
-  std::unordered_map<InputID, MidiAction> keyMapping;
+  // Dual Map Architecture (Phase 39.3)
+  // compiledMap: Keyed by HardwareID (for audio processing)
+  std::unordered_map<InputID, MidiAction> compiledMap;
+  // configMap: Keyed by AliasHash (for visualization/UI)
+  std::unordered_map<InputID, MidiAction> configMap;
 
   // Note buffer for Strum mode (for visualizer; strum is triggered on key
   // press)

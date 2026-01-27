@@ -58,32 +58,40 @@ DeviceSetupComponent::DeviceSetupComponent(DeviceManager &deviceMgr, RawInputMan
       if (result == 1) {
         juce::String newName = dialog->getTextEditorContents("name").trim();
         if (!newName.isEmpty() && newName != oldName) {
-          // ASYNC CALL to prevent stack corruption
-          juce::MessageManager::callAsync([this, oldName, newName]() {
-            // Safe to call now
-            deviceManager.renameAlias(oldName, newName, presetManager);
-            
-            // Update selected alias if it was renamed
-            if (selectedAlias == oldName) {
-              selectedAlias = newName;
-            }
-            
-            // Refresh UI - this will update the alias list and reselect if needed
-            refreshAliasList();
-            
-            // Reselect the renamed alias in the list
-            auto aliases = deviceManager.getAllAliases();
-            int newIndex = aliases.indexOf(newName);
-            if (newIndex >= 0) {
-              aliasListBox.selectRow(newIndex);
-            }
-            
-            // Update hardware list if the renamed alias was selected
-            if (selectedAlias == newName) {
-              hardwareModel.setAlias(newName);
-              refreshHardwareList();
-            }
-          });
+          // Prevent renaming to "Global"
+          if (newName.equalsIgnoreCase("Global")) {
+            juce::AlertWindow::showMessageBoxAsync(
+              juce::AlertWindow::WarningIcon,
+              "Invalid Alias Name",
+              "\"Global\" is a reserved name and cannot be used as an alias.");
+          } else {
+            // ASYNC CALL to prevent stack corruption
+            juce::MessageManager::callAsync([this, oldName, newName]() {
+              // Safe to call now
+              deviceManager.renameAlias(oldName, newName, presetManager);
+              
+              // Update selected alias if it was renamed
+              if (selectedAlias == oldName) {
+                selectedAlias = newName;
+              }
+              
+              // Refresh UI - this will update the alias list and reselect if needed
+              refreshAliasList();
+              
+              // Reselect the renamed alias in the list
+              auto aliases = deviceManager.getAllAliases();
+              int newIndex = aliases.indexOf(newName);
+              if (newIndex >= 0) {
+                aliasListBox.selectRow(newIndex);
+              }
+              
+              // Update hardware list if the renamed alias was selected
+              if (selectedAlias == newName) {
+                hardwareModel.setAlias(newName);
+                refreshHardwareList();
+              }
+            });
+          }
         }
       }
       delete dialog;
@@ -191,8 +199,16 @@ void DeviceSetupComponent::addAlias() {
     if (result == 1) {
       juce::String name = dialog->getTextEditorContents("aliasName").trim();
       if (!name.isEmpty()) {
-        deviceManager.createAlias(name);
-        refreshAliasList();
+        // Prevent creating alias named "Global"
+        if (name.equalsIgnoreCase("Global")) {
+          juce::AlertWindow::showMessageBoxAsync(
+            juce::AlertWindow::WarningIcon,
+            "Invalid Alias Name",
+            "\"Global\" is a reserved name and cannot be used as an alias.");
+        } else {
+          deviceManager.createAlias(name);
+          refreshAliasList();
+        }
       }
     }
     delete dialog;

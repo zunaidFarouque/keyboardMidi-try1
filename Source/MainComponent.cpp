@@ -23,6 +23,7 @@ MainComponent::MainComponent()
       settingsPanel(settingsManager, midiEngine, *rawInputManager),
       visualizer(&inputProcessor.getZoneManager(), &deviceManager, voiceManager,
                  &settingsManager, &presetManager, &inputProcessor),
+      setupWizard(deviceManager, *rawInputManager),
       visualizerContainer("Visualizer", visualizer),
       editorContainer("Mapping / Zones", mainTabs),
       logContainer("Log", logComponent),
@@ -115,12 +116,42 @@ MainComponent::MainComponent()
                         presetManager.loadFromFile(result);
                         logComponent.addEntry("Loaded: " +
                                               result.getFileName());
+                        
+                        // Phase 9.6: Rig Health Check
+                        if (settingsManager.isStudioMode()) {
+                          // Extract all alias hashes from preset mappings
+                          std::vector<uintptr_t> requiredAliasHashes;
+                          auto mappings = presetManager.getMappingsNode();
+                          
+                          for (int i = 0; i < mappings.getNumChildren(); ++i) {
+                            auto mapping = mappings.getChild(i);
+                            juce::String aliasName = mapping.getProperty("inputAlias", "").toString();
+                            
+                            if (!aliasName.isEmpty() && aliasName != "Global (All Devices)" && 
+                                aliasName != "Any / Master" && aliasName != "Global") {
+                              // Convert alias name to hash
+                              uintptr_t aliasHash = static_cast<uintptr_t>(std::hash<juce::String>{}(aliasName));
+                              requiredAliasHashes.push_back(aliasHash);
+                            }
+                          }
+                          
+                          // Check for empty aliases
+                          juce::StringArray emptyAliases = deviceManager.getEmptyAliases(requiredAliasHashes);
+                          
+                          if (emptyAliases.size() > 0) {
+                            // Start the wizard
+                            setupWizard.startSequence(emptyAliases);
+                            setupWizard.setVisible(true);
+                            setupWizard.toFront(false);
+                          }
+                        }
                       }
                     });
   };
 
   addAndMakeVisible(deviceSetupButton);
   deviceSetupButton.setButtonText("Device Setup");
+  deviceSetupButton.setVisible(settingsManager.isStudioMode()); // Hide when Studio Mode is OFF
   deviceSetupButton.onClick = [this] {
     juce::DialogWindow::LaunchOptions options;
     auto *setupComponent =
@@ -142,6 +173,10 @@ MainComponent::MainComponent()
   addAndMakeVisible(visualizerContainer);
   addAndMakeVisible(editorContainer);
   addAndMakeVisible(logContainer);
+  
+  // --- Add Quick Setup Wizard (Phase 9.6) ---
+  addAndMakeVisible(setupWizard);
+  setupWizard.setVisible(false); // Hidden by default
 
   // --- Add Resizer Bars ---
   addAndMakeVisible(verticalBar);
@@ -223,6 +258,11 @@ MainComponent::MainComponent()
     return nullptr;
   });
 
+  // Register device change callback for hardware hygiene
+  rawInputManager->setOnDeviceChangeCallback([this]() {
+    deviceManager.validateConnectedDevices();
+  });
+
   // Note: Test zone removed - StartupManager now handles factory default zones
 
   startTimer(33); // 30 Hz for async log processing (Phase 21.1)
@@ -295,11 +335,18 @@ void MainComponent::logEvent(uintptr_t device, int keyCode, bool isDown) {
 
   juce::String logLine = devStr + " | " + keyInfo;
 
-  // 2. Simulate input to get action and source
-  auto [action, source] = inputProcessor.simulateInput(device, keyCode);
+  // 2. Simulate input to get action and source (Phase 39: uses SimulationResult)
+  // Convert device handle to alias hash for simulation
+  juce::String aliasName = deviceManager.getAliasForHardware(device);
+  uintptr_t viewDeviceHash = 0;
+  if (aliasName != "Unassigned" && !aliasName.isEmpty()) {
+    // Simple hash: use std::hash on the string
+    viewDeviceHash = static_cast<uintptr_t>(std::hash<juce::String>{}(aliasName));
+  }
+  auto result = inputProcessor.simulateInput(viewDeviceHash, keyCode);
 
-  if (action.has_value()) {
-    const auto &midiAction = action.value();
+  if (result.action.has_value()) {
+    const auto &midiAction = result.action.value();
     logLine += " -> [MIDI] ";
 
     if (midiAction.type == ActionType::Note) {
@@ -313,8 +360,15 @@ void MainComponent::logEvent(uintptr_t device, int keyCode, bool isDown) {
     }
 
     // Add source description
-    if (!source.isEmpty()) {
-      logLine += " | Source: " + source;
+    if (!result.sourceDescription.isEmpty()) {
+      logLine += " | Source: " + result.sourceDescription;
+    }
+    
+    // Add override/inheritance indicators (Phase 39)
+    if (result.isOverride) {
+      logLine += " [OVERRIDE]";
+    } else if (result.isInherited) {
+      logLine += " [INHERITED]";
     }
   }
 
@@ -376,6 +430,10 @@ void MainComponent::changeListenerCallback(juce::ChangeBroadcaster* source) {
         }
       }
     }
+    
+    // Handle Studio Mode changes - update Device Setup button visibility
+    deviceSetupButton.setVisible(settingsManager.isStudioMode());
+    resized(); // Trigger re-layout of header
   }
 }
 
@@ -588,6 +646,9 @@ void MainComponent::paint(juce::Graphics &g) {
 
 void MainComponent::resized() {
   auto area = getLocalBounds().reduced(4);
+  
+  // Phase 9.6: Setup wizard covers entire bounds (on top)
+  setupWizard.setBounds(getLocalBounds());
 
   // Header (Buttons)
   auto header = area.removeFromTop(30);

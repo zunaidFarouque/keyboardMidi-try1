@@ -1,6 +1,8 @@
 #pragma once
 #include <cstdint>
 #include <functional> // For std::hash
+#include <optional>   // For std::optional
+#include <JuceHeader.h>
 
 // Action types for MIDI mapping
 enum class ActionType {
@@ -90,11 +92,46 @@ struct InputID {
 // std::unordered_map/unordered_multimap)
 namespace std {
 template <> struct hash<InputID> {
-  std::size_t operator()(const InputID &id) const noexcept {
-    // Combine hash of deviceHandle and keyCode
-    std::size_t h1 = std::hash<uintptr_t>{}(id.deviceHandle);
-    std::size_t h2 = std::hash<int>{}(id.keyCode);
-    return h1 ^ (h2 << 1); // Combine hashes
+  std::size_t operator()(const InputID &k) const noexcept {
+    // Robust hash combine (based on boost::hash_combine)
+    std::size_t h1 = std::hash<uintptr_t>{}(k.deviceHandle);
+    std::size_t h2 = std::hash<int>{}(k.keyCode);
+    // seed ^ (hash + 0x9e3779b9 + (seed<<6) + (seed>>2))
+    return h1 ^ (h2 + 0x9e3779b9 + (h1 << 6) + (h1 >> 2));
   }
 };
 } // namespace std
+
+// Visual state enum for Visualizer (Phase 39.1)
+enum class VisualState {
+  Empty,
+  Active,     // Defined locally, no global conflict
+  Inherited,  // Undefined locally, using global
+  Override,   // Defined locally, masking global
+  Conflict    // (Optional) Hard error state
+};
+
+// Rich return type for simulation (Phase 39.1)
+struct SimulationResult {
+  std::optional<MidiAction> action;
+  VisualState state = VisualState::Empty;
+  juce::String sourceName; // e.g. "Mapping" or "Zone: Main"
+  // Helper to know if it's a Zone or Mapping for coloring
+  bool isZone = false;
+  
+  // Legacy compatibility (Phase 39)
+  juce::String sourceDescription; // For Log (maps to sourceName)
+  bool isOverride = false;        // Maps to (state == VisualState::Override)
+  bool isInherited = false;       // Maps to (state == VisualState::Inherited)
+  
+  // Constructor to maintain backward compatibility
+  SimulationResult() {
+    updateLegacyFields();
+  }
+  
+  void updateLegacyFields() {
+    sourceDescription = sourceName;
+    isOverride = (state == VisualState::Override);
+    isInherited = (state == VisualState::Inherited);
+  }
+};

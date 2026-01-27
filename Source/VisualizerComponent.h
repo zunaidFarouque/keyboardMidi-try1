@@ -60,6 +60,13 @@ private:
   bool cacheValid = false;
   void refreshCache();
 
+  // View Context (Phase 39/39.2)
+  juce::ComboBox viewSelector;
+  uintptr_t currentViewHash = 0; // Default to Global (0)
+  std::vector<uintptr_t> viewHashes; // Store full 64-bit hashes (Phase 39.2)
+  void updateViewSelector();
+  void onViewSelectorChanged();
+
   // Helper to check if a key belongs to any zone
   bool isKeyInAnyZone(int keyCode, uintptr_t aliasHash);
   

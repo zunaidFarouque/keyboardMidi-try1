@@ -23,6 +23,10 @@ public:
   juce::String getLastMidiDevice() const;
   void setLastMidiDevice(const juce::String& name);
 
+  // Studio Mode (Multi-Device Support)
+  bool isStudioMode() const;
+  void setStudioMode(bool active);
+
   // Mapping type colors (Phase 37)
   juce::Colour getTypeColor(ActionType type) const;
   void setTypeColor(ActionType type, juce::Colour colour);

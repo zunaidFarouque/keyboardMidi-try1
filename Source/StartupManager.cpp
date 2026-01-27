@@ -122,21 +122,18 @@ void StartupManager::createFactoryDefault() {
     }
   }
   
-  // Device: Ensure "Master Input" alias exists (it's actually "Any / Master" with hash 0)
-  // DeviceManager handles this automatically, but we can ensure it exists
-  if (deviceManager && !deviceManager->aliasExists("Any / Master")) {
-    // Actually, "Any / Master" is a special case (hash 0), so we don't need to create it
-    // But we can create a "Master Input" alias if needed
-    if (!deviceManager->aliasExists("Master Input")) {
-      deviceManager->createAlias("Master Input");
-    }
+  // Device: Ensure "Master Input" alias exists (legacy compatibility)
+  // DeviceManager handles Global (hash 0) automatically
+  // Note: "Any / Master" is legacy terminology, now "Global" (hash 0)
+  if (deviceManager && !deviceManager->aliasExists("Master Input")) {
+    deviceManager->createAlias("Master Input");
   }
   
   // Zone: Create "Main Keys" (C Major, Linear, Keys Q->P)
   if (zoneManager) {
     auto mainZone = std::make_shared<Zone>();
     mainZone->name = "Main Keys";
-    mainZone->targetAliasHash = 0; // "Any / Master"
+    mainZone->targetAliasHash = 0; // Global (All Devices)
     mainZone->rootNote = 60; // C4
     mainZone->scaleName = "Major";
     mainZone->chromaticOffset = 0;
