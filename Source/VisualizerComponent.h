@@ -36,6 +36,7 @@ public:
   void valueTreeChildAdded(juce::ValueTree &parentTree, juce::ValueTree &childWhichHasBeenAdded) override;
   void valueTreeChildRemoved(juce::ValueTree &parentTree, juce::ValueTree &childWhichHasBeenRemoved, int indexFromWhichChildWasRemoved) override;
   void valueTreePropertyChanged(juce::ValueTree &treeWhosePropertyHasChanged, const juce::Identifier &property) override;
+  void valueTreeParentChanged(juce::ValueTree &treeWhoseParentHasChanged) override;
 
 private:
   ZoneManager *zoneManager;

@@ -290,12 +290,8 @@ void MappingEditorComponent::paintCell(juce::Graphics &g, int rowNumber,
 
   switch (columnId) {
   case 1:
-    // Check for displayName first, otherwise show inputKey
-    if (node.hasProperty("displayName")) {
-      text = node.getProperty("displayName").toString();
-    } else {
-      text = node.getProperty("inputKey").toString();
-    }
+    // Calculate clean name dynamically from inputKey
+    text = KeyNameUtilities::getKeyName((int)node.getProperty("inputKey"));
     break;
   case 2:
     // Show alias name if available, otherwise convert deviceHash to alias name

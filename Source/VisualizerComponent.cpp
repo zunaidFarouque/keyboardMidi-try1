@@ -171,22 +171,29 @@ void VisualizerComponent::refreshCache() {
     bool hasManual = inputProcessor && inputProcessor->hasManualMappingForKey(keyCode);
     bool isConflict = (zoneCount >= 2) || (zoneCount >= 1 && hasManual);
 
-    // A. Zone Underlay Color
+    // A. Underlay Color: Manual Mapping first, else Zone (Phase 38)
     juce::Colour underlayColor = juce::Colours::transparentBlack;
     if (isConflict) {
       underlayColor = juce::Colours::red.withAlpha(0.7f);
     } else {
-      auto zoneColor = zoneManager->getZoneColorForKey(keyCode, 0);
-      if (zoneColor.has_value()) {
-        underlayColor = zoneColor.value();
-      } else if (deviceManager) {
-        auto aliases = deviceManager->getAllAliasNames();
-        for (const auto &aliasName : aliases) {
-          uintptr_t aliasHash = aliasNameToHash(aliasName);
-          zoneColor = zoneManager->getZoneColorForKey(keyCode, aliasHash);
-          if (zoneColor.has_value()) {
-            underlayColor = zoneColor.value();
-            break;
+      auto manualType = (inputProcessor && settingsManager)
+          ? inputProcessor->getMappingType(keyCode, 0)
+          : std::optional<ActionType>{};
+      if (manualType.has_value()) {
+        underlayColor = settingsManager->getTypeColor(manualType.value());
+      } else {
+        auto zoneColor = zoneManager->getZoneColorForKey(keyCode, 0);
+        if (zoneColor.has_value()) {
+          underlayColor = zoneColor.value();
+        } else if (deviceManager) {
+          auto aliases = deviceManager->getAllAliasNames();
+          for (const auto &aliasName : aliases) {
+            uintptr_t aliasHash = aliasNameToHash(aliasName);
+            zoneColor = zoneManager->getZoneColorForKey(keyCode, aliasHash);
+            if (zoneColor.has_value()) {
+              underlayColor = zoneColor.value();
+              break;
+            }
           }
         }
       }
@@ -459,53 +466,55 @@ void VisualizerComponent::changeListenerCallback(juce::ChangeBroadcaster *source
 }
 
 void VisualizerComponent::valueTreeChildAdded(juce::ValueTree &parentTree, juce::ValueTree &childWhichHasBeenAdded) {
-  // Repaint when mappings are added
   auto mappingsNode = presetManager ? presetManager->getMappingsNode() : juce::ValueTree();
   if (parentTree.isEquivalentTo(mappingsNode) || parentTree.getParent().isEquivalentTo(mappingsNode)) {
+    cacheValid = false;
     needsRepaint = true;
-    // Small delay to ensure InputProcessor has finished updating keyMapping
     juce::Component::SafePointer<VisualizerComponent> safeThis(this);
     juce::MessageManager::callAsync([safeThis] {
       if (safeThis == nullptr) return;
       juce::MessageManager::callAsync([safeThis] {
         if (safeThis == nullptr) return;
-        // Repaint will be triggered by vBlank callback if needed
       });
     });
   }
 }
 
 void VisualizerComponent::valueTreeChildRemoved(juce::ValueTree &parentTree, juce::ValueTree &childWhichHasBeenRemoved, int indexFromWhichChildWasRemoved) {
-  // Repaint when mappings are removed
   auto mappingsNode = presetManager ? presetManager->getMappingsNode() : juce::ValueTree();
   if (parentTree.isEquivalentTo(mappingsNode) || parentTree.getParent().isEquivalentTo(mappingsNode)) {
+    cacheValid = false;
     needsRepaint = true;
-    // Small delay to ensure InputProcessor has finished updating keyMapping
     juce::Component::SafePointer<VisualizerComponent> safeThis(this);
     juce::MessageManager::callAsync([safeThis] {
       if (safeThis == nullptr) return;
       juce::MessageManager::callAsync([safeThis] {
         if (safeThis == nullptr) return;
-        // Repaint will be triggered by vBlank callback if needed
       });
     });
   }
 }
 
 void VisualizerComponent::valueTreePropertyChanged(juce::ValueTree &treeWhosePropertyHasChanged, const juce::Identifier &property) {
-  // Repaint when mapping properties change (e.g., keyCode, which affects conflict detection)
   auto mappingsNode = presetManager ? presetManager->getMappingsNode() : juce::ValueTree();
   if (treeWhosePropertyHasChanged.getParent().isEquivalentTo(mappingsNode)) {
+    cacheValid = false;
     needsRepaint = true;
-    // Small delay to ensure InputProcessor has finished updating keyMapping
     juce::Component::SafePointer<VisualizerComponent> safeThis(this);
     juce::MessageManager::callAsync([safeThis] {
       if (safeThis == nullptr) return;
       juce::MessageManager::callAsync([safeThis] {
         if (safeThis == nullptr) return;
-        // Repaint will be triggered by vBlank callback if needed
       });
     });
+  }
+}
+
+void VisualizerComponent::valueTreeParentChanged(juce::ValueTree &treeWhoseParentHasChanged) {
+  auto mappingsNode = presetManager ? presetManager->getMappingsNode() : juce::ValueTree();
+  if (treeWhoseParentHasChanged.isEquivalentTo(mappingsNode) || treeWhoseParentHasChanged.getParent().isEquivalentTo(mappingsNode)) {
+    cacheValid = false;
+    needsRepaint = true;
   }
 }
 

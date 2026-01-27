@@ -49,6 +49,58 @@ void SettingsManager::setLastMidiDevice(const juce::String& name) {
   sendChangeMessage();
 }
 
+juce::String SettingsManager::getTypePropertyName(ActionType type) const {
+  switch (type) {
+    case ActionType::Note:
+      return "color_Note";
+    case ActionType::CC:
+      return "color_CC";
+    case ActionType::Command:
+      return "color_Command";
+    case ActionType::Macro:
+      return "color_Macro";
+    case ActionType::Envelope:
+      return "color_Envelope";
+    default:
+      return "color_Note";
+  }
+}
+
+namespace {
+juce::Colour getTypeColorDefault(ActionType type) {
+  switch (type) {
+    case ActionType::Note:
+      return juce::Colours::skyblue;
+    case ActionType::CC:
+      return juce::Colours::orange;
+    case ActionType::Command:
+      return juce::Colours::red;
+    case ActionType::Macro:
+      return juce::Colours::yellow;
+    case ActionType::Envelope:
+      return juce::Colours::purple;
+    default:
+      return juce::Colours::grey;
+  }
+}
+} // namespace
+
+juce::Colour SettingsManager::getTypeColor(ActionType type) const {
+  juce::Identifier key(getTypePropertyName(type));
+  juce::var v = rootNode.getProperty(key);
+  if (v.isVoid() || !v.toString().isNotEmpty())
+    return getTypeColorDefault(type);
+  juce::Colour c = juce::Colour::fromString(v.toString());
+  if (c == juce::Colours::transparentBlack)
+    return getTypeColorDefault(type);
+  return c;
+}
+
+void SettingsManager::setTypeColor(ActionType type, juce::Colour colour) {
+  rootNode.setProperty(juce::Identifier(getTypePropertyName(type)), colour.toString(), nullptr);
+  sendChangeMessage();
+}
+
 void SettingsManager::saveToXml(juce::File file) {
   auto xml = rootNode.createXml();
   if (xml != nullptr) {

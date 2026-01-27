@@ -1,4 +1,5 @@
 #pragma once
+#include "MappingTypes.h"
 #include <JuceHeader.h>
 
 class SettingsManager : public juce::ChangeBroadcaster, public juce::ValueTree::Listener {
@@ -22,6 +23,10 @@ public:
   juce::String getLastMidiDevice() const;
   void setLastMidiDevice(const juce::String& name);
 
+  // Mapping type colors (Phase 37)
+  juce::Colour getTypeColor(ActionType type) const;
+  void setTypeColor(ActionType type, juce::Colour colour);
+
   // Persistence
   void saveToXml(juce::File file);
   void loadFromXml(juce::File file);
@@ -32,6 +37,8 @@ public:
 
 private:
   juce::ValueTree rootNode;
+
+  juce::String getTypePropertyName(ActionType type) const;
 
   JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(SettingsManager)
 };

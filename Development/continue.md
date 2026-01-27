@@ -10,7 +10,13 @@ there could also be banks. banks could be like a state of the layout/bindings. e
 I dont know which will be better to implement first... we need to do brainstorming.
 
 
+---
 
+===
+
+---
+
+we need to add icon to our software.
 
 ---
 
@@ -18,20 +24,9 @@ I dont know which will be better to implement first... we need to do brainstormi
 
 ---
 
-
-Thank you...
-
-now, we need to improve the mappings window.
-
-currently it has columns:
-Key, Device, Type, Data1, Data2, Ch
-
-Now, the key is stored like this:
-"Laptop Keybord - Num 0",
-"Laptop Keybord - Shift",
-"Laptop Keybord - Q",
-basically like this: [Alias Name] - [Key name]
-
-but we dont need to show alias name there. we can see that in Device Column.
-
-so, lets fix it.
+the keyboard visualizer should have alias-wise keyboard.
+for example, I should be able to choose which keyboard mapping is being shown.
+e.g. when I select the laptop keyboard to be shown, the keyboard mappings will be shown for laptop And the any/master aliases. that way it is easy to identify conflict.
+if I select the external keyboard alias, the keyboard mappings will be shown for external And the any/master aliases.
+if I select any/master alias, it will only show mapping for that only.
+if I select ALL, it will show from all keyboards (starting from any/master bindings and going down chronologically. it will not try to override if a key already shows as "bound". )

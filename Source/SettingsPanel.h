@@ -1,10 +1,14 @@
 #pragma once
+#include "MappingTypes.h"
 #include "MidiEngine.h"
 #include "RawInputManager.h"
 #include "SettingsManager.h"
 #include <JuceHeader.h>
+#include <array>
 
-class SettingsPanel : public juce::Component, public RawInputManager::Listener {
+class SettingsPanel : public juce::Component,
+                      public juce::ChangeListener,
+                      public RawInputManager::Listener {
 public:
   explicit SettingsPanel(SettingsManager& settingsMgr, MidiEngine& midiEng, RawInputManager& rawInputMgr);
   ~SettingsPanel() override;
@@ -15,6 +19,7 @@ public:
 
   void paint(juce::Graphics& g) override;
   void resized() override;
+  void changeListenerCallback(juce::ChangeBroadcaster* source) override;
 
 private:
   SettingsManager& settingsManager;
@@ -23,10 +28,17 @@ private:
   juce::Slider pbRangeSlider;
   juce::Label pbRangeLabel;
   juce::TextButton sendRpnButton; // Button to send RPN to all channels (Phase 25.2)
+  juce::Label toggleKeyLabel;
   juce::TextButton toggleKeyButton; // Button to set toggle key
+  juce::TextButton resetToggleKeyButton; // Button to reset toggle key to F12
   bool isLearningToggleKey = false;
+
+  juce::GroupComponent mappingColorsGroup;
+  std::array<juce::TextButton, 5> typeColorButtons;
   
   void updateToggleKeyButtonText();
+  void refreshTypeColorButtons();
+  void launchColourSelectorForType(ActionType type, juce::TextButton* button);
 
   JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(SettingsPanel)
 };

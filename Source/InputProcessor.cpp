@@ -680,6 +680,23 @@ bool InputProcessor::hasManualMappingForKey(int keyCode) {
   return false;
 }
 
+std::optional<ActionType> InputProcessor::getMappingType(int keyCode, uintptr_t aliasHash) {
+  juce::ScopedReadLock lock(mapLock);
+  InputID id{aliasHash, keyCode};
+  auto it = keyMapping.find(id);
+  if (it != keyMapping.end())
+    return it->second.type;
+  it = keyMapping.find(InputID{0, keyCode});
+  if (it != keyMapping.end())
+    return it->second.type;
+  if (aliasHash == 0) {
+    for (const auto &p : keyMapping)
+      if (p.first.keyCode == keyCode)
+        return p.second.type;
+  }
+  return std::nullopt;
+}
+
 void InputProcessor::forceRebuildMappings() {
   juce::ScopedWriteLock lock(mapLock);
   rebuildMapFromTree();

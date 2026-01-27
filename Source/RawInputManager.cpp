@@ -202,8 +202,37 @@ int64_t __stdcall RawInputManager::rawInputWndProc(void *hwnd, unsigned int msg,
 
         if (raw->header.dwType == RIM_TYPEKEYBOARD) {
           HANDLE deviceHandle = raw->header.hDevice;
-          int vKey = raw->data.keyboard.VKey;
-          bool isDown = (raw->data.keyboard.Flags & RI_KEY_BREAK) == 0;
+          UINT vKey = raw->data.keyboard.VKey;
+          UINT makeCode = raw->data.keyboard.MakeCode;
+          UINT flags = raw->data.keyboard.Flags;
+          bool isDown = (flags & RI_KEY_BREAK) == 0;
+
+          // --- VKEY REPAIR START ---
+          /* TEMPORARILY DISABLED FOR STABILITY
+          if (vKey == 0 || vKey == 0xFF) {
+            // 1. Check Flags for Special Keys
+            if (flags & RI_KEY_E1) {
+              // Only Pause/Break uses E1
+              vKey = VK_PAUSE;
+            }
+            else if (makeCode == 0x37 && (flags & RI_KEY_E0)) {
+              // Print Screen (E0 + 37)
+              vKey = VK_SNAPSHOT;
+            }
+            else if (makeCode == 0x45) {
+              // Num Lock (Scan 45, No E1)
+              vKey = VK_NUMLOCK;
+            }
+            else {
+              // 2. Fallback to Windows Mapping
+              // MAPVK_VSC_TO_VK_EX distinguishes Left/Right Shift/Ctrl/Alt
+              vKey = MapVirtualKey(makeCode, MAPVK_VSC_TO_VK_EX);
+              
+              if (vKey == 0) vKey = MapVirtualKey(makeCode, MAPVK_VSC_TO_VK);
+            }
+          }
+          */
+          // --- VKEY REPAIR END ---
 
           if (globalManagerInstance) {
             // Check if MIDI mode is active - only broadcast for MIDI when active

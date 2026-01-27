@@ -1,7 +1,18 @@
 #include "SettingsPanel.h"
+#include "MappingTypes.h"
+#include <windows.h>
+
+namespace {
+const std::array<ActionType, 5> kMappingTypeOrder = {
+    ActionType::Note, ActionType::CC, ActionType::Command, ActionType::Macro, ActionType::Envelope};
+const char* kMappingTypeNames[] = {"Note", "CC", "Command", "Macro", "Envelope"};
+} // namespace
 
 SettingsPanel::SettingsPanel(SettingsManager& settingsMgr, MidiEngine& midiEng, RawInputManager& rawInputMgr)
-    : settingsManager(settingsMgr), midiEngine(midiEng), rawInputManager(rawInputMgr) {
+    : settingsManager(settingsMgr), midiEngine(midiEng), rawInputManager(rawInputMgr),
+      mappingColorsGroup("Mapping Colors", "Mapping Colors") {
+  settingsManager.addChangeListener(this);
+
   // Setup PB Range Slider
   pbRangeLabel.setText("Global Pitch Bend Range (+/- semitones):", juce::dontSendNotification);
   pbRangeLabel.attachToComponent(&pbRangeSlider, true);
@@ -34,7 +45,21 @@ SettingsPanel::SettingsPanel(SettingsManager& settingsMgr, MidiEngine& midiEng, 
     });
   };
   
-  // Setup Toggle Key Button
+  // Mapping Colors (Phase 37)
+  addAndMakeVisible(mappingColorsGroup);
+  for (size_t i = 0; i < typeColorButtons.size(); ++i) {
+    addAndMakeVisible(typeColorButtons[i]);
+    typeColorButtons[i].setButtonText(kMappingTypeNames[i]);
+    ActionType type = kMappingTypeOrder[i];
+    juce::TextButton* btn = &typeColorButtons[i];
+    typeColorButtons[i].onClick = [this, type, btn] { launchColourSelectorForType(type, btn); };
+  }
+  refreshTypeColorButtons();
+
+  // Setup Toggle Key Label and Button
+  toggleKeyLabel.setText("Global MIDI Toggle Key:", juce::dontSendNotification);
+  toggleKeyLabel.attachToComponent(&toggleKeyButton, true);
+  addAndMakeVisible(toggleKeyLabel);
   addAndMakeVisible(toggleKeyButton);
   updateToggleKeyButtonText();
   toggleKeyButton.onClick = [this] {
@@ -50,12 +75,78 @@ SettingsPanel::SettingsPanel(SettingsManager& settingsMgr, MidiEngine& midiEng, 
       updateToggleKeyButtonText();
     }
   };
+
+  // Setup Reset Toggle Key Button
+  addAndMakeVisible(resetToggleKeyButton);
+  resetToggleKeyButton.setButtonText("Reset");
+  resetToggleKeyButton.onClick = [this] {
+    juce::AlertWindow::showOkCancelBox(
+        juce::AlertWindow::QuestionIcon,
+        "Reset Toggle Key",
+        "Reset the MIDI toggle key to F12?",
+        "Yes",
+        "Cancel",
+        this,
+        juce::ModalCallbackFunction::create([this](int result) {
+          if (result == 1) { // OK button
+            settingsManager.setToggleKey(VK_F12);
+            updateToggleKeyButtonText();
+          }
+        }));
+  };
 }
 
 SettingsPanel::~SettingsPanel() {
+  settingsManager.removeChangeListener(this);
   if (isLearningToggleKey) {
     rawInputManager.removeListener(this);
   }
+}
+
+void SettingsPanel::changeListenerCallback(juce::ChangeBroadcaster* source) {
+  if (source == &settingsManager)
+    refreshTypeColorButtons();
+}
+
+void SettingsPanel::refreshTypeColorButtons() {
+  for (size_t i = 0; i < typeColorButtons.size(); ++i) {
+    juce::Colour c = settingsManager.getTypeColor(kMappingTypeOrder[i]);
+    typeColorButtons[i].setColour(juce::TextButton::buttonColourId, c);
+    typeColorButtons[i].repaint();
+  }
+}
+
+void SettingsPanel::launchColourSelectorForType(ActionType type, juce::TextButton* button) {
+  int flags = juce::ColourSelector::showColourspace |
+              juce::ColourSelector::showSliders |
+              juce::ColourSelector::showColourAtTop;
+  auto* selector = new juce::ColourSelector(flags);
+  selector->setName("Mapping Type Color");
+  selector->setCurrentColour(settingsManager.getTypeColor(type));
+  selector->setSize(400, 300);
+
+  class Listener : public juce::ChangeListener {
+  public:
+    Listener(SettingsManager* mgr, juce::ColourSelector* s, ActionType t, juce::TextButton* b)
+        : settingsMgr(mgr), selector(s), actionType(t), btn(b) {}
+    void changeListenerCallback(juce::ChangeBroadcaster* src) override {
+      if (src != selector || !settingsMgr || !btn) return;
+      juce::Colour c = selector->getCurrentColour();
+      settingsMgr->setTypeColor(actionType, c);
+      btn->setColour(juce::TextButton::buttonColourId, c);
+      btn->repaint();
+    }
+  private:
+    SettingsManager* settingsMgr;
+    juce::ColourSelector* selector;
+    ActionType actionType;
+    juce::TextButton* btn;
+  };
+  auto* listener = new Listener(&settingsManager, selector, type, button);
+  selector->addChangeListener(listener);
+
+  juce::CallOutBox::launchAsynchronously(
+      std::unique_ptr<juce::Component>(selector), button->getScreenBounds(), this);
 }
 
 void SettingsPanel::handleRawKeyEvent(uintptr_t deviceHandle, int keyCode, bool isDown) {
@@ -96,11 +187,26 @@ void SettingsPanel::resized() {
   int y = topPadding;
   pbRangeSlider.setBounds(leftMargin, y, width, controlHeight);
   y += controlHeight + spacing;
-  
-  // Position Send RPN button below the slider
+
   sendRpnButton.setBounds(leftMargin, y, 200, controlHeight);
   y += controlHeight + spacing;
-  
-  // Toggle Key Button
-  toggleKeyButton.setBounds(leftMargin, y, 200, controlHeight);
+
+  // Toggle Key row: button and reset button side by side
+  int toggleKeyButtonWidth = 200;
+  int resetButtonWidth = 80;
+  toggleKeyButton.setBounds(leftMargin, y, toggleKeyButtonWidth, controlHeight);
+  resetToggleKeyButton.setBounds(leftMargin + toggleKeyButtonWidth + spacing, y, resetButtonWidth, controlHeight);
+  y += controlHeight + spacing;
+
+  // Mapping Colors group (panel coordinates)
+  int groupHeight = controlHeight + spacing + 28;
+  mappingColorsGroup.setBounds(area.getX(), y, area.getWidth(), groupHeight);
+  int innerX = area.getX() + 10;
+  int innerY = y + 24;
+  int innerW = area.getWidth() - 20;
+  int btnW = (innerW - 4 * spacing) / 5;
+  for (size_t i = 0; i < typeColorButtons.size(); ++i) {
+    typeColorButtons[i].setBounds(
+        innerX + (int)i * (btnW + spacing), innerY, btnW, controlHeight);
+  }
 }

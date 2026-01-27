@@ -46,6 +46,11 @@ public:
   // in visualizer)
   bool hasManualMappingForKey(int keyCode);
 
+  // Lookup mapping type for UI (e.g. visualizer). Returns type if mapping
+  // exists for (keyCode, aliasHash), else nullopt. Use aliasHash 0 for
+  // Master/Global.
+  std::optional<ActionType> getMappingType(int keyCode, uintptr_t aliasHash);
+
   // Force rebuild of keyMapping from ValueTree (for reset operations)
   void forceRebuildMappings();
 
