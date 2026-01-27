@@ -48,6 +48,7 @@ ZonePropertiesPanel::ZonePropertiesPanel(ZoneManager *zoneMgr,
         // Rebuild lookup table when alias changes
         if (zoneManager) {
           zoneManager->rebuildLookupTable();
+          zoneManager->sendChangeMessage(); // Notify listeners (e.g., Visualizer) to invalidate cache
         }
       }
     }
