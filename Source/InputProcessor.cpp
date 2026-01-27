@@ -483,7 +483,25 @@ InputProcessor::lookupAction(uintptr_t deviceHandle, int keyCode) {
     aliasHash = aliasNameToHash(aliasName);
   }
 
-  // Step 2: Check specific alias zones first
+  // Correct priority order: Manual mappings have priority over zones
+  // Step 2: Check manual mappings (specific alias/hardware first)
+  InputID input = {effectiveDevice, keyCode};
+  juce::ScopedReadLock lock(mapLock);
+  const MidiAction *action = findMapping(input);
+  if (action != nullptr) {
+    return {*action, "Mapping"};
+  }
+
+  // Step 3: Check manual mappings (global/wildcard)
+  if (effectiveDevice != 0) {
+    InputID anyDevice = {0, keyCode};
+    action = findMapping(anyDevice);
+    if (action != nullptr) {
+      return {*action, "Mapping"};
+    }
+  }
+
+  // Step 4: Check specific alias zones (after manual mappings)
   if (aliasHash != 0) {
     InputID aliasInputID = {aliasHash, keyCode};
     auto [zoneAction, zoneName] = zoneManager.handleInputWithName(aliasInputID);
@@ -492,29 +510,12 @@ InputProcessor::lookupAction(uintptr_t deviceHandle, int keyCode) {
     }
   }
 
-  // Step 3: Check wildcard zone (hash 0 = Global)
+  // Step 5: Check wildcard zone (hash 0 = Global, lowest priority)
   InputID wildcardInputID = {0, keyCode};
   auto [zoneAction, zoneName] =
       zoneManager.handleInputWithName(wildcardInputID);
   if (zoneAction.has_value()) {
     return {zoneAction, "Zone: " + zoneName};
-  }
-
-  // Step 4: Check manual mappings (specific alias first)
-  InputID input = {effectiveDevice, keyCode};
-  juce::ScopedReadLock lock(mapLock);
-  const MidiAction *action = findMapping(input);
-  if (action != nullptr) {
-    return {*action, "Mapping"};
-  }
-
-  // Step 5: Check manual mappings (wildcard)
-  if (effectiveDevice != 0) {
-    InputID anyDevice = {0, keyCode};
-    action = findMapping(anyDevice);
-    if (action != nullptr) {
-      return {*action, "Mapping"};
-    }
   }
 
   return {std::nullopt, ""};

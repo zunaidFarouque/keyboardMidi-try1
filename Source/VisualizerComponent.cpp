@@ -273,33 +273,28 @@ void VisualizerComponent::refreshCache() {
       }
     }
 
-    // C. Text/Label
+    // C. Text/Label - Use simResult which already has correct hierarchy
     juce::String labelText = geometry.label;
     
-    std::pair<std::shared_ptr<Zone>, bool> zoneInfo{nullptr, false};
-    zoneInfo = findZoneForKey(keyCode, 0);
-    
-    if (!zoneInfo.first && deviceManager) {
-      auto aliases = deviceManager->getAllAliasNames();
-      for (const auto &aliasName : aliases) {
-        uintptr_t aliasHash = aliasNameToHash(aliasName);
-        zoneInfo = findZoneForKey(keyCode, aliasHash);
-        if (zoneInfo.first) {
-          break;
-        }
+    if (simResult.action.has_value()) {
+      if (simResult.action->type == ActionType::Note) {
+        labelText = MidiNoteUtilities::getMidiNoteName(simResult.action->data1);
       }
-    }
-    
-    if (zoneInfo.first) {
-      juce::String cachedLabel = zoneInfo.first->getKeyLabel(keyCode);
-      if (cachedLabel.isNotEmpty()) {
-        labelText = cachedLabel;
-      } else {
-        uintptr_t aliasHash = zoneInfo.first->targetAliasHash;
-        auto action = zoneManager->simulateInput(keyCode, aliasHash);
-        
-        if (action.has_value() && action->type == ActionType::Note) {
-          labelText = MidiNoteUtilities::getMidiNoteName(action->data1);
+    } else {
+      // Fallback: Try to find zone label if no action found
+      // Check current view hash first, then global
+      std::pair<std::shared_ptr<Zone>, bool> zoneInfo{nullptr, false};
+      if (currentViewHash != 0) {
+        zoneInfo = findZoneForKey(keyCode, currentViewHash);
+      }
+      if (!zoneInfo.first) {
+        zoneInfo = findZoneForKey(keyCode, 0);
+      }
+      
+      if (zoneInfo.first) {
+        juce::String cachedLabel = zoneInfo.first->getKeyLabel(keyCode);
+        if (cachedLabel.isNotEmpty()) {
+          labelText = cachedLabel;
         }
       }
     }
@@ -320,8 +315,8 @@ void VisualizerComponent::refreshCache() {
     g.setColour(borderColor);
     g.drawRoundedRectangle(keyBounds, 6.0f, borderWidth);
 
-    // Layer 4: Text (white for off state, red if override/conflict)
-    juce::Colour textColor = (simResult.state == VisualState::Override || simResult.state == VisualState::Conflict) 
+    // Layer 4: Text (white for normal/override, red only for conflicts)
+    juce::Colour textColor = (simResult.state == VisualState::Conflict) 
         ? juce::Colours::red 
         : juce::Colours::white;
     g.setColour(textColor);
@@ -443,32 +438,28 @@ void VisualizerComponent::paint(juce::Graphics &g) {
       dynamicSimResult = inputProcessor->simulateInput(currentViewHash, keyCode);
     }
     
-    // Get label text (same logic as refreshCache)
+    // Get label text - Use dynamicSimResult which already has correct hierarchy
     juce::String labelText = geometry.label;
-    std::pair<std::shared_ptr<Zone>, bool> zoneInfo{nullptr, false};
-    zoneInfo = findZoneForKey(keyCode, 0);
     
-    if (!zoneInfo.first && deviceManager) {
-      auto aliases = deviceManager->getAllAliasNames();
-      for (const auto &aliasName : aliases) {
-        uintptr_t aliasHash = aliasNameToHash(aliasName);
-        zoneInfo = findZoneForKey(keyCode, aliasHash);
-        if (zoneInfo.first) {
-          break;
-        }
+    if (dynamicSimResult.action.has_value()) {
+      if (dynamicSimResult.action->type == ActionType::Note) {
+        labelText = MidiNoteUtilities::getMidiNoteName(dynamicSimResult.action->data1);
       }
-    }
-    
-    if (zoneInfo.first) {
-      juce::String cachedLabel = zoneInfo.first->getKeyLabel(keyCode);
-      if (cachedLabel.isNotEmpty()) {
-        labelText = cachedLabel;
-      } else {
-        uintptr_t aliasHash = zoneInfo.first->targetAliasHash;
-        auto action = zoneManager->simulateInput(keyCode, aliasHash);
-        
-        if (action.has_value() && action->type == ActionType::Note) {
-          labelText = MidiNoteUtilities::getMidiNoteName(action->data1);
+    } else {
+      // Fallback: Try to find zone label if no action found
+      // Check current view hash first, then global
+      std::pair<std::shared_ptr<Zone>, bool> zoneInfo{nullptr, false};
+      if (currentViewHash != 0) {
+        zoneInfo = findZoneForKey(keyCode, currentViewHash);
+      }
+      if (!zoneInfo.first) {
+        zoneInfo = findZoneForKey(keyCode, 0);
+      }
+      
+      if (zoneInfo.first) {
+        juce::String cachedLabel = zoneInfo.first->getKeyLabel(keyCode);
+        if (cachedLabel.isNotEmpty()) {
+          labelText = cachedLabel;
         }
       }
     }
