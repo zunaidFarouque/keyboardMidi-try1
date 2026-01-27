@@ -794,6 +794,37 @@ std::optional<ActionType> InputProcessor::getMappingType(int keyCode, uintptr_t 
   return std::nullopt;
 }
 
+int InputProcessor::getManualMappingCountForKey(int keyCode, uintptr_t aliasHash) const {
+  juce::ScopedReadLock lock(mapLock);
+  int count = 0;
+  
+  // Count mappings from ValueTree (configMap overwrites duplicates)
+  auto mappingsNode = presetManager.getMappingsNode();
+  for (int i = 0; i < mappingsNode.getNumChildren(); ++i) {
+    auto mapping = mappingsNode.getChild(i);
+    int mappingKey = mapping.getProperty("inputKey", 0);
+    if (mappingKey != keyCode)
+      continue;
+    
+    // Get alias name from mapping
+    juce::String aliasName = mapping.getProperty("inputAlias", "").toString();
+    
+    // Convert alias name to hash
+    uintptr_t mappingAliasHash = 0;
+    if (!aliasName.isEmpty() && aliasName != "Global (All Devices)" && 
+        aliasName != "Any / Master" && aliasName != "Global") {
+      mappingAliasHash = static_cast<uintptr_t>(std::hash<juce::String>{}(aliasName));
+    }
+    
+    // Check if this mapping matches the requested alias hash
+    if (mappingAliasHash == aliasHash) {
+      count++;
+    }
+  }
+  
+  return count;
+}
+
 void InputProcessor::forceRebuildMappings() {
   juce::ScopedWriteLock lock(mapLock);
   rebuildMapFromTree();
@@ -840,9 +871,16 @@ SimulationResult InputProcessor::simulateInput(uintptr_t viewDeviceHash, int key
     // MASTER VIEW: Only check Global (strict isolation)
     if (hasGlobalMap) {
       result.action = globalMap->second;
-      result.state = VisualState::Active;
       result.sourceName = "Mapping";
       result.isZone = false;
+      
+      // Check for multiple global mappings (Mapping vs Mapping conflict)
+      if (getManualMappingCountForKey(keyCode, 0) > 1) {
+        result.state = VisualState::Conflict;
+        result.sourceName = "Conflict: Multiple Mappings";
+      } else {
+        result.state = VisualState::Active;
+      }
     } else if (globalZone.has_value()) {
       result.action = globalZone;
       result.state = VisualState::Active;
@@ -867,11 +905,16 @@ SimulationResult InputProcessor::simulateInput(uintptr_t viewDeviceHash, int key
         result.state = VisualState::Conflict;
         result.sourceName = "Conflict: Mapping + Zone";
       }
-      // 2. Hierarchy Override (Local vs Global) -> Orange Override
+      // 2. Multiple Manual Mappings (Mapping vs Mapping) -> Red Conflict
+      else if (getManualMappingCountForKey(keyCode, viewDeviceHash) > 1) {
+        result.state = VisualState::Conflict;
+        result.sourceName = "Conflict: Multiple Mappings";
+      }
+      // 3. Hierarchy Override (Local vs Global) -> Orange Override
       else if (hasGlobalMap || globalZone.has_value()) {
         result.state = VisualState::Override;
       }
-      // 3. Clean
+      // 4. Clean
       else {
         result.state = VisualState::Active;
       }
@@ -879,9 +922,16 @@ SimulationResult InputProcessor::simulateInput(uintptr_t viewDeviceHash, int key
     // B. Global Manual (Inheritance)
     else if (hasGlobalMap) {
       result.action = globalMap->second;
-      result.state = VisualState::Inherited;
       result.sourceName = "Mapping";
       result.isZone = false;
+      
+      // Check for multiple global mappings (Mapping vs Mapping conflict)
+      if (getManualMappingCountForKey(keyCode, 0) > 1) {
+        result.state = VisualState::Conflict;
+        result.sourceName = "Conflict: Multiple Mappings";
+      } else {
+        result.state = VisualState::Inherited;
+      }
     }
     // C. Specific Zone
     else if (specificZone.has_value()) {

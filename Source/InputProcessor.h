@@ -49,6 +49,9 @@ public:
   // exists for (keyCode, aliasHash), else nullopt. Use aliasHash 0 for
   // Master/Global.
   std::optional<ActionType> getMappingType(int keyCode, uintptr_t aliasHash);
+  
+  // Count manual mappings for a specific key/alias (for conflict detection)
+  int getManualMappingCountForKey(int keyCode, uintptr_t aliasHash) const;
 
   // Force rebuild of keyMapping from ValueTree (for reset operations)
   void forceRebuildMappings();
