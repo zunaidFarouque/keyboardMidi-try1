@@ -1,9 +1,10 @@
 #include "MappingInspector.h"
-#include "MidiNoteUtilities.h"
 #include "DeviceManager.h"
 #include "MappingTypes.h"
+#include "MidiNoteUtilities.h"
 
-MappingInspector::MappingInspector(juce::UndoManager *undoMgr, DeviceManager *deviceMgr)
+MappingInspector::MappingInspector(juce::UndoManager *undoMgr,
+                                   DeviceManager *deviceMgr)
     : undoManager(undoMgr), deviceManager(deviceMgr) {
   // Setup Labels
   typeLabel.setText("Type:", juce::dontSendNotification);
@@ -148,7 +149,8 @@ MappingInspector::MappingInspector(juce::UndoManager *undoMgr, DeviceManager *de
   envTargetSelector.onChange = [this] {
     if (selectedTrees.empty())
       return;
-    if (envTargetSelector.getSelectedId() < 1 || envTargetSelector.getSelectedId() > 3)
+    if (envTargetSelector.getSelectedId() < 1 ||
+        envTargetSelector.getSelectedId() > 3)
       return;
     undoManager->beginNewTransaction("Change Envelope Target");
     juce::String targetStr;
@@ -178,7 +180,8 @@ MappingInspector::MappingInspector(juce::UndoManager *undoMgr, DeviceManager *de
 
   // "Uses Global Range" label
   pbGlobalRangeLabel.setText("Uses Global Range", juce::dontSendNotification);
-  pbGlobalRangeLabel.setColour(juce::Label::textColourId, juce::Colours::lightgrey);
+  pbGlobalRangeLabel.setColour(juce::Label::textColourId,
+                               juce::Colours::lightgrey);
   addAndMakeVisible(pbGlobalRangeLabel);
   pbGlobalRangeLabel.setVisible(false);
 
@@ -228,13 +231,14 @@ MappingInspector::MappingInspector(juce::UndoManager *undoMgr, DeviceManager *de
   aliasSelector.onChange = [this] {
     if (selectedTrees.empty())
       return;
-    
-    // Don't update if showing mixed value (no selection or multiple different values)
+
+    // Don't update if showing mixed value (no selection or multiple different
+    // values)
     if (aliasSelector.getSelectedId() == -1)
       return;
 
     juce::String aliasName = aliasSelector.getText();
-    
+
     // Special case: "Global (All Devices)" means empty or hash 0
     if (aliasName == "Global (All Devices)")
       aliasName = "";
@@ -243,7 +247,8 @@ MappingInspector::MappingInspector(juce::UndoManager *undoMgr, DeviceManager *de
     for (auto &tree : selectedTrees) {
       if (tree.isValid()) {
         if (aliasName.isEmpty()) {
-          // Set both inputAlias (empty) and deviceHash ("0" as string) for Global
+          // Set both inputAlias (empty) and deviceHash ("0" as string) for
+          // Global
           tree.setProperty("inputAlias", "", undoManager);
           tree.setProperty("deviceHash", "0", undoManager);
         } else {
@@ -288,7 +293,7 @@ MappingInspector::MappingInspector(juce::UndoManager *undoMgr, DeviceManager *de
     // Transaction ends automatically when next beginNewTransaction() is called
   };
 
-  // Setup Command Selector (IDs 1-10 map to CommandID 0-9)
+  // Setup Command Selector (IDs 1-13 map to CommandID 0-12)
   commandSelector.addItem("Sustain (Momentary)", 1);
   commandSelector.addItem("Sustain (Toggle)", 2);
   commandSelector.addItem("Sustain (Inverse)", 3);
@@ -299,22 +304,36 @@ MappingInspector::MappingInspector(juce::UndoManager *undoMgr, DeviceManager *de
   commandSelector.addItem("Global Pitch -1", 8);
   commandSelector.addItem("Global Mode +1", 9);
   commandSelector.addItem("Global Mode -1", 10);
+  // Phase 41: Layer commands
+  commandSelector.addItem("Layer Momentary (Hold)", 11);
+  commandSelector.addItem("Layer Toggle", 12);
+  commandSelector.addItem("Layer Solo", 13);
   commandSelector.onChange = [this] {
     if (selectedTrees.empty())
       return;
 
     int selectedId = commandSelector.getSelectedId();
-    if (selectedId < 1 || selectedId > 10)
+    if (selectedId < 1 || selectedId > 13)
       return;
 
-    // Map ComboBox ID (1-10) to CommandID enum value (0-9)
+    // Map ComboBox ID (1-13) to CommandID enum value (0-12)
     int cmdValue = selectedId - 1;
 
     undoManager->beginNewTransaction("Change Command");
     for (auto &tree : selectedTrees) {
-      if (tree.isValid())
+      if (tree.isValid()) {
         tree.setProperty("data1", cmdValue, undoManager);
+        // Phase 41: For layer commands, initialize data2 to 0 if not set
+        if (cmdValue >= 10 && cmdValue <= 12) {
+          if (!tree.hasProperty("data2")) {
+            tree.setProperty("data2", 0, undoManager);
+          }
+        }
+      }
     }
+
+    // Update UI to show layer ID slider if needed
+    updateControlsFromSelection();
   };
 
   // Setup Channel Slider
@@ -323,7 +342,7 @@ MappingInspector::MappingInspector(juce::UndoManager *undoMgr, DeviceManager *de
   channelSlider.onValueChange = [this] {
     if (selectedTrees.empty())
       return;
-    
+
     // Don't update if showing mixed value (suffix contains "---")
     if (channelSlider.getTextValueSuffix().contains("---"))
       return;
@@ -344,16 +363,34 @@ MappingInspector::MappingInspector(juce::UndoManager *undoMgr, DeviceManager *de
   data1Slider.onValueChange = [this] {
     if (selectedTrees.empty())
       return;
-    
+
     // Don't update if showing mixed value (suffix contains "---")
     if (data1Slider.getTextValueSuffix().contains("---"))
       return;
 
-    undoManager->beginNewTransaction("Change Data1");
+    // Phase 41: Check if this is a layer command (data1Slider is showing layer
+    // ID)
+    bool isLayerCommand = false;
+    if (allTreesHaveSameValue("type") &&
+        getCommonValue("type").toString() == "Command") {
+      if (allTreesHaveSameValue("data1")) {
+        int cmdId = static_cast<int>(getCommonValue("data1"));
+        isLayerCommand = (cmdId >= 10 && cmdId <= 12);
+      }
+    }
+
+    undoManager->beginNewTransaction(isLayerCommand ? "Change Layer ID"
+                                                    : "Change Data1");
     int value = static_cast<int>(data1Slider.getValue());
     for (auto &tree : selectedTrees) {
-      if (tree.isValid())
-        tree.setProperty("data1", value, undoManager);
+      if (tree.isValid()) {
+        if (isLayerCommand) {
+          // Phase 41: For layer commands, save layer ID to data2
+          tree.setProperty("data2", value, undoManager);
+        } else {
+          tree.setProperty("data1", value, undoManager);
+        }
+      }
     }
     // Transaction ends automatically when next beginNewTransaction() is called
   };
@@ -364,7 +401,7 @@ MappingInspector::MappingInspector(juce::UndoManager *undoMgr, DeviceManager *de
   data2Slider.onValueChange = [this] {
     if (selectedTrees.empty())
       return;
-    
+
     // Don't update if showing mixed value (suffix contains "---")
     if (data2Slider.getTextValueSuffix().contains("---"))
       return;
@@ -384,7 +421,7 @@ MappingInspector::MappingInspector(juce::UndoManager *undoMgr, DeviceManager *de
   randVelSlider.onValueChange = [this] {
     if (selectedTrees.empty())
       return;
-    
+
     // Don't update if showing mixed value
     if (randVelSlider.getTextValueSuffix().contains("---"))
       return;
@@ -423,13 +460,13 @@ void MappingInspector::changeListenerCallback(juce::ChangeBroadcaster *source) {
 
 void MappingInspector::refreshAliasSelector() {
   aliasSelector.clear(juce::dontSendNotification);
-  
+
   if (deviceManager == nullptr)
     return;
 
   // Add "Global (All Devices)" option (hash 0)
   aliasSelector.addItem("Global (All Devices)", 1);
-  
+
   // Add all aliases
   auto aliases = deviceManager->getAllAliasNames();
   for (int i = 0; i < aliases.size(); ++i) {
@@ -443,8 +480,8 @@ void MappingInspector::paint(juce::Graphics &g) {
   if (selectedTrees.empty()) {
     g.setColour(juce::Colours::grey);
     g.setFont(14.0f);
-    g.drawText("No selection", getLocalBounds(),
-               juce::Justification::centred, true);
+    g.drawText("No selection", getLocalBounds(), juce::Justification::centred,
+               true);
   }
 }
 
@@ -494,18 +531,20 @@ void MappingInspector::resized() {
   if (attackSlider.isVisible()) {
     int adsrY = y;
     int adsrWidth = (width - spacing) / 2;
-    
+
     attackSlider.setBounds(leftMargin, adsrY, adsrWidth, controlHeight);
-    decaySlider.setBounds(leftMargin + adsrWidth + spacing, adsrY, adsrWidth, controlHeight);
+    decaySlider.setBounds(leftMargin + adsrWidth + spacing, adsrY, adsrWidth,
+                          controlHeight);
     adsrY += controlHeight + spacing;
-    
+
     sustainSlider.setBounds(leftMargin, adsrY, adsrWidth, controlHeight);
-    releaseSlider.setBounds(leftMargin + adsrWidth + spacing, adsrY, adsrWidth, controlHeight);
+    releaseSlider.setBounds(leftMargin + adsrWidth + spacing, adsrY, adsrWidth,
+                            controlHeight);
     adsrY += controlHeight + spacing;
-    
+
     envTargetSelector.setBounds(leftMargin, adsrY, width, controlHeight);
     adsrY += controlHeight + spacing;
-    
+
     // Pitch Bend controls (if visible)
     if (pbShiftSlider.isVisible()) {
       pbShiftSlider.setBounds(leftMargin, adsrY, width, controlHeight);
@@ -519,7 +558,7 @@ void MappingInspector::resized() {
       smartStepSlider.setBounds(leftMargin, adsrY, width, controlHeight);
       adsrY += controlHeight + spacing;
     }
-    
+
     y = adsrY;
   }
 
@@ -534,14 +573,15 @@ int MappingInspector::getRequiredHeight() const {
   int spacing = 10;
   int topPadding = 10;
   int bottomPadding = 10;
-  
+
   // 5 controls: Type, Channel, Alias, Data1, Data2
   int numControls = 5;
-  
+
   return topPadding + (numControls * (controlHeight + spacing)) + bottomPadding;
 }
 
-void MappingInspector::setSelection(const std::vector<juce::ValueTree> &selection) {
+void MappingInspector::setSelection(
+    const std::vector<juce::ValueTree> &selection) {
   // Remove listeners from old selection
   for (auto &tree : selectedTrees) {
     if (tree.isValid())
@@ -592,7 +632,8 @@ void MappingInspector::updateControlsFromSelection() {
 
   // Show/hide controls based on type
   bool isCommand = (typeStr == "Command");
-  bool isNoteOrCC = (typeStr == "Note" || typeStr == "CC" || typeStr == "Macro");
+  bool isNoteOrCC =
+      (typeStr == "Note" || typeStr == "CC" || typeStr == "Macro");
   bool isNote = (typeStr == "Note");
   bool isEnvelope = (typeStr == "Envelope");
 
@@ -624,18 +665,21 @@ void MappingInspector::updateControlsFromSelection() {
   envTargetLabel.setVisible(isEnvelope);
 
   // Pitch Bend controls visibility (only for Envelope with PitchBend target)
-  juce::String target = allTreesHaveSameValue("adsrTarget") ? getCommonValue("adsrTarget").toString() : "";
+  juce::String target = allTreesHaveSameValue("adsrTarget")
+                            ? getCommonValue("adsrTarget").toString()
+                            : "";
   bool isPitchBend = (isEnvelope && target == "PitchBend");
   bool isSmartScaleBend = (isEnvelope && target == "SmartScaleBend");
   pbShiftSlider.setVisible(isPitchBend);
   pbShiftLabel.setVisible(isPitchBend);
   pbGlobalRangeLabel.setVisible(isPitchBend);
-  
+
   // Smart Scale Bend controls visibility
   smartStepSlider.setVisible(isSmartScaleBend);
   smartStepLabel.setVisible(isSmartScaleBend);
-  
-  // Hide data1Slider and data2Slider for Pitch Bend and SmartScaleBend (use musical controls instead)
+
+  // Hide data1Slider and data2Slider for Pitch Bend and SmartScaleBend (use
+  // musical controls instead)
   if (isPitchBend || isSmartScaleBend) {
     data1Slider.setVisible(false);
     data1Label.setVisible(false);
@@ -686,14 +730,37 @@ void MappingInspector::updateControlsFromSelection() {
       data2Slider.updateText();
     }
   }
-  
+
   if (typeStr == "Command") {
     // Command type - update commandSelector from data1
     if (allTreesHaveSameValue("data1")) {
       int data1 = static_cast<int>(getCommonValue("data1"));
-      // Map CommandID enum value (0-9) to ComboBox ID (1-10)
-      if (data1 >= 0 && data1 <= 9) {
+      // Map CommandID enum value (0-12) to ComboBox ID (1-13)
+      if (data1 >= 0 && data1 <= 12) {
         commandSelector.setSelectedId(data1 + 1, juce::dontSendNotification);
+
+        // Phase 41: For layer commands, show data2Slider as "Target Layer ID"
+        if (data1 >= 10 && data1 <= 12) {
+          data1Label.setText("Target Layer ID:", juce::dontSendNotification);
+          data1Slider.setRange(0, 8, 1);
+          data1Slider.textFromValueFunction = nullptr;
+          data1Slider.valueFromTextFunction = nullptr;
+
+          // Update from data2 (layer ID is stored in data2 per Phase 40
+          // implementation)
+          if (allTreesHaveSameValue("data2")) {
+            int layerId = static_cast<int>(getCommonValue("data2"));
+            data1Slider.setValue(layerId, juce::dontSendNotification);
+            data1Slider.setTextValueSuffix("");
+          } else {
+            data1Slider.setValue(0, juce::dontSendNotification);
+            data1Slider.setTextValueSuffix(" (---)");
+          }
+          data1Slider.updateText();
+        } else {
+          // Regular commands - reset label
+          data1Label.setText("Data1:", juce::dontSendNotification);
+        }
       } else {
         commandSelector.setSelectedId(-1, juce::dontSendNotification);
       }
@@ -722,7 +789,7 @@ void MappingInspector::updateControlsFromSelection() {
   // Update Alias Selector
   if (deviceManager != nullptr) {
     juce::String aliasName;
-    
+
     // Try to get alias from inputAlias property first
     if (allTreesHaveSameValue("inputAlias")) {
       aliasName = getCommonValue("inputAlias").toString();
@@ -742,9 +809,10 @@ void MappingInspector::updateControlsFromSelection() {
             deviceHash = static_cast<uintptr_t>(hashStr.getHexValue64());
           }
         } else if (hashVar.isInt()) {
-          deviceHash = static_cast<uintptr_t>(static_cast<juce::int64>(hashVar));
+          deviceHash =
+              static_cast<uintptr_t>(static_cast<juce::int64>(hashVar));
         }
-        
+
         if (deviceHash == 0) {
           aliasName = "Global (All Devices)";
         } else {
@@ -755,7 +823,7 @@ void MappingInspector::updateControlsFromSelection() {
         aliasSelector.setSelectedId(-1, juce::dontSendNotification);
       }
     }
-    
+
     // Set selection if we found a single alias
     if (!aliasName.isEmpty() && aliasName != "Unknown") {
       // Find the ID for this alias name
@@ -765,7 +833,8 @@ void MappingInspector::updateControlsFromSelection() {
         auto aliases = deviceManager->getAllAliasNames();
         int index = aliases.indexOf(aliasName);
         if (index >= 0) {
-          aliasSelector.setSelectedId(index + 2, juce::dontSendNotification); // IDs start at 2
+          aliasSelector.setSelectedId(
+              index + 2, juce::dontSendNotification); // IDs start at 2
         } else {
           aliasSelector.setSelectedId(-1, juce::dontSendNotification);
         }
@@ -775,8 +844,26 @@ void MappingInspector::updateControlsFromSelection() {
     }
   }
 
-  // Update Data1 Slider
-  if (allTreesHaveSameValue("data1")) {
+  // Update Data1 Slider (or Layer ID slider for layer commands)
+  if (typeStr == "Command" && allTreesHaveSameValue("data1")) {
+    int cmdId = static_cast<int>(getCommonValue("data1"));
+    if (cmdId >= 10 && cmdId <= 12) {
+      // Phase 41: Layer command - show layer ID from data2
+      if (allTreesHaveSameValue("data2")) {
+        int layerId = static_cast<int>(getCommonValue("data2"));
+        data1Slider.setValue(layerId, juce::dontSendNotification);
+        data1Slider.setTextValueSuffix("");
+      } else {
+        data1Slider.setValue(0, juce::dontSendNotification);
+        data1Slider.setTextValueSuffix(" (---)");
+      }
+    } else {
+      // Regular command - show data1
+      int data1 = cmdId;
+      data1Slider.setValue(data1, juce::dontSendNotification);
+      data1Slider.setTextValueSuffix("");
+    }
+  } else if (allTreesHaveSameValue("data1")) {
     int data1 = static_cast<int>(getCommonValue("data1"));
     data1Slider.setValue(data1, juce::dontSendNotification);
     data1Slider.setTextValueSuffix("");
@@ -931,7 +1018,7 @@ juce::var MappingInspector::getCommonValue(const juce::Identifier &property) {
   return juce::var();
 }
 
-void MappingInspector::updatePitchBendPeakValue(juce::ValueTree& tree) {
+void MappingInspector::updatePitchBendPeakValue(juce::ValueTree &tree) {
   // Note: This method is no longer used since InputProcessor now handles
   // the calculation using global range. However, we keep it for potential
   // future use or if we need to update data2 from the UI side.
@@ -939,14 +1026,19 @@ void MappingInspector::updatePitchBendPeakValue(juce::ValueTree& tree) {
   // using SettingsManager::getPitchBendRange().
 }
 
-void MappingInspector::valueTreePropertyChanged(juce::ValueTree &tree,
-                                                 const juce::Identifier &property) {
+void MappingInspector::valueTreePropertyChanged(
+    juce::ValueTree &tree, const juce::Identifier &property) {
   // Update UI if the changed property is one we're displaying
-  if (property == juce::Identifier("type") || property == juce::Identifier("channel") ||
-      property == juce::Identifier("data1") || property == juce::Identifier("data2") ||
-      property == juce::Identifier("inputAlias") || property == juce::Identifier("deviceHash") ||
-      property == juce::Identifier("adsrAttack") || property == juce::Identifier("adsrDecay") ||
-      property == juce::Identifier("adsrSustain") || property == juce::Identifier("adsrRelease") ||
+  if (property == juce::Identifier("type") ||
+      property == juce::Identifier("channel") ||
+      property == juce::Identifier("data1") ||
+      property == juce::Identifier("data2") ||
+      property == juce::Identifier("inputAlias") ||
+      property == juce::Identifier("deviceHash") ||
+      property == juce::Identifier("adsrAttack") ||
+      property == juce::Identifier("adsrDecay") ||
+      property == juce::Identifier("adsrSustain") ||
+      property == juce::Identifier("adsrRelease") ||
       property == juce::Identifier("adsrTarget") ||
       property == juce::Identifier("pbShift") ||
       property == juce::Identifier("smartStepShift")) {

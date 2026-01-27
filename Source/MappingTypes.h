@@ -33,7 +33,10 @@ enum class CommandID : int {
   GlobalPitchUp    = 6,  // Chromatic +1
   GlobalPitchDown  = 7,  // Chromatic -1
   GlobalModeUp     = 8,  // Degree +1
-  GlobalModeDown   = 9   // Degree -1
+  GlobalModeDown   = 9,  // Degree -1
+  LayerMomentary   = 10, // Press=layer on, Release=layer off (data1 = layer ID)
+  LayerToggle      = 11, // Press=flip layer active (data1 = layer ID)
+  LayerSolo        = 12  // Press=only this layer active (data1 = layer ID)
 };
 }
 

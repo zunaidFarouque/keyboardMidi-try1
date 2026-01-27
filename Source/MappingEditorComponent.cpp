@@ -12,9 +12,19 @@ static uintptr_t parseDeviceHash(const juce::var &var) {
 MappingEditorComponent::MappingEditorComponent(PresetManager &pm,
                                                RawInputManager &rawInputMgr,
                                                DeviceManager &deviceMgr)
-    : presetManager(pm), rawInputManager(rawInputMgr), deviceManager(deviceMgr), 
+    : presetManager(pm), rawInputManager(rawInputMgr), deviceManager(deviceMgr),
+      layerListPanel(pm),
       inspector(&undoManager, &deviceManager),
       resizerBar(&horizontalLayout, 1, true) { // Item index 1, vertical bar
+  
+  // Phase 41: Setup layer list panel callback
+  layerListPanel.onLayerSelected = [this](int layerId) {
+    selectedLayerId = layerId;
+    table.updateContent();
+    table.repaint();
+    inspector.setSelection({});  // Clear selection when switching layers
+  };
+  addAndMakeVisible(layerListPanel);
   // Setup Headers
   table.getHeader().addColumn("Key", 1, 50);
   table.getHeader().addColumn("Device", 2, 70);
@@ -53,12 +63,6 @@ MappingEditorComponent::MappingEditorComponent(PresetManager &pm,
         juce::PopupMenu::Options().withTargetComponent(&addButton),
         [this](int result) {
           juce::ValueTree newMapping("Mapping");
-          auto mappingsNode = presetManager.getMappingsNode();
-
-          if (!mappingsNode.isValid()) {
-            DBG("Error: Mappings node is invalid!");
-            return;
-          }
 
           switch (result) {
           case 1: // Key Mapping
@@ -97,7 +101,12 @@ MappingEditorComponent::MappingEditorComponent(PresetManager &pm,
             return; // User cancelled
           }
 
-          mappingsNode.addChild(newMapping, -1, &undoManager);
+          // Phase 41: Set layerID and add to current layer's mappings
+          newMapping.setProperty("layerID", selectedLayerId, nullptr);
+          auto mappingsNode = getCurrentLayerMappings();
+          if (mappingsNode.isValid()) {
+            mappingsNode.addChild(newMapping, -1, &undoManager);
+          }
           table.updateContent();
           table.repaint();
         });
@@ -108,7 +117,7 @@ MappingEditorComponent::MappingEditorComponent(PresetManager &pm,
   duplicateButton.setButtonText("Duplicate");
   duplicateButton.onClick = [this] {
     int row = table.getSelectedRow();
-    auto mappingsNode = presetManager.getMappingsNode();
+    auto mappingsNode = getCurrentLayerMappings();
     
     // Validation
     if (row < 0 || row >= mappingsNode.getNumChildren()) {
@@ -129,6 +138,7 @@ MappingEditorComponent::MappingEditorComponent(PresetManager &pm,
     
     // Create deep copy
     juce::ValueTree copy = original.createCopy();
+    copy.setProperty("layerID", selectedLayerId, nullptr);  // Ensure layerID is set
     
     // Insert directly below the original
     mappingsNode.addChild(copy, row + 1, &undoManager);
@@ -171,9 +181,9 @@ MappingEditorComponent::MappingEditorComponent(PresetManager &pm,
       "Delete",
       "Cancel",
       this,
-      juce::ModalCallbackFunction::create([this, numSelected](int result) {
+        juce::ModalCallbackFunction::create([this, numSelected](int result) {
         if (result == 1) { // OK clicked
-          auto mappingsNode = presetManager.getMappingsNode();
+          auto mappingsNode = getCurrentLayerMappings();
           if (!mappingsNode.isValid())
             return;
 
@@ -247,6 +257,10 @@ void MappingEditorComponent::resized() {
   header.removeFromRight(4);
   learnButton.setBounds(header.removeFromRight(60));
   
+  // Phase 41: Layout: LayerListPanel (20%) | Table/Inspector (80%)
+  int layerListWidth = (int)(area.getWidth() * 0.2f);
+  layerListPanel.setBounds(area.removeFromLeft(layerListWidth));
+  
   // Use StretchableLayoutManager for horizontal split: Table | Bar | Inspector
   juce::Component* horizontalComps[] = { &table, &resizerBar, &inspectorViewport };
   horizontalLayout.layOutComponents(
@@ -260,7 +274,12 @@ void MappingEditorComponent::resized() {
 }
 
 int MappingEditorComponent::getNumRows() {
-  return presetManager.getMappingsNode().getNumChildren();
+  // Phase 41: Return count for current layer
+  return getCurrentLayerMappings().getNumChildren();
+}
+
+juce::ValueTree MappingEditorComponent::getCurrentLayerMappings() {
+  return presetManager.getMappingsListForLayer(selectedLayerId);
 }
 
 void MappingEditorComponent::paintRowBackground(juce::Graphics &g,
@@ -276,7 +295,8 @@ void MappingEditorComponent::paintRowBackground(juce::Graphics &g,
 void MappingEditorComponent::paintCell(juce::Graphics &g, int rowNumber,
                                        int columnId, int width, int height,
                                        bool rowIsSelected) {
-  auto node = presetManager.getMappingsNode().getChild(rowNumber);
+  // Phase 41: Get mapping from current layer
+  auto node = getCurrentLayerMappings().getChild(rowNumber);
   if (!node.isValid())
     return;
 
@@ -328,17 +348,35 @@ void MappingEditorComponent::paintCell(juce::Graphics &g, int rowNumber,
 
 void MappingEditorComponent::valueTreeChildAdded(juce::ValueTree &parent,
                                                  juce::ValueTree &child) {
-  // Update if a row is added OR if the whole "Mappings" folder is replaced
-  // (Load Preset)
-  if (parent.hasType("Mappings") || child.hasType("Mappings"))
-    table.updateContent();
+  // Phase 41: Update if mappings are added to current layer
+  if (parent.hasType("Mappings") || child.hasType("Mappings")) {
+    // Check if this is for the current layer
+    if (parent.getParent().isValid() && parent.getParent().hasType("Layer")) {
+      int layerId = parent.getParent().getProperty("id", -1);
+      if (layerId == selectedLayerId) {
+        table.updateContent();
+      }
+    } else if (parent.hasType("Mappings")) {
+      // Legacy: update if it's a direct child
+      table.updateContent();
+    }
+  }
 }
 
 void MappingEditorComponent::valueTreeChildRemoved(juce::ValueTree &parent,
                                                    juce::ValueTree &child,
                                                    int) {
-  if (parent.hasType("Mappings") || child.hasType("Mappings"))
-    table.updateContent();
+  // Phase 41: Update if mappings are removed from current layer
+  if (parent.hasType("Mappings") || child.hasType("Mappings")) {
+    if (parent.getParent().isValid() && parent.getParent().hasType("Layer")) {
+      int layerId = parent.getParent().getProperty("id", -1);
+      if (layerId == selectedLayerId) {
+        table.updateContent();
+      }
+    } else if (parent.hasType("Mappings")) {
+      table.updateContent();
+    }
+  }
 }
 
 void MappingEditorComponent::valueTreePropertyChanged(
@@ -357,7 +395,7 @@ void MappingEditorComponent::selectedRowsChanged(int lastRowSelected) {
   
   // Build vector of selected ValueTrees
   std::vector<juce::ValueTree> selectedTrees;
-  auto mappingsNode = presetManager.getMappingsNode();
+  auto mappingsNode = getCurrentLayerMappings();  // Phase 41: Use current layer
   
   // Iterate over selected rows
   for (int i = 0; i < numSelected; ++i) {
@@ -423,6 +461,12 @@ void MappingEditorComponent::handleRawKeyEvent(uintptr_t deviceHandle,
                             juce::String::toHexString((juce::int64)deviceHandle)
                                 .toUpperCase(),
                             nullptr);
+    
+    // Phase 41: Ensure layerID is set
+    mappingNode.setProperty("layerID", selectedLayerId, nullptr);
+    
+    // Phase 41: Ensure layerID is set
+    mappingNode.setProperty("layerID", selectedLayerId, nullptr);
 
     // Create display name using KeyNameUtilities
     juce::String keyName = KeyNameUtilities::getKeyName(keyCode);

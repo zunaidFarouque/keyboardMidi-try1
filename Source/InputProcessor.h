@@ -3,12 +3,24 @@
 #include "ExpressionEngine.h"
 #include "MappingTypes.h"
 #include "PresetManager.h"
+#include "RhythmAnalyzer.h"
 #include "VoiceManager.h"
 #include "ZoneManager.h"
-#include "RhythmAnalyzer.h"
 #include <JuceHeader.h>
+#include <unordered_map>
+#include <vector>
 
 class ScaleLibrary;
+
+// Phase 40: Multi-Layer System. Layer 0 = Base, 1..8 = Overlays.
+struct Layer {
+  juce::String name;
+  int id = 0;
+  bool isActive = false; // Runtime state
+
+  std::unordered_map<InputID, MidiAction> compiledMap; // HardwareID -> Action
+  std::unordered_map<InputID, MidiAction> configMap;   // AliasHash -> Action
+};
 class MidiEngine;
 class SettingsManager;
 
@@ -32,7 +44,8 @@ public:
   // NEW: Helper for the Logger to peek at what will happen
   const MidiAction *getMappingForInput(InputID input);
 
-  // Simulate input and return action with source description (Phase 39: returns SimulationResult)
+  // Simulate input and return action with source description (Phase 39: returns
+  // SimulationResult)
   SimulationResult simulateInput(uintptr_t viewDeviceHash, int keyCode);
 
   // Zone management
@@ -49,7 +62,7 @@ public:
   // exists for (keyCode, aliasHash), else nullopt. Use aliasHash 0 for
   // Master/Global.
   std::optional<ActionType> getMappingType(int keyCode, uintptr_t aliasHash);
-  
+
   // Count manual mappings for a specific key/alias (for conflict detection)
   int getManualMappingCountForKey(int keyCode, uintptr_t aliasHash) const;
 
@@ -72,11 +85,8 @@ private:
   juce::ReadWriteLock mapLock;
   juce::ReadWriteLock bufferLock;
 
-  // Dual Map Architecture (Phase 39.3)
-  // compiledMap: Keyed by HardwareID (for audio processing)
-  std::unordered_map<InputID, MidiAction> compiledMap;
-  // configMap: Keyed by AliasHash (for visualization/UI)
-  std::unordered_map<InputID, MidiAction> configMap;
+  // Phase 40: Multi-Layer. Each layer has its own compiledMap + configMap.
+  std::vector<Layer> layers; // Layer 0 = Base, 1..8 = Overlays (default size 9)
 
   // Note buffer for Strum mode (for visualizer; strum is triggered on key
   // press)

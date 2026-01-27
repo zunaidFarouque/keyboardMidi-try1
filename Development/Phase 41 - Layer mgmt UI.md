@@ -1,68 +1,72 @@
-# 🤖 Cursor Prompt: Phase 41 - Layer Management UI
+# 🤖 Cursor Prompt: Phase 41 - Layer Management UI & Data Structure
 
 **Role:** Expert C++ Audio Developer (JUCE Framework).
 
 **Context:**
 We are building "OmniKey".
-*   **Current State:** Phase 40 Complete. The Backend (`InputProcessor`) supports multiple Layers (Banks), but the UI (`MappingEditorComponent`) still views a flat list of mappings and assumes everything is in Layer 0.
-*   **Phase Goal:** Implement a `LayerListPanel` to create/select layers, and refactor `MappingEditorComponent` to display mappings for the **Selected Layer** only.
+*   **Current State:** Phase 40 Complete. The Backend (`InputProcessor`) supports Layers, but the UI (`MappingEditorComponent`) is broken because it expects a flat list of mappings. It doesn't know how to read/write the new `<Layer>` XML structure.
+*   **Phase Goal:** Implement the UI to Manage Layers (Add, Remove, Rename) and update the Mapping Editor to show only the selected Layer.
 
 **Strict Constraints:**
-1.  **Tree Structure:** The `ValueTree` schema has changed. Mappings are now children of a `<Layer>` node, not the root.
-    *   *Old:* `<Mappings><Mapping.../></Mappings>`
-    *   *New:* `<Layers><Layer id="0" name="Base"><Mapping.../></Layer>...</Layers>`
-2.  **Safety:** Layer 0 ("Base") is permanent. The "Remove" button must be disabled for Layer 0.
-3.  **Command Binding:** The `MappingInspector` must now allow selecting `LayerMomentary`, `LayerToggle`, and `LayerSolo` commands.
+1.  **XML Structure:** We are moving from a Flat List to a Hierarchy:
+    *   **Root** -> `Layers` (List) -> `Layer` (ValueTree) -> `Mappings` (List) -> `Mapping` (ValueTree).
+    *   *Note:* Ensure `PresetManager` handles migration/creation of this structure if missing.
+2.  **Layer 0:** The Base Layer (ID 0) cannot be removed.
+3.  **Renaming:** Users must be able to rename layers via the UI.
 
 ---
 
 ### Step 1: Update `PresetManager` (`Source/PresetManager.h/cpp`)
-Handle the new Tree hierarchy.
+Refactor for Hierarchy.
 
 **Methods:**
-1.  `juce::ValueTree getLayersNode();` (Creates it if missing).
-2.  `juce::ValueTree getLayerNode(int layerIndex);` (Returns the specific child tree).
+1.  `juce::ValueTree getLayersList();` (Returns the parent node for layers).
+2.  `juce::ValueTree getLayerNode(int layerIndex);`
+    *   Iterate children of `getLayersList()`. Find one with property `id == layerIndex`.
+    *   If not found (and index is valid), create it.
 3.  `void addLayer(String name);`
-4.  `void removeLayer(int layerIndex);`
-5.  **Refactor `getMappingsNode`**: This method is now ambiguous. Rename/Overload it to `getMappingsNode(int layerId)` so the Table knows which list to show.
+    *   Find highest ID + 1. Create new child.
+4.  `void removeLayer(int layerIndex);` (Ignore if 0).
+5.  **Helper:** `juce::ValueTree getMappingsListForLayer(int layerIndex);`
+    *   Get Layer Node -> Get Child "Mappings" (create if missing).
 
 ### Step 2: `LayerListPanel` (`Source/LayerListPanel.h/cpp`)
-Manage the Banks.
+The Sidebar.
 
 **Requirements:**
-1.  **Inheritance:** `juce::Component`, `juce::ListBoxModel`, `juce::ValueTree::Listener` (listen to `Layers` node).
-2.  **Members:** `juce::ListBox list;`, `juce::TextButton addButton, removeButton;`.
-3.  **API:** `std::function<void(int layerId)> onLayerSelected;`
-4.  **Logic:**
-    *   **Draw:** Show Layer Name and ID. Highlight selected.
-    *   **Add:** Create new Layer Node.
-    *   **Remove:** Delete selected Layer Node (Ignore if ID 0).
-    *   **Selection:** Trigger callback when user clicks a row.
+1.  **Inheritance:** `juce::Component`, `juce::ListBoxModel`.
+2.  **Logic:**
+    *   Display list of Layers (Name + ID).
+    *   **Highlight** the currently selected row.
+    *   **Double Click:** Rename Layer (AlertWindow).
+3.  **Callback:** `std::function<void(int layerId)> onLayerSelected;`
 
 ### Step 3: Update `MappingEditorComponent`
-Integrate the Layer List.
+Connect the List to the Table.
 
 **1. Layout:**
-*   Use `juce::Grid` or `FlexBox`.
-*   **Left (20%):** `LayerListPanel`.
-*   **Right (80%):** `TableListBox` (The existing table).
-
+    *   Grid: Left 20% (`LayerListPanel`), Right 80% (`TableListBox`).
 **2. Logic:**
-*   Member: `int currentLayerId = 0;`
-*   **Callback:** Bind `layerList.onLayerSelected = [this](int id) { currentLayerId = id; table.updateContent(); };`
-*   **Data Source:** Update all table methods (`getNumRows`, `paintCell`) to use `presetManager.getMappingsNode(currentLayerId)`.
-*   **Add Button:** When adding a mapping, ensure it is added to `getMappingsNode(currentLayerId)`.
+    *   Member `int selectedLayerId = 0;`
+    *   **Data Source:** Update `getNumRows` and `paintCell` to call `presetManager.getMappingsListForLayer(selectedLayerId)`.
+    *   **Add Button:** When adding a row, insert it into the *currently selected layer's* mapping list.
 
 ### Step 4: Update `MappingInspector`
-Add the new commands.
+Add Layer Commands.
 
-**Update `Constructor`:**
-*   Add items to `commandSelector`:
-    *   "Layer Hold (Momentary)"
-    *   "Layer Toggle"
-    *   "Layer Solo"
-*   **Dynamic UI:** If one of these is selected, show `data1Slider` but rename label to **"Target Layer ID"**.
+**1. Update `commandSelector`:**
+    *   Add items: "Layer Momentary (Hold)", "Layer Toggle", "Layer Solo".
+**2. UI Logic:**
+    *   If a Layer Command is selected, show `data1Slider` but label it **"Target Layer ID"**.
+    *   Range: 0 to 8.
+
+### Step 5: `InputProcessor` (XML Update)
+Ensure `rebuildMapFromTree` handles the new hierarchy.
+*   Instead of `presetManager.getMappingsNode()`, it should:
+    *   Iterate `presetManager.getLayersList()` children.
+    *   For each Layer, iterate its "Mappings" child.
+    *   Populate `layers[id].compiledMap` / `configMap`.
 
 ---
 
-**Generate code for: Updated `PresetManager`, `LayerListPanel`, Updated `MappingEditorComponent`, and Updated `MappingInspector`.**
+**Generate code for: `PresetManager`, `LayerListPanel`, Updated `MappingEditorComponent`, Updated `MappingInspector`, and Updated `InputProcessor` (XML Parsing logic).**

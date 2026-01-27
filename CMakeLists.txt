@@ -32,6 +32,7 @@ target_sources(OmniKey PRIVATE
     Source/PresetManager.cpp
     Source/MappingEditorComponent.cpp
     Source/MappingInspector.cpp
+    Source/LayerListPanel.cpp
     Source/LogComponent.cpp
     Source/KeyNameUtilities.cpp
     Source/MidiNoteUtilities.cpp
