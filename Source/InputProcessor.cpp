@@ -40,7 +40,8 @@ InputProcessor::~InputProcessor() {
 
 void InputProcessor::changeListenerCallback(juce::ChangeBroadcaster *source) {
   if (source == &presetManager) {
-    // Phase 41.1: one rebuild after silent load (no per-event rebuilds during load)
+    // Phase 41.1: one rebuild after silent load (no per-event rebuilds during
+    // load)
     rebuildMapFromTree();
   } else if (source == &deviceManager) {
     rebuildMapFromTree();
@@ -960,6 +961,20 @@ void InputProcessor::processEvent(InputID input, bool isDown) {
 std::vector<int> InputProcessor::getBufferedNotes() {
   juce::ScopedReadLock lock(bufferLock);
   return noteBuffer;
+}
+
+juce::StringArray InputProcessor::getActiveLayerNames() {
+  juce::StringArray result;
+  juce::ScopedReadLock lock(mapLock);
+  for (const auto &layer : layers) {
+    if (layer.isActive) {
+      auto name = layer.name;
+      if (name.isEmpty())
+        name = "Layer " + juce::String(layer.id);
+      result.add(name);
+    }
+  }
+  return result;
 }
 
 bool InputProcessor::hasManualMappingForKey(int keyCode) {

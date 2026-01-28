@@ -16,12 +16,32 @@ MappingEditorComponent::MappingEditorComponent(PresetManager &pm,
       layerListPanel(pm), inspector(&undoManager, &deviceManager),
       resizerBar(&horizontalLayout, 1, true) { // Item index 1, vertical bar
 
-  // Phase 41: Setup layer list panel callback
-  layerListPanel.onLayerSelected = [this](int layerId) {
-    selectedLayerId = layerId;
+  // Phase 41/45: Setup layer list panel callback with per-layer selection
+  // memory
+  layerListPanel.onLayerSelected = [this](int newLayerId) {
+    // 1. Save current selection for previously active layer
+    int currentRow = table.getSelectedRow();
+    layerSelectionHistory[selectedLayerId] = currentRow;
+
+    // 2. Switch to new layer and refresh table
+    selectedLayerId = newLayerId;
     table.updateContent();
     table.repaint();
-    inspector.setSelection({}); // Clear selection when switching layers
+
+    // 3. Restore saved selection for new layer, if valid
+    int savedRow = -1;
+    auto it = layerSelectionHistory.find(newLayerId);
+    if (it != layerSelectionHistory.end())
+      savedRow = it->second;
+
+    if (savedRow >= 0 && savedRow < getNumRows()) {
+      table.selectRow(savedRow);
+    } else {
+      table.deselectAllRows();
+    }
+
+    // Phase 45.1: force inspector refresh even if row index is unchanged
+    updateInspectorFromSelection();
   };
   addAndMakeVisible(layerListPanel);
   // Setup Headers
@@ -258,16 +278,17 @@ void MappingEditorComponent::resized() {
   juce::Grid grid;
   grid.templateRows = {juce::Grid::TrackInfo(juce::Grid::Fr(1))};
   grid.templateColumns = {juce::Grid::TrackInfo(juce::Grid::Fr(2)),
-                         juce::Grid::TrackInfo(juce::Grid::Fr(8))};
+                          juce::Grid::TrackInfo(juce::Grid::Fr(8))};
   grid.items = {juce::GridItem(layerListPanel), juce::GridItem(table)};
   grid.performLayout(area);
 
   // Right 80%: split Table | Bar | Inspector
   auto rightArea = table.getBounds();
-  juce::Component *horizontalComps[] = {&table, &resizerBar, &inspectorViewport};
-  horizontalLayout.layOutComponents(
-      horizontalComps, 3, rightArea.getX(), rightArea.getY(),
-      rightArea.getWidth(), rightArea.getHeight(), false, true);
+  juce::Component *horizontalComps[] = {&table, &resizerBar,
+                                        &inspectorViewport};
+  horizontalLayout.layOutComponents(horizontalComps, 3, rightArea.getX(),
+                                    rightArea.getY(), rightArea.getWidth(),
+                                    rightArea.getHeight(), false, true);
   int contentWidth = inspectorViewport.getWidth() - 15;
   int contentHeight = inspector.getRequiredHeight();
   inspector.setBounds(0, 0, contentWidth, contentHeight);
@@ -404,24 +425,27 @@ void MappingEditorComponent::changeListenerCallback(
 }
 
 void MappingEditorComponent::selectedRowsChanged(int lastRowSelected) {
-  // Get selected rows from table
-  int numSelected = table.getNumSelectedRows();
+  updateInspectorFromSelection();
+}
 
-  // Build vector of selected ValueTrees
+void MappingEditorComponent::updateInspectorFromSelection() {
+  // 1. Get selected rows (SparseSet)
+  auto selectedRows = table.getSelectedRows();
+
+  // 2. Build vector of selected ValueTrees for the current layer
   std::vector<juce::ValueTree> selectedTrees;
-  auto mappingsNode = getCurrentLayerMappings(); // Phase 41: Use current layer
+  auto mappingsNode = getCurrentLayerMappings(); // Uses selectedLayerId
 
-  // Iterate over selected rows
-  for (int i = 0; i < numSelected; ++i) {
-    int row = table.getSelectedRow(i);
-    if (row >= 0) {
+  for (int i = 0; i < selectedRows.size(); ++i) {
+    int row = selectedRows[i];
+    if (row >= 0 && row < mappingsNode.getNumChildren()) {
       auto child = mappingsNode.getChild(row);
       if (child.isValid())
         selectedTrees.push_back(child);
     }
   }
 
-  // Update inspector with selection
+  // 3. Update inspector with selection (may be empty to clear)
   inspector.setSelection(selectedTrees);
 }
 

@@ -54,6 +54,9 @@ public:
   // Get buffered notes (for visualizer - thread safe)
   std::vector<int> getBufferedNotes();
 
+  // Phase 45: Get names of all active layers (thread-safe)
+  juce::StringArray getActiveLayerNames();
+
   // True if any manual mapping exists for this keyCode (for conflict highlight
   // in visualizer)
   bool hasManualMappingForKey(int keyCode);

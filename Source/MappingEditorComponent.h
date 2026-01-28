@@ -1,20 +1,20 @@
 #pragma once
+#include "DeviceManager.h"
+#include "LayerListPanel.h"
 #include "MappingInspector.h"
 #include "PresetManager.h"
 #include "RawInputManager.h"
-#include "DeviceManager.h"
-#include "LayerListPanel.h"
 #include <JuceHeader.h>
+#include <map>
 
-class MappingEditorComponent
-    : public juce::Component,
-      public juce::TableListBoxModel,
-      public juce::ValueTree::Listener,
-      public juce::ChangeListener,
-      public RawInputManager::Listener
-{
+class MappingEditorComponent : public juce::Component,
+                               public juce::TableListBoxModel,
+                               public juce::ValueTree::Listener,
+                               public juce::ChangeListener,
+                               public RawInputManager::Listener {
 public:
-  MappingEditorComponent(PresetManager &pm, RawInputManager &rawInputMgr, DeviceManager &deviceMgr);
+  MappingEditorComponent(PresetManager &pm, RawInputManager &rawInputMgr,
+                         DeviceManager &deviceMgr);
   ~MappingEditorComponent() override;
 
   // Get undo manager for command handling
@@ -57,10 +57,12 @@ private:
   PresetManager &presetManager;
   RawInputManager &rawInputManager;
   DeviceManager &deviceManager;
-  int selectedLayerId = 0;  // Phase 41: Currently selected layer
+  int selectedLayerId = 0; // Phase 41: Currently selected layer
+  // Phase 45: Remember selection per layer (layerId -> row index)
+  std::map<int, int> layerSelectionHistory;
 
   // 2. Content Components (Must live longer than containers)
-  LayerListPanel layerListPanel;  // Phase 41: Layer sidebar
+  LayerListPanel layerListPanel; // Phase 41: Layer sidebar
   juce::TableListBox table;
   juce::TextButton addButton;
   juce::TextButton duplicateButton;
@@ -75,9 +77,12 @@ private:
   // Resizable layout for table and inspector
   juce::StretchableLayoutManager horizontalLayout;
   juce::StretchableLayoutResizerBar resizerBar;
-  
+
   // Phase 41: Helper to get current layer's mappings
   juce::ValueTree getCurrentLayerMappings();
+
+  void updateInspectorFromSelection(); // Phase 45.1: refresh inspector on
+                                       // layer/row change
 
   JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(MappingEditorComponent)
 };
