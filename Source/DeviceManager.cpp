@@ -1,16 +1,15 @@
 #include "DeviceManager.h"
 #include "PresetManager.h"
-#include <vector>
 #include <set>
+#include <vector>
 #include <windows.h>
 
 DeviceManager::DeviceManager() {
   loadConfig();
+  rebuildAliasCache();
 }
 
-DeviceManager::~DeviceManager() {
-  saveConfig();
-}
+DeviceManager::~DeviceManager() { saveConfig(); }
 
 void DeviceManager::createAlias(const juce::String &name) {
   if (name.isEmpty() || aliasExists(name))
@@ -22,9 +21,11 @@ void DeviceManager::createAlias(const juce::String &name) {
 
   sendChangeMessage();
   saveConfig();
+  rebuildAliasCache();
 }
 
-void DeviceManager::assignHardware(const juce::String &aliasName, uintptr_t hardwareId) {
+void DeviceManager::assignHardware(const juce::String &aliasName,
+                                   uintptr_t hardwareId) {
   if (!aliasExists(aliasName))
     createAlias(aliasName);
 
@@ -43,14 +44,17 @@ void DeviceManager::assignHardware(const juce::String &aliasName, uintptr_t hard
 
   // Add new hardware node
   juce::ValueTree hardwareNode("Hardware");
-  hardwareNode.setProperty("id", juce::String::toHexString((juce::int64)hardwareId).toUpperCase(), nullptr);
+  hardwareNode.setProperty(
+      "id", juce::String::toHexString((juce::int64)hardwareId).toUpperCase(),
+      nullptr);
   aliasNode.addChild(hardwareNode, -1, nullptr);
 
   sendChangeMessage();
   saveConfig();
 }
 
-void DeviceManager::removeHardware(const juce::String &aliasName, uintptr_t hardwareId) {
+void DeviceManager::removeHardware(const juce::String &aliasName,
+                                   uintptr_t hardwareId) {
   if (!aliasExists(aliasName))
     return;
 
@@ -71,6 +75,15 @@ void DeviceManager::removeHardware(const juce::String &aliasName, uintptr_t hard
   }
 }
 
+void DeviceManager::removeHardwareFromAlias(const juce::String &aliasName,
+                                            uintptr_t hardwareId) {
+  // Remove from ValueTree (and persist)
+  removeHardware(aliasName, hardwareId);
+
+  // Phase 46.2: refresh the live unassigned list immediately
+  validateConnectedDevices();
+}
+
 void DeviceManager::deleteAlias(const juce::String &aliasName) {
   if (!aliasExists(aliasName))
     return;
@@ -78,86 +91,95 @@ void DeviceManager::deleteAlias(const juce::String &aliasName) {
   // Find and remove the alias node
   for (int i = globalConfig.getNumChildren() - 1; i >= 0; --i) {
     auto aliasNode = globalConfig.getChild(i);
-    if (aliasNode.hasType("Alias") && 
+    if (aliasNode.hasType("Alias") &&
         aliasNode.getProperty("name").toString() == aliasName) {
       globalConfig.removeChild(aliasNode, nullptr);
       sendChangeMessage();
       saveConfig();
+      rebuildAliasCache();
       return;
     }
   }
 }
 
-// Helper to convert alias name to hash (same as in InputProcessor/ZonePropertiesPanel)
+// Helper to convert alias name to hash (same as in
+// InputProcessor/ZonePropertiesPanel)
 static uintptr_t getAliasHash(const juce::String &aliasName) {
-  if (aliasName.isEmpty() || aliasName == "Any / Master" || aliasName == "Unassigned")
+  if (aliasName.isEmpty() || aliasName == "Any / Master" ||
+      aliasName == "Unassigned")
     return 0;
   return static_cast<uintptr_t>(std::hash<juce::String>{}(aliasName));
 }
 
-void DeviceManager::renameAlias(const juce::String &oldNameIn, const juce::String &newNameIn, PresetManager* presetManager) {
+void DeviceManager::renameAlias(const juce::String &oldNameIn,
+                                const juce::String &newNameIn,
+                                PresetManager *presetManager) {
   // Deep copies
   const juce::String oldName = oldNameIn;
   const juce::String newName = newNameIn;
-  
+
   if (oldName == newName || newName.isEmpty())
     return;
-  
+
   if (!aliasExists(oldName))
     return;
-  
+
   if (aliasExists(newName))
     return; // New name already exists
-  
+
   // 1. Update the Alias Definition (Global Config)
   juce::ValueTree aliasNode;
   for (int i = 0; i < globalConfig.getNumChildren(); ++i) {
     auto child = globalConfig.getChild(i);
-    if (child.hasType("Alias") && 
+    if (child.hasType("Alias") &&
         child.getProperty("name").toString() == oldName) {
       aliasNode = child;
       break;
     }
   }
-  
+
   if (!aliasNode.isValid())
     return;
-  
+
   // Calculate Hashes
   uintptr_t oldHash = getAliasHash(oldName);
   uintptr_t newHash = getAliasHash(newName);
-  
+
   // 2. Update Mappings (Safely - Collect then Update pattern)
   if (presetManager) {
     auto mappings = presetManager->getMappingsNode();
     std::vector<juce::ValueTree> mappingsToUpdate;
-    std::vector<bool> updateInputAlias; // Track which ones need inputAlias update
-    
+    std::vector<bool>
+        updateInputAlias; // Track which ones need inputAlias update
+
     // Pass 1: Collect
     for (int i = 0; i < mappings.getNumChildren(); ++i) {
       auto mapping = mappings.getChild(i);
-      
+
       // Check if this mapping uses the old alias name (new approach)
-      juce::String inputAlias = mapping.getProperty("inputAlias", "").toString();
+      juce::String inputAlias =
+          mapping.getProperty("inputAlias", "").toString();
       bool needsInputAliasUpdate = (inputAlias == oldName);
-      
-      // Check if this mapping uses the old alias hash (legacy deviceHash property)
+
+      // Check if this mapping uses the old alias hash (legacy deviceHash
+      // property)
       juce::String hashStr = mapping.getProperty("deviceHash").toString();
       bool needsHashUpdate = false;
       if (!hashStr.isEmpty()) {
         uintptr_t currentHash = (uintptr_t)hashStr.getHexValue64();
         needsHashUpdate = (currentHash == oldHash);
       }
-      
+
       if (needsInputAliasUpdate || needsHashUpdate) {
         mappingsToUpdate.push_back(mapping);
         updateInputAlias.push_back(needsInputAliasUpdate);
       }
     }
-    
-    // Pass 2: Update (Listeners fire here, but we are no longer iterating the parent tree)
+
+    // Pass 2: Update (Listeners fire here, but we are no longer iterating the
+    // parent tree)
     for (size_t i = 0; i < mappingsToUpdate.size(); ++i) {
-      auto& mapping = mappingsToUpdate[i];
+      auto &mapping = mappingsToUpdate[i];
       if (updateInputAlias[i]) {
         mapping.setProperty("inputAlias", newName, nullptr);
       }
@@ -166,26 +188,33 @@ void DeviceManager::renameAlias(const juce::String &oldNameIn, const juce::Strin
       if (!hashStr.isEmpty()) {
         uintptr_t currentHash = (uintptr_t)hashStr.getHexValue64();
         if (currentHash == oldHash) {
-          mapping.setProperty("deviceHash", juce::String::toHexString((juce::int64)newHash).toUpperCase(), nullptr);
+          mapping.setProperty(
+              "deviceHash",
+              juce::String::toHexString((juce::int64)newHash).toUpperCase(),
+              nullptr);
         }
       }
     }
   }
-  
+
   // 3. Apply Name Change
   aliasNode.setProperty("name", newName, nullptr);
-  
+
+  // Phase 46.3: keep reverse lookup cache in sync
+  rebuildAliasCache();
+
   // 4. Notify & Save
   sendChangeMessage();
   saveConfig();
 }
 
-juce::Array<uintptr_t> DeviceManager::getHardwareForAlias(const juce::String &aliasName) const {
+juce::Array<uintptr_t>
+DeviceManager::getHardwareForAlias(const juce::String &aliasName) const {
   juce::Array<uintptr_t> result;
 
   for (int i = 0; i < globalConfig.getNumChildren(); ++i) {
     auto aliasNode = globalConfig.getChild(i);
-    if (aliasNode.hasType("Alias") && 
+    if (aliasNode.hasType("Alias") &&
         aliasNode.getProperty("name").toString() == aliasName) {
       // Found the alias, collect all hardware IDs
       for (int j = 0; j < aliasNode.getNumChildren(); ++j) {
@@ -197,6 +226,35 @@ juce::Array<uintptr_t> DeviceManager::getHardwareForAlias(const juce::String &al
         }
       }
       break;
+    }
+  }
+
+  return result;
+}
+
+juce::Array<juce::uint64>
+DeviceManager::getAliasesForHardware(uintptr_t hardwareId) const {
+  juce::Array<juce::uint64> result;
+
+  for (int i = 0; i < globalConfig.getNumChildren(); ++i) {
+    auto aliasNode = globalConfig.getChild(i);
+    if (!aliasNode.hasType("Alias"))
+      continue;
+
+    juce::String aliasName = aliasNode.getProperty("name").toString();
+    juce::uint64 aliasHash = static_cast<juce::uint64>(getAliasHash(aliasName));
+
+    for (int j = 0; j < aliasNode.getNumChildren(); ++j) {
+      auto hardwareNode = aliasNode.getChild(j);
+      if (!hardwareNode.hasType("Hardware"))
+        continue;
+
+      uintptr_t id = static_cast<uintptr_t>(
+          hardwareNode.getProperty("id").toString().getHexValue64());
+      if (id == hardwareId) {
+        result.add(aliasHash);
+        break; // this alias already recorded for this hardware
+      }
     }
   }
 
@@ -237,17 +295,12 @@ juce::StringArray DeviceManager::getAllAliases() const {
 }
 
 juce::String DeviceManager::getAliasName(uintptr_t hardwareHash) const {
-  // Edge case: hash is 0 means "Global"
-  if (hardwareHash == 0)
-    return "Global";
+  // Phase 46.3: robust reverse lookup (alias hash -> name)
+  auto it = aliasNameCache.find(hardwareHash);
+  if (it != aliasNameCache.end())
+    return it->second;
 
-  // Look up which alias this hardware ID belongs to
-  juce::String alias = getAliasForHardware(hardwareHash);
-  
-  if (alias == "Unassigned")
-    return "Unknown";
-  
-  return alias;
+  return "Unknown";
 }
 
 juce::StringArray DeviceManager::getAllAliasNames() const {
@@ -258,7 +311,7 @@ juce::StringArray DeviceManager::getAllAliasNames() const {
 bool DeviceManager::aliasExists(const juce::String &aliasName) const {
   for (int i = 0; i < globalConfig.getNumChildren(); ++i) {
     auto aliasNode = globalConfig.getChild(i);
-    if (aliasNode.hasType("Alias") && 
+    if (aliasNode.hasType("Alias") &&
         aliasNode.getProperty("name").toString() == aliasName) {
       return true;
     }
@@ -285,12 +338,32 @@ void DeviceManager::loadConfig() {
   } else {
     globalConfig = juce::ValueTree("OmniKeyConfig");
   }
+
+  rebuildAliasCache();
 }
 
-juce::ValueTree DeviceManager::findOrCreateAliasNode(const juce::String &aliasName) {
+void DeviceManager::rebuildAliasCache() {
+  aliasNameCache.clear();
+
+  // Always add Global entry
+  aliasNameCache[0] = "Global (All Devices)";
+
   for (int i = 0; i < globalConfig.getNumChildren(); ++i) {
     auto aliasNode = globalConfig.getChild(i);
-    if (aliasNode.hasType("Alias") && 
+    if (!aliasNode.hasType("Alias"))
+      continue;
+
+    juce::String name = aliasNode.getProperty("name").toString();
+    uintptr_t hash = getAliasHash(name);
+    aliasNameCache[hash] = name;
+  }
+}
+
+juce::ValueTree
+DeviceManager::findOrCreateAliasNode(const juce::String &aliasName) {
+  for (int i = 0; i < globalConfig.getNumChildren(); ++i) {
+    auto aliasNode = globalConfig.getChild(i);
+    if (aliasNode.hasType("Alias") &&
         aliasNode.getProperty("name").toString() == aliasName) {
       return aliasNode;
     }
@@ -303,52 +376,56 @@ juce::ValueTree DeviceManager::findOrCreateAliasNode(const juce::String &aliasNa
   return aliasNode;
 }
 
-juce::StringArray DeviceManager::getEmptyAliases(const std::vector<uintptr_t>& requiredAliasHashes) {
+juce::StringArray DeviceManager::getEmptyAliases(
+    const std::vector<uintptr_t> &requiredAliasHashes) {
   juce::StringArray emptyAliases;
-  
+
   // Iterate through required alias hashes
   for (uintptr_t requiredHash : requiredAliasHashes) {
     // Skip hash 0 (Global)
     if (requiredHash == 0)
       continue;
-    
+
     // Find alias name by iterating all aliases and computing their hash
     juce::String aliasName;
     for (int i = 0; i < globalConfig.getNumChildren(); ++i) {
       auto aliasNode = globalConfig.getChild(i);
       if (!aliasNode.hasType("Alias"))
         continue;
-      
+
       juce::String name = aliasNode.getProperty("name").toString();
       uintptr_t hash = getAliasHash(name);
-      
+
       if (hash == requiredHash) {
         aliasName = name;
         break;
       }
     }
-    
+
     // If alias doesn't exist, create it
     if (aliasName.isEmpty()) {
       // Generate a default name from hash (fallback)
-      aliasName = "Alias_" + juce::String::toHexString((juce::int64)requiredHash).substring(0, 8);
+      aliasName =
+          "Alias_" +
+          juce::String::toHexString((juce::int64)requiredHash).substring(0, 8);
       createAlias(aliasName);
     }
-    
+
     // Check if alias has hardware assigned
     juce::Array<uintptr_t> hardwareIds = getHardwareForAlias(aliasName);
     if (hardwareIds.size() == 0) {
       emptyAliases.add(aliasName);
     }
   }
-  
+
   return emptyAliases;
 }
 
 void DeviceManager::validateConnectedDevices() {
   // Step 1: Get list of currently live devices using GetRawInputDeviceList
   UINT numDevices = 0;
-  if (GetRawInputDeviceList(nullptr, &numDevices, sizeof(RAWINPUTDEVICELIST)) != 0) {
+  if (GetRawInputDeviceList(nullptr, &numDevices, sizeof(RAWINPUTDEVICELIST)) !=
+      0) {
     // Error getting device count
     return;
   }
@@ -359,14 +436,16 @@ void DeviceManager::validateConnectedDevices() {
   }
 
   std::vector<RAWINPUTDEVICELIST> deviceList(numDevices);
-  if (GetRawInputDeviceList(deviceList.data(), &numDevices, sizeof(RAWINPUTDEVICELIST)) == static_cast<UINT>(-1)) {
+  if (GetRawInputDeviceList(deviceList.data(), &numDevices,
+                            sizeof(RAWINPUTDEVICELIST)) ==
+      static_cast<UINT>(-1)) {
     // Error getting device list
     return;
   }
 
   // Step 2: Extract valid hDevice handles into a set
   std::set<uintptr_t> liveHandles;
-  for (const auto& device : deviceList) {
+  for (const auto &device : deviceList) {
     // Only include keyboard devices (RIM_TYPEKEYBOARD = 1)
     if (device.dwType == RIM_TYPEKEYBOARD) {
       uintptr_t handle = reinterpret_cast<uintptr_t>(device.hDevice);
@@ -374,8 +453,14 @@ void DeviceManager::validateConnectedDevices() {
     }
   }
 
-  // Step 3: Iterate through all aliases and their hardware IDs
+  // Phase 46: rebuild the unassigned device list
+  unassignedDevices.clear();
+
+  // Step 3: Iterate through all aliases and their hardware IDs, tracking which
+  // live handles are already assigned
   bool changesMade = false;
+  std::set<uintptr_t> assignedHandles;
+
   for (int i = 0; i < globalConfig.getNumChildren(); ++i) {
     auto aliasNode = globalConfig.getChild(i);
     if (!aliasNode.hasType("Alias"))
@@ -392,26 +477,43 @@ void DeviceManager::validateConnectedDevices() {
       juce::String idStr = hardwareNode.getProperty("id").toString();
       uintptr_t id = static_cast<uintptr_t>(idStr.getHexValue64());
 
-      // Step 5: Remove if id != 0 AND id is NOT in liveHandles
+      // Track assigned live devices (non-zero only)
+      if (id != 0 && liveHandles.find(id) != liveHandles.end())
+        assignedHandles.insert(id);
+
+      // Remove if id != 0 AND id is NOT in liveHandles (dead device cleanup)
       if (id != 0 && liveHandles.find(id) == liveHandles.end()) {
-        // Dead device - remove it
-        DBG("DeviceManager: Removed dead device " + juce::String::toHexString((juce::int64)id) + " from Alias \"" + aliasName + "\"");
+        DBG("DeviceManager: Removed dead device " +
+            juce::String::toHexString((juce::int64)id) + " from Alias \"" +
+            aliasName + "\"");
         aliasNode.removeChild(hardwareNode, nullptr);
         changesMade = true;
       }
     }
   }
 
-  // Step 6: If changes were made, send change message and save
-  if (changesMade) {
-    sendChangeMessage();
-    saveConfig();
+  // Step 5: Any live handle that is not in assignedHandles is considered
+  // "unassigned". We do NOT write these into the ValueTree; we just track them
+  // in-memory for the UI.
+  for (auto handle : liveHandles) {
+    if (assignedHandles.find(handle) == assignedHandles.end()) {
+      unassignedDevices.push_back(handle);
+    }
   }
+
+  // Step 6: If changes were made, send change message and save
+  // Always notify UI: the unassignedDevices list can change even if no dead
+  // devices were removed.
+  sendChangeMessage();
+
+  if (changesMade)
+    saveConfig();
 }
 
 juce::File DeviceManager::getConfigFile() const {
-  auto dir = juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory)
-                 .getChildFile("OmniKey");
+  auto dir =
+      juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory)
+          .getChildFile("OmniKey");
   dir.createDirectory();
   return dir.getChildFile("OmniKeyConfig.xml");
 }

@@ -69,6 +69,15 @@ VisualizerComponent::VisualizerComponent(ZoneManager *zoneMgr,
   });
 }
 
+void VisualizerComponent::setVisualizedLayer(int layerId) {
+  // Clamp to non-negative; InputProcessor further clamps to valid range
+  if (layerId < 0)
+    layerId = 0;
+  currentVisualizedLayer = layerId;
+  cacheValid = false;
+  needsRepaint = true;
+}
+
 void VisualizerComponent::initialize() {
   if (zoneManager)
     zoneManager->addChangeListener(this);
@@ -225,7 +234,8 @@ void VisualizerComponent::refreshCache() {
         // Phase 9.5: When Studio Mode is OFF, simulateInput will force
         // viewDeviceHash to 0 So we can always call it, but use currentViewHash
         // (which is 0 when Studio Mode is OFF)
-        simResult = inputProcessor->simulateInput(currentViewHash, keyCode);
+        simResult = inputProcessor->simulateInput(currentViewHash, keyCode,
+                                                  currentVisualizedLayer);
 
         // Phase 39.5: Fix color determination logic
         // Note: When Studio Mode is OFF, simulateInput forces viewDeviceHash to
@@ -233,20 +243,17 @@ void VisualizerComponent::refreshCache() {
         if (simResult.state != VisualState::Empty) {
           // 1. Determine Base Color
           if (simResult.isZone) {
-            // Try to get color for the current view
+            // Phase 47: color lookup should not depend on VisualState.
+            // Try current view first, then fall back to Global.
             auto zColor =
                 zoneManager->getZoneColorForKey(keyCode, currentViewHash);
 
-            // If not found and it's Inherited, check Global (0) to get the
-            // inherited zone color
-            if (!zColor.has_value() &&
-                simResult.state == VisualState::Inherited) {
+            if (!zColor.has_value() && currentViewHash != 0) {
               zColor = zoneManager->getZoneColorForKey(keyCode, 0);
             }
 
-            if (zColor.has_value()) {
+            if (zColor.has_value())
               underlayColor = zColor.value();
-            }
           } else if (simResult.action.has_value()) {
             // Manual Mapping: use type color
             underlayColor =
@@ -491,8 +498,8 @@ void VisualizerComponent::paint(juce::Graphics &g) {
     if (inputProcessor && settingsManager) {
       // Phase 9.5: When Studio Mode is OFF, simulateInput will force
       // viewDeviceHash to 0
-      dynamicSimResult =
-          inputProcessor->simulateInput(currentViewHash, keyCode);
+      dynamicSimResult = inputProcessor->simulateInput(currentViewHash, keyCode,
+                                                       currentVisualizedLayer);
     }
 
     // Get label text - Use dynamicSimResult which already has correct hierarchy

@@ -26,6 +26,17 @@ if I select ALL, it will show from all keyboards (starting from any/master bindi
 
 ---
 
+overhawl the configurator window
+
+for CC, it would be useful if we added some previews of the general mapping of CC numbers.
+
+
+---
+
+===
+
+---
+
 ## Regarding mouse/trackpage
 
 what if we do this:

@@ -12,7 +12,8 @@
 
 MainComponent::MainComponent()
     : voiceManager(midiEngine, settingsManager),
-      inputProcessor(voiceManager, presetManager, deviceManager, scaleLibrary, midiEngine, settingsManager),
+      inputProcessor(voiceManager, presetManager, deviceManager, scaleLibrary,
+                     midiEngine, settingsManager),
       startupManager(&presetManager, &deviceManager,
                      &inputProcessor.getZoneManager(), &settingsManager),
       rawInputManager(std::make_unique<RawInputManager>()),
@@ -27,25 +28,32 @@ MainComponent::MainComponent()
           &horizontalLayout, 1,
           true), // true = vertical bar for horizontal layout (drag left/right)
       setupWizard(deviceManager, *rawInputManager) {
-  // --- Restore UI: create the five content components and wire into containers/tabs ---
+  // --- Restore UI: create the five content components and wire into
+  // containers/tabs ---
   logComponent = std::make_unique<LogComponent>();
   visualizer = std::make_unique<VisualizerComponent>(
       &inputProcessor.getZoneManager(), &deviceManager, voiceManager,
       &settingsManager, &presetManager, &inputProcessor);
   mappingEditor = std::make_unique<MappingEditorComponent>(
-      presetManager, *rawInputManager, deviceManager);
+      presetManager, *rawInputManager, deviceManager, settingsManager);
   zoneEditor = std::make_unique<ZoneEditorComponent>(
       &inputProcessor.getZoneManager(), &deviceManager, rawInputManager.get(),
       &scaleLibrary);
-  settingsPanel = std::make_unique<SettingsPanel>(
-      settingsManager, midiEngine, *rawInputManager);
+  settingsPanel = std::make_unique<SettingsPanel>(settingsManager, midiEngine,
+                                                  *rawInputManager);
 
   visualizerContainer.setContent(*visualizer);
   logContainer.setContent(*logComponent);
 
+  // Phase 45.3: keep visualizer's layer context in sync with editor selection
+  mappingEditor->onLayerChanged = [this](int layerId) {
+    if (visualizer)
+      visualizer->setVisualizedLayer(layerId);
+  };
+
   // Mini Status Window (before init; no listener storm)
   miniWindow = std::make_unique<MiniStatusWindow>(settingsManager);
-  
+
   // Listen to SettingsManager for MIDI mode changes
   settingsManager.addChangeListener(this);
 
@@ -59,7 +67,8 @@ MainComponent::MainComponent()
   // 1. Populate the list (safe – no driver open)
   midiSelector.addItemList(midiEngine.getDeviceNames(), 1);
 
-  // 2. Setup selection logic – onChange will call setOutputDevice when selection changes
+  // 2. Setup selection logic – onChange will call setOutputDevice when
+  // selection changes
   midiSelector.onChange = [this] {
     int selectedIndex = midiSelector.getSelectedItemIndex();
     if (selectedIndex >= 0) {
@@ -69,7 +78,8 @@ MainComponent::MainComponent()
     }
   };
 
-  // 3. Deferred auto-connect – wait until app/window/heap are stable before opening MIDI driver
+  // 3. Deferred auto-connect – wait until app/window/heap are stable before
+  // opening MIDI driver
   juce::Component::SafePointer<MainComponent> weakThis(this);
   juce::Timer::callAfterDelay(200, [weakThis]() {
     if (weakThis == nullptr)
@@ -84,7 +94,7 @@ MainComponent::MainComponent()
     }
     if (weakThis->midiSelector.getNumItems() > 0) {
       weakThis->midiSelector.setSelectedItemIndex(indexToSelect,
-                                                   juce::sendNotificationSync);
+                                                  juce::sendNotificationSync);
     }
   });
 
@@ -102,7 +112,9 @@ MainComponent::MainComponent()
                       // If the user didn't cancel (file is valid)
                       if (result != juce::File()) {
                         presetManager.saveToFile(result);
-                        if (logComponent) logComponent->addEntry("Saved: " + result.getFileName());
+                        if (logComponent)
+                          logComponent->addEntry("Saved: " +
+                                                 result.getFileName());
                       }
                     });
   };
@@ -114,53 +126,60 @@ MainComponent::MainComponent()
         "Load Preset",
         juce::File::getSpecialLocation(juce::File::userHomeDirectory), "*.xml");
 
-    fc->launchAsync(juce::FileBrowserComponent::openMode |
-                        juce::FileBrowserComponent::canSelectFiles,
-                    [this, fc](const juce::FileChooser &chooser) {
-                      auto result = chooser.getResult();
-                      if (result.exists()) {
-                        presetManager.loadFromFile(result);
-                        if (logComponent) logComponent->addEntry("Loaded: " + result.getFileName());
-                        
-                        // Phase 9.6: Rig Health Check
-                        if (settingsManager.isStudioMode()) {
-                          // Extract all alias hashes from preset mappings
-                          std::vector<uintptr_t> requiredAliasHashes;
-                          auto mappings = presetManager.getMappingsNode();
-                          
-                          for (int i = 0; i < mappings.getNumChildren(); ++i) {
-                            auto mapping = mappings.getChild(i);
-                            juce::String aliasName = mapping.getProperty("inputAlias", "").toString();
-                            
-                            if (!aliasName.isEmpty() && aliasName != "Global (All Devices)" && 
-                                aliasName != "Any / Master" && aliasName != "Global") {
-                              // Convert alias name to hash
-                              uintptr_t aliasHash = static_cast<uintptr_t>(std::hash<juce::String>{}(aliasName));
-                              requiredAliasHashes.push_back(aliasHash);
-                            }
-                          }
-                          
-                          // Check for empty aliases
-                          juce::StringArray emptyAliases = deviceManager.getEmptyAliases(requiredAliasHashes);
-                          
-                          if (emptyAliases.size() > 0) {
-                            // Start the wizard
-                            setupWizard.startSequence(emptyAliases);
-                            setupWizard.setVisible(true);
-                            setupWizard.toFront(false);
-                          }
-                        }
-                      }
-                    });
+    fc->launchAsync(
+        juce::FileBrowserComponent::openMode |
+            juce::FileBrowserComponent::canSelectFiles,
+        [this, fc](const juce::FileChooser &chooser) {
+          auto result = chooser.getResult();
+          if (result.exists()) {
+            presetManager.loadFromFile(result);
+            if (logComponent)
+              logComponent->addEntry("Loaded: " + result.getFileName());
+
+            // Phase 9.6: Rig Health Check
+            if (settingsManager.isStudioMode()) {
+              // Extract all alias hashes from preset mappings
+              std::vector<uintptr_t> requiredAliasHashes;
+              auto mappings = presetManager.getMappingsNode();
+
+              for (int i = 0; i < mappings.getNumChildren(); ++i) {
+                auto mapping = mappings.getChild(i);
+                juce::String aliasName =
+                    mapping.getProperty("inputAlias", "").toString();
+
+                if (!aliasName.isEmpty() &&
+                    aliasName != "Global (All Devices)" &&
+                    aliasName != "Any / Master" && aliasName != "Global") {
+                  // Convert alias name to hash
+                  uintptr_t aliasHash = static_cast<uintptr_t>(
+                      std::hash<juce::String>{}(aliasName));
+                  requiredAliasHashes.push_back(aliasHash);
+                }
+              }
+
+              // Check for empty aliases
+              juce::StringArray emptyAliases =
+                  deviceManager.getEmptyAliases(requiredAliasHashes);
+
+              if (emptyAliases.size() > 0) {
+                // Start the wizard
+                setupWizard.startSequence(emptyAliases);
+                setupWizard.setVisible(true);
+                setupWizard.toFront(false);
+              }
+            }
+          }
+        });
   };
 
   addAndMakeVisible(deviceSetupButton);
   deviceSetupButton.setButtonText("Device Setup");
-  deviceSetupButton.setVisible(settingsManager.isStudioMode()); // Hide when Studio Mode is OFF
+  deviceSetupButton.setVisible(
+      settingsManager.isStudioMode()); // Hide when Studio Mode is OFF
   deviceSetupButton.onClick = [this] {
     juce::DialogWindow::LaunchOptions options;
-    auto *setupComponent =
-        new DeviceSetupComponent(deviceManager, *rawInputManager, &presetManager);
+    auto *setupComponent = new DeviceSetupComponent(
+        deviceManager, *rawInputManager, &presetManager);
     options.content.setOwned(setupComponent);
     options.content->setSize(600, 400);
     options.dialogTitle = "Rig Configuration";
@@ -170,15 +189,17 @@ MainComponent::MainComponent()
   };
 
   // --- Setup Main Tabs ---
-  mainTabs.addTab("Mappings", juce::Colour(0xff2a2a2a), mappingEditor.get(), false);
+  mainTabs.addTab("Mappings", juce::Colour(0xff2a2a2a), mappingEditor.get(),
+                  false);
   mainTabs.addTab("Zones", juce::Colour(0xff2a2a2a), zoneEditor.get(), false);
-  mainTabs.addTab("Settings", juce::Colour(0xff2a2a2a), settingsPanel.get(), false);
+  mainTabs.addTab("Settings", juce::Colour(0xff2a2a2a), settingsPanel.get(),
+                  false);
 
   // --- Add Containers ---
   addAndMakeVisible(visualizerContainer);
   addAndMakeVisible(editorContainer);
   addAndMakeVisible(logContainer);
-  
+
   // --- Add Quick Setup Wizard (Phase 9.6) ---
   addAndMakeVisible(setupWizard);
   setupWizard.setVisible(false); // Hidden by default
@@ -195,14 +216,21 @@ MainComponent::MainComponent()
                                -0.6); // Bottom area (stretchable)
 
   // Horizontal: Editors | Bar | Log
-  horizontalLayout.setItemLayout(0, -0.1, -0.9, -0.7); // Item 0 (Left/Editors): Min 10%, Max 90%, Preferred 70%
-  horizontalLayout.setItemLayout(1, 5, 5, 5);          // Item 1 (Bar): Fixed 5px width
-  horizontalLayout.setItemLayout(2, -0.1, -0.9, -0.3); // Item 2 (Right/Log): Min 10%, Max 90%, Preferred 30%
+  horizontalLayout.setItemLayout(
+      0, -0.1, -0.9,
+      -0.7); // Item 0 (Left/Editors): Min 10%, Max 90%, Preferred 70%
+  horizontalLayout.setItemLayout(1, 5, 5, 5); // Item 1 (Bar): Fixed 5px width
+  horizontalLayout.setItemLayout(
+      2, -0.1, -0.9,
+      -0.3); // Item 2 (Right/Log): Min 10%, Max 90%, Preferred 30%
 
   // --- Log Controls ---
   addAndMakeVisible(clearButton);
   clearButton.setButtonText("Clear Log");
-  clearButton.onClick = [this] { if (logComponent) logComponent->clear(); };
+  clearButton.onClick = [this] {
+    if (logComponent)
+      logComponent->clear();
+  };
 
   addAndMakeVisible(performanceModeButton);
   performanceModeButton.setButtonText("Performance Mode");
@@ -252,12 +280,12 @@ MainComponent::MainComponent()
   // --- Input Logic ---
   rawInputManager->addListener(this);
   rawInputManager->addListener(visualizer.get());
-  
+
   // Register focus target callback
-  rawInputManager->setFocusTargetCallback([this]() -> void* {
+  rawInputManager->setFocusTargetCallback([this]() -> void * {
     // Check if Main Window is Minimized (Iconic)
-    if (auto* peer = getPeer()) {
-      void* hwnd = peer->getNativeHandle();
+    if (auto *peer = getPeer()) {
+      void *hwnd = peer->getNativeHandle();
       if (hwnd != nullptr && IsIconic(static_cast<HWND>(hwnd))) {
         // Main window is minimized - use mini window
         if (miniWindow && miniWindow->getPeer()) {
@@ -271,9 +299,8 @@ MainComponent::MainComponent()
   });
 
   // Register device change callback for hardware hygiene
-  rawInputManager->setOnDeviceChangeCallback([this]() {
-    deviceManager.validateConnectedDevices();
-  });
+  rawInputManager->setOnDeviceChangeCallback(
+      [this]() { deviceManager.validateConnectedDevices(); });
 
   // Note: Test zone removed - StartupManager now handles factory default zones
 
@@ -296,8 +323,9 @@ MainComponent::~MainComponent() {
   stopTimer();
 
   // 2. CRITICAL: Manually clear tabs.
-  // This detaches the MappingEditor/ZoneEditor/SettingsPanel safely so the TabbedComponent
-  // doesn't try to delete them (even if we set the flag to false, this is safer).
+  // This detaches the MappingEditor/ZoneEditor/SettingsPanel safely so the
+  // TabbedComponent doesn't try to delete them (even if we set the flag to
+  // false, this is safer).
   mainTabs.clearTabs();
 
   // 3. Close Popups
@@ -313,7 +341,8 @@ MainComponent::~MainComponent() {
   // 5. Stop Input (Explicitly)
   if (rawInputManager) {
     rawInputManager->removeListener(this);
-    if (visualizer) rawInputManager->removeListener(visualizer.get());
+    if (visualizer)
+      rawInputManager->removeListener(visualizer.get());
     rawInputManager->shutdown();
   }
 
@@ -348,13 +377,14 @@ void MainComponent::logEvent(uintptr_t device, int keyCode, bool isDown) {
 
   juce::String logLine = devStr + " | " + keyInfo;
 
-  // 2. Simulate input to get action and source (Phase 39: uses SimulationResult)
-  // Convert device handle to alias hash for simulation
+  // 2. Simulate input to get action and source (Phase 39: uses
+  // SimulationResult) Convert device handle to alias hash for simulation
   juce::String aliasName = deviceManager.getAliasForHardware(device);
   uintptr_t viewDeviceHash = 0;
   if (aliasName != "Unassigned" && !aliasName.isEmpty()) {
     // Simple hash: use std::hash on the string
-    viewDeviceHash = static_cast<uintptr_t>(std::hash<juce::String>{}(aliasName));
+    viewDeviceHash =
+        static_cast<uintptr_t>(std::hash<juce::String>{}(aliasName));
   }
   auto result = inputProcessor.simulateInput(viewDeviceHash, keyCode);
 
@@ -376,7 +406,7 @@ void MainComponent::logEvent(uintptr_t device, int keyCode, bool isDown) {
     if (!result.sourceDescription.isEmpty()) {
       logLine += " | Source: " + result.sourceDescription;
     }
-    
+
     // Add override/inheritance indicators (Phase 39)
     if (result.isOverride) {
       logLine += " [OVERRIDE]";
@@ -385,7 +415,8 @@ void MainComponent::logEvent(uintptr_t device, int keyCode, bool isDown) {
     }
   }
 
-  if (logComponent) logComponent->addEntry(logLine);
+  if (logComponent)
+    logComponent->addEntry(logLine);
 }
 
 // ApplicationCommandTarget implementation
@@ -399,16 +430,19 @@ void MainComponent::getCommandInfo(juce::CommandID commandID,
   if (commandID == juce::StandardApplicationCommandIDs::undo) {
     result.setInfo("Undo", "Undo last action", "Edit", 0);
     result.addDefaultKeypress('Z', juce::ModifierKeys::ctrlModifier);
-    result.setActive(mappingEditor ? mappingEditor->getUndoManager().canUndo() : false);
+    result.setActive(mappingEditor ? mappingEditor->getUndoManager().canUndo()
+                                   : false);
   } else if (commandID == juce::StandardApplicationCommandIDs::redo) {
     result.setInfo("Redo", "Redo last undone action", "Edit", 0);
     result.addDefaultKeypress('Y', juce::ModifierKeys::ctrlModifier);
-    result.setActive(mappingEditor ? mappingEditor->getUndoManager().canRedo() : false);
+    result.setActive(mappingEditor ? mappingEditor->getUndoManager().canRedo()
+                                   : false);
   }
 }
 
 bool MainComponent::perform(const InvocationInfo &info) {
-  if (!mappingEditor) return false;
+  if (!mappingEditor)
+    return false;
   if (info.commandID == juce::StandardApplicationCommandIDs::undo) {
     mappingEditor->getUndoManager().undo();
     commandManager.commandStatusChanged();
@@ -425,7 +459,7 @@ juce::ApplicationCommandTarget *MainComponent::getNextCommandTarget() {
   return nullptr;
 }
 
-void MainComponent::changeListenerCallback(juce::ChangeBroadcaster* source) {
+void MainComponent::changeListenerCallback(juce::ChangeBroadcaster *source) {
   if (source == &settingsManager) {
     // Handle MIDI mode changes
     if (!settingsManager.isMidiModeActive()) {
@@ -436,15 +470,15 @@ void MainComponent::changeListenerCallback(juce::ChangeBroadcaster* source) {
     } else {
       // MIDI mode turned on - show mini window if main window is minimized
       if (miniWindow) {
-        if (auto* peer = getPeer()) {
-          void* hwnd = peer->getNativeHandle();
+        if (auto *peer = getPeer()) {
+          void *hwnd = peer->getNativeHandle();
           if (hwnd != nullptr && IsIconic(static_cast<HWND>(hwnd))) {
             miniWindow->setVisible(true);
           }
         }
       }
     }
-    
+
     // Handle Studio Mode changes - update Device Setup button visibility
     deviceSetupButton.setVisible(settingsManager.isStudioMode());
     resized(); // Trigger re-layout of header
@@ -458,7 +492,7 @@ void MainComponent::handleRawKeyEvent(uintptr_t deviceHandle, int keyCode,
     settingsManager.setMidiModeActive(!settingsManager.isMidiModeActive());
     return; // Don't process this key for MIDI
   }
-  
+
   // Safety: Check for Escape key to unlock cursor
   if (isDown && keyCode == VK_ESCAPE &&
       performanceModeButton.getToggleState()) {
@@ -522,7 +556,8 @@ void MainComponent::handleAxisEvent(uintptr_t deviceHandle, int inputCode,
     }
   }
 
-  if (logComponent) logComponent->addEntry(logLine);
+  if (logComponent)
+    logComponent->addEntry(logLine);
 
   // Forward axis events to InputProcessor
   inputProcessor.handleAxisEvent(deviceHandle, inputCode, value);
@@ -604,8 +639,9 @@ void MainComponent::menuItemSelected(int menuItemID, int topLevelMenuIndex) {
           juce::File::getSpecialLocation(juce::File::userDesktopDirectory)
               .getChildFile("OmniKey_Voicings.txt");
       ChordUtilities::dumpDebugReport(targetFile);
-      if (logComponent) logComponent->addEntry("Voicing report exported to: " +
-                            targetFile.getFullPathName());
+      if (logComponent)
+        logComponent->addEntry("Voicing report exported to: " +
+                               targetFile.getFullPathName());
       break;
     }
     case FileResetEverything:
@@ -618,8 +654,10 @@ void MainComponent::menuItemSelected(int menuItemID, int topLevelMenuIndex) {
             if (result == 1) { // OK clicked
               startupManager.createFactoryDefault();
               inputProcessor.forceRebuildMappings();
-              if (visualizer) visualizer->repaint();
-              if (logComponent) logComponent->addEntry("Reset to factory defaults");
+              if (visualizer)
+                visualizer->repaint();
+              if (logComponent)
+                logComponent->addEntry("Reset to factory defaults");
             }
           }));
       break;
@@ -659,7 +697,7 @@ void MainComponent::paint(juce::Graphics &g) {
 
 void MainComponent::resized() {
   auto area = getLocalBounds().reduced(4);
-  
+
   // Phase 9.6: Setup wizard covers entire bounds (on top)
   setupWizard.setBounds(getLocalBounds());
 
@@ -729,7 +767,9 @@ void MainComponent::timerCallback() {
         if (hwnd != nullptr) {
           rawInputManager->initialize(hwnd, &settingsManager);
           isInputInitialized = true;
-          if (logComponent) logComponent->addEntry("--- SYSTEM: Raw Input Hooked Successfully ---");
+          if (logComponent)
+            logComponent->addEntry(
+                "--- SYSTEM: Raw Input Hooked Successfully ---");
         }
       }
     }

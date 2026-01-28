@@ -118,13 +118,15 @@ uintptr_t parseDeviceHash(const juce::var &var) {
 
 // Helper to convert alias name to hash (simple string hash)
 static uintptr_t aliasNameToHash(const juce::String &aliasName) {
-  if (aliasName.isEmpty() || aliasName == "Any / Master" ||
-      aliasName == "Global (All Devices)" || aliasName == "Global" ||
-      aliasName == "Unassigned")
+  const juce::String trimmed = aliasName.trim();
+  if (trimmed.isEmpty() || trimmed.equalsIgnoreCase("Any / Master") ||
+      trimmed.equalsIgnoreCase("Global (All Devices)") ||
+      trimmed.equalsIgnoreCase("Global") ||
+      trimmed.equalsIgnoreCase("Unassigned"))
     return 0; // Hash 0 = Global (All Devices)
 
   // Simple hash: use std::hash on the string
-  return static_cast<uintptr_t>(std::hash<juce::String>{}(aliasName));
+  return static_cast<uintptr_t>(std::hash<juce::String>{}(trimmed));
 }
 
 void InputProcessor::addMappingFromTree(juce::ValueTree mappingNode) {
@@ -277,12 +279,8 @@ void InputProcessor::addMappingFromTree(juce::ValueTree mappingNode) {
   // Phase 39.3: Populate both maps
 
   // Calculate alias hash for configMap (Phase 39.3)
-  uintptr_t aliasHash = 0;
-  if (!aliasName.isEmpty() && aliasName != "Global (All Devices)" &&
-      aliasName != "Any / Master" && aliasName != "Global") {
-    aliasHash = aliasNameToHash(aliasName);
-  }
-  // If aliasName is empty, aliasHash remains 0 (Global)
+  // Phase 47: be robust about "Global" naming variants.
+  uintptr_t aliasHash = aliasNameToHash(aliasName);
 
   // Populate configMap (UI/Visualization) - One entry per mapping using alias
   // hash
@@ -301,6 +299,8 @@ void InputProcessor::addMappingFromTree(juce::ValueTree mappingNode) {
     }
 
     // Also add to compiledMap with hash 0 if this is a global mapping
+    // Phase 47: Ensure Global mappings are compiled even if hardware list is
+    // empty.
     if (aliasHash == 0) {
       InputID globalInputId = {0, inputKey};
       targetLayer.compiledMap[globalInputId] = action;
@@ -337,28 +337,18 @@ void InputProcessor::addMappingFromTree(juce::ValueTree mappingNode) {
           targetLayer.compiledMap[globalInputId] = action;
         }
       } else {
-        // Legacy preset: hardware not assigned to any alias
-        // Create a "Master Input" alias if it doesn't exist and assign this
-        // hardware
-        if (!deviceManager.aliasExists("Master Input")) {
-          deviceManager.createAlias("Master Input");
-        }
-        deviceManager.assignHardware("Master Input", deviceHash);
-
-        // Now use the alias
-        uintptr_t masterAliasHash = aliasNameToHash("Master Input");
-
-        // Add to configMap
-        InputID configInputId = {masterAliasHash, inputKey};
+        // Phase 46.1: Legacy preset with unassigned hardware.
+        // Do NOT auto-create "Master Input" or assign hardware to any alias.
+        // Use the hardware hash directly so the mapping still works, but keep
+        // the hardware unassigned (visible in Device Setup's "[ Unassigned
+        // Devices ]"). Add to configMap using the hardware hash directly (not
+        // an alias hash)
+        InputID configInputId = {deviceHash, inputKey};
         targetLayer.configMap[configInputId] = action;
 
-        // Add to compiledMap
-        juce::Array<uintptr_t> hardwareIds =
-            deviceManager.getHardwareForAlias("Master Input");
-        for (uintptr_t hardwareId : hardwareIds) {
-          InputID inputId = {hardwareId, inputKey};
-          targetLayer.compiledMap[inputId] = action;
-        }
+        // Add to compiledMap using the hardware hash directly
+        InputID inputId = {deviceHash, inputKey};
+        targetLayer.compiledMap[inputId] = action;
       }
     } else {
       // Legacy: deviceHash is 0 (Global)
@@ -1187,6 +1177,87 @@ SimulationResult InputProcessor::simulateInput(uintptr_t viewDeviceHash,
 
   // Update legacy fields for backward compatibility
   result.updateLegacyFields();
+
+  return result;
+}
+
+SimulationResult InputProcessor::simulateInput(uintptr_t viewDeviceHash,
+                                               int keyCode, int targetLayerId) {
+  SimulationResult result;
+  juce::ScopedReadLock lock(mapLock);
+
+  // Phase 9.5: Studio Mode Check - Force Global ID if Studio Mode is OFF
+  if (!settingsManager.isStudioMode()) {
+    viewDeviceHash = 0; // Force Global ID
+  }
+
+  if (layers.empty()) {
+    return result;
+  }
+
+  // Clamp target layer into valid range
+  if (targetLayerId < 0 || targetLayerId >= (int)layers.size())
+    targetLayerId = (int)layers.size() - 1;
+
+  InputID specificInput{viewDeviceHash, keyCode};
+  InputID globalInput{0, keyCode};
+
+  // Search from targetLayerId down to 0, ignoring isActive so we can see
+  // what would happen in this editing context.
+  for (int i = targetLayerId; i >= 0; --i) {
+    auto &cm = layers[i].configMap;
+    if (viewDeviceHash != 0) {
+      // 1) Specific device mapping
+      if (auto it = cm.find(specificInput); it != cm.end()) {
+        result.action = it->second;
+        result.sourceName = "Mapping";
+        result.isZone = false;
+        result.state =
+            (i == targetLayerId ? VisualState::Active : VisualState::Inherited);
+        return result;
+      }
+      // 2) Global mapping (0) for this key
+      if (auto it = cm.find(globalInput); it != cm.end()) {
+        result.action = it->second;
+        result.sourceName = "Mapping";
+        result.isZone = false;
+        // When editing a specific device, global mapping is inherited unless
+        // we are explicitly viewing the global layer
+        if (i == targetLayerId && viewDeviceHash == 0)
+          result.state = VisualState::Active;
+        else
+          result.state = VisualState::Inherited;
+        return result;
+      }
+    } else {
+      // Studio/global view: only consider global mappings
+      if (auto it = cm.find(globalInput); it != cm.end()) {
+        result.action = it->second;
+        result.sourceName = "Mapping";
+        result.isZone = false;
+        result.state =
+            (i == targetLayerId ? VisualState::Active : VisualState::Inherited);
+        return result;
+      }
+    }
+  }
+
+  // Fallback: consult zones using the same inputs
+  std::optional<MidiAction> zoneAction;
+  if (viewDeviceHash != 0) {
+    zoneAction = zoneManager.handleInput(specificInput);
+    if (!zoneAction.has_value())
+      zoneAction = zoneManager.handleInput(globalInput);
+  } else {
+    zoneAction = zoneManager.handleInput(globalInput);
+  }
+
+  if (zoneAction.has_value()) {
+    result.action = zoneAction;
+    result.isZone = true;
+    result.sourceName = "Zone";
+    result.state = VisualState::Active;
+  }
 
   return result;
 }

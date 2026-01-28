@@ -47,6 +47,9 @@ public:
   // Simulate input and return action with source description (Phase 39: returns
   // SimulationResult)
   SimulationResult simulateInput(uintptr_t viewDeviceHash, int keyCode);
+  // Phase 45.3: simulate for a specific layer context (editing view)
+  SimulationResult simulateInput(uintptr_t viewDeviceHash, int keyCode,
+                                 int targetLayerId);
 
   // Zone management
   ZoneManager &getZoneManager() { return zoneManager; }

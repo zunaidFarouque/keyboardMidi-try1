@@ -4,6 +4,7 @@
 #include "MappingInspector.h"
 #include "PresetManager.h"
 #include "RawInputManager.h"
+#include "SettingsManager.h"
 #include <JuceHeader.h>
 #include <map>
 
@@ -14,7 +15,8 @@ class MappingEditorComponent : public juce::Component,
                                public RawInputManager::Listener {
 public:
   MappingEditorComponent(PresetManager &pm, RawInputManager &rawInputMgr,
-                         DeviceManager &deviceMgr);
+                         DeviceManager &deviceMgr,
+                         SettingsManager &settingsMgr);
   ~MappingEditorComponent() override;
 
   // Get undo manager for command handling
@@ -52,11 +54,15 @@ public:
 
   void changeListenerCallback(juce::ChangeBroadcaster *source) override;
 
+  // Phase 45.3: notify listeners when the current layer changes
+  std::function<void(int)> onLayerChanged;
+
 private:
   // 1. Data/Managers
   PresetManager &presetManager;
   RawInputManager &rawInputManager;
   DeviceManager &deviceManager;
+  SettingsManager &settingsManager;
   int selectedLayerId = 0; // Phase 41: Currently selected layer
   // Phase 45: Remember selection per layer (layerId -> row index)
   std::map<int, int> layerSelectionHistory;

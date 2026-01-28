@@ -11,9 +11,11 @@ static uintptr_t parseDeviceHash(const juce::var &var) {
 
 MappingEditorComponent::MappingEditorComponent(PresetManager &pm,
                                                RawInputManager &rawInputMgr,
-                                               DeviceManager &deviceMgr)
+                                               DeviceManager &deviceMgr,
+                                               SettingsManager &settingsMgr)
     : presetManager(pm), rawInputManager(rawInputMgr), deviceManager(deviceMgr),
-      layerListPanel(pm), inspector(&undoManager, &deviceManager),
+      settingsManager(settingsMgr), layerListPanel(pm),
+      inspector(undoManager, deviceManager),
       resizerBar(&horizontalLayout, 1, true) { // Item index 1, vertical bar
 
   // Phase 41/45: Setup layer list panel callback with per-layer selection
@@ -42,6 +44,10 @@ MappingEditorComponent::MappingEditorComponent(PresetManager &pm,
 
     // Phase 45.1: force inspector refresh even if row index is unchanged
     updateInspectorFromSelection();
+
+    // Phase 45.3: notify external listeners (e.g. Visualizer) of layer change
+    if (onLayerChanged)
+      onLayerChanged(selectedLayerId);
   };
   addAndMakeVisible(layerListPanel);
   // Setup Headers
@@ -459,15 +465,23 @@ void MappingEditorComponent::handleRawKeyEvent(uintptr_t deviceHandle,
   if (!isDown)
     return;
 
+  // Phase 45.2: ignore the global toggle key (e.g. Scroll Lock) in learn mode
+  if (keyCode == settingsManager.getToggleKey())
+    return;
+
   // Thread safety: wrap UI updates in callAsync
   juce::MessageManager::callAsync([this, deviceHandle, keyCode] {
+    // Re-check learn state on the message thread
+    if (!learnButton.getToggleState())
+      return;
+
     // Get selected row
     int selectedRow = table.getSelectedRow();
     if (selectedRow < 0)
       return;
 
-    // Get the ValueTree for the selected row
-    auto mappingsNode = presetManager.getMappingsNode();
+    // Get the ValueTree for the selected row in the CURRENT layer
+    auto mappingsNode = getCurrentLayerMappings();
     if (!mappingsNode.isValid())
       return;
 
@@ -475,41 +489,55 @@ void MappingEditorComponent::handleRawKeyEvent(uintptr_t deviceHandle,
     if (!mappingNode.isValid())
       return;
 
-    // Update the mapping properties
+    // --- Update mapping from learned event ---
+    // 1) Always update key code
     mappingNode.setProperty("inputKey", keyCode, nullptr);
 
-    // Get alias name for this hardware ID
-    juce::String aliasName = deviceManager.getAliasForHardware(deviceHandle);
+    // 2) Conditionally update device alias/hash (Phase 45.6/45.7)
+    if (settingsManager.isStudioMode()) {
+      auto aliases = deviceManager.getAliasesForHardware(deviceHandle);
 
-    // If no alias exists, show alert and use "Unassigned"
-    if (aliasName == "Unassigned") {
-      juce::AlertWindow::showMessageBoxAsync(
-          juce::AlertWindow::WarningIcon, "Device Not Assigned",
-          "This device is not assigned to an alias. Please assign it in Device "
-          "Setup first.",
-          "OK");
-      aliasName = "Unassigned";
+      DBG("Learn: Key " + juce::String(keyCode) + " on Device " +
+          juce::String::toHexString((juce::int64)deviceHandle));
+      DBG("Learn: Found " + juce::String(aliases.size()) +
+          " aliases for device.");
+
+      juce::uint64 bestAlias = 0;
+      bool foundValid = false;
+
+      // Prefer first non-zero alias (specific alias) over Global(0)
+      for (int i = 0; i < aliases.size(); ++i) {
+        auto a = aliases[i];
+        if (a != 0) {
+          bestAlias = a;
+          foundValid = true;
+          break;
+        }
+      }
+      // If no non-zero alias but we did find something (e.g. only Global),
+      // allow using that.
+      if (!foundValid && aliases.size() > 0) {
+        bestAlias = aliases[0];
+        foundValid = true;
+      }
+
+      if (foundValid) {
+        DBG("Learn: Switching to Alias " +
+            juce::String::toHexString((juce::int64)bestAlias));
+        DBG("Learn: Writing deviceHash: " +
+            juce::String::toHexString((juce::int64)bestAlias));
+        mappingNode.setProperty(
+            "deviceHash", juce::String::toHexString((juce::int64)bestAlias),
+            nullptr);
+      } else {
+        DBG("Learn: No alias found. Keeping existing deviceHash.");
+        // Do not touch deviceHash – preserve existing alias when there is no
+        // mapping.
+      }
+    } else {
+      // Studio Mode OFF: force Global (0)
+      mappingNode.setProperty("deviceHash", "0", nullptr);
     }
-
-    // Save alias name instead of hardware ID
-    mappingNode.setProperty("inputAlias", aliasName, nullptr);
-
-    // Also keep deviceHash for backward compatibility (legacy support)
-    mappingNode.setProperty(
-        "deviceHash",
-        juce::String::toHexString((juce::int64)deviceHandle).toUpperCase(),
-        nullptr);
-
-    // Phase 41: Ensure layerID is set
-    mappingNode.setProperty("layerID", selectedLayerId, nullptr);
-
-    // Phase 41: Ensure layerID is set
-    mappingNode.setProperty("layerID", selectedLayerId, nullptr);
-
-    // Create display name using KeyNameUtilities
-    juce::String keyName = KeyNameUtilities::getKeyName(keyCode);
-    juce::String displayName = aliasName + " - " + keyName;
-    mappingNode.setProperty("displayName", displayName, nullptr);
 
     // Turn off learn mode
     learnButton.setToggleState(false, juce::dontSendNotification);
