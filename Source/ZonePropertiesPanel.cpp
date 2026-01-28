@@ -48,10 +48,33 @@ ZonePropertiesPanel::ZonePropertiesPanel(ZoneManager *zoneMgr,
         // Rebuild lookup table when alias changes
         if (zoneManager) {
           zoneManager->rebuildLookupTable();
-          zoneManager->sendChangeMessage(); // Notify listeners (e.g., Visualizer) to invalidate cache
+          zoneManager->sendChangeMessage(); // Notify listeners (e.g.,
+                                            // Visualizer) to invalidate cache
         }
       }
     }
+  };
+
+  // Phase 49: Layer selector (Zone belongs to a layer 0..8)
+  addAndMakeVisible(layerLabel);
+  layerLabel.setText("Layer:", juce::dontSendNotification);
+  layerLabel.attachToComponent(&layerSelector, true);
+
+  addAndMakeVisible(layerSelector);
+  for (int i = 0; i <= 8; ++i) {
+    layerSelector.addItem(
+        i == 0 ? "0: Base" : (juce::String(i) + ": Layer " + juce::String(i)),
+        i + 1);
+  }
+  layerSelector.onChange = [this] {
+    if (!currentZone || !zoneManager)
+      return;
+    int layerId = layerSelector.getSelectedId() - 1;
+    if (layerId < 0 || layerId > 8)
+      return;
+    currentZone->layerID = layerId;
+    zoneManager->rebuildLookupTable();
+    zoneManager->sendChangeMessage();
   };
 
   addAndMakeVisible(nameLabel);
@@ -755,6 +778,10 @@ void ZonePropertiesPanel::resized() {
   aliasSelector.setBounds(leftMargin, y, width, rowHeight);
   y += rowHeight + spacing;
 
+  // Layer (Phase 49)
+  layerSelector.setBounds(leftMargin, y, width, rowHeight);
+  y += rowHeight + spacing;
+
   // Name
   nameEditor.setBounds(leftMargin, y, width, rowHeight);
   y += rowHeight + spacing;
@@ -845,7 +872,8 @@ void ZonePropertiesPanel::resized() {
 
   // Mono Warning Label (only visible for Mono/Legato) (Phase 26.2)
   if (monoWarningLabel.isVisible()) {
-    monoWarningLabel.setBounds(leftMargin, y, width, rowHeight * 2); // Allow 2 rows for text
+    monoWarningLabel.setBounds(leftMargin, y, width,
+                               rowHeight * 2); // Allow 2 rows for text
     y += (rowHeight * 2) + spacing;
   }
 
@@ -923,11 +951,11 @@ int ZonePropertiesPanel::getRequiredHeight() const {
 
   // Count number of rows
   int numRows =
-      26; // Alias, Name, Scale, Root, Chromatic, Degree, Lock, ChordType,
-          // Voicing, PlayMode, StrumSpeed, ReleaseBehavior, ReleaseDuration,
-          // AllowSustain, BaseVel, RandVel, StrictGhost, GhostVel, BassToggle,
-          // BassOctave, DisplayMode, Capture/Remove, Strategy, Grid, Channel,
-          // Color
+      27; // Alias, Layer, Name, Scale, Root, Chromatic, Degree, Lock,
+          // ChordType, Voicing, PlayMode, StrumSpeed, ReleaseBehavior,
+          // ReleaseDuration, AllowSustain, BaseVel, RandVel, StrictGhost,
+          // GhostVel, BassToggle, BassOctave, DisplayMode, Capture/Remove,
+          // Strategy, Grid, Channel, Color
   // Add one more row if Piano help label is visible
   if (currentZone &&
       currentZone->layoutStrategy == Zone::LayoutStrategy::Piano) {
@@ -953,6 +981,7 @@ void ZonePropertiesPanel::updateControlsFromZone() {
   if (!currentZone) {
     // Disable all controls
     aliasSelector.setEnabled(false);
+    layerSelector.setEnabled(false);
     nameEditor.setEnabled(false);
     scaleSelector.setEnabled(false);
     globalScaleToggle.setEnabled(false);
@@ -993,6 +1022,7 @@ void ZonePropertiesPanel::updateControlsFromZone() {
 
   // Enable all controls
   aliasSelector.setEnabled(true);
+  layerSelector.setEnabled(true);
   nameEditor.setEnabled(true);
   scaleSelector.setEnabled(true);
   globalScaleToggle.setEnabled(true);
@@ -1019,13 +1049,13 @@ void ZonePropertiesPanel::updateControlsFromZone() {
   ghostVelSlider.setEnabled(true);
   bassToggle.setEnabled(true);
   bassOctaveSlider.setEnabled(currentZone->addBassNote);
-    displayModeSelector.setEnabled(true);
-    polyphonyModeSelector.setEnabled(true);
-    glideTimeSlider.setEnabled(true);
-    adaptiveGlideToggle.setEnabled(true);
-    maxGlideTimeSlider.setEnabled(true);
-    monoWarningLabel.setEnabled(true);
-    channelSlider.setEnabled(true);
+  displayModeSelector.setEnabled(true);
+  polyphonyModeSelector.setEnabled(true);
+  glideTimeSlider.setEnabled(true);
+  adaptiveGlideToggle.setEnabled(true);
+  maxGlideTimeSlider.setEnabled(true);
+  monoWarningLabel.setEnabled(true);
+  channelSlider.setEnabled(true);
   colorButton.setEnabled(true);
 
   // Update values
@@ -1046,6 +1076,10 @@ void ZonePropertiesPanel::updateControlsFromZone() {
     }
   }
   aliasSelector.setSelectedItemIndex(aliasIndex, juce::dontSendNotification);
+
+  // Layer selector
+  layerSelector.setSelectedId(currentZone->layerID + 1,
+                              juce::dontSendNotification);
 
   // Set scale selector to match current zone's scale name
   if (scaleLibrary) {
@@ -1228,18 +1262,18 @@ void ZonePropertiesPanel::updateVisibility() {
   scaleSelector.setEnabled((!piano) && (!useGlobalScale));
   editScaleButton.setEnabled((!piano) && (!useGlobalScale));
   rootSlider.setEnabled(!useGlobalRoot);
-  
+
   // Show glide controls only for Legato mode
   bool isLegato = (currentZone->polyphonyMode == PolyphonyMode::Legato);
   glideTimeSlider.setVisible(isLegato);
   glideTimeLabel.setVisible(isLegato);
   adaptiveGlideToggle.setVisible(isLegato);
-  
+
   // Show max glide time slider only for Adaptive mode
   bool isAdaptive = isLegato && currentZone->isAdaptiveGlide;
   maxGlideTimeSlider.setVisible(isAdaptive);
   maxGlideTimeLabel.setVisible(isAdaptive);
-  
+
   // Update glide time label text based on adaptive mode
   if (isLegato) {
     if (currentZone->isAdaptiveGlide) {
@@ -1248,9 +1282,9 @@ void ZonePropertiesPanel::updateVisibility() {
       glideTimeLabel.setText("Glide Time:", juce::dontSendNotification);
     }
   }
-  
+
   // Show warning label for Mono/Legato modes (Phase 26.2)
-  bool isMonoOrLegato = (currentZone->polyphonyMode == PolyphonyMode::Mono || 
+  bool isMonoOrLegato = (currentZone->polyphonyMode == PolyphonyMode::Mono ||
                          currentZone->polyphonyMode == PolyphonyMode::Legato);
   monoWarningLabel.setVisible(isMonoOrLegato);
 }

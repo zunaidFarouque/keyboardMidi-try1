@@ -3,13 +3,13 @@
 #include "PointerInputManager.h"
 #include "SettingsManager.h"
 
-
 // 1. Windows Header Only
 // (We removed the #defines because CMake already sets them)
 #include <windows.h>
 
 // Static storage (file-scope for safety during destruction)
-static WNDPROC globalOriginalWndProc = nullptr; // Store the old proc here (survives class destruction)
+static WNDPROC globalOriginalWndProc =
+    nullptr; // Store the old proc here (survives class destruction)
 RawInputManager *RawInputManager::globalManagerInstance = nullptr;
 
 // Helper class to forward pointer events to RawInputManager listeners
@@ -39,7 +39,8 @@ RawInputManager::RawInputManager()
 
 RawInputManager::~RawInputManager() { shutdown(); }
 
-void RawInputManager::initialize(void *nativeWindowHandle, SettingsManager* settingsMgr) {
+void RawInputManager::initialize(void *nativeWindowHandle,
+                                 SettingsManager *settingsMgr) {
   if (isInitialized || nativeWindowHandle == nullptr)
     return;
 
@@ -48,40 +49,44 @@ void RawInputManager::initialize(void *nativeWindowHandle, SettingsManager* sett
   settingsManager = settingsMgr;
 
   // Log the Handle
-  DBG("RawInputManager: Initializing with HWND: " + juce::String::toHexString((juce::int64)hwnd));
+  DBG("RawInputManager: Initializing with HWND: " +
+      juce::String::toHexString((juce::int64)hwnd));
 
   // RAW INPUT REGISTRATION
   RAWINPUTDEVICE rid[1];
-  
+
   // Page 1, Usage 6 = Keyboard
   rid[0].usUsagePage = 0x01;
   rid[0].usUsage = 0x06;
-  
+
   // CRITICAL FIX: RIDEV_INPUTSINK enables background monitoring.
   // We also keep RIDEV_DEVNOTIFY to handle plug/unplug events.
   rid[0].dwFlags = RIDEV_INPUTSINK | RIDEV_DEVNOTIFY;
-  
+
   // CRITICAL FIX: Target must be explicit for InputSink to work.
   rid[0].hwndTarget = hwnd;
 
   if (RegisterRawInputDevices(rid, 1, sizeof(rid[0])) == FALSE) {
     DWORD error = GetLastError();
-    DBG("RawInputManager: CRITICAL ERROR - Registration Failed! Error Code: " + juce::String(error));
+    DBG("RawInputManager: CRITICAL ERROR - Registration Failed! Error Code: " +
+        juce::String(error));
     return;
   } else {
     DBG("RawInputManager: Registration Success. Flags: RIDEV_INPUTSINK");
   }
 
   // Subclass the window
-  LONG_PTR oldProc = SetWindowLongPtr(hwnd, GWLP_WNDPROC, (LONG_PTR)rawInputWndProc);
+  LONG_PTR oldProc =
+      SetWindowLongPtr(hwnd, GWLP_WNDPROC, (LONG_PTR)rawInputWndProc);
   globalOriginalWndProc = (WNDPROC)oldProc;
-  
+
   // Store global pointer
   globalManagerInstance = this;
 
   if (globalOriginalWndProc) {
     isInitialized = true;
-    DBG("RawInputManager: Window subclassed successfully. Initialized with RIDEV_INPUTSINK.");
+    DBG("RawInputManager: Window subclassed successfully. Initialized with "
+        "RIDEV_INPUTSINK.");
   }
 }
 
@@ -98,7 +103,8 @@ void RawInputManager::shutdown() {
   }
 
   // 3. Clean up static state
-  // globalOriginalWndProc = nullptr; // Optional, maybe keep it safe in case a lagging message hits
+  // globalOriginalWndProc = nullptr; // Optional, maybe keep it safe in case a
+  // lagging message hits
 
   // Clear device key states
   deviceKeyStates.clear();
@@ -114,7 +120,7 @@ void RawInputManager::removeListener(Listener *listener) {
   listeners.remove(listener);
 }
 
-void RawInputManager::setFocusTargetCallback(std::function<void*()> cb) {
+void RawInputManager::setFocusTargetCallback(std::function<void *()> cb) {
   focusTargetCallback = cb;
 }
 
@@ -122,9 +128,11 @@ void RawInputManager::setOnDeviceChangeCallback(std::function<void()> cb) {
   onDeviceChangeCallback = cb;
 }
 
-// Helper function to force a window to the foreground, bypassing Windows restrictions
+// Helper function to force a window to the foreground, bypassing Windows
+// restrictions
 static void forceForegroundWindow(HWND hwnd) {
-  if (GetForegroundWindow() == hwnd) return;
+  if (GetForegroundWindow() == hwnd)
+    return;
 
   HWND currentForeground = GetForegroundWindow();
   DWORD foregroundThread = 0;
@@ -141,14 +149,14 @@ static void forceForegroundWindow(HWND hwnd) {
   // 2. Attach threads to bypass focus lock
   if (foregroundThread != 0 && foregroundThread != appThread) {
     AttachThreadInput(foregroundThread, appThread, TRUE);
-    
+
     // Trick: Sometimes sending a dummy ALT key helps unlock the state
     // keybd_event(VK_MENU, 0, 0, 0);
     // keybd_event(VK_MENU, 0, KEYEVENTF_KEYUP, 0);
-    
+
     SetForegroundWindow(hwnd);
     SetFocus(hwnd); // Ensure keyboard focus too
-    
+
     AttachThreadInput(foregroundThread, appThread, FALSE);
   } else {
     SetForegroundWindow(hwnd);
@@ -161,7 +169,8 @@ int64_t __stdcall RawInputManager::rawInputWndProc(void *hwnd, unsigned int msg,
   // 1. SAFETY CHECK: If the class is dead, just pass through.
   if (globalManagerInstance == nullptr) {
     if (globalOriginalWndProc) {
-      return CallWindowProc(globalOriginalWndProc, (HWND)hwnd, (UINT)msg, (WPARAM)wParam, (LPARAM)lParam);
+      return CallWindowProc(globalOriginalWndProc, (HWND)hwnd, (UINT)msg,
+                            (WPARAM)wParam, (LPARAM)lParam);
     }
     return DefWindowProc((HWND)hwnd, (UINT)msg, (WPARAM)wParam, (LPARAM)lParam);
   }
@@ -171,19 +180,23 @@ int64_t __stdcall RawInputManager::rawInputWndProc(void *hwnd, unsigned int msg,
     // DIAGNOSTIC LOG
     // GET_RAWINPUT_CODE_WPARAM is a macro to extract the input type
     int code = GET_RAWINPUT_CODE_WPARAM(wParam);
-    juce::String typeStr = (code == RIM_INPUT) ? "FOREGROUND" : (code == RIM_INPUTSINK ? "BACKGROUND" : "OTHER");
-    
+    juce::String typeStr =
+        (code == RIM_INPUT) ? "FOREGROUND"
+                            : (code == RIM_INPUTSINK ? "BACKGROUND" : "OTHER");
+
     // Only log if it is BACKGROUND to prove it works (avoid flooding)
     if (code == RIM_INPUTSINK) {
-      DBG("RawInputManager: Received BACKGROUND Event! (wParam=" + juce::String((int)wParam) + ", code=" + juce::String(code) + ")");
+      DBG("RawInputManager: Received BACKGROUND Event! (wParam=" +
+          juce::String((int)wParam) + ", code=" + juce::String(code) + ")");
     }
-    
+
     // Focus Guard: If MIDI mode is active, steal focus when key is pressed
     if (globalManagerInstance && globalManagerInstance->settingsManager) {
       if (globalManagerInstance->settingsManager->isMidiModeActive()) {
-        HWND shield = static_cast<HWND>(globalManagerInstance->targetHwnd); // Default to main window
+        HWND shield = static_cast<HWND>(
+            globalManagerInstance->targetHwnd); // Default to main window
         if (globalManagerInstance->focusTargetCallback) {
-          void* callbackResult = globalManagerInstance->focusTargetCallback();
+          void *callbackResult = globalManagerInstance->focusTargetCallback();
           if (callbackResult != nullptr) {
             shield = static_cast<HWND>(callbackResult);
           }
@@ -193,7 +206,7 @@ int64_t __stdcall RawInputManager::rawInputWndProc(void *hwnd, unsigned int msg,
         }
       }
     }
-    
+
     UINT dwSize = 0;
     GetRawInputData((HRAWINPUT)lParam, RID_INPUT, NULL, &dwSize,
                     sizeof(RAWINPUTHEADER));
@@ -231,7 +244,7 @@ int64_t __stdcall RawInputManager::rawInputWndProc(void *hwnd, unsigned int msg,
               // 2. Fallback to Windows Mapping
               // MAPVK_VSC_TO_VK_EX distinguishes Left/Right Shift/Ctrl/Alt
               vKey = MapVirtualKey(makeCode, MAPVK_VSC_TO_VK_EX);
-              
+
               if (vKey == 0) vKey = MapVirtualKey(makeCode, MAPVK_VSC_TO_VK);
             }
           }
@@ -239,17 +252,22 @@ int64_t __stdcall RawInputManager::rawInputWndProc(void *hwnd, unsigned int msg,
           // --- VKEY REPAIR END ---
 
           if (globalManagerInstance) {
-            // Check if MIDI mode is active - only broadcast for MIDI when active
-            // (Toggle key detection still works because hook allows it through)
+            // Check if MIDI mode is active - only broadcast for MIDI when
+            // active (Toggle key detection still works because hook allows it
+            // through)
             bool shouldBroadcast = false;
             if (globalManagerInstance->settingsManager) {
               // Always broadcast if MIDI mode is active
-              // Also always broadcast toggle key so it can be detected to turn mode off
-              int toggleKey = globalManagerInstance->settingsManager->getToggleKey();
-              shouldBroadcast = globalManagerInstance->settingsManager->isMidiModeActive() || 
-                               (vKey == toggleKey);
+              // Also always broadcast toggle key so it can be detected to turn
+              // mode off
+              int toggleKey =
+                  globalManagerInstance->settingsManager->getToggleKey();
+              shouldBroadcast =
+                  globalManagerInstance->settingsManager->isMidiModeActive() ||
+                  (vKey == toggleKey);
             } else {
-              // If no settings manager, always broadcast (backward compatibility)
+              // If no settings manager, always broadcast (backward
+              // compatibility)
               shouldBroadcast = true;
             }
 
@@ -329,7 +347,8 @@ int64_t __stdcall RawInputManager::rawInputWndProc(void *hwnd, unsigned int msg,
     }
   } else if (msg == WM_INPUT_DEVICE_CHANGE) {
     // Device plug/unplug event (0x00FE)
-    if (globalManagerInstance && globalManagerInstance->onDeviceChangeCallback) {
+    if (globalManagerInstance &&
+        globalManagerInstance->onDeviceChangeCallback) {
       // Call the callback asynchronously to avoid blocking the message loop
       juce::MessageManager::callAsync([instance = globalManagerInstance]() {
         if (instance && instance->onDeviceChangeCallback) {
@@ -339,14 +358,16 @@ int64_t __stdcall RawInputManager::rawInputWndProc(void *hwnd, unsigned int msg,
     }
     // Return 0 to indicate we handled it
     if (globalOriginalWndProc) {
-      return CallWindowProc(globalOriginalWndProc, (HWND)hwnd, (UINT)msg, (WPARAM)wParam, (LPARAM)lParam);
+      return CallWindowProc(globalOriginalWndProc, (HWND)hwnd, (UINT)msg,
+                            (WPARAM)wParam, (LPARAM)lParam);
     }
     return DefWindowProc((HWND)hwnd, (UINT)msg, (WPARAM)wParam, (LPARAM)lParam);
   }
 
   // 3. Pass to original
   if (globalOriginalWndProc) {
-    return CallWindowProc(globalOriginalWndProc, (HWND)hwnd, (UINT)msg, (WPARAM)wParam, (LPARAM)lParam);
+    return CallWindowProc(globalOriginalWndProc, (HWND)hwnd, (UINT)msg,
+                          (WPARAM)wParam, (LPARAM)lParam);
   }
   return DefWindowProc((HWND)hwnd, (UINT)msg, (WPARAM)wParam, (LPARAM)lParam);
 }

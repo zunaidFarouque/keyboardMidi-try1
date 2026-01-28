@@ -25,8 +25,9 @@ public:
 
   // Properties
   juce::String name;
-  uintptr_t
-      targetAliasHash; // The Alias this zone listens to (0 = Global / All Devices)
+  int layerID = 0;           // Phase 49: layer assignment (0=Base)
+  uintptr_t targetAliasHash; // The Alias this zone listens to (0 = Global / All
+                             // Devices)
   std::vector<int> inputKeyCodes; // The physical keys, ordered
   int rootNote;                   // Base MIDI note
   juce::String scaleName;         // Scale name (looked up from ScaleLibrary)
@@ -67,8 +68,10 @@ public:
   bool useGlobalRoot = false;  // If true, inherit ZoneManager::globalRootNote
   PolyphonyMode polyphonyMode =
       PolyphonyMode::Poly; // Polyphony mode (Phase 26)
-  int glideTimeMs = 50;    // Portamento glide time in milliseconds (Phase 26) - Static time OR min time if adaptive
-  bool isAdaptiveGlide = false; // If true, glide time adapts to playing speed (Phase 26.1)
+  int glideTimeMs = 50;    // Portamento glide time in milliseconds (Phase 26) -
+                           // Static time OR min time if adaptive
+  bool isAdaptiveGlide =
+      false; // If true, glide time adapts to playing speed (Phase 26.1)
   int maxGlideTimeMs = 200; // Maximum glide time for adaptive mode (Phase 26.1)
 
   // Performance cache: Pre-compiled key-to-chord mappings (compilation

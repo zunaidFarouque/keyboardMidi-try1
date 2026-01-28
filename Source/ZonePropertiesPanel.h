@@ -48,6 +48,9 @@ private:
   // UI Controls
   juce::Label aliasLabel;
   juce::ComboBox aliasSelector;
+  // Phase 49: Zone layer assignment
+  juce::Label layerLabel;
+  juce::ComboBox layerSelector;
   juce::Label nameLabel;
   juce::TextEditor nameEditor;
   juce::Label scaleLabel;

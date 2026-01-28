@@ -5,6 +5,25 @@
 #include "ScaleLibrary.h"
 #include "SettingsManager.h"
 
+// Phase 39.9: Modifier key aliasing (Left/Right -> Generic).
+// Visualizer/layout uses VK_LSHIFT/VK_RSHIFT etc, while older mappings may
+// store VK_SHIFT/VK_CONTROL/VK_MENU. This helper allows fallback lookups.
+static int getGenericKey(int specificKey) {
+  switch (specificKey) {
+  case 0xA0:     // VK_LSHIFT
+  case 0xA1:     // VK_RSHIFT
+    return 0x10; // VK_SHIFT
+  case 0xA2:     // VK_LCONTROL
+  case 0xA3:     // VK_RCONTROL
+    return 0x11; // VK_CONTROL
+  case 0xA4:     // VK_LMENU
+  case 0xA5:     // VK_RMENU
+    return 0x12; // VK_MENU
+  default:
+    return 0;
+  }
+}
+
 InputProcessor::InputProcessor(VoiceManager &voiceMgr, PresetManager &presetMgr,
                                DeviceManager &deviceMgr, ScaleLibrary &scaleLib,
                                MidiEngine &midiEng,
@@ -585,15 +604,30 @@ const MidiAction *InputProcessor::findMapping(const InputID &input) {
       juce::String::toHexString(static_cast<juce::int64>(input.deviceHandle)) +
       ", " + juce::String(input.keyCode) + " }");
 
+  int genericKey = getGenericKey(input.keyCode);
+
   for (int i = (int)layers.size() - 1; i >= 0; --i) {
     if (!layers[i].isActive)
       continue;
     auto &cm = layers[i].compiledMap;
+    // 1) Specific Device, Specific Key
     auto it = cm.find(input);
     if (it != cm.end()) {
       DBG("Runtime: MATCH found in Layer " + juce::String(i));
       return &it->second;
     }
+
+    // 2) Specific Device, Generic Key (modifier aliasing)
+    if (genericKey != 0) {
+      it = cm.find(InputID{input.deviceHandle, genericKey});
+      if (it != cm.end()) {
+        DBG("Runtime: MATCH found in Layer " + juce::String(i) +
+            " (generic modifier fallback)");
+        return &it->second;
+      }
+    }
+
+    // 3) Global Device, Specific Key
     if (input.deviceHandle != 0) {
       InputID anyDevice = {0, input.keyCode};
       it = cm.find(anyDevice);
@@ -601,6 +635,17 @@ const MidiAction *InputProcessor::findMapping(const InputID &input) {
         DBG("Runtime: MATCH found in Layer " + juce::String(i) +
             " (global fallback)");
         return &it->second;
+      }
+
+      // 4) Global Device, Generic Key
+      if (genericKey != 0) {
+        InputID anyDeviceGeneric = {0, genericKey};
+        it = cm.find(anyDeviceGeneric);
+        if (it != cm.end()) {
+          DBG("Runtime: MATCH found in Layer " + juce::String(i) +
+              " (global + generic modifier fallback)");
+          return &it->second;
+        }
       }
     }
   }
@@ -635,39 +680,59 @@ InputProcessor::lookupAction(uintptr_t deviceHandle, int keyCode) {
     aliasHash = aliasNameToHash(aliasName);
   }
 
-  // Correct priority order: Manual mappings have priority over zones
-  // Step 2: Check manual mappings (specific alias/hardware first)
-  InputID input = {effectiveDevice, keyCode};
+  // Phase 49: Zones are now part of the layer stack.
+  // For each active layer (top-down): Manual Mapping -> Zone.
+  int genericKey = getGenericKey(keyCode);
+  InputID specificHardware{effectiveDevice, keyCode};
+  InputID globalHardware{0, keyCode};
+  InputID specificAlias{aliasHash, keyCode};
+  InputID globalAlias{0, keyCode};
+
   juce::ScopedReadLock lock(mapLock);
-  const MidiAction *action = findMapping(input);
-  if (action != nullptr) {
-    return {*action, "Mapping"};
-  }
+  for (int i = (int)layers.size() - 1; i >= 0; --i) {
+    if (!layers[i].isActive)
+      continue;
 
-  // Step 3: Check manual mappings (global/wildcard)
-  if (effectiveDevice != 0) {
-    InputID anyDevice = {0, keyCode};
-    action = findMapping(anyDevice);
-    if (action != nullptr) {
-      return {*action, "Mapping"};
+    // 1) Manual mappings (hardware)
+    {
+      auto &cm = layers[i].compiledMap;
+      auto it = cm.find(specificHardware);
+      if (it != cm.end())
+        return {it->second, "Mapping"};
+
+      // Phase 39.9: Specific Device, Generic Key fallback (modifiers)
+      if (genericKey != 0) {
+        it = cm.find(InputID{effectiveDevice, genericKey});
+        if (it != cm.end())
+          return {it->second, "Mapping"};
+      }
+
+      if (effectiveDevice != 0) {
+        it = cm.find(globalHardware);
+        if (it != cm.end())
+          return {it->second, "Mapping"};
+
+        // Phase 39.9: Global Device, Generic Key fallback (modifiers)
+        if (genericKey != 0) {
+          it = cm.find(InputID{0, genericKey});
+          if (it != cm.end())
+            return {it->second, "Mapping"};
+        }
+      }
     }
-  }
 
-  // Step 4: Check specific alias zones (after manual mappings)
-  if (aliasHash != 0) {
-    InputID aliasInputID = {aliasHash, keyCode};
-    auto [zoneAction, zoneName] = zoneManager.handleInputWithName(aliasInputID);
-    if (zoneAction.has_value()) {
-      return {zoneAction, "Zone: " + zoneName};
+    // 2) Zones (alias hash)
+    if (aliasHash != 0) {
+      auto [zoneAction, zoneName] =
+          zoneManager.handleInputWithName(specificAlias, i);
+      if (zoneAction.has_value())
+        return {zoneAction, "Zone: " + zoneName};
     }
-  }
 
-  // Step 5: Check wildcard zone (hash 0 = Global, lowest priority)
-  InputID wildcardInputID = {0, keyCode};
-  auto [zoneAction, zoneName] =
-      zoneManager.handleInputWithName(wildcardInputID);
-  if (zoneAction.has_value()) {
-    return {zoneAction, "Zone: " + zoneName};
+    auto [globalZoneAction, globalZoneName] =
+        zoneManager.handleInputWithName(globalAlias, i);
+    if (globalZoneAction.has_value())
+      return {globalZoneAction, "Zone: " + globalZoneName};
   }
 
   return {std::nullopt, ""};
@@ -698,12 +763,24 @@ std::shared_ptr<Zone> InputProcessor::getZoneForInputResolved(InputID input) {
   uintptr_t aliasHash = (aliasName != "Unassigned" && !aliasName.isEmpty())
                             ? aliasNameToHash(aliasName)
                             : 0;
-  if (aliasHash != 0) {
-    auto z = zoneManager.getZoneForInput(InputID{aliasHash, input.keyCode});
+  // Phase 49: zones are layered. Search active layers from top down.
+  for (int i = (int)layers.size() - 1; i >= 0; --i) {
+    if (!layers[i].isActive)
+      continue;
+
+    if (aliasHash != 0) {
+      auto z =
+          zoneManager.getZoneForInput(InputID{aliasHash, input.keyCode}, i);
+      if (z)
+        return z;
+    }
+
+    auto z = zoneManager.getZoneForInput(InputID{0, input.keyCode}, i);
     if (z)
       return z;
   }
-  return zoneManager.getZoneForInput(InputID{0, input.keyCode});
+
+  return nullptr;
 }
 
 void InputProcessor::processEvent(InputID input, bool isDown) {
@@ -1075,152 +1152,131 @@ SimulationResult InputProcessor::simulateInput(uintptr_t viewDeviceHash,
     viewDeviceHash = 0; // Force Global ID
   }
 
-  // Phase 40: Iterate active layers from top down, use configMap per layer
-  InputID specificInput = {viewDeviceHash, keyCode};
-  InputID globalInput = {0, keyCode};
-  bool hasSpecificMap = false;
-  bool hasGlobalMap = false;
-  std::optional<MidiAction> manualAction;
+  // Phase 49: Zones are integrated into the layer stack.
+  // For each active layer (top-down): Manual (configMap) -> Zone.
+  int genericKey = getGenericKey(keyCode);
+  InputID specificInput{viewDeviceHash, keyCode};
+  InputID globalInput{0, keyCode};
+  InputID specificGeneric{viewDeviceHash, genericKey};
+  InputID globalGeneric{0, genericKey};
+
+  struct Candidate {
+    MidiAction action;
+    bool isZone = false;
+    bool isSpecific = false; // specific alias vs global alias (0)
+    int layerIndex = -1;
+  };
+
+  bool hasCandidate = false;
+  Candidate cand;
+
   for (int i = (int)layers.size() - 1; i >= 0; --i) {
     if (!layers[i].isActive)
       continue;
+
     auto &cm = layers[i].configMap;
+
+    // 1) Manual mappings
     if (viewDeviceHash != 0) {
-      auto it = cm.find(specificInput);
-      if (it != cm.end()) {
-        hasSpecificMap = true;
-        manualAction = it->second;
+      if (auto it = cm.find(specificInput); it != cm.end()) {
+        cand.action = it->second;
+        cand.isZone = false;
+        cand.isSpecific = true;
+        cand.layerIndex = i;
+        hasCandidate = true;
         break;
       }
-      it = cm.find(globalInput);
-      if (it != cm.end()) {
-        hasGlobalMap = true;
-        manualAction = it->second;
-        break;
+
+      // Phase 39.9: Modifier aliasing (L/R -> Generic)
+      if (genericKey != 0) {
+        if (auto it = cm.find(specificGeneric); it != cm.end()) {
+          cand.action = it->second;
+          cand.isZone = false;
+          cand.isSpecific = true;
+          cand.layerIndex = i;
+          hasCandidate = true;
+          break;
+        }
       }
-    } else {
-      auto it = cm.find(globalInput);
-      if (it != cm.end()) {
-        hasGlobalMap = true;
-        manualAction = it->second;
+    }
+    if (auto it = cm.find(globalInput); it != cm.end()) {
+      cand.action = it->second;
+      cand.isZone = false;
+      cand.isSpecific = (viewDeviceHash == 0);
+      cand.layerIndex = i;
+      hasCandidate = true;
+      break;
+    }
+
+    if (genericKey != 0) {
+      if (auto it = cm.find(globalGeneric); it != cm.end()) {
+        cand.action = it->second;
+        cand.isZone = false;
+        cand.isSpecific = (viewDeviceHash == 0);
+        cand.layerIndex = i;
+        hasCandidate = true;
         break;
       }
     }
-  }
 
-  // 3. Check Specific Zone
-  std::optional<MidiAction> specificZone;
-  if (viewDeviceHash != 0) {
-    auto zoneResult = zoneManager.handleInput(specificInput);
-    if (zoneResult.has_value()) {
-      specificZone = zoneResult;
+    // 2) Zones
+    if (viewDeviceHash != 0) {
+      if (auto z = zoneManager.handleInput(specificInput, i); z.has_value()) {
+        cand.action = z.value();
+        cand.isZone = true;
+        cand.isSpecific = true;
+        cand.layerIndex = i;
+        hasCandidate = true;
+        break;
+      }
+    }
+    if (auto z = zoneManager.handleInput(globalInput, i); z.has_value()) {
+      cand.action = z.value();
+      cand.isZone = true;
+      cand.isSpecific = (viewDeviceHash == 0);
+      cand.layerIndex = i;
+      hasCandidate = true;
+      break;
     }
   }
 
-  // 4. Check Global Zone
-  auto globalZone = zoneManager.handleInput(globalInput);
+  if (!hasCandidate)
+    return result;
 
-  // --- LOGIC TREE (Phase 39.1) ---
+  result.action = cand.action;
+  result.isZone = cand.isZone;
+  result.sourceName = cand.isZone ? "Zone" : "Mapping";
 
+  // Compute state in a way consistent with the layer stack model.
   if (viewDeviceHash == 0) {
-    // MASTER VIEW: Only check Global (strict isolation)
-    if (hasGlobalMap && manualAction.has_value()) {
-      result.action = manualAction;
-      result.sourceName = "Mapping";
-      result.isZone = false;
-
-      // Check for multiple global mappings (Mapping vs Mapping conflict)
-      if (getManualMappingCountForKey(keyCode, 0) > 1) {
-        result.state = VisualState::Conflict;
-        result.sourceName = "Conflict: Multiple Mappings";
-      } else {
-        result.state = VisualState::Active;
+    result.state = VisualState::Active;
+  } else if (cand.isSpecific) {
+    // Specific result. If there exists any global mapping/zone below, treat as
+    // override.
+    bool hasGlobalBelow = false;
+    for (int j = cand.layerIndex - 1; j >= 0; --j) {
+      if (!layers[j].isActive)
+        continue;
+      if (layers[j].configMap.find(globalInput) != layers[j].configMap.end()) {
+        hasGlobalBelow = true;
+        break;
       }
-    } else if (globalZone.has_value()) {
-      result.action = globalZone;
-      result.state = VisualState::Active;
-      result.sourceName = "Zone";
-      result.isZone = true;
+      if (genericKey != 0 && layers[j].configMap.find(globalGeneric) !=
+                                 layers[j].configMap.end()) {
+        hasGlobalBelow = true;
+        break;
+      }
+      if (zoneManager.handleInput(globalInput, j).has_value()) {
+        hasGlobalBelow = true;
+        break;
+      }
     }
-    // else: Empty state (default)
+    result.state = hasGlobalBelow ? VisualState::Override : VisualState::Active;
   } else {
-    // SPECIFIC VIEW
-
-    // A. Specific Manual (Highest Priority)
-    if (hasSpecificMap && manualAction.has_value()) {
-      result.action = manualAction;
-      result.sourceName = "Mapping";
-      result.isZone = false;
-
-      // Phase 39.8: Manual vs Zone Conflict Detection
-      // CRITICAL CHECK: Manual vs Zone Collision
-
-      // 1. Same Layer Collision (Local vs Local) -> Red Conflict
-      if (specificZone.has_value()) {
-        result.state = VisualState::Conflict;
-        result.sourceName = "Conflict: Mapping + Zone";
-      }
-      // 2. Multiple Manual Mappings (Mapping vs Mapping) -> Red Conflict
-      else if (getManualMappingCountForKey(keyCode, viewDeviceHash) > 1) {
-        result.state = VisualState::Conflict;
-        result.sourceName = "Conflict: Multiple Mappings";
-      }
-      // 3. Hierarchy Override (Local vs Global) -> Orange Override
-      else if (hasGlobalMap || globalZone.has_value()) {
-        result.state = VisualState::Override;
-      }
-      // 4. Clean
-      else {
-        result.state = VisualState::Active;
-      }
-    }
-    // B. Global Manual (Inheritance)
-    else if (hasGlobalMap && manualAction.has_value()) {
-      result.action = manualAction;
-      result.sourceName = "Mapping";
-      result.isZone = false;
-
-      // Check for multiple global mappings (Mapping vs Mapping conflict)
-      if (getManualMappingCountForKey(keyCode, 0) > 1) {
-        result.state = VisualState::Conflict;
-        result.sourceName = "Conflict: Multiple Mappings";
-      } else {
-        result.state = VisualState::Inherited;
-      }
-    }
-    // C. Specific Zone
-    else if (specificZone.has_value()) {
-      result.action = specificZone;
-      result.sourceName = "Zone";
-      result.isZone = true;
-      if (globalZone.has_value()) {
-        result.state = VisualState::Override;
-      } else {
-        result.state = VisualState::Active;
-      }
-    }
-    // D. Global Zone (Inheritance)
-    else if (globalZone.has_value()) {
-      result.action = globalZone;
-      result.state = VisualState::Inherited;
-      result.sourceName = "Zone";
-      result.isZone = true;
-    }
-    // else: Empty state (default)
+    result.state = VisualState::Inherited;
   }
 
-  // Phase 39.7: Conflict Detection
-  // Check for zone overlaps if result is a zone
-  if (result.isZone && result.state != VisualState::Empty) {
-    int zoneCount = zoneManager.getZoneCountForKey(keyCode, viewDeviceHash);
-    if (zoneCount > 1) {
-      result.state = VisualState::Conflict;
-    }
-  }
-
-  // Update legacy fields for backward compatibility
   result.updateLegacyFields();
-
   return result;
 }
 
@@ -1242,15 +1298,20 @@ SimulationResult InputProcessor::simulateInput(uintptr_t viewDeviceHash,
   if (targetLayerId < 0 || targetLayerId >= (int)layers.size())
     targetLayerId = (int)layers.size() - 1;
 
+  int genericKey = getGenericKey(keyCode);
   InputID specificInput{viewDeviceHash, keyCode};
   InputID globalInput{0, keyCode};
+  InputID specificGeneric{viewDeviceHash, genericKey};
+  InputID globalGeneric{0, genericKey};
 
-  // Search from targetLayerId down to 0, ignoring isActive so we can see
-  // what would happen in this editing context.
+  // Phase 49: Search from targetLayerId down to 0. For each layer:
+  // (Manual mapping) -> (Zone). This preserves correct override behavior
+  // (a zone in a higher layer overrides mappings/zones in lower layers).
   for (int i = targetLayerId; i >= 0; --i) {
     auto &cm = layers[i].configMap;
+
+    // 1) Manual mappings
     if (viewDeviceHash != 0) {
-      // 1) Specific device mapping
       if (auto it = cm.find(specificInput); it != cm.end()) {
         result.action = it->second;
         result.sourceName = "Mapping";
@@ -1259,54 +1320,63 @@ SimulationResult InputProcessor::simulateInput(uintptr_t viewDeviceHash,
             (i == targetLayerId ? VisualState::Active : VisualState::Inherited);
         return result;
       }
-      // 2) Global mapping (0) for this key
-      if (auto it = cm.find(globalInput); it != cm.end()) {
+
+      // Phase 39.9: Modifier aliasing (L/R -> Generic)
+      if (genericKey != 0) {
+        if (auto it = cm.find(specificGeneric); it != cm.end()) {
+          result.action = it->second;
+          result.sourceName = "Mapping";
+          result.isZone = false;
+          result.state = (i == targetLayerId ? VisualState::Active
+                                             : VisualState::Inherited);
+          return result;
+        }
+      }
+    }
+
+    if (auto it = cm.find(globalInput); it != cm.end()) {
+      result.action = it->second;
+      result.sourceName = "Mapping";
+      result.isZone = false;
+      result.state =
+          (viewDeviceHash == 0 && i == targetLayerId ? VisualState::Active
+                                                     : VisualState::Inherited);
+      return result;
+    }
+
+    if (genericKey != 0) {
+      if (auto it = cm.find(globalGeneric); it != cm.end()) {
         result.action = it->second;
         result.sourceName = "Mapping";
         result.isZone = false;
-        // When editing a specific device, global mapping is inherited unless
-        // we are explicitly viewing the global layer
-        if (i == targetLayerId && viewDeviceHash == 0)
-          result.state = VisualState::Active;
-        else
-          result.state = VisualState::Inherited;
+        result.state = (viewDeviceHash == 0 && i == targetLayerId
+                            ? VisualState::Active
+                            : VisualState::Inherited);
         return result;
       }
-    } else {
-      // Studio/global view: only consider global mappings
-      if (auto it = cm.find(globalInput); it != cm.end()) {
-        result.action = it->second;
-        result.sourceName = "Mapping";
-        result.isZone = false;
+    }
+
+    // 2) Zones
+    if (viewDeviceHash != 0) {
+      if (auto z = zoneManager.handleInput(specificInput, i); z.has_value()) {
+        result.action = z;
+        result.isZone = true;
+        result.sourceName = "Zone";
         result.state =
             (i == targetLayerId ? VisualState::Active : VisualState::Inherited);
         return result;
       }
     }
-  }
 
-  // Fallback: consult zones using the same inputs
-  std::optional<MidiAction> zoneAction;
-  bool zoneFromGlobalFallback = false;
-
-  if (viewDeviceHash != 0) {
-    zoneAction = zoneManager.handleInput(specificInput);
-    if (!zoneAction.has_value()) {
-      zoneAction = zoneManager.handleInput(globalInput);
-      zoneFromGlobalFallback = zoneAction.has_value();
+    if (auto z = zoneManager.handleInput(globalInput, i); z.has_value()) {
+      result.action = z;
+      result.isZone = true;
+      result.sourceName = "Zone";
+      result.state =
+          (viewDeviceHash == 0 && i == targetLayerId ? VisualState::Active
+                                                     : VisualState::Inherited);
+      return result;
     }
-  } else {
-    zoneAction = zoneManager.handleInput(globalInput);
-  }
-
-  if (zoneAction.has_value()) {
-    result.action = zoneAction;
-    result.isZone = true;
-    result.sourceName = "Zone";
-    // Phase 47.1: If we fell back from a specific view to global zone, treat
-    // it as inherited so the visualizer dims it.
-    result.state =
-        zoneFromGlobalFallback ? VisualState::Inherited : VisualState::Active;
   }
 
   return result;

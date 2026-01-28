@@ -251,12 +251,25 @@ void VisualizerComponent::refreshCache() {
           if (simResult.isZone) {
             // Phase 47: color lookup should not depend on VisualState.
             // Try current view first, then fall back to Global.
-            auto zColor =
-                zoneManager->getZoneColorForKey(keyCode, currentViewHash);
+            auto findZoneColorInLayerStack = [&](uintptr_t viewHash) {
+              // Try current visualized layer first
+              auto z = zoneManager->getZoneColorForKey(keyCode, viewHash,
+                                                       currentVisualizedLayer);
+              if (!z.has_value() && viewHash != 0) {
+                z = zoneManager->getZoneColorForKey(keyCode, 0,
+                                                    currentVisualizedLayer);
+              }
+              // Inherit from lower layers if not found
+              for (int li = currentVisualizedLayer - 1;
+                   !z.has_value() && li >= 0; --li) {
+                z = zoneManager->getZoneColorForKey(keyCode, viewHash, li);
+                if (!z.has_value() && viewHash != 0)
+                  z = zoneManager->getZoneColorForKey(keyCode, 0, li);
+              }
+              return z;
+            };
 
-            if (!zColor.has_value() && currentViewHash != 0) {
-              zColor = zoneManager->getZoneColorForKey(keyCode, 0);
-            }
+            auto zColor = findZoneColorInLayerStack(currentViewHash);
 
             if (zColor.has_value())
               underlayColor = zColor.value();
@@ -306,7 +319,7 @@ void VisualizerComponent::refreshCache() {
           if (manualType.has_value()) {
             underlayColor = settingsManager->getTypeColor(manualType.value());
           } else {
-            auto zoneColor = zoneManager->getZoneColorForKey(keyCode, 0);
+            auto zoneColor = zoneManager->getZoneColorForKey(keyCode, 0, 0);
             if (zoneColor.has_value()) {
               underlayColor = zoneColor.value();
             }
