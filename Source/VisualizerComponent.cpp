@@ -83,6 +83,9 @@ void VisualizerComponent::initialize() {
     zoneManager->addChangeListener(this);
   if (settingsManager)
     settingsManager->addChangeListener(this);
+  if (inputProcessor)
+    inputProcessor->addChangeListener(
+        this); // Phase 48: repaint on layer changes
   if (presetManager) {
     auto mappingsNode = presetManager->getMappingsNode();
     if (mappingsNode.isValid())
@@ -104,6 +107,9 @@ VisualizerComponent::~VisualizerComponent() {
   }
   if (settingsManager) {
     settingsManager->removeChangeListener(this);
+  }
+  if (inputProcessor) {
+    inputProcessor->removeChangeListener(this);
   }
   if (presetManager) {
     auto mappingsNode = presetManager->getMappingsNode();
@@ -282,8 +288,7 @@ void VisualizerComponent::refreshCache() {
             borderWidth = 1.0f;
           }
 
-          // Apply Alpha
-          underlayColor = underlayColor.withAlpha(alpha);
+          // Phase 47.1: apply alpha at draw time (after all overrides)
         }
       } else {
         // Fallback for non-Studio Mode (use old logic)
@@ -340,7 +345,8 @@ void VisualizerComponent::refreshCache() {
 
       // Layer 1: Underlay (Zone Color) - Phase 39.5: Alpha already applied
       if (!underlayColor.isTransparent()) {
-        g.setColour(underlayColor);
+        auto finalUnderlay = underlayColor.withAlpha(alpha);
+        g.setColour(finalUnderlay);
         g.fillRect(fullBounds);
       }
 
@@ -626,6 +632,11 @@ void VisualizerComponent::handleAxisEvent(uintptr_t deviceHandle, int inputCode,
 
 void VisualizerComponent::changeListenerCallback(
     juce::ChangeBroadcaster *source) {
+  if (source == inputProcessor) {
+    // Phase 48: layer state changed -> update HUD next frame
+    needsRepaint = true;
+    return;
+  }
   if (source == zoneManager || source == settingsManager) {
     cacheValid = false;
     needsRepaint = true;

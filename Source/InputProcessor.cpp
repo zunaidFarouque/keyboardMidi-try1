@@ -292,8 +292,15 @@ void InputProcessor::addMappingFromTree(juce::ValueTree mappingNode) {
     juce::Array<uintptr_t> hardwareIds =
         deviceManager.getHardwareForAlias(aliasName);
 
+    // Phase 47.2: debug compiler path
+    DBG("Compiler: Alias '" + aliasName + "' has " +
+        juce::String(hardwareIds.size()) + " devices.");
+
     // For each hardware ID in the alias, create a mapping entry in compiledMap
     for (uintptr_t hardwareId : hardwareIds) {
+      DBG("Compiler: Adding { " +
+          juce::String::toHexString((juce::int64)hardwareId) + ", " +
+          juce::String(inputKey) + " }");
       InputID inputId = {hardwareId, inputKey};
       targetLayer.compiledMap[inputId] = action;
     }
@@ -574,21 +581,30 @@ void InputProcessor::valueTreePropertyChanged(
 }
 
 const MidiAction *InputProcessor::findMapping(const InputID &input) {
-  // Phase 40: Check active layers from top (highest index) down to 0
+  DBG("Runtime: Looking for { " +
+      juce::String::toHexString(static_cast<juce::int64>(input.deviceHandle)) +
+      ", " + juce::String(input.keyCode) + " }");
+
   for (int i = (int)layers.size() - 1; i >= 0; --i) {
     if (!layers[i].isActive)
       continue;
     auto &cm = layers[i].compiledMap;
     auto it = cm.find(input);
-    if (it != cm.end())
+    if (it != cm.end()) {
+      DBG("Runtime: MATCH found in Layer " + juce::String(i));
       return &it->second;
+    }
     if (input.deviceHandle != 0) {
       InputID anyDevice = {0, input.keyCode};
       it = cm.find(anyDevice);
-      if (it != cm.end())
+      if (it != cm.end()) {
+        DBG("Runtime: MATCH found in Layer " + juce::String(i) +
+            " (global fallback)");
         return &it->second;
+      }
     }
   }
+  DBG("Runtime: NO MATCH");
   return nullptr;
 }
 
@@ -697,6 +713,22 @@ void InputProcessor::processEvent(InputID input, bool isDown) {
   }
 
   if (!isDown) {
+    // Phase 48: Top-priority check: if we are releasing the momentary trigger
+    // key, force the layer off before any other mapping can consume this
+    // key-up.
+    if (momentaryTriggerKey != -1 && input.keyCode == momentaryTriggerKey) {
+      if (activeMomentaryLayerId >= 0 &&
+          activeMomentaryLayerId < (int)layers.size()) {
+        juce::ScopedWriteLock wl(mapLock);
+        layers[(size_t)activeMomentaryLayerId].isActive = false;
+      }
+
+      momentaryTriggerKey = -1;
+      activeMomentaryLayerId = -1;
+      sendChangeMessage(); // Phase 48: update Visualizer HUD
+      return;              // swallow (treat momentary key as modifier)
+    }
+
     auto [action, source] = lookupAction(input.deviceHandle, input.keyCode);
     // Phase 40: LayerMomentary key-up = turn layer off
     if (action.has_value() && action->type == ActionType::Command &&
@@ -706,6 +738,9 @@ void InputProcessor::processEvent(InputID input, bool isDown) {
         juce::ScopedWriteLock wl(mapLock);
         layers[layerId].isActive = false;
       }
+      momentaryTriggerKey = -1;
+      activeMomentaryLayerId = -1;
+      sendChangeMessage(); // Phase 48: update Visualizer HUD
       return;
     }
     // Command key-up: SustainMomentary=Off, SustainInverse=On
@@ -775,8 +810,14 @@ void InputProcessor::processEvent(InputID input, bool isDown) {
         layerId = juce::jlimit(0, (int)layers.size() - 1, layerId);
         if (layerId >= 0 && layerId < (int)layers.size()) {
           juce::ScopedWriteLock wl(mapLock);
-          layers[layerId].isActive = isDown;
+          layers[layerId].isActive = true;
         }
+        // Phase 48: remember trigger key + target layer so key-up always
+        // releases correctly even if another mapping exists on that target
+        // layer.
+        momentaryTriggerKey = input.keyCode;
+        activeMomentaryLayerId = layerId;
+        sendChangeMessage(); // Phase 48: update Visualizer HUD
         return;
       }
       if (cmd == static_cast<int>(OmniKey::CommandID::LayerToggle)) {
@@ -785,6 +826,7 @@ void InputProcessor::processEvent(InputID input, bool isDown) {
           juce::ScopedWriteLock wl(mapLock);
           layers[layerId].isActive = !layers[layerId].isActive;
         }
+        sendChangeMessage(); // Phase 48: update Visualizer HUD
         return;
       }
       if (cmd == static_cast<int>(OmniKey::CommandID::LayerSolo)) {
@@ -794,6 +836,7 @@ void InputProcessor::processEvent(InputID input, bool isDown) {
           for (size_t i = 0; i < layers.size(); ++i)
             layers[i].isActive = (i == (size_t)layerId);
         }
+        sendChangeMessage(); // Phase 48: update Visualizer HUD
         return;
       }
       if (cmd == static_cast<int>(OmniKey::CommandID::SustainMomentary))
@@ -1244,10 +1287,14 @@ SimulationResult InputProcessor::simulateInput(uintptr_t viewDeviceHash,
 
   // Fallback: consult zones using the same inputs
   std::optional<MidiAction> zoneAction;
+  bool zoneFromGlobalFallback = false;
+
   if (viewDeviceHash != 0) {
     zoneAction = zoneManager.handleInput(specificInput);
-    if (!zoneAction.has_value())
+    if (!zoneAction.has_value()) {
       zoneAction = zoneManager.handleInput(globalInput);
+      zoneFromGlobalFallback = zoneAction.has_value();
+    }
   } else {
     zoneAction = zoneManager.handleInput(globalInput);
   }
@@ -1256,7 +1303,10 @@ SimulationResult InputProcessor::simulateInput(uintptr_t viewDeviceHash,
     result.action = zoneAction;
     result.isZone = true;
     result.sourceName = "Zone";
-    result.state = VisualState::Active;
+    // Phase 47.1: If we fell back from a specific view to global zone, treat
+    // it as inherited so the visualizer dims it.
+    result.state =
+        zoneFromGlobalFallback ? VisualState::Inherited : VisualState::Active;
   }
 
   return result;

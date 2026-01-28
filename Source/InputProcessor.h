@@ -24,7 +24,8 @@ struct Layer {
 class MidiEngine;
 class SettingsManager;
 
-class InputProcessor : public juce::ValueTree::Listener,
+class InputProcessor : public juce::ChangeBroadcaster,
+                       public juce::ValueTree::Listener,
                        public juce::ChangeListener {
 public:
   InputProcessor(VoiceManager &voiceMgr, PresetManager &presetMgr,
@@ -96,6 +97,10 @@ private:
 
   // Phase 40: Multi-Layer. Each layer has its own compiledMap + configMap.
   std::vector<Layer> layers; // Layer 0 = Base, 1..8 = Overlays (default size 9)
+
+  // Phase 48: momentary layer tracking so key-up always releases the layer
+  int momentaryTriggerKey = -1;
+  int activeMomentaryLayerId = -1;
 
   // Note buffer for Strum mode (for visualizer; strum is triggered on key
   // press)

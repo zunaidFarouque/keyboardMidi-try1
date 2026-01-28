@@ -522,13 +522,29 @@ void MappingEditorComponent::handleRawKeyEvent(uintptr_t deviceHandle,
       }
 
       if (foundValid) {
-        DBG("Learn: Switching to Alias " +
-            juce::String::toHexString((juce::int64)bestAlias));
+        // Phase 46.6: also write inputAlias so InputProcessor compiles
+        // correctly
+        juce::String aliasName =
+            deviceManager.getAliasName(static_cast<uintptr_t>(bestAlias));
+
+        DBG("Learn: Switching to Alias " + aliasName + " (" +
+            juce::String::toHexString((juce::int64)bestAlias) + ")");
         DBG("Learn: Writing deviceHash: " +
             juce::String::toHexString((juce::int64)bestAlias));
+
         mappingNode.setProperty(
-            "deviceHash", juce::String::toHexString((juce::int64)bestAlias),
+            "deviceHash",
+            juce::String::toHexString((juce::int64)bestAlias).toUpperCase(),
             nullptr);
+
+        // Keep XML consistent with Inspector/Compiler expectations.
+        // (InputProcessor uses inputAlias as the primary source of truth.)
+        if (bestAlias == 0 || aliasName == "Global (All Devices)" ||
+            aliasName == "Unknown") {
+          mappingNode.setProperty("inputAlias", "", nullptr);
+        } else {
+          mappingNode.setProperty("inputAlias", aliasName, nullptr);
+        }
       } else {
         DBG("Learn: No alias found. Keeping existing deviceHash.");
         // Do not touch deviceHash – preserve existing alias when there is no
@@ -537,6 +553,8 @@ void MappingEditorComponent::handleRawKeyEvent(uintptr_t deviceHandle,
     } else {
       // Studio Mode OFF: force Global (0)
       mappingNode.setProperty("deviceHash", "0", nullptr);
+      // Phase 46.6: keep compiler consistent (Global = empty inputAlias)
+      mappingNode.setProperty("inputAlias", "", nullptr);
     }
 
     // Turn off learn mode
