@@ -373,6 +373,24 @@ int64_t __stdcall RawInputManager::rawInputWndProc(void *hwnd, unsigned int msg,
 }
 
 juce::String RawInputManager::getKeyName(int virtualKey) {
+  // Prefer explicit names for modifier left/right so UI can distinguish them.
+  switch (virtualKey) {
+  case VK_LSHIFT:
+    return "Left Shift";
+  case VK_RSHIFT:
+    return "Right Shift";
+  case VK_LCONTROL:
+    return "Left Ctrl";
+  case VK_RCONTROL:
+    return "Right Ctrl";
+  case VK_LMENU:
+    return "Left Alt";
+  case VK_RMENU:
+    return "Right Alt";
+  default:
+    break;
+  }
+
   int scanCode = MapVirtualKeyA(virtualKey, MAPVK_VK_TO_VSC);
   char name[128] = {0};
   if (GetKeyNameTextA(scanCode << 16, name, 128) > 0)

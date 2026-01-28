@@ -94,6 +94,14 @@ struct InputID {
   bool operator==(const InputID &other) const {
     return deviceHandle == other.deviceHandle && keyCode == other.keyCode;
   }
+
+  // Ordering operator (Phase 40.1: used for std::set<InputID> / deterministic
+  // ordering)
+  bool operator<(const InputID &other) const {
+    if (deviceHandle != other.deviceHandle)
+      return deviceHandle < other.deviceHandle;
+    return keyCode < other.keyCode;
+  }
 };
 
 // Hash specialization for InputID (required for

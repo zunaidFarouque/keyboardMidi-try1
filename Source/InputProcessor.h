@@ -7,16 +7,33 @@
 #include "VoiceManager.h"
 #include "ZoneManager.h"
 #include <JuceHeader.h>
+#include <set>
 #include <unordered_map>
 #include <vector>
 
 class ScaleLibrary;
 
+// Phase 40.1: ordering for std::set<InputID>
+struct InputIDLess {
+  bool operator()(const InputID &a, const InputID &b) const {
+    if (a.deviceHandle != b.deviceHandle)
+      return a.deviceHandle < b.deviceHandle;
+    return a.keyCode < b.keyCode;
+  }
+};
+
 // Phase 40: Multi-Layer System. Layer 0 = Base, 1..8 = Overlays.
 struct Layer {
   juce::String name;
   int id = 0;
-  bool isActive = false; // Runtime state
+  // Phase 40.1: Robust layer state machine.
+  // - isLatched: toggled ON/OFF persistently by commands (and persisted)
+  // - isMomentary: computed from currently held keys (transient)
+  bool isLatched = false;
+  bool isMomentary = false;
+  bool isActive() const {
+    return id == 0 || isLatched || isMomentary;
+  } // Base always on
 
   std::unordered_map<InputID, MidiAction> compiledMap; // HardwareID -> Action
   std::unordered_map<InputID, MidiAction> configMap;   // AliasHash -> Action
@@ -98,9 +115,9 @@ private:
   // Phase 40: Multi-Layer. Each layer has its own compiledMap + configMap.
   std::vector<Layer> layers; // Layer 0 = Base, 1..8 = Overlays (default size 9)
 
-  // Phase 48: momentary layer tracking so key-up always releases the layer
-  int momentaryTriggerKey = -1;
-  int activeMomentaryLayerId = -1;
+  // Phase 40.1: currently held keys for state reconstruction
+  std::set<InputID, InputIDLess> currentlyHeldKeys;
+  bool updateLayerState(); // returns true if momentary state changed
 
   // Note buffer for Strum mode (for visualizer; strum is triggered on key
   // press)

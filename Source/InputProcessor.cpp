@@ -75,7 +75,15 @@ void InputProcessor::rebuildMapFromTree() {
   juce::ScopedWriteLock lock(mapLock);
   // Phase 41: Static 9 layers (0=Base, 1-8=Overlays). Reset to 9 empty layers.
   layers.assign(9, Layer());
-  layers[0].isActive = true;
+  for (int i = 0; i < (int)layers.size(); ++i) {
+    layers[(size_t)i].id = i;
+    layers[(size_t)i].name = (i == 0 ? "Base" : ("Layer " + juce::String(i)));
+    layers[(size_t)i].isLatched = false;
+    layers[(size_t)i].isMomentary = false;
+  }
+
+  // Rebuild invalidates any in-flight held-key state; drop it.
+  currentlyHeldKeys.clear();
 
   auto layersList = presetManager.getLayersList();
   const int maxLayer = static_cast<int>(layers.size());
@@ -98,7 +106,8 @@ void InputProcessor::rebuildMapFromTree() {
     layers[id].id = id;
     layers[id].name =
         layerNode.getProperty("name", "Layer " + juce::String(id)).toString();
-    layers[id].isActive = layerNode.getProperty("isActive", id == 0);
+    // Phase 40.1: Persisted layer activation maps to latched state.
+    layers[id].isLatched = (bool)layerNode.getProperty("isActive", id == 0);
 
     auto mappingsNode = layerNode.getChildWithName("Mappings");
     if (mappingsNode.isValid()) {
@@ -552,8 +561,10 @@ void InputProcessor::valueTreePropertyChanged(
             treeWhosePropertyHasChanged
                 .getProperty("name", "Layer " + juce::String(layerId))
                 .toString();
-        layers[layerId].isActive =
-            treeWhosePropertyHasChanged.getProperty("isActive", layerId == 0);
+        // Phase 40.1: treat persisted isActive as latched state
+        layers[layerId].isLatched =
+            (bool)treeWhosePropertyHasChanged.getProperty("isActive",
+                                                          layerId == 0);
       }
       return;
     }
@@ -607,7 +618,7 @@ const MidiAction *InputProcessor::findMapping(const InputID &input) {
   int genericKey = getGenericKey(input.keyCode);
 
   for (int i = (int)layers.size() - 1; i >= 0; --i) {
-    if (!layers[i].isActive)
+    if (!layers[(size_t)i].isActive())
       continue;
     auto &cm = layers[i].compiledMap;
     // 1) Specific Device, Specific Key
@@ -690,7 +701,7 @@ InputProcessor::lookupAction(uintptr_t deviceHandle, int keyCode) {
 
   juce::ScopedReadLock lock(mapLock);
   for (int i = (int)layers.size() - 1; i >= 0; --i) {
-    if (!layers[i].isActive)
+    if (!layers[(size_t)i].isActive())
       continue;
 
     // 1) Manual mappings (hardware)
@@ -765,7 +776,7 @@ std::shared_ptr<Zone> InputProcessor::getZoneForInputResolved(InputID input) {
                             : 0;
   // Phase 49: zones are layered. Search active layers from top down.
   for (int i = (int)layers.size() - 1; i >= 0; --i) {
-    if (!layers[i].isActive)
+    if (!layers[(size_t)i].isActive())
       continue;
 
     if (aliasHash != 0) {
@@ -783,43 +794,102 @@ std::shared_ptr<Zone> InputProcessor::getZoneForInputResolved(InputID input) {
   return nullptr;
 }
 
+// Phase 40.1: Robust layer state machine.
+// Recompute momentary layers based on currently held keys.
+bool InputProcessor::updateLayerState() {
+  juce::ScopedWriteLock lock(mapLock);
+
+  std::vector<bool> prevMomentary;
+  prevMomentary.reserve(layers.size());
+  for (const auto &layer : layers)
+    prevMomentary.push_back(layer.isMomentary);
+
+  // 1) Reset momentary
+  for (auto &layer : layers)
+    layer.isMomentary = false;
+
+  // 2) Iterative resolution (chains like A->B->C)
+  bool changed = true;
+  int pass = 0;
+  while (changed && pass < 5) {
+    changed = false;
+
+    for (const auto &held : currentlyHeldKeys) {
+      const int genericKey = getGenericKey(held.keyCode);
+
+      // Find the highest-priority mapping for this key among currently active
+      // layers. Only LayerMomentary affects momentary state.
+      for (int i = (int)layers.size() - 1; i >= 0; --i) {
+        if (!layers[(size_t)i].isActive())
+          continue;
+
+        auto &cm = layers[(size_t)i].compiledMap;
+
+        auto it = cm.find(held); // 1) specific device + specific key
+        if (it == cm.end() && genericKey != 0) {
+          it = cm.find(InputID{held.deviceHandle, genericKey}); // 2) generic
+        }
+        if (it == cm.end() && held.deviceHandle != 0) {
+          it = cm.find(InputID{0, held.keyCode}); // 3) global device fallback
+          if (it == cm.end() && genericKey != 0) {
+            it = cm.find(InputID{0, genericKey}); // 4) global + generic
+          }
+        }
+
+        if (it != cm.end()) {
+          const auto &action = it->second;
+          if (action.type == ActionType::Command &&
+              action.data1 ==
+                  static_cast<int>(OmniKey::CommandID::LayerMomentary)) {
+            int targetLayer =
+                juce::jlimit(0, (int)layers.size() - 1, action.data2);
+            if (!layers[(size_t)targetLayer].isMomentary) {
+              layers[(size_t)targetLayer].isMomentary = true;
+              changed = true;
+            }
+          }
+          break; // key handled at this layer
+        }
+      }
+    }
+
+    ++pass;
+  }
+
+  bool anyDiff = false;
+  for (size_t i = 0; i < layers.size() && i < prevMomentary.size(); ++i) {
+    if (layers[i].isMomentary != prevMomentary[i]) {
+      anyDiff = true;
+      break;
+    }
+  }
+  return anyDiff;
+}
+
 void InputProcessor::processEvent(InputID input, bool isDown) {
   // Gate: If MIDI mode is not active, don't generate MIDI
   if (!settingsManager.isMidiModeActive()) {
     return;
   }
 
+  // Phase 40.1: Track held keys and recompute momentary layers.
+  InputID held = input;
+  if (!settingsManager.isStudioMode())
+    held.deviceHandle = 0;
+
+  {
+    juce::ScopedWriteLock wl(mapLock);
+    if (isDown)
+      currentlyHeldKeys.insert(held);
+    else
+      currentlyHeldKeys.erase(held);
+  }
+
+  if (updateLayerState())
+    sendChangeMessage();
+
   if (!isDown) {
-    // Phase 48: Top-priority check: if we are releasing the momentary trigger
-    // key, force the layer off before any other mapping can consume this
-    // key-up.
-    if (momentaryTriggerKey != -1 && input.keyCode == momentaryTriggerKey) {
-      if (activeMomentaryLayerId >= 0 &&
-          activeMomentaryLayerId < (int)layers.size()) {
-        juce::ScopedWriteLock wl(mapLock);
-        layers[(size_t)activeMomentaryLayerId].isActive = false;
-      }
-
-      momentaryTriggerKey = -1;
-      activeMomentaryLayerId = -1;
-      sendChangeMessage(); // Phase 48: update Visualizer HUD
-      return;              // swallow (treat momentary key as modifier)
-    }
-
     auto [action, source] = lookupAction(input.deviceHandle, input.keyCode);
-    // Phase 40: LayerMomentary key-up = turn layer off
-    if (action.has_value() && action->type == ActionType::Command &&
-        action->data1 == static_cast<int>(OmniKey::CommandID::LayerMomentary)) {
-      int layerId = juce::jlimit(0, (int)layers.size() - 1, action->data2);
-      if (layerId >= 0 && layerId < (int)layers.size()) {
-        juce::ScopedWriteLock wl(mapLock);
-        layers[layerId].isActive = false;
-      }
-      momentaryTriggerKey = -1;
-      activeMomentaryLayerId = -1;
-      sendChangeMessage(); // Phase 48: update Visualizer HUD
-      return;
-    }
     // Command key-up: SustainMomentary=Off, SustainInverse=On
     if (action.has_value() && action->type == ActionType::Command) {
       int cmd = action->data1;
@@ -884,26 +954,18 @@ void InputProcessor::processEvent(InputID input, bool isDown) {
       int layerId = midiAction.data2; // For layer commands, data2 = layer ID
       // Phase 40: Layer commands (consume key, update layer state)
       if (cmd == static_cast<int>(OmniKey::CommandID::LayerMomentary)) {
-        layerId = juce::jlimit(0, (int)layers.size() - 1, layerId);
-        if (layerId >= 0 && layerId < (int)layers.size()) {
-          juce::ScopedWriteLock wl(mapLock);
-          layers[layerId].isActive = true;
-        }
-        // Phase 48: remember trigger key + target layer so key-up always
-        // releases correctly even if another mapping exists on that target
-        // layer.
-        momentaryTriggerKey = input.keyCode;
-        activeMomentaryLayerId = layerId;
-        sendChangeMessage(); // Phase 48: update Visualizer HUD
+        // Phase 40.1: momentary layers are handled by updateLayerState().
         return;
       }
       if (cmd == static_cast<int>(OmniKey::CommandID::LayerToggle)) {
         layerId = juce::jlimit(0, (int)layers.size() - 1, layerId);
         if (layerId >= 0 && layerId < (int)layers.size()) {
           juce::ScopedWriteLock wl(mapLock);
-          layers[layerId].isActive = !layers[layerId].isActive;
+          layers[(size_t)layerId].isLatched =
+              !layers[(size_t)layerId].isLatched;
         }
-        sendChangeMessage(); // Phase 48: update Visualizer HUD
+        updateLayerState();
+        sendChangeMessage(); // Phase 40.1: layer state rebuilt
         return;
       }
       if (cmd == static_cast<int>(OmniKey::CommandID::LayerSolo)) {
@@ -911,9 +973,10 @@ void InputProcessor::processEvent(InputID input, bool isDown) {
         if (layerId >= 0 && layerId < (int)layers.size()) {
           juce::ScopedWriteLock wl(mapLock);
           for (size_t i = 0; i < layers.size(); ++i)
-            layers[i].isActive = (i == (size_t)layerId);
+            layers[i].isLatched = ((int)i == layerId);
         }
-        sendChangeMessage(); // Phase 48: update Visualizer HUD
+        updateLayerState();
+        sendChangeMessage(); // Phase 40.1: layer state rebuilt
         return;
       }
       if (cmd == static_cast<int>(OmniKey::CommandID::SustainMomentary))
@@ -1077,7 +1140,7 @@ juce::StringArray InputProcessor::getActiveLayerNames() {
   juce::StringArray result;
   juce::ScopedReadLock lock(mapLock);
   for (const auto &layer : layers) {
-    if (layer.isActive) {
+    if (layer.isActive()) {
       auto name = layer.name;
       if (name.isEmpty())
         name = "Layer " + juce::String(layer.id);
@@ -1091,7 +1154,7 @@ bool InputProcessor::hasManualMappingForKey(int keyCode) {
   juce::ScopedReadLock lock(mapLock);
   // Phase 40: Check active layers' compiledMaps
   for (int i = (int)layers.size() - 1; i >= 0; --i) {
-    if (!layers[i].isActive)
+    if (!layers[(size_t)i].isActive())
       continue;
     for (const auto &p : layers[i].compiledMap) {
       if (p.first.keyCode == keyCode)
@@ -1108,7 +1171,7 @@ std::optional<ActionType> InputProcessor::getMappingType(int keyCode,
   InputID id{aliasHash, keyCode};
   InputID globalId{0, keyCode};
   for (int i = (int)layers.size() - 1; i >= 0; --i) {
-    if (!layers[i].isActive)
+    if (!layers[(size_t)i].isActive())
       continue;
     auto it = layers[i].configMap.find(id);
     if (it != layers[i].configMap.end())
@@ -1171,7 +1234,7 @@ SimulationResult InputProcessor::simulateInput(uintptr_t viewDeviceHash,
   Candidate cand;
 
   for (int i = (int)layers.size() - 1; i >= 0; --i) {
-    if (!layers[i].isActive)
+    if (!layers[(size_t)i].isActive())
       continue;
 
     auto &cm = layers[i].configMap;
@@ -1255,14 +1318,15 @@ SimulationResult InputProcessor::simulateInput(uintptr_t viewDeviceHash,
     // override.
     bool hasGlobalBelow = false;
     for (int j = cand.layerIndex - 1; j >= 0; --j) {
-      if (!layers[j].isActive)
+      if (!layers[(size_t)j].isActive())
         continue;
-      if (layers[j].configMap.find(globalInput) != layers[j].configMap.end()) {
+      if (layers[(size_t)j].configMap.find(globalInput) !=
+          layers[(size_t)j].configMap.end()) {
         hasGlobalBelow = true;
         break;
       }
-      if (genericKey != 0 && layers[j].configMap.find(globalGeneric) !=
-                                 layers[j].configMap.end()) {
+      if (genericKey != 0 && layers[(size_t)j].configMap.find(globalGeneric) !=
+                                 layers[(size_t)j].configMap.end()) {
         hasGlobalBelow = true;
         break;
       }
@@ -1423,7 +1487,7 @@ bool InputProcessor::hasPointerMappings() {
   juce::ScopedReadLock lock(mapLock);
   // Phase 40: Check active layers' compiledMaps
   for (int i = (int)layers.size() - 1; i >= 0; --i) {
-    if (!layers[i].isActive)
+    if (!layers[(size_t)i].isActive())
       continue;
     for (const auto &pair : layers[i].compiledMap) {
       int keyCode = pair.first.keyCode;

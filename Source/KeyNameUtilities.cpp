@@ -18,6 +18,20 @@ juce::String KeyNameUtilities::getKeyName(int virtualKeyCode) {
   // 2. Manual Overrides for Windows Ambiguities
   // These keys often map to Numpad names if we don't handle them explicitly.
   switch (virtualKeyCode) {
+  // Modifiers (Phase 49.1 / 39.9 follow-up): distinguish Left/Right
+  case VK_LSHIFT:
+    return "Left Shift";
+  case VK_RSHIFT:
+    return "Right Shift";
+  case VK_LCONTROL:
+    return "Left Ctrl";
+  case VK_RCONTROL:
+    return "Right Ctrl";
+  case VK_LMENU:
+    return "Left Alt";
+  case VK_RMENU:
+    return "Right Alt";
+
   // Navigation
   case VK_LEFT:
     return "Left Arrow";
