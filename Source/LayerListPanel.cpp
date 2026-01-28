@@ -3,6 +3,7 @@
 LayerListPanel::LayerListPanel(PresetManager &pm) : presetManager(pm) {
   listBox.setModel(this);
   listBox.setRowHeight(24);
+  listBox.setColour(juce::ListBox::backgroundColourId, juce::Colour(0xff1a1a1a));
   addAndMakeVisible(listBox);
 
   // Listen to Layers list changes
@@ -13,12 +14,11 @@ LayerListPanel::LayerListPanel(PresetManager &pm) : presetManager(pm) {
 }
 
 void LayerListPanel::selectedRowsChanged(int lastRowSelected) {
-  auto layer = getLayerAtRow(lastRowSelected);
-  if (layer.isValid()) {
-    int layerId = layer.getProperty("id", -1);
-    selectedLayerId = layerId;
+  // Phase 41: row index = layer id (0..8)
+  if (lastRowSelected >= 0 && lastRowSelected <= 8) {
+    selectedLayerId = lastRowSelected;
     if (onLayerSelected)
-      onLayerSelected(layerId);
+      onLayerSelected(lastRowSelected);
   }
 }
 
@@ -27,14 +27,14 @@ LayerListPanel::~LayerListPanel() {
 }
 
 void LayerListPanel::paint(juce::Graphics &g) {
-  g.fillAll(juce::Colour(0xff2a2a2a));
+  g.fillAll(juce::Colour(0xff1a1a1a));
 }
 
 void LayerListPanel::resized() { listBox.setBounds(getLocalBounds()); }
 
 int LayerListPanel::getNumRows() {
-  auto layersList = presetManager.getLayersList();
-  return layersList.getNumChildren();
+  // Phase 41: Static 9 layers (0=Base, 1-8=Overlays)
+  return 9;
 }
 
 void LayerListPanel::paintListBoxItem(int rowNumber, juce::Graphics &g,
@@ -44,22 +44,21 @@ void LayerListPanel::paintListBoxItem(int rowNumber, juce::Graphics &g,
   if (!layer.isValid())
     return;
 
-  // Background
+  const int pad = 2;
+  auto area = juce::Rectangle<int>(0, 0, width, height).reduced(pad, 0);
   if (rowIsSelected) {
-    g.fillAll(juce::Colour(0xff4a4a4a));
-  } else {
-    g.fillAll(juce::Colour(0xff2a2a2a));
+    g.setColour(juce::Colours::lightblue.withAlpha(0.2f));
+    g.fillRoundedRectangle(area.toFloat(), 4.0f);
   }
 
-  // Text
-  g.setColour(juce::Colours::white);
-  g.setFont(14.0f);
-
-  int layerId = layer.getProperty("id", -1);
-  juce::String name = layer.getProperty("name", "Unknown").toString();
-
+  g.setColour(rowIsSelected ? juce::Colours::white : juce::Colours::grey);
+  g.setFont(15.0f);
+  int layerId = layer.getProperty("id", rowNumber);
+  juce::String name = layer.getProperty("name", layerId == 0 ? "Base" : "Layer " + juce::String(layerId)).toString();
   juce::String displayText = juce::String(layerId) + ": " + name;
-  g.drawText(displayText, 8, 0, width - 8, height,
+  if (rowNumber == 0)
+    displayText += " (Default)";
+  g.drawText(displayText, 10, 0, width - 10, height,
              juce::Justification::centredLeft, true);
 }
 
@@ -69,18 +68,26 @@ void LayerListPanel::listBoxItemDoubleClicked(int row,
   if (!layer.isValid())
     return;
 
-  juce::String currentName = layer.getProperty("name", "").toString();
-
-  // Phase 41: Simple rename - show message for now
-  // Full inline editing with AlertWindow text input can be enhanced later
-  juce::AlertWindow::showMessageBoxAsync(
-      juce::AlertWindow::InfoIcon, "Rename Layer",
-      "Double-click rename functionality.\n"
-      "Current layer: " +
-          currentName +
-          "\n\n"
-          "To rename, edit the layer name property in the inspector or preset "
-          "XML.");
+  juce::String currentName =
+      layer.getProperty("name", row == 0 ? "Base" : "Layer " + juce::String(row))
+          .toString();
+  auto *dialog = new juce::AlertWindow("Rename Layer", "Enter new name:",
+                                       juce::AlertWindow::NoIcon);
+  dialog->addTextEditor("name", currentName, "Layer name:", false);
+  dialog->addButton("OK", 1);
+  dialog->addButton("Cancel", 0);
+  dialog->enterModalState(
+      true,
+      juce::ModalCallbackFunction::create(
+          [this, dialog, layer](int result) mutable {
+            if (result == 1) {
+              juce::String newName = dialog->getTextEditorContents("name").trim();
+              if (!newName.isEmpty())
+                layer.setProperty("name", newName, nullptr);
+              listBox.repaint();
+            }
+            delete dialog;
+          }));
 }
 
 void LayerListPanel::valueTreeChildAdded(
@@ -106,26 +113,17 @@ void LayerListPanel::valueTreePropertyChanged(
 }
 
 void LayerListPanel::setSelectedLayer(int layerId) {
+  if (layerId < 0 || layerId > 8)
+    return;
   selectedLayerId = layerId;
-  auto layersList = presetManager.getLayersList();
-  for (int i = 0; i < layersList.getNumChildren(); ++i) {
-    auto layer = layersList.getChild(i);
-    if (layer.isValid()) {
-      int id = static_cast<int>(layer.getProperty("id", -1));
-      if (id == layerId) {
-        listBox.selectRow(i);
-        if (onLayerSelected)
-          onLayerSelected(layerId);
-        return;
-      }
-    }
-  }
+  listBox.selectRow(layerId); // Phase 41: row index = layer id
+  if (onLayerSelected)
+    onLayerSelected(layerId);
 }
 
 juce::ValueTree LayerListPanel::getLayerAtRow(int row) {
-  auto layersList = presetManager.getLayersList();
-  if (row >= 0 && row < layersList.getNumChildren()) {
-    return layersList.getChild(row);
-  }
+  // Phase 41: Static 9 layers; row index = layer id
+  if (row >= 0 && row <= 8)
+    return presetManager.getLayerNode(row);
   return juce::ValueTree();
 }

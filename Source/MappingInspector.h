@@ -47,6 +47,8 @@ private:
   juce::Label aliasLabel;
   juce::Label commandLabel;
   juce::ComboBox commandSelector;
+  juce::Label targetLayerLabel;
+  juce::ComboBox targetLayerSelector;
 
   // ADSR controls (for Envelope type)
   juce::Slider attackSlider;
@@ -76,6 +78,7 @@ private:
   juce::var getCommonValue(const juce::Identifier &property);
   void refreshAliasSelector();
   void updatePitchBendPeakValue(juce::ValueTree& tree); // Calculate and set data2 from pbRange/pbShift
+  void updateVisibility(); // Phase 44: show/hide Target Layer for Layer commands
 
   JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(MappingInspector)
 };

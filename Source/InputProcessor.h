@@ -41,8 +41,8 @@ public:
   // Check if preset has pointer mappings (for smart cursor locking)
   bool hasPointerMappings();
 
-  // NEW: Helper for the Logger to peek at what will happen
-  const MidiAction *getMappingForInput(InputID input);
+  // Phase 41.3: Return copy by value to avoid dangling pointer after unlock
+  std::optional<MidiAction> getMappingForInput(InputID input);
 
   // Simulate input and return action with source description (Phase 39: returns
   // SimulationResult)
@@ -68,6 +68,9 @@ public:
 
   // Force rebuild of keyMapping from ValueTree (for reset operations)
   void forceRebuildMappings();
+
+  // Phase 42: Two-stage init – call after object graph is built
+  void initialize();
 
   // ChangeListener implementation
   void changeListenerCallback(juce::ChangeBroadcaster *source) override;

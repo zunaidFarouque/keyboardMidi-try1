@@ -16,27 +16,34 @@ MainComponent::MainComponent()
       startupManager(&presetManager, &deviceManager,
                      &inputProcessor.getZoneManager(), &settingsManager),
       rawInputManager(std::make_unique<RawInputManager>()),
-      mappingEditor(presetManager, *rawInputManager, deviceManager),
       mainTabs(juce::TabbedButtonBar::TabsAtTop),
-      zoneEditor(&inputProcessor.getZoneManager(), &deviceManager,
-                 rawInputManager.get(), &scaleLibrary),
-      settingsPanel(settingsManager, midiEngine, *rawInputManager),
-      visualizer(&inputProcessor.getZoneManager(), &deviceManager, voiceManager,
-                 &settingsManager, &presetManager, &inputProcessor),
-      setupWizard(deviceManager, *rawInputManager),
-      visualizerContainer("Visualizer", visualizer),
+      visualizerContainer("Visualizer", layoutPlaceholder),
       editorContainer("Mapping / Zones", mainTabs),
-      logContainer("Log", logComponent),
+      logContainer("Log", layoutPlaceholder),
       verticalBar(
           &verticalLayout, 1,
           false), // false = horizontal bar for vertical layout (drag up/down)
       horizontalBar(
           &horizontalLayout, 1,
-          true) { // true = vertical bar for horizontal layout (drag left/right)
-  // Initialize application (load or create factory default)
-  startupManager.initApp();
-  
-  // Initialize Mini Status Window
+          true), // true = vertical bar for horizontal layout (drag left/right)
+      setupWizard(deviceManager, *rawInputManager) {
+  // --- Restore UI: create the five content components and wire into containers/tabs ---
+  logComponent = std::make_unique<LogComponent>();
+  visualizer = std::make_unique<VisualizerComponent>(
+      &inputProcessor.getZoneManager(), &deviceManager, voiceManager,
+      &settingsManager, &presetManager, &inputProcessor);
+  mappingEditor = std::make_unique<MappingEditorComponent>(
+      presetManager, *rawInputManager, deviceManager);
+  zoneEditor = std::make_unique<ZoneEditorComponent>(
+      &inputProcessor.getZoneManager(), &deviceManager, rawInputManager.get(),
+      &scaleLibrary);
+  settingsPanel = std::make_unique<SettingsPanel>(
+      settingsManager, midiEngine, *rawInputManager);
+
+  visualizerContainer.setContent(*visualizer);
+  logContainer.setContent(*logComponent);
+
+  // Mini Status Window (before init; no listener storm)
   miniWindow = std::make_unique<MiniStatusWindow>(settingsManager);
   
   // Listen to SettingsManager for MIDI mode changes
@@ -49,38 +56,37 @@ MainComponent::MainComponent()
   // --- Header Controls ---
   addAndMakeVisible(midiSelector);
   midiSelector.setTextWhenNoChoicesAvailable("No MIDI Devices");
+  // 1. Populate the list (safe – no driver open)
   midiSelector.addItemList(midiEngine.getDeviceNames(), 1);
-  
-  // Auto-select saved MIDI device
-  juce::String savedName = settingsManager.getLastMidiDevice();
-  bool foundSavedDevice = false;
-  if (!savedName.isEmpty() && midiSelector.getNumItems() > 0) {
-    // Search for the saved device name
-    for (int i = 0; i < midiSelector.getNumItems(); ++i) {
-      if (midiSelector.getItemText(i) == savedName) {
-        midiSelector.setSelectedItemIndex(i);
-        midiEngine.setOutputDevice(i);
-        foundSavedDevice = true;
-        break;
-      }
-    }
-  }
-  
-  // Fallback to first device if saved device not found
-  if (!foundSavedDevice && midiSelector.getNumItems() > 0) {
-    midiSelector.setSelectedItemIndex(0);
-    midiEngine.setOutputDevice(0);
-  }
-  
+
+  // 2. Setup selection logic – onChange will call setOutputDevice when selection changes
   midiSelector.onChange = [this] {
     int selectedIndex = midiSelector.getSelectedItemIndex();
     if (selectedIndex >= 0) {
       midiEngine.setOutputDevice(selectedIndex);
-      // Save the device name (not index) for persistence
       juce::String deviceName = midiSelector.getItemText(selectedIndex);
       settingsManager.setLastMidiDevice(deviceName);
     }
   };
+
+  // 3. Deferred auto-connect – wait until app/window/heap are stable before opening MIDI driver
+  juce::Component::SafePointer<MainComponent> weakThis(this);
+  juce::Timer::callAfterDelay(200, [weakThis]() {
+    if (weakThis == nullptr)
+      return;
+    juce::String savedName = weakThis->settingsManager.getLastMidiDevice();
+    int indexToSelect = 0;
+    for (int i = 0; i < weakThis->midiSelector.getNumItems(); ++i) {
+      if (weakThis->midiSelector.getItemText(i) == savedName) {
+        indexToSelect = i;
+        break;
+      }
+    }
+    if (weakThis->midiSelector.getNumItems() > 0) {
+      weakThis->midiSelector.setSelectedItemIndex(indexToSelect,
+                                                   juce::sendNotificationSync);
+    }
+  });
 
   addAndMakeVisible(saveButton);
   saveButton.setButtonText("Save Preset");
@@ -96,7 +102,7 @@ MainComponent::MainComponent()
                       // If the user didn't cancel (file is valid)
                       if (result != juce::File()) {
                         presetManager.saveToFile(result);
-                        logComponent.addEntry("Saved: " + result.getFileName());
+                        if (logComponent) logComponent->addEntry("Saved: " + result.getFileName());
                       }
                     });
   };
@@ -114,8 +120,7 @@ MainComponent::MainComponent()
                       auto result = chooser.getResult();
                       if (result.exists()) {
                         presetManager.loadFromFile(result);
-                        logComponent.addEntry("Loaded: " +
-                                              result.getFileName());
+                        if (logComponent) logComponent->addEntry("Loaded: " + result.getFileName());
                         
                         // Phase 9.6: Rig Health Check
                         if (settingsManager.isStudioMode()) {
@@ -165,9 +170,9 @@ MainComponent::MainComponent()
   };
 
   // --- Setup Main Tabs ---
-  mainTabs.addTab("Mappings", juce::Colour(0xff2a2a2a), &mappingEditor, false);
-  mainTabs.addTab("Zones", juce::Colour(0xff2a2a2a), &zoneEditor, false);
-  mainTabs.addTab("Settings", juce::Colour(0xff2a2a2a), &settingsPanel, false);
+  mainTabs.addTab("Mappings", juce::Colour(0xff2a2a2a), mappingEditor.get(), false);
+  mainTabs.addTab("Zones", juce::Colour(0xff2a2a2a), zoneEditor.get(), false);
+  mainTabs.addTab("Settings", juce::Colour(0xff2a2a2a), settingsPanel.get(), false);
 
   // --- Add Containers ---
   addAndMakeVisible(visualizerContainer);
@@ -197,7 +202,7 @@ MainComponent::MainComponent()
   // --- Log Controls ---
   addAndMakeVisible(clearButton);
   clearButton.setButtonText("Clear Log");
-  clearButton.onClick = [this] { logComponent.clear(); };
+  clearButton.onClick = [this] { if (logComponent) logComponent->clear(); };
 
   addAndMakeVisible(performanceModeButton);
   performanceModeButton.setButtonText("Performance Mode");
@@ -237,9 +242,16 @@ MainComponent::MainComponent()
 
   setSize(800, 600);
 
+  // --- Phase 42: SAFE INITIALIZATION SEQUENCE ---
+  inputProcessor.initialize();
+  mappingEditor->initialize();
+  visualizer->initialize();
+  settingsPanel->initialize();
+  startupManager.initApp();
+
   // --- Input Logic ---
   rawInputManager->addListener(this);
-  rawInputManager->addListener(&visualizer);
+  rawInputManager->addListener(visualizer.get());
   
   // Register focus target callback
   rawInputManager->setFocusTargetCallback([this]() -> void* {
@@ -301,6 +313,7 @@ MainComponent::~MainComponent() {
   // 5. Stop Input (Explicitly)
   if (rawInputManager) {
     rawInputManager->removeListener(this);
+    if (visualizer) rawInputManager->removeListener(visualizer.get());
     rawInputManager->shutdown();
   }
 
@@ -372,7 +385,7 @@ void MainComponent::logEvent(uintptr_t device, int keyCode, bool isDown) {
     }
   }
 
-  logComponent.addEntry(logLine);
+  if (logComponent) logComponent->addEntry(logLine);
 }
 
 // ApplicationCommandTarget implementation
@@ -386,21 +399,22 @@ void MainComponent::getCommandInfo(juce::CommandID commandID,
   if (commandID == juce::StandardApplicationCommandIDs::undo) {
     result.setInfo("Undo", "Undo last action", "Edit", 0);
     result.addDefaultKeypress('Z', juce::ModifierKeys::ctrlModifier);
-    result.setActive(mappingEditor.getUndoManager().canUndo());
+    result.setActive(mappingEditor ? mappingEditor->getUndoManager().canUndo() : false);
   } else if (commandID == juce::StandardApplicationCommandIDs::redo) {
     result.setInfo("Redo", "Redo last undone action", "Edit", 0);
     result.addDefaultKeypress('Y', juce::ModifierKeys::ctrlModifier);
-    result.setActive(mappingEditor.getUndoManager().canRedo());
+    result.setActive(mappingEditor ? mappingEditor->getUndoManager().canRedo() : false);
   }
 }
 
 bool MainComponent::perform(const InvocationInfo &info) {
+  if (!mappingEditor) return false;
   if (info.commandID == juce::StandardApplicationCommandIDs::undo) {
-    mappingEditor.getUndoManager().undo();
+    mappingEditor->getUndoManager().undo();
     commandManager.commandStatusChanged();
     return true;
   } else if (info.commandID == juce::StandardApplicationCommandIDs::redo) {
-    mappingEditor.getUndoManager().redo();
+    mappingEditor->getUndoManager().redo();
     commandManager.commandStatusChanged();
     return true;
   }
@@ -462,8 +476,8 @@ void MainComponent::handleRawKeyEvent(uintptr_t deviceHandle, int keyCode,
   // For scroll events, only process and queue log if mapping exists
   if (isScrollEvent) {
     InputID id = {deviceHandle, keyCode};
-    const MidiAction *action = inputProcessor.getMappingForInput(id);
-    if (action != nullptr) {
+    auto actionOpt = inputProcessor.getMappingForInput(id);
+    if (actionOpt.has_value()) {
       {
         juce::ScopedLock lock(queueLock);
         eventQueue.push_back({deviceHandle, keyCode, isDown});
@@ -499,14 +513,16 @@ void MainComponent::handleAxisEvent(uintptr_t deviceHandle, int inputCode,
 
   // Check for MIDI mapping
   InputID id = {deviceHandle, inputCode};
-  const MidiAction *action = inputProcessor.getMappingForInput(id);
-
-  if (action != nullptr && action->type == ActionType::CC) {
-    logLine += " -> [MIDI] CC " + juce::String(action->data1) +
-               " | ch: " + juce::String(action->channel);
+  auto actionOpt = inputProcessor.getMappingForInput(id);
+  if (actionOpt.has_value()) {
+    const auto &action = *actionOpt;
+    if (action.type == ActionType::CC) {
+      logLine += " -> [MIDI] CC " + juce::String(action.data1) +
+                 " | ch: " + juce::String(action.channel);
+    }
   }
 
-  logComponent.addEntry(logLine);
+  if (logComponent) logComponent->addEntry(logLine);
 
   // Forward axis events to InputProcessor
   inputProcessor.handleAxisEvent(deviceHandle, inputCode, value);
@@ -588,7 +604,7 @@ void MainComponent::menuItemSelected(int menuItemID, int topLevelMenuIndex) {
           juce::File::getSpecialLocation(juce::File::userDesktopDirectory)
               .getChildFile("OmniKey_Voicings.txt");
       ChordUtilities::dumpDebugReport(targetFile);
-      logComponent.addEntry("Voicing report exported to: " +
+      if (logComponent) logComponent->addEntry("Voicing report exported to: " +
                             targetFile.getFullPathName());
       break;
     }
@@ -601,12 +617,9 @@ void MainComponent::menuItemSelected(int menuItemID, int topLevelMenuIndex) {
           juce::ModalCallbackFunction::create([this](int result) {
             if (result == 1) { // OK clicked
               startupManager.createFactoryDefault();
-              // Force InputProcessor to rebuild its keyMapping (ensures
-              // conflict detection is accurate)
               inputProcessor.forceRebuildMappings();
-              // Trigger visualizer repaint to update conflict indicators
-              visualizer.repaint();
-              logComponent.addEntry("Reset to factory defaults");
+              if (visualizer) visualizer->repaint();
+              if (logComponent) logComponent->addEntry("Reset to factory defaults");
             }
           }));
       break;
@@ -716,7 +729,7 @@ void MainComponent::timerCallback() {
         if (hwnd != nullptr) {
           rawInputManager->initialize(hwnd, &settingsManager);
           isInputInitialized = true;
-          logComponent.addEntry("--- SYSTEM: Raw Input Hooked Successfully ---");
+          if (logComponent) logComponent->addEntry("--- SYSTEM: Raw Input Hooked Successfully ---");
         }
       }
     }

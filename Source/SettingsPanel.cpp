@@ -8,10 +8,14 @@ const std::array<ActionType, 5> kMappingTypeOrder = {
 const char* kMappingTypeNames[] = {"Note", "CC", "Command", "Macro", "Envelope"};
 } // namespace
 
+void SettingsPanel::initialize() {
+  settingsManager.addChangeListener(this);
+}
+
 SettingsPanel::SettingsPanel(SettingsManager& settingsMgr, MidiEngine& midiEng, RawInputManager& rawInputMgr)
     : settingsManager(settingsMgr), midiEngine(midiEng), rawInputManager(rawInputMgr),
       mappingColorsGroup("Mapping Colors", "Mapping Colors") {
-  settingsManager.addChangeListener(this);
+  // Phase 42: addChangeListener moved to initialize()
 
   // Setup PB Range Slider
   pbRangeLabel.setText("Global Pitch Bend Range (+/- semitones):", juce::dontSendNotification);

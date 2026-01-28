@@ -17,23 +17,7 @@ static uintptr_t aliasNameToHash(const juce::String &aliasName) {
 
 VisualizerComponent::VisualizerComponent(ZoneManager *zoneMgr, DeviceManager *deviceMgr, const VoiceManager &voiceMgr, SettingsManager *settingsMgr, PresetManager *presetMgr, InputProcessor *inputProc)
     : zoneManager(zoneMgr), deviceManager(deviceMgr), voiceManager(voiceMgr), settingsManager(settingsMgr), presetManager(presetMgr), inputProcessor(inputProc) {
-  if (zoneManager) {
-    zoneManager->addChangeListener(this);
-  }
-  if (settingsManager) {
-    settingsManager->addChangeListener(this);
-  }
-  if (presetManager) {
-    auto mappingsNode = presetManager->getMappingsNode();
-    if (mappingsNode.isValid()) {
-      mappingsNode.addListener(this);
-    }
-    // Also listen to root node changes (in case mappings node is recreated)
-    presetManager->getRootNode().addListener(this);
-  }
-  if (deviceManager) {
-    deviceManager->addChangeListener(this);
-  }
+  // Phase 42: Listeners moved to initialize() – no addListener here
   
   // Setup View Selector (Phase 39)
   addAndMakeVisible(viewSelector);
@@ -77,6 +61,21 @@ VisualizerComponent::VisualizerComponent(ZoneManager *zoneMgr, DeviceManager *de
   });
 }
 
+void VisualizerComponent::initialize() {
+  if (zoneManager)
+    zoneManager->addChangeListener(this);
+  if (settingsManager)
+    settingsManager->addChangeListener(this);
+  if (presetManager) {
+    auto mappingsNode = presetManager->getMappingsNode();
+    if (mappingsNode.isValid())
+      mappingsNode.addListener(this);
+    presetManager->getRootNode().addListener(this);
+  }
+  if (deviceManager)
+    deviceManager->addChangeListener(this);
+}
+
 VisualizerComponent::~VisualizerComponent() {
   // Stop callbacks immediately
   vBlankAttachment = nullptr;
@@ -103,6 +102,12 @@ VisualizerComponent::~VisualizerComponent() {
 }
 
 void VisualizerComponent::refreshCache() {
+  // SAFETY: Prevent creating 0x0 images or drawing into invalid bounds
+  if (getWidth() <= 0 || getHeight() <= 0) {
+    cacheValid = false;
+    backgroundCache = juce::Image();
+    return;
+  }
   if (!zoneManager) {
     cacheValid = false;
     return;
@@ -331,10 +336,12 @@ void VisualizerComponent::refreshCache() {
 }
 
 void VisualizerComponent::paint(juce::Graphics &g) {
-  if (!zoneManager) {
-    return; // Can't render without zone manager
-  }
-  
+  // SAFETY: Don't draw or touch cache when bounds are empty
+  if (getWidth() <= 0 || getHeight() <= 0)
+    return;
+  if (!zoneManager)
+    return;
+
   // Check Cache Validity
   if (!cacheValid || backgroundCache.isNull() || 
       backgroundCache.getWidth() != getWidth() || 
@@ -554,26 +561,16 @@ void VisualizerComponent::handleAxisEvent(uintptr_t deviceHandle, int inputCode,
 
 void VisualizerComponent::changeListenerCallback(juce::ChangeBroadcaster *source) {
   if (source == zoneManager || source == settingsManager) {
-    cacheValid = false; // Invalidate cache on zone/transpose changes
+    cacheValid = false;
     needsRepaint = true;
-    
     // Update view selector visibility based on Studio Mode (Phase 9.5)
     if (source == settingsManager && settingsManager) {
       bool studioMode = settingsManager->isStudioMode();
       viewSelector.setVisible(studioMode);
-      // Update selector state (enables/disables and populates correctly)
       updateViewSelector();
-      // Reposition selector when visibility changes
       resized();
-      // Ensure selector is on top to receive mouse events (after layout)
       viewSelector.toFront(false);
     }
-    
-    juce::Component::SafePointer<VisualizerComponent> safeThis(this);
-    juce::MessageManager::callAsync([safeThis] {
-      if (safeThis == nullptr) return;
-      // Repaint will be triggered by vBlank callback if needed
-    });
   } else if (source == deviceManager) {
     // Device alias configuration changed, refresh view selector
     updateViewSelector();
@@ -656,56 +653,31 @@ void VisualizerComponent::onViewSelectorChanged() {
 }
 
 void VisualizerComponent::valueTreeChildAdded(juce::ValueTree &parentTree, juce::ValueTree &childWhichHasBeenAdded) {
-  auto mappingsNode = presetManager ? presetManager->getMappingsNode() : juce::ValueTree();
-  if (parentTree.isEquivalentTo(mappingsNode) || parentTree.getParent().isEquivalentTo(mappingsNode)) {
-    cacheValid = false;
-    needsRepaint = true;
-    juce::Component::SafePointer<VisualizerComponent> safeThis(this);
-    juce::MessageManager::callAsync([safeThis] {
-      if (safeThis == nullptr) return;
-      juce::MessageManager::callAsync([safeThis] {
-        if (safeThis == nullptr) return;
-      });
-    });
-  }
+  if (!presetManager || presetManager->getIsLoading())
+    return;
+  cacheValid = false;
+  needsRepaint = true;
 }
 
 void VisualizerComponent::valueTreeChildRemoved(juce::ValueTree &parentTree, juce::ValueTree &childWhichHasBeenRemoved, int indexFromWhichChildWasRemoved) {
-  auto mappingsNode = presetManager ? presetManager->getMappingsNode() : juce::ValueTree();
-  if (parentTree.isEquivalentTo(mappingsNode) || parentTree.getParent().isEquivalentTo(mappingsNode)) {
-    cacheValid = false;
-    needsRepaint = true;
-    juce::Component::SafePointer<VisualizerComponent> safeThis(this);
-    juce::MessageManager::callAsync([safeThis] {
-      if (safeThis == nullptr) return;
-      juce::MessageManager::callAsync([safeThis] {
-        if (safeThis == nullptr) return;
-      });
-    });
-  }
+  if (!presetManager || presetManager->getIsLoading())
+    return;
+  cacheValid = false;
+  needsRepaint = true;
 }
 
 void VisualizerComponent::valueTreePropertyChanged(juce::ValueTree &treeWhosePropertyHasChanged, const juce::Identifier &property) {
-  auto mappingsNode = presetManager ? presetManager->getMappingsNode() : juce::ValueTree();
-  if (treeWhosePropertyHasChanged.getParent().isEquivalentTo(mappingsNode)) {
-    cacheValid = false;
-    needsRepaint = true;
-    juce::Component::SafePointer<VisualizerComponent> safeThis(this);
-    juce::MessageManager::callAsync([safeThis] {
-      if (safeThis == nullptr) return;
-      juce::MessageManager::callAsync([safeThis] {
-        if (safeThis == nullptr) return;
-      });
-    });
-  }
+  if (!presetManager || presetManager->getIsLoading())
+    return;
+  cacheValid = false;
+  needsRepaint = true;
 }
 
 void VisualizerComponent::valueTreeParentChanged(juce::ValueTree &treeWhoseParentHasChanged) {
-  auto mappingsNode = presetManager ? presetManager->getMappingsNode() : juce::ValueTree();
-  if (treeWhoseParentHasChanged.isEquivalentTo(mappingsNode) || treeWhoseParentHasChanged.getParent().isEquivalentTo(mappingsNode)) {
-    cacheValid = false;
-    needsRepaint = true;
-  }
+  if (!presetManager || presetManager->getIsLoading())
+    return;
+  cacheValid = false;
+  needsRepaint = true;
 }
 
 bool VisualizerComponent::isKeyInAnyZone(int keyCode, uintptr_t aliasHash) {

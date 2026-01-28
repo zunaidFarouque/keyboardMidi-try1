@@ -10,7 +10,8 @@ class MappingEditorComponent
     : public juce::Component,
       public juce::TableListBoxModel,
       public juce::ValueTree::Listener,
-      public RawInputManager::Listener // <--- ADD LISTENER
+      public juce::ChangeListener,
+      public RawInputManager::Listener
 {
 public:
   MappingEditorComponent(PresetManager &pm, RawInputManager &rawInputMgr, DeviceManager &deviceMgr);
@@ -18,6 +19,9 @@ public:
 
   // Get undo manager for command handling
   juce::UndoManager &getUndoManager() { return undoManager; }
+
+  // Phase 42: Two-stage init – call after object graph is built
+  void initialize();
 
   // RawInputManager::Listener implementation
   void handleRawKeyEvent(uintptr_t deviceHandle, int keyCode,
@@ -45,6 +49,8 @@ public:
   void valueTreePropertyChanged(juce::ValueTree &,
                                 const juce::Identifier &) override;
   void valueTreeParentChanged(juce::ValueTree &) override;
+
+  void changeListenerCallback(juce::ChangeBroadcaster *source) override;
 
 private:
   // 1. Data/Managers

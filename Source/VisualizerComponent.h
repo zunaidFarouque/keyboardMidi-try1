@@ -22,6 +22,9 @@ public:
   VisualizerComponent(ZoneManager *zoneMgr, DeviceManager *deviceMgr, const VoiceManager &voiceMgr, SettingsManager *settingsMgr, PresetManager *presetMgr = nullptr, InputProcessor *inputProc = nullptr);
   ~VisualizerComponent() override;
 
+  // Phase 42: Two-stage init – call after object graph is built
+  void initialize();
+
   void paint(juce::Graphics &) override;
   void resized() override;
 

@@ -13,6 +13,9 @@ public:
   explicit SettingsPanel(SettingsManager& settingsMgr, MidiEngine& midiEng, RawInputManager& rawInputMgr);
   ~SettingsPanel() override;
 
+  // Phase 42: Two-stage init – call after object graph is built
+  void initialize();
+
   // RawInputManager::Listener implementation
   void handleRawKeyEvent(uintptr_t deviceHandle, int keyCode, bool isDown) override;
   void handleAxisEvent(uintptr_t deviceHandle, int inputCode, float value) override;

@@ -1,0 +1,57 @@
+---
+description: Use H1 + bold + emoji for flashy attention-grabbing text in responses
+alwaysApply: true
+---
+
+# Attention-grabbing format in responses
+
+Use this format **only when attention is actually needed**, and **only at the very end** of your message.
+
+**Format:** `# [emoji] **Short headline**`
+
+- **H1** (`#`) makes the line large  
+- **Bold** (`**text**`) adds weight  
+- **Emoji** adds visibility (Cursor renders it; inline color/HTML does not)
+
+---
+
+## When to use (attention is needed)
+
+Use only in situations where the user must act, decide, or be warned:
+
+- **Half-implemented or incomplete** — you stopped partway, left stubs, or deferred work
+- **Not properly implemented** — you used a workaround, guessed, or skipped something
+- **User answer/input needed to proceed** — you cannot continue without their choice or confirmation
+- **Blockers** — something must be fixed, configured, or checked before it’s safe to continue
+- **Important caveats or side effects** — the change has non-obvious implications
+
+**Do not use** when everything worked, the task is done, or there is nothing critical for the user to do. No “success” banners.
+
+---
+
+## Placement: always at the end
+
+Put the attention line **at the absolute last part of your message**. Never in the middle of agentic work.
+
+- ✅ After all reasoning, code, edits, and explanations — then the attention line
+- ❌ Not between steps, not mid-task, not interspersed with tool outputs or code blocks
+
+One attention line per message, at the end, only when needed.
+
+---
+
+## Examples
+
+```
+# ⚠️ **Half-done — you need to finish the error handling**
+```
+
+```
+# ❓ **Your input needed: which approach do you want?**
+```
+
+```
+# 🚨 **Workaround in place — proper fix still required**
+```
+
+Pick an emoji that fits (⚠️ ❓ 🚨 📌 🔶 etc.); keep the line to one short, bold phrase.

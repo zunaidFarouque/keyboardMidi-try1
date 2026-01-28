@@ -41,6 +41,29 @@ MappingInspector::MappingInspector(juce::UndoManager *undoMgr,
   commandSelector.setVisible(false);
   commandLabel.setVisible(false);
 
+  targetLayerLabel.setText("Target Layer:", juce::dontSendNotification);
+  targetLayerLabel.attachToComponent(&targetLayerSelector, true);
+  addAndMakeVisible(targetLayerLabel);
+  addAndMakeVisible(targetLayerSelector);
+  targetLayerSelector.setVisible(false);
+  targetLayerLabel.setVisible(false);
+  for (int i = 0; i <= 8; ++i)
+    targetLayerSelector.addItem(
+        i == 0 ? "0: Base" : (juce::String(i) + ": Layer " + juce::String(i)),
+        i + 1);
+  targetLayerSelector.onChange = [this] {
+    if (selectedTrees.empty())
+      return;
+    int layerId = targetLayerSelector.getSelectedId() - 1;
+    if (layerId < 0 || layerId > 8)
+      return;
+    undoManager->beginNewTransaction("Change Target Layer");
+    for (auto& tree : selectedTrees) {
+      if (tree.isValid())
+        tree.setProperty("data2", layerId, undoManager);
+    }
+  };
+
   aliasLabel.setText("Alias:", juce::dontSendNotification);
   aliasLabel.attachToComponent(&aliasSelector, true);
   addAndMakeVisible(aliasLabel);
@@ -332,7 +355,7 @@ MappingInspector::MappingInspector(juce::UndoManager *undoMgr,
       }
     }
 
-    // Update UI to show layer ID slider if needed
+    updateVisibility();
     updateControlsFromSelection();
   };
 
@@ -511,6 +534,10 @@ void MappingInspector::resized() {
     commandSelector.setBounds(leftMargin, y, width, controlHeight);
     y += controlHeight + spacing;
   }
+  if (targetLayerSelector.isVisible()) {
+    targetLayerSelector.setBounds(leftMargin, y, width, controlHeight);
+    y += controlHeight + spacing;
+  }
 
   if (data1Slider.isVisible()) {
     data1Slider.setBounds(leftMargin, y, width, controlHeight);
@@ -651,6 +678,7 @@ void MappingInspector::updateControlsFromSelection() {
 
   commandSelector.setVisible(isCommand);
   commandLabel.setVisible(isCommand);
+  updateVisibility();
 
   // ADSR controls visibility
   attackSlider.setVisible(isEnvelope);
@@ -848,14 +876,13 @@ void MappingInspector::updateControlsFromSelection() {
   if (typeStr == "Command" && allTreesHaveSameValue("data1")) {
     int cmdId = static_cast<int>(getCommonValue("data1"));
     if (cmdId >= 10 && cmdId <= 12) {
-      // Phase 41: Layer command - show layer ID from data2
+      // Phase 44: Layer command - sync Target Layer selector from data2
       if (allTreesHaveSameValue("data2")) {
         int layerId = static_cast<int>(getCommonValue("data2"));
-        data1Slider.setValue(layerId, juce::dontSendNotification);
-        data1Slider.setTextValueSuffix("");
+        layerId = juce::jlimit(0, 8, layerId);
+        targetLayerSelector.setSelectedId(layerId + 1, juce::dontSendNotification);
       } else {
-        data1Slider.setValue(0, juce::dontSendNotification);
-        data1Slider.setTextValueSuffix(" (---)");
+        targetLayerSelector.setSelectedId(1, juce::dontSendNotification); // Base when mixed
       }
     } else {
       // Regular command - show data1
@@ -990,6 +1017,19 @@ void MappingInspector::updateControlsFromSelection() {
   resized();
 }
 
+void MappingInspector::updateVisibility() {
+  bool isLayerCmd = false;
+  if (!selectedTrees.empty() && allTreesHaveSameValue("type") &&
+      getCommonValue("type").toString() == "Command" &&
+      allTreesHaveSameValue("data1")) {
+    int cmdId = static_cast<int>(getCommonValue("data1"));
+    isLayerCmd = (cmdId >= static_cast<int>(OmniKey::CommandID::LayerMomentary) &&
+                  cmdId <= static_cast<int>(OmniKey::CommandID::LayerSolo));
+  }
+  targetLayerSelector.setVisible(isLayerCmd);
+  targetLayerLabel.setVisible(isLayerCmd);
+}
+
 void MappingInspector::enableControls(bool enabled) {
   typeSelector.setEnabled(enabled);
   channelSlider.setEnabled(enabled);
@@ -998,6 +1038,7 @@ void MappingInspector::enableControls(bool enabled) {
   data2Slider.setEnabled(enabled);
   randVelSlider.setEnabled(enabled);
   commandSelector.setEnabled(enabled);
+  targetLayerSelector.setEnabled(enabled);
 }
 
 bool MappingInspector::allTreesHaveSameValue(const juce::Identifier &property) {

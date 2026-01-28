@@ -49,7 +49,7 @@ void StartupManager::initApp() {
   // Ensure app data folder exists
   appDataFolder.createDirectory();
   
-  // Load SettingsManager config (global settings)
+  // 1. Load Settings (global) – loadFromXml validates pitchBendRange etc.
   if (settingsManager) {
     settingsManager->loadFromXml(settingsFile);
   }
@@ -59,37 +59,35 @@ void StartupManager::initApp() {
     deviceManager->loadConfig();
   }
   
-  // Check for autoload.xml
+  // 2. Load Preset (autoload) with fail-safe – Phase 43.2: silence listeners during bulk update
+  if (presetManager)
+    presetManager->beginTransaction();
+
+  bool loadSuccess = false;
   if (autoloadFile.existsAsFile()) {
-    // Load existing session
     if (auto xml = juce::parseXML(autoloadFile)) {
       auto sessionTree = juce::ValueTree::fromXml(*xml);
-      
       if (sessionTree.isValid() && sessionTree.hasType("OmniKeySession")) {
-        // Load PresetManager data
         if (presetManager) {
           auto presetNode = sessionTree.getChildWithName("OmniKeyPreset");
           if (presetNode.isValid()) {
-            // Replace the root node with the loaded one
             auto& rootNode = presetManager->getRootNode();
-            // Remove existing children
             while (rootNode.getNumChildren() > 0) {
               rootNode.removeChild(0, nullptr);
             }
-            // Copy children from loaded preset
             for (int i = 0; i < presetNode.getNumChildren(); ++i) {
               rootNode.addChild(presetNode.getChild(i).createCopy(), -1, nullptr);
             }
-            // Copy properties
             for (int i = 0; i < presetNode.getNumProperties(); ++i) {
               auto propName = presetNode.getPropertyName(i);
               rootNode.setProperty(propName, presetNode.getProperty(propName), nullptr);
             }
+            if (presetManager->getLayersList().getNumChildren() > 0) {
+              loadSuccess = true;
+            }
           }
         }
-        
-        // Load ZoneManager data
-        if (zoneManager) {
+        if (loadSuccess && zoneManager) {
           auto zoneMgrNode = sessionTree.getChildWithName("ZoneManager");
           if (zoneMgrNode.isValid()) {
             zoneManager->restoreFromValueTree(zoneMgrNode);
@@ -97,13 +95,22 @@ void StartupManager::initApp() {
         }
       }
     }
-  } else {
-    // No autoload file - create factory default
+  }
+  if (!loadSuccess) {
+    DBG("StartupManager: Autoload missing or corrupt. Creating defaults.");
     createFactoryDefault();
   }
+
+  if (presetManager)
+    presetManager->endTransaction();
 }
 
 void StartupManager::createFactoryDefault() {
+  // Phase 43.2: If not already in a transaction (e.g. called from "Reset Everything"), start one
+  bool wasLoading = presetManager ? presetManager->getIsLoading() : false;
+  if (presetManager && !wasLoading)
+    presetManager->beginTransaction();
+
   // Clear all mappings
   if (presetManager) {
     auto mappingsNode = presetManager->getMappingsNode();
@@ -148,7 +155,10 @@ void StartupManager::createFactoryDefault() {
     
     zoneManager->addZone(mainZone);
   }
-  
+
+  if (presetManager && !wasLoading)
+    presetManager->endTransaction();
+
   // Save immediately
   saveImmediate();
 }

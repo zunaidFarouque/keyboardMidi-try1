@@ -132,6 +132,12 @@ void SettingsManager::loadFromXml(juce::File file) {
         rootNode.setProperty("toggleKeyCode", 0x91, nullptr);
         rootNode.setProperty("lastMidiDevice", "", nullptr);
         rootNode.setProperty("studioMode", false, nullptr);
+      } else {
+        // Phase 43: Validate (sanitize) – prevent divide-by-zero from bad saved data
+        int pb = rootNode.getProperty("pitchBendRange", 12);
+        if (pb < 1) {
+          rootNode.setProperty("pitchBendRange", 12, nullptr);
+        }
       }
       rootNode.addListener(this);
       sendChangeMessage();

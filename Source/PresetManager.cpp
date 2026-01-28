@@ -1,24 +1,20 @@
 #include "PresetManager.h"
 
 PresetManager::PresetManager() {
-  // Phase 41: Create layer hierarchy if missing
-  auto layersList = rootNode.getChildWithName("Layers");
-  if (!layersList.isValid()) {
-    layersList = juce::ValueTree("Layers");
-    rootNode.addChild(layersList, -1, nullptr);
-  }
-  
-  // Ensure Layer 0 (Base) exists
-  auto layer0 = getLayerNode(0);
-  if (!layer0.getChildWithName("Mappings").isValid()) {
-    layer0.addChild(juce::ValueTree("Mappings"), -1, nullptr);
-  }
-  
-  // Migration: If old flat "Mappings" exists, migrate to Layer 0
+  ensureStaticLayers();
   migrateToLayerHierarchy();
 }
 
 PresetManager::~PresetManager() {}
+
+void PresetManager::beginTransaction() {
+  isLoading = true;
+}
+
+void PresetManager::endTransaction() {
+  isLoading = false;
+  sendChangeMessage();
+}
 
 void PresetManager::migrateToLayerHierarchy() {
   auto oldMappings = rootNode.getChildWithName("Mappings");
@@ -26,12 +22,12 @@ void PresetManager::migrateToLayerHierarchy() {
     // Old structure exists, migrate to Layer 0
     auto layer0 = getLayerNode(0);
     auto layer0Mappings = layer0.getChildWithName("Mappings");
-    
+
     if (!layer0Mappings.isValid()) {
       layer0Mappings = juce::ValueTree("Mappings");
       layer0.addChild(layer0Mappings, -1, nullptr);
     }
-    
+
     // Copy all mappings to Layer 0
     for (int i = 0; i < oldMappings.getNumChildren(); ++i) {
       auto mapping = oldMappings.getChild(i);
@@ -43,7 +39,7 @@ void PresetManager::migrateToLayerHierarchy() {
         layer0Mappings.addChild(mapping.createCopy(), -1, nullptr);
       }
     }
-    
+
     // Remove old flat structure
     rootNode.removeChild(oldMappings, nullptr);
   }
@@ -57,28 +53,79 @@ void PresetManager::saveToFile(juce::File file) {
 }
 
 void PresetManager::loadFromFile(juce::File file) {
+  isLoading = true; // Phase 41.1: suspend listener reactions during load
+
   auto xml = juce::XmlDocument::parse(file);
   if (xml != nullptr) {
     auto newTree = juce::ValueTree::fromXml(*xml);
     if (newTree.isValid() && newTree.hasType(rootNode.getType())) {
-      // Phase 41: Replace entire root (preserves layer hierarchy)
-      rootNode = newTree.createCopy();
-      
-      // Ensure structure is valid after load
-      auto layersList = getLayersList();
-      if (!layersList.isValid()) {
-        layersList = juce::ValueTree("Layers");
-        rootNode.addChild(layersList, -1, nullptr);
+      rootNode.copyPropertiesFrom(newTree, nullptr);
+      rootNode.removeAllChildren(nullptr);
+      for (int i = 0; i < newTree.getNumChildren(); ++i) {
+        auto child = newTree.getChild(i).createCopy();
+        // Sanitize: remove layers with id < 0 or id > 8 to avoid corrupt data
+        if (child.hasType("Layers")) {
+          for (int j = child.getNumChildren() - 1; j >= 0; --j) {
+            auto layer = child.getChild(j);
+            int id = static_cast<int>(layer.getProperty("id", -1));
+            if (id < 0 || id > 8) {
+              DBG("PresetManager: Removing invalid layer ID " + juce::String(id));
+              child.removeChild(j, nullptr);
+            }
+          }
+        }
+        rootNode.addChild(child, -1, nullptr);
       }
-      
-      // Ensure Layer 0 exists
-      auto layer0 = getLayerNode(0);
-      if (!layer0.getChildWithName("Mappings").isValid()) {
-        layer0.addChild(juce::ValueTree("Mappings"), -1, nullptr);
-      }
-      
-      // Migrate if old structure exists
+
+      // Phase 41.2: Sanitize – keep only first "Layers" child if duplicates exist
+      juce::Array<int> layersIndices;
+      for (int i = 0; i < rootNode.getNumChildren(); ++i)
+        if (rootNode.getChild(i).hasType("Layers"))
+          layersIndices.add(i);
+      for (int k = layersIndices.size() - 1; k >= 1; --k)
+        rootNode.removeChild(layersIndices[k], nullptr);
+
+      ensureStaticLayers();
       migrateToLayerHierarchy();
+    }
+  }
+
+  isLoading = false;
+  sendChangeMessage(); // one broadcast so listeners rebuild once
+}
+
+void PresetManager::ensureStaticLayers() {
+  auto layersList = rootNode.getChildWithName("Layers");
+  if (!layersList.isValid()) {
+    layersList = juce::ValueTree("Layers");
+    rootNode.addChild(layersList, -1, nullptr);
+  }
+
+  // Phase 41.2: Remove any layer with id > 8 (enforce static limit)
+  for (int j = layersList.getNumChildren() - 1; j >= 0; --j) {
+    auto layer = layersList.getChild(j);
+    if (layer.isValid() && static_cast<int>(layer.getProperty("id", -1)) > 8)
+      layersList.removeChild(layer, nullptr);
+  }
+
+  for (int i = 0; i <= 8; ++i) {
+    bool found = false;
+    for (int j = 0; j < layersList.getNumChildren(); ++j) {
+      auto layer = layersList.getChild(j);
+      if (layer.isValid() &&
+          static_cast<int>(layer.getProperty("id", -1)) == i) {
+        found = true;
+        break;
+      }
+    }
+    if (!found) {
+      juce::ValueTree layer("Layer");
+      layer.setProperty("id", i, nullptr);
+      layer.setProperty("name", i == 0 ? "Base" : "Layer " + juce::String(i),
+                        nullptr);
+      juce::ValueTree mappings("Mappings");
+      layer.addChild(mappings, -1, nullptr);
+      layersList.addChild(layer, -1, nullptr);
     }
   }
 }
@@ -93,84 +140,28 @@ juce::ValueTree PresetManager::getLayersList() {
 }
 
 juce::ValueTree PresetManager::getLayerNode(int layerIndex) {
-  auto layersList = getLayersList();
-  
-  // Find existing layer
-  for (int i = 0; i < layersList.getNumChildren(); ++i) {
-    auto layer = layersList.getChild(i);
-    if (layer.isValid()) {
-      int id = static_cast<int>(layer.getProperty("id", -1));
-      if (id == layerIndex) {
-        return layer;
-      }
-    }
-  }
-  
-  // Not found, create it
-  juce::ValueTree layer("Layer");
-  layer.setProperty("id", layerIndex, nullptr);
-  layer.setProperty("name", layerIndex == 0 ? "Base" : "Layer " + juce::String(layerIndex), nullptr);
-  
-  // Add Mappings child
-  juce::ValueTree mappings("Mappings");
-  layer.addChild(mappings, -1, nullptr);
-  
-  layersList.addChild(layer, -1, nullptr);
-  return layer;
-}
-
-void PresetManager::addLayer(juce::String name) {
-  int newId = findHighestLayerId() + 1;
-  juce::ValueTree layer("Layer");
-  layer.setProperty("id", newId, nullptr);
-  layer.setProperty("name", name.isEmpty() ? "Layer " + juce::String(newId) : name, nullptr);
-  
-  juce::ValueTree mappings("Mappings");
-  layer.addChild(mappings, -1, nullptr);
-  
-  auto layersList = getLayersList();
-  layersList.addChild(layer, -1, nullptr);
-}
-
-void PresetManager::removeLayer(int layerIndex) {
-  if (layerIndex == 0)
-    return;  // Cannot remove Base layer
-  
+  if (layerIndex < 0 || layerIndex > 8)
+    return juce::ValueTree();
   auto layersList = getLayersList();
   for (int i = 0; i < layersList.getNumChildren(); ++i) {
     auto layer = layersList.getChild(i);
-    if (layer.isValid()) {
-      int id = static_cast<int>(layer.getProperty("id", -1));
-      if (id == layerIndex) {
-        layersList.removeChild(layer, nullptr);
-        return;
-      }
-    }
+    if (layer.isValid() &&
+        static_cast<int>(layer.getProperty("id", -1)) == layerIndex)
+      return layer;
   }
+  return juce::ValueTree();
 }
 
 juce::ValueTree PresetManager::getMappingsListForLayer(int layerIndex) {
   auto layer = getLayerNode(layerIndex);
+  if (!layer.isValid())
+    return juce::ValueTree();
   auto mappings = layer.getChildWithName("Mappings");
   if (!mappings.isValid()) {
     mappings = juce::ValueTree("Mappings");
     layer.addChild(mappings, -1, nullptr);
   }
   return mappings;
-}
-
-int PresetManager::findHighestLayerId() {
-  int highest = -1;
-  auto layersList = getLayersList();
-  for (int i = 0; i < layersList.getNumChildren(); ++i) {
-    auto layer = layersList.getChild(i);
-    if (layer.isValid()) {
-      int id = layer.getProperty("id", -1);
-      if (id > highest)
-        highest = id;
-    }
-  }
-  return highest;
 }
 
 juce::ValueTree PresetManager::getMappingsNode() {

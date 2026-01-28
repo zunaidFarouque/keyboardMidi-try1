@@ -1,0 +1,83 @@
+# 🤖 Cursor Prompt: Phase 41.2 - Fix Startup Crash (Data Sanitization)
+
+**Role:** Expert C++ Audio Developer (Debugging).
+
+**Context:**
+*   **Current State:** Phase 41.1 Complete.
+*   **The Bug:** The app crashes/fails to open if `autoload.xml` exists. Deleting the file fixes it.
+*   **Diagnosis:** Likely an **Out of Bounds** access in `InputProcessor`. The saved XML might contain Layer IDs that exceed the fixed vector size (9), or invalid data types.
+
+**Phase Goal:** Harden the `InputProcessor` and `PresetManager` to gracefully handle (and sanitize) dirty XML data without crashing.
+
+**Strict Constraints:**
+1.  **Bounds Checking:** `InputProcessor` MUST check `id >= 0 && id < layers.size()` before touching the `layers` vector.
+2.  **Sanitization:** `PresetManager::ensureStaticLayers` should verify that IDs 0-8 exist and are valid.
+
+---
+
+### Step 1: Update `Source/InputProcessor.cpp`
+Fix the crash in `rebuildMapFromTree`.
+
+**Refactor `rebuildMapFromTree`:**
+```cpp
+void InputProcessor::rebuildMapFromTree()
+{
+    // 1. Lock
+    juce::ScopedWriteLock lock(mapLock);
+    
+    // 2. Reset Layers (Fixed Size 9)
+    layers.assign(9, Layer());
+    layers[0].isActive = true; // Base always active
+
+    // 3. Get Source Data
+    auto layersList = presetManager.getLayersNode();
+    
+    // 4. Iterate and Sanitize
+    for (const auto& layerNode : layersList)
+    {
+        // Safety: Check if property exists and is valid integer
+        if (!layerNode.hasProperty("id")) continue;
+        
+        int id = layerNode.getProperty("id");
+        
+        // CRITICAL FIX: Bounds Check
+        if (id < 0 || id >= (int)layers.size()) 
+        {
+            DBG("InputProcessor: Skipping invalid Layer ID: " + String(id));
+            continue; 
+        }
+
+        // 5. Populate Layer
+        auto& layer = layers[id];
+        layer.name = layerNode.getProperty("name").toString();
+        layer.id = id;
+        // ... (isActive state if you save it) ...
+
+        // 6. Populate Mappings for this Layer
+        // (Iterate layerNode children...)
+        for (const auto& mappingNode : layerNode)
+        {
+            addMappingToLayer(mappingNode, layer); // Helper function recommended
+        }
+    }
+}
+```
+
+**Note:** You might need to extract the `addMappingToLayer` logic from your previous code to keep this clean. The key is ensuring `layers[id]` is never accessed unsafely.
+
+### Step 2: Update `Source/PresetManager.cpp`
+Ensure the XML structure is clean after load.
+
+**Refactor `loadFromFile`:**
+*   After `rootNode.copyProperties...` and adding children:
+*   **Sanitize:**
+    *   Iterate `rootNode`. If multiple "Layers" children exist (rare but possible with XML corruption), keep only the first, delete others.
+*   Call `ensureStaticLayers()`.
+
+**Refactor `ensureStaticLayers`:**
+*   Iterate the "Layers" node children.
+*   If any child has `id` > 8, **Remove it** (or re-assign it). *Decision: Remove it to enforce the static limit.*
+
+---
+
+**Generate code for: Updated `InputProcessor.cpp` and `PresetManager.cpp`.**

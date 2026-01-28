@@ -1,72 +1,72 @@
-# 🤖 Cursor Prompt: Phase 41 - Layer Management UI & Data Structure
+# 🤖 Cursor Prompt: Phase 41 (Stable) - Static Layer UI & Logic
 
-**Role:** Expert C++ Audio Developer (JUCE Framework).
+**Role:** Expert C++ Audio Developer (System Architecture).
 
 **Context:**
-We are building "OmniKey".
-*   **Current State:** Phase 40 Complete. The Backend (`InputProcessor`) supports Layers, but the UI (`MappingEditorComponent`) is broken because it expects a flat list of mappings. It doesn't know how to read/write the new `<Layer>` XML structure.
-*   **Phase Goal:** Implement the UI to Manage Layers (Add, Remove, Rename) and update the Mapping Editor to show only the selected Layer.
+*   **Current State:** Phase 40 Complete (Backend supports layers). Previous attempts at Phase 41 caused infinite recursion/hangs on startup due to dynamic layer creation.
+*   **Goal:** Implement the Layer UI using a **Static 9-Layer System** (Fixed Banks).
+    *   Layer 0 = Base.
+    *   Layers 1-8 = Overlay Banks.
+    *   No Add/Remove allowed. Renaming allowed.
 
 **Strict Constraints:**
-1.  **XML Structure:** We are moving from a Flat List to a Hierarchy:
-    *   **Root** -> `Layers` (List) -> `Layer` (ValueTree) -> `Mappings` (List) -> `Mapping` (ValueTree).
-    *   *Note:* Ensure `PresetManager` handles migration/creation of this structure if missing.
-2.  **Layer 0:** The Base Layer (ID 0) cannot be removed.
-3.  **Renaming:** Users must be able to rename layers via the UI.
+1.  **PresetManager:** In the constructor (and after loading XML), strictly enforce that Layers 0-8 exist.
+2.  **InputProcessor:** Remove any logic that tries to create layers. It should expect a vector of size 9.
+3.  **LayerListPanel:** Remove Add/Remove buttons. Display exactly 9 rows.
 
 ---
 
-### Step 1: Update `PresetManager` (`Source/PresetManager.h/cpp`)
-Refactor for Hierarchy.
+### Step 1: Update `Source/PresetManager.h` & `.cpp`
+**1. Header:**
+*   Remove `addLayer`, `removeLayer`.
+*   Add `void ensureStaticLayers();`
 
-**Methods:**
-1.  `juce::ValueTree getLayersList();` (Returns the parent node for layers).
-2.  `juce::ValueTree getLayerNode(int layerIndex);`
-    *   Iterate children of `getLayersList()`. Find one with property `id == layerIndex`.
-    *   If not found (and index is valid), create it.
-3.  `void addLayer(String name);`
-    *   Find highest ID + 1. Create new child.
-4.  `void removeLayer(int layerIndex);` (Ignore if 0).
-5.  **Helper:** `juce::ValueTree getMappingsListForLayer(int layerIndex);`
-    *   Get Layer Node -> Get Child "Mappings" (create if missing).
+**2. Implementation:**
+*   **`ensureStaticLayers`:**
+    *   Get (or create) the main "Layers" list node.
+    *   Loop `i` from 0 to 8.
+    *   Check if a child with `id == i` exists.
+    *   **If missing:** Create `ValueTree("Layer")`. Set `id` to `i`. Set `name` ("Base" or "Layer X"). Add to parent.
+*   **Constructor:** Call `ensureStaticLayers()` immediately.
+*   **`loadFromFile`:** Call `ensureStaticLayers()` *after* parsing the XML (to fill in any missing banks from older presets).
+*   **`getLayerNode(int index)`:** Simple iteration to find the child. Return `juce::ValueTree()` (invalid) if out of bounds, do **not** create.
 
-### Step 2: `LayerListPanel` (`Source/LayerListPanel.h/cpp`)
-The Sidebar.
+### Step 2: Update `Source/LayerListPanel.h` & `.cpp`
+**1. Header:**
+*   Remove `addButton`, `removeButton`.
 
-**Requirements:**
-1.  **Inheritance:** `juce::Component`, `juce::ListBoxModel`.
-2.  **Logic:**
-    *   Display list of Layers (Name + ID).
-    *   **Highlight** the currently selected row.
-    *   **Double Click:** Rename Layer (AlertWindow).
-3.  **Callback:** `std::function<void(int layerId)> onLayerSelected;`
+**2. Implementation:**
+*   **Constructor:** Remove button setup. Just setup `listBox`.
+*   **`getNumRows`:** Return 9.
+*   **`paintListBoxItem`:**
+    *   Get Layer Node `i`.
+    *   Draw Name (e.g., "0: Base", "1: Shift").
+    *   Highlight row 0 slightly differently (Bold).
+*   **`listBoxItemDoubleClicked`:**
+    *   Launch AlertWindow to rename the layer property `name`.
 
-### Step 3: Update `MappingEditorComponent`
-Connect the List to the Table.
+### Step 3: Update `Source/InputProcessor.cpp`
+**1. Constructor:**
+*   `layers.resize(9);`
 
+**2. `rebuildMapFromTree`:**
+*   `layers.assign(9, Layer());` (Reset to 9 empty layers).
+*   `layers[0].isActive = true;`
+*   Iterate `presetManager.getLayersList()` children.
+    *   Read `id`. If valid (0-8), populate `layers[id]`.
+
+### Step 4: Update `Source/MappingEditorComponent.cpp`
 **1. Layout:**
-    *   Grid: Left 20% (`LayerListPanel`), Right 80% (`TableListBox`).
-**2. Logic:**
-    *   Member `int selectedLayerId = 0;`
-    *   **Data Source:** Update `getNumRows` and `paintCell` to call `presetManager.getMappingsListForLayer(selectedLayerId)`.
-    *   **Add Button:** When adding a row, insert it into the *currently selected layer's* mapping list.
+*   Use `juce::Grid` (1 row, 2 columns).
+    *   Col 1 (20%): `layerListPanel`.
+    *   Col 2 (80%): `table`.
+*   Remove any "Add Layer" button logic.
 
-### Step 4: Update `MappingInspector`
-Add Layer Commands.
-
-**1. Update `commandSelector`:**
-    *   Add items: "Layer Momentary (Hold)", "Layer Toggle", "Layer Solo".
-**2. UI Logic:**
-    *   If a Layer Command is selected, show `data1Slider` but label it **"Target Layer ID"**.
-    *   Range: 0 to 8.
-
-### Step 5: `InputProcessor` (XML Update)
-Ensure `rebuildMapFromTree` handles the new hierarchy.
-*   Instead of `presetManager.getMappingsNode()`, it should:
-    *   Iterate `presetManager.getLayersList()` children.
-    *   For each Layer, iterate its "Mappings" child.
-    *   Populate `layers[id].compiledMap` / `configMap`.
+**2. Interaction:**
+*   When `layerListPanel` selection changes:
+    *   Update `currentLayerId`.
+    *   `table.updateContent()`.
 
 ---
 
-**Generate code for: `PresetManager`, `LayerListPanel`, Updated `MappingEditorComponent`, Updated `MappingInspector`, and Updated `InputProcessor` (XML Parsing logic).**
+**Generate code for: `PresetManager.h/cpp`, `LayerListPanel.h/cpp`, `InputProcessor.cpp`, and `MappingEditorComponent.cpp`.**

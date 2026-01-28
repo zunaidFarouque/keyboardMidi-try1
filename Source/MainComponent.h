@@ -65,15 +65,16 @@ private:
   // 4. Persistence
   StartupManager startupManager;
 
-  // 5. Content Components (Must live longer than containers)
-  VisualizerComponent visualizer; // Listens to RawInput/Voice/Zone
-  MappingEditorComponent mappingEditor; // CONTENT for Tab
-  ZoneEditorComponent zoneEditor;       // CONTENT for Tab
-  SettingsPanel settingsPanel;          // CONTENT for Tab
-  LogComponent logComponent;
+  // 5. Content Components (unique_ptr to isolate corruptor – create in ctor body when enabled)
+  std::unique_ptr<VisualizerComponent> visualizer;
+  std::unique_ptr<MappingEditorComponent> mappingEditor;
+  std::unique_ptr<ZoneEditorComponent> zoneEditor;
+  std::unique_ptr<SettingsPanel> settingsPanel;
+  std::unique_ptr<LogComponent> logComponent;
 
   // 6. Containers / Wrappers (Must die first)
   juce::TabbedComponent mainTabs;
+  juce::Component layoutPlaceholder;  // placeholder when visualizer/log are null
   DetachableContainer visualizerContainer;
   DetachableContainer editorContainer;
   DetachableContainer logContainer;

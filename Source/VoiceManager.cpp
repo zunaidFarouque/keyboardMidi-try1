@@ -45,6 +45,8 @@ void VoiceManager::addVoiceFromStrum(InputID source, int note, int channel,
 
 void VoiceManager::rebuildPbLookup() {
   int globalRange = settingsManager.getPitchBendRange();
+  if (globalRange < 1)
+    globalRange = 12; // Phase 43: prevent div/0 from bad saved data
   double stepsPerSemitone = 8192.0 / static_cast<double>(globalRange);
 
   // Fill lookup table: index = delta + 127 (so -127 maps to 0, +127 maps to

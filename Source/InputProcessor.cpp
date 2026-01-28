@@ -12,15 +12,18 @@ InputProcessor::InputProcessor(VoiceManager &voiceMgr, PresetManager &presetMgr,
     : voiceManager(voiceMgr), presetManager(presetMgr),
       deviceManager(deviceMgr), zoneManager(scaleLib), scaleLibrary(scaleLib),
       expressionEngine(midiEng), settingsManager(settingsMgr) {
-  // Add listeners
+  // Phase 42: No addListener here – done in initialize() after graph is built
+  // Phase 41: Static 9 layers (0=Base, 1-8=Overlays)
+  layers.resize(9);
+}
+
+void InputProcessor::initialize() {
   presetManager.getRootNode().addListener(this);
-  presetManager.getLayersList().addListener(
-      this); // Phase 41: Listen to layer changes
+  presetManager.getLayersList().addListener(this);
+  presetManager.addChangeListener(this);
   deviceManager.addChangeListener(this);
   settingsManager.addChangeListener(this);
   zoneManager.addChangeListener(this);
-
-  // Populate map from existing tree
   rebuildMapFromTree();
 }
 
@@ -29,82 +32,65 @@ InputProcessor::~InputProcessor() {
   presetManager.getRootNode().removeListener(this);
   presetManager.getLayersList().removeListener(
       this); // Phase 41: Remove layer listener
+  presetManager.removeChangeListener(this);
   deviceManager.removeChangeListener(this);
   settingsManager.removeChangeListener(this);
   zoneManager.removeChangeListener(this);
 }
 
 void InputProcessor::changeListenerCallback(juce::ChangeBroadcaster *source) {
-  if (source == &deviceManager) {
-    // Device alias configuration changed, rebuild the map
+  if (source == &presetManager) {
+    // Phase 41.1: one rebuild after silent load (no per-event rebuilds during load)
+    rebuildMapFromTree();
+  } else if (source == &deviceManager) {
     rebuildMapFromTree();
   } else if (source == &settingsManager) {
-    // Global settings changed (e.g., PB Range), rebuild the map to recalculate
-    // PB values
     rebuildMapFromTree();
   } else if (source == &zoneManager) {
-    // Global scale/root changed, rebuild the map to recalculate SmartScaleBend
-    // lookup tables
     rebuildMapFromTree();
   }
 }
 
 void InputProcessor::rebuildMapFromTree() {
   juce::ScopedWriteLock lock(mapLock);
-  layers.clear();
+  // Phase 41: Static 9 layers (0=Base, 1-8=Overlays). Reset to 9 empty layers.
+  layers.assign(9, Layer());
+  layers[0].isActive = true;
 
-  // Phase 41: Read from new layer hierarchy
   auto layersList = presetManager.getLayersList();
+  const int maxLayer = static_cast<int>(layers.size());
 
-  // Iterate all layers in the preset
   for (int layerIdx = 0; layerIdx < layersList.getNumChildren(); ++layerIdx) {
     auto layerNode = layersList.getChild(layerIdx);
     if (!layerNode.isValid() || !layerNode.hasType("Layer"))
       continue;
 
-    int layerId = layerNode.getProperty("id", -1);
-    if (layerId < 0)
+    if (!layerNode.hasProperty("id"))
       continue;
+    int id = static_cast<int>(layerNode.getProperty("id", -1));
 
-    // Ensure layer exists in vector
-    while ((int)layers.size() <= layerId) {
-      Layer L;
-      L.id = (int)layers.size();
-      L.name = "Layer " + juce::String(L.id);
-      L.isActive = (L.id == 0); // Only Layer 0 active by default
-      layers.push_back(std::move(L));
+    // Phase 41.2: Bounds check – never touch layers[id] if out of range
+    if (id < 0 || id >= maxLayer) {
+      DBG("InputProcessor: Skipping invalid Layer ID: " + juce::String(id));
+      continue;
     }
 
-    // Update layer info
-    layers[layerId].id = layerId;
-    layers[layerId].name =
-        layerNode.getProperty("name", "Layer " + juce::String(layerId))
-            .toString();
-    layers[layerId].isActive = layerNode.getProperty("isActive", layerId == 0);
+    layers[id].id = id;
+    layers[id].name =
+        layerNode.getProperty("name", "Layer " + juce::String(id)).toString();
+    layers[id].isActive = layerNode.getProperty("isActive", id == 0);
 
-    // Get mappings for this layer
     auto mappingsNode = layerNode.getChildWithName("Mappings");
     if (mappingsNode.isValid()) {
       for (int i = 0; i < mappingsNode.getNumChildren(); ++i) {
         auto mapping = mappingsNode.getChild(i);
         if (mapping.isValid()) {
-          // Ensure layerID property is set
-          if (!mapping.hasProperty("layerID")) {
-            mapping.setProperty("layerID", layerId, nullptr);
-          }
+          if (!mapping.hasProperty("layerID"))
+            mapping.setProperty("layerID", id, nullptr);
           addMappingFromTree(mapping);
         }
       }
     }
-  }
-
-  // Ensure Layer 0 exists even if preset has no layers
-  if (layers.empty()) {
-    Layer base;
-    base.id = 0;
-    base.name = "Base";
-    base.isActive = true;
-    layers.push_back(std::move(base));
   }
 
   // State flush: reset Sustain/Latch, then re-evaluate SustainInverse
@@ -146,13 +132,9 @@ void InputProcessor::addMappingFromTree(juce::ValueTree mappingNode) {
 
   int layerID = mappingNode.getProperty("layerID", 0);
   layerID = juce::jlimit(0, 8, layerID);
-  while ((int)layers.size() <= layerID) {
-    Layer L;
-    L.id = (int)layers.size();
-    L.name = "Layer " + juce::String(L.id);
-    L.isActive = (L.id == 0);
-    layers.push_back(std::move(L));
-  }
+  // Phase 41: Static 9 layers; no creation
+  if (layerID >= (int)layers.size())
+    return;
   Layer &targetLayer = layers[layerID];
 
   int inputKey = mappingNode.getProperty("inputKey", 0);
@@ -230,8 +212,10 @@ void InputProcessor::addMappingFromTree(juce::ValueTree mappingNode) {
       // Read pbShift (semitones) from mapping (default: 0)
       int pbShift = mappingNode.getProperty("pbShift", 0);
 
-      // Get global range from SettingsManager
+      // Get global range from SettingsManager (Phase 43: prevent div/0)
       int globalRange = settingsManager.getPitchBendRange();
+      if (globalRange < 1)
+        globalRange = 12;
 
       // Calculate target MIDI value: 8192 (center) + (shift * steps per
       // semitone)
@@ -247,8 +231,10 @@ void InputProcessor::addMappingFromTree(juce::ValueTree mappingNode) {
       // Read smartStepShift (scale steps) from mapping (default: 0)
       int smartStepShift = mappingNode.getProperty("smartStepShift", 0);
 
-      // Get global range from SettingsManager
+      // Get global range from SettingsManager (Phase 43: prevent div/0)
       int globalRange = settingsManager.getPitchBendRange();
+      if (globalRange < 1)
+        globalRange = 12;
 
       // Get global scale intervals and root from ZoneManager
       juce::String globalScaleName = zoneManager.getGlobalScaleName();
@@ -450,6 +436,8 @@ void InputProcessor::removeMappingFromTree(juce::ValueTree mappingNode) {
 
 void InputProcessor::valueTreeChildAdded(
     juce::ValueTree &parentTree, juce::ValueTree &childWhichHasBeenAdded) {
+  if (presetManager.getIsLoading())
+    return;
 
   // Phase 41: Handle layer hierarchy changes
   if (parentTree.hasType("Layers")) {
@@ -495,6 +483,8 @@ void InputProcessor::valueTreeChildAdded(
 void InputProcessor::valueTreeChildRemoved(
     juce::ValueTree &parentTree, juce::ValueTree &childWhichHasBeenRemoved,
     int indexFromWhichChildWasRemoved) {
+  if (presetManager.getIsLoading())
+    return;
 
   // Phase 41: Handle layer removal
   if (parentTree.hasType("Layers")) {
@@ -506,13 +496,7 @@ void InputProcessor::valueTreeChildRemoved(
 
   // Case A: The "Mappings" folder was removed (e.g. Loading start)
   if (childWhichHasBeenRemoved.hasType("Mappings")) {
-    juce::ScopedWriteLock lock(mapLock);
-    layers.clear();
-    Layer base;
-    base.id = 0;
-    base.name = "Base";
-    base.isActive = true;
-    layers.push_back(std::move(base));
+    rebuildMapFromTree(); // Phase 41: Keeps static 9 layers (takes mapLock)
     return;
   }
 
@@ -537,6 +521,9 @@ void InputProcessor::valueTreeChildRemoved(
 void InputProcessor::valueTreePropertyChanged(
     juce::ValueTree &treeWhosePropertyHasChanged,
     const juce::Identifier &property) {
+  if (presetManager.getIsLoading())
+    return;
+
   // Phase 41: Handle layer property changes (name, isActive)
   if (treeWhosePropertyHasChanged.hasType("Layer")) {
     if (property == juce::Identifier("name") ||
@@ -614,12 +601,13 @@ const MidiAction *InputProcessor::findMapping(const InputID &input) {
   return nullptr;
 }
 
-// --- THIS WAS THE MISSING FUNCTION CAUSING THE LINKER ERROR ---
-const MidiAction *InputProcessor::getMappingForInput(InputID input) {
+std::optional<MidiAction> InputProcessor::getMappingForInput(InputID input) {
   juce::ScopedReadLock lock(mapLock);
-  return findMapping(input);
+  const MidiAction *ptr = findMapping(input);
+  if (ptr != nullptr)
+    return *ptr;
+  return std::nullopt;
 }
-// -------------------------------------------------------------
 
 // Shared lookup logic for processEvent and simulateInput
 // Returns: {action, sourceDescription}
@@ -1011,32 +999,16 @@ int InputProcessor::getManualMappingCountForKey(int keyCode,
                                                 uintptr_t aliasHash) const {
   juce::ScopedReadLock lock(mapLock);
   int count = 0;
-
-  // Count mappings from ValueTree (configMap overwrites duplicates)
-  auto mappingsNode = presetManager.getMappingsNode();
-  for (int i = 0; i < mappingsNode.getNumChildren(); ++i) {
-    auto mapping = mappingsNode.getChild(i);
-    int mappingKey = mapping.getProperty("inputKey", 0);
-    if (mappingKey != keyCode)
-      continue;
-
-    // Get alias name from mapping
-    juce::String aliasName = mapping.getProperty("inputAlias", "").toString();
-
-    // Convert alias name to hash
-    uintptr_t mappingAliasHash = 0;
-    if (!aliasName.isEmpty() && aliasName != "Global (All Devices)" &&
-        aliasName != "Any / Master" && aliasName != "Global") {
-      mappingAliasHash =
-          static_cast<uintptr_t>(std::hash<juce::String>{}(aliasName));
-    }
-
-    // Check if this mapping matches the requested alias hash
-    if (mappingAliasHash == aliasHash) {
+  // Phase 40: Count layers that have a manual mapping for (keyCode, aliasHash)
+  InputID key = {aliasHash, keyCode};
+  InputID globalKey = {0, keyCode};
+  for (const auto &layer : layers) {
+    if (layer.configMap.find(key) != layer.configMap.end())
       count++;
-    }
+    else if (aliasHash != 0 &&
+             layer.configMap.find(globalKey) != layer.configMap.end())
+      count++;
   }
-
   return count;
 }
 

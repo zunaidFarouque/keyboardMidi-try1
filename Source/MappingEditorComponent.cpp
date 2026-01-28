@@ -13,16 +13,15 @@ MappingEditorComponent::MappingEditorComponent(PresetManager &pm,
                                                RawInputManager &rawInputMgr,
                                                DeviceManager &deviceMgr)
     : presetManager(pm), rawInputManager(rawInputMgr), deviceManager(deviceMgr),
-      layerListPanel(pm),
-      inspector(&undoManager, &deviceManager),
+      layerListPanel(pm), inspector(&undoManager, &deviceManager),
       resizerBar(&horizontalLayout, 1, true) { // Item index 1, vertical bar
-  
+
   // Phase 41: Setup layer list panel callback
   layerListPanel.onLayerSelected = [this](int layerId) {
     selectedLayerId = layerId;
     table.updateContent();
     table.repaint();
-    inspector.setSelection({});  // Clear selection when switching layers
+    inspector.setSelection({}); // Clear selection when switching layers
   };
   addAndMakeVisible(layerListPanel);
   // Setup Headers
@@ -36,7 +35,7 @@ MappingEditorComponent::MappingEditorComponent(PresetManager &pm,
   table.setModel(this);
   table.setMultipleSelectionEnabled(true);
   addAndMakeVisible(table);
-  
+
   // Setup viewport for inspector
   addAndMakeVisible(inspectorViewport);
   inspectorViewport.setViewedComponent(&inspector, false);
@@ -46,9 +45,12 @@ MappingEditorComponent::MappingEditorComponent(PresetManager &pm,
   addAndMakeVisible(resizerBar);
 
   // Setup horizontal layout: Table | Bar | Inspector
-  horizontalLayout.setItemLayout(0, -0.3, -0.7, -0.5); // Item 0 (Table): Min 30%, Max 70%, Preferred 50%
-  horizontalLayout.setItemLayout(1, 5, 5, 5);          // Item 1 (Bar): Fixed 5px width
-  horizontalLayout.setItemLayout(2, -0.3, -0.7, -0.5); // Item 2 (Inspector): Min 30%, Max 70%, Preferred 50%
+  horizontalLayout.setItemLayout(
+      0, -0.3, -0.7, -0.5); // Item 0 (Table): Min 30%, Max 70%, Preferred 50%
+  horizontalLayout.setItemLayout(1, 5, 5, 5); // Item 1 (Bar): Fixed 5px width
+  horizontalLayout.setItemLayout(
+      2, -0.3, -0.7,
+      -0.5); // Item 2 (Inspector): Min 30%, Max 70%, Preferred 50%
 
   // Setup Add Button with Popup Menu
   addButton.setButtonText("+");
@@ -65,7 +67,7 @@ MappingEditorComponent::MappingEditorComponent(PresetManager &pm,
           juce::ValueTree newMapping("Mapping");
 
           switch (result) {
-          case 1: // Key Mapping
+          case 1:                                            // Key Mapping
             newMapping.setProperty("inputKey", 81, nullptr); // Default Q
             newMapping.setProperty("deviceHash", "0", nullptr);
             newMapping.setProperty("type", "Note", nullptr);
@@ -118,34 +120,32 @@ MappingEditorComponent::MappingEditorComponent(PresetManager &pm,
   duplicateButton.onClick = [this] {
     int row = table.getSelectedRow();
     auto mappingsNode = getCurrentLayerMappings();
-    
+
     // Validation
     if (row < 0 || row >= mappingsNode.getNumChildren()) {
       juce::AlertWindow::showMessageBoxAsync(
-        juce::AlertWindow::InfoIcon,
-        "No Selection",
-        "Please select a mapping to duplicate.",
-        "OK"
-      );
+          juce::AlertWindow::InfoIcon, "No Selection",
+          "Please select a mapping to duplicate.", "OK");
       return;
     }
-    
+
     // Get the original mapping
     juce::ValueTree original = mappingsNode.getChild(row);
     if (!original.isValid()) {
       return;
     }
-    
+
     // Create deep copy
     juce::ValueTree copy = original.createCopy();
-    copy.setProperty("layerID", selectedLayerId, nullptr);  // Ensure layerID is set
-    
+    copy.setProperty("layerID", selectedLayerId,
+                     nullptr); // Ensure layerID is set
+
     // Insert directly below the original
     mappingsNode.addChild(copy, row + 1, &undoManager);
-    
+
     // Select the new row
     table.selectRow(row + 1);
-    
+
     // Refresh UI
     table.updateContent();
     table.repaint();
@@ -158,11 +158,8 @@ MappingEditorComponent::MappingEditorComponent(PresetManager &pm,
     int numSelected = table.getNumSelectedRows();
     if (numSelected == 0) {
       juce::AlertWindow::showMessageBoxAsync(
-        juce::AlertWindow::InfoIcon,
-        "No Selection",
-        "Please select one or more mappings to delete.",
-        "OK"
-      );
+          juce::AlertWindow::InfoIcon, "No Selection",
+          "Please select one or more mappings to delete.", "OK");
       return;
     }
 
@@ -171,48 +168,45 @@ MappingEditorComponent::MappingEditorComponent(PresetManager &pm,
     if (numSelected == 1) {
       message = "Delete the selected mapping?\n\nThis action cannot be undone.";
     } else {
-      message = "Delete " + juce::String(numSelected) + " selected mappings?\n\nThis action cannot be undone.";
+      message = "Delete " + juce::String(numSelected) +
+                " selected mappings?\n\nThis action cannot be undone.";
     }
 
     juce::AlertWindow::showOkCancelBox(
-      juce::AlertWindow::WarningIcon,
-      "Delete Mappings",
-      message,
-      "Delete",
-      "Cancel",
-      this,
+        juce::AlertWindow::WarningIcon, "Delete Mappings", message, "Delete",
+        "Cancel", this,
         juce::ModalCallbackFunction::create([this, numSelected](int result) {
-        if (result == 1) { // OK clicked
-          auto mappingsNode = getCurrentLayerMappings();
-          if (!mappingsNode.isValid())
-            return;
+          if (result == 1) { // OK clicked
+            auto mappingsNode = getCurrentLayerMappings();
+            if (!mappingsNode.isValid())
+              return;
 
-          // Collect selected rows (sorted descending to avoid index shifting)
-          juce::Array<int> selectedRows;
-          for (int i = 0; i < numSelected; ++i) {
-            int row = table.getSelectedRow(i);
-            if (row >= 0)
-              selectedRows.add(row);
-          }
-          selectedRows.sort();
-          std::reverse(selectedRows.begin(), selectedRows.end()); // Remove from end to start
-
-          // Remove each selected mapping
-          undoManager.beginNewTransaction("Delete Mappings");
-          for (int row : selectedRows) {
-            auto child = mappingsNode.getChild(row);
-            if (child.isValid()) {
-              mappingsNode.removeChild(child, &undoManager);
+            // Collect selected rows (sorted descending to avoid index shifting)
+            juce::Array<int> selectedRows;
+            for (int i = 0; i < numSelected; ++i) {
+              int row = table.getSelectedRow(i);
+              if (row >= 0)
+                selectedRows.add(row);
             }
-          }
+            selectedRows.sort();
+            std::reverse(selectedRows.begin(),
+                         selectedRows.end()); // Remove from end to start
 
-          // Clear selection and refresh
-          table.deselectAllRows();
-          table.updateContent();
-          inspector.setSelection({});
-        }
-      })
-    );
+            // Remove each selected mapping
+            undoManager.beginNewTransaction("Delete Mappings");
+            for (int row : selectedRows) {
+              auto child = mappingsNode.getChild(row);
+              if (child.isValid()) {
+                mappingsNode.removeChild(child, &undoManager);
+              }
+            }
+
+            // Clear selection and refresh
+            table.deselectAllRows();
+            table.updateContent();
+            inspector.setSelection({});
+          }
+        }));
   };
   addAndMakeVisible(deleteButton);
 
@@ -221,16 +215,19 @@ MappingEditorComponent::MappingEditorComponent(PresetManager &pm,
   learnButton.setClickingTogglesState(true);
   addAndMakeVisible(learnButton);
 
-  // Attach listeners
-  presetManager.getRootNode().addListener(this);
-  rawInputManager.addListener(this);
+  // Phase 42: Listeners and initial update moved to initialize()
+}
 
-  // Initial update
+void MappingEditorComponent::initialize() {
+  presetManager.getRootNode().addListener(this);
+  presetManager.addChangeListener(this);
+  rawInputManager.addListener(this);
   table.updateContent();
 }
 
 MappingEditorComponent::~MappingEditorComponent() {
   presetManager.getRootNode().removeListener(this);
+  presetManager.removeChangeListener(this);
   rawInputManager.removeListener(this);
 }
 
@@ -256,18 +253,21 @@ void MappingEditorComponent::resized() {
   deleteButton.setBounds(header.removeFromRight(30));
   header.removeFromRight(4);
   learnButton.setBounds(header.removeFromRight(60));
-  
-  // Phase 41: Layout: LayerListPanel (20%) | Table/Inspector (80%)
-  int layerListWidth = (int)(area.getWidth() * 0.2f);
-  layerListPanel.setBounds(area.removeFromLeft(layerListWidth));
-  
-  // Use StretchableLayoutManager for horizontal split: Table | Bar | Inspector
-  juce::Component* horizontalComps[] = { &table, &resizerBar, &inspectorViewport };
+
+  // Phase 41: juce::Grid (1 row, 2 cols): layerListPanel 20%, table area 80%
+  juce::Grid grid;
+  grid.templateRows = {juce::Grid::TrackInfo(juce::Grid::Fr(1))};
+  grid.templateColumns = {juce::Grid::TrackInfo(juce::Grid::Fr(2)),
+                         juce::Grid::TrackInfo(juce::Grid::Fr(8))};
+  grid.items = {juce::GridItem(layerListPanel), juce::GridItem(table)};
+  grid.performLayout(area);
+
+  // Right 80%: split Table | Bar | Inspector
+  auto rightArea = table.getBounds();
+  juce::Component *horizontalComps[] = {&table, &resizerBar, &inspectorViewport};
   horizontalLayout.layOutComponents(
-    horizontalComps, 3, area.getX(), area.getY(), area.getWidth(), area.getHeight(),
-    false, true); // false = horizontal layout (left to right)
-  
-  // Set inspector content bounds (accounting for scrollbar width of 15px)
+      horizontalComps, 3, rightArea.getX(), rightArea.getY(),
+      rightArea.getWidth(), rightArea.getHeight(), false, true);
   int contentWidth = inspectorViewport.getWidth() - 15;
   int contentHeight = inspector.getRequiredHeight();
   inspector.setBounds(0, 0, contentWidth, contentHeight);
@@ -348,6 +348,8 @@ void MappingEditorComponent::paintCell(juce::Graphics &g, int rowNumber,
 
 void MappingEditorComponent::valueTreeChildAdded(juce::ValueTree &parent,
                                                  juce::ValueTree &child) {
+  if (presetManager.getIsLoading())
+    return;
   // Phase 41: Update if mappings are added to current layer
   if (parent.hasType("Mappings") || child.hasType("Mappings")) {
     // Check if this is for the current layer
@@ -366,6 +368,8 @@ void MappingEditorComponent::valueTreeChildAdded(juce::ValueTree &parent,
 void MappingEditorComponent::valueTreeChildRemoved(juce::ValueTree &parent,
                                                    juce::ValueTree &child,
                                                    int) {
+  if (presetManager.getIsLoading())
+    return;
   // Phase 41: Update if mappings are removed from current layer
   if (parent.hasType("Mappings") || child.hasType("Mappings")) {
     if (parent.getParent().isValid() && parent.getParent().hasType("Layer")) {
@@ -381,22 +385,32 @@ void MappingEditorComponent::valueTreeChildRemoved(juce::ValueTree &parent,
 
 void MappingEditorComponent::valueTreePropertyChanged(
     juce::ValueTree &, const juce::Identifier &) {
+  if (presetManager.getIsLoading())
+    return;
   table.repaint();
 }
 
 void MappingEditorComponent::valueTreeParentChanged(juce::ValueTree &child) {
+  if (presetManager.getIsLoading())
+    return;
   if (child.hasType("Mappings"))
+    table.updateContent();
+}
+
+void MappingEditorComponent::changeListenerCallback(
+    juce::ChangeBroadcaster *source) {
+  if (source == &presetManager)
     table.updateContent();
 }
 
 void MappingEditorComponent::selectedRowsChanged(int lastRowSelected) {
   // Get selected rows from table
   int numSelected = table.getNumSelectedRows();
-  
+
   // Build vector of selected ValueTrees
   std::vector<juce::ValueTree> selectedTrees;
-  auto mappingsNode = getCurrentLayerMappings();  // Phase 41: Use current layer
-  
+  auto mappingsNode = getCurrentLayerMappings(); // Phase 41: Use current layer
+
   // Iterate over selected rows
   for (int i = 0; i < numSelected; ++i) {
     int row = table.getSelectedRow(i);
@@ -406,13 +420,13 @@ void MappingEditorComponent::selectedRowsChanged(int lastRowSelected) {
         selectedTrees.push_back(child);
     }
   }
-  
+
   // Update inspector with selection
   inspector.setSelection(selectedTrees);
 }
 
 void MappingEditorComponent::handleRawKeyEvent(uintptr_t deviceHandle,
-                                                int keyCode, bool isDown) {
+                                               int keyCode, bool isDown) {
   // Check if learn mode is active
   if (!learnButton.getToggleState())
     return;
@@ -439,32 +453,32 @@ void MappingEditorComponent::handleRawKeyEvent(uintptr_t deviceHandle,
 
     // Update the mapping properties
     mappingNode.setProperty("inputKey", keyCode, nullptr);
-    
+
     // Get alias name for this hardware ID
     juce::String aliasName = deviceManager.getAliasForHardware(deviceHandle);
-    
+
     // If no alias exists, show alert and use "Unassigned"
     if (aliasName == "Unassigned") {
       juce::AlertWindow::showMessageBoxAsync(
-          juce::AlertWindow::WarningIcon,
-          "Device Not Assigned",
-          "This device is not assigned to an alias. Please assign it in Device Setup first.",
+          juce::AlertWindow::WarningIcon, "Device Not Assigned",
+          "This device is not assigned to an alias. Please assign it in Device "
+          "Setup first.",
           "OK");
       aliasName = "Unassigned";
     }
-    
+
     // Save alias name instead of hardware ID
     mappingNode.setProperty("inputAlias", aliasName, nullptr);
-    
+
     // Also keep deviceHash for backward compatibility (legacy support)
-    mappingNode.setProperty("deviceHash",
-                            juce::String::toHexString((juce::int64)deviceHandle)
-                                .toUpperCase(),
-                            nullptr);
-    
+    mappingNode.setProperty(
+        "deviceHash",
+        juce::String::toHexString((juce::int64)deviceHandle).toUpperCase(),
+        nullptr);
+
     // Phase 41: Ensure layerID is set
     mappingNode.setProperty("layerID", selectedLayerId, nullptr);
-    
+
     // Phase 41: Ensure layerID is set
     mappingNode.setProperty("layerID", selectedLayerId, nullptr);
 
@@ -481,16 +495,17 @@ void MappingEditorComponent::handleRawKeyEvent(uintptr_t deviceHandle,
   });
 }
 
-void MappingEditorComponent::handleAxisEvent(uintptr_t deviceHandle, int inputCode,
-                                             float value) {
+void MappingEditorComponent::handleAxisEvent(uintptr_t deviceHandle,
+                                             int inputCode, float value) {
   // Check if learn mode is active
   if (!learnButton.getToggleState())
     return;
 
   // Jitter Filter: Calculate deviation from center (0.0-1.0 range)
   float deviation = std::abs(value - 0.5f);
-  
-  // Threshold: Only trigger if deviation is significant (user is swiping, not just touching)
+
+  // Threshold: Only trigger if deviation is significant (user is swiping, not
+  // just touching)
   const float threshold = 0.2f; // 20% deviation threshold
   if (deviation < threshold)
     return;
@@ -543,26 +558,26 @@ void MappingEditorComponent::handleAxisEvent(uintptr_t deviceHandle, int inputCo
 
     // Update the mapping properties
     mappingNode.setProperty("inputKey", axisToLearn, nullptr);
-    
+
     // Get alias name for this hardware ID
     juce::String aliasName = deviceManager.getAliasForHardware(deviceToUse);
     if (aliasName == "Unassigned") {
       juce::AlertWindow::showMessageBoxAsync(
-          juce::AlertWindow::WarningIcon,
-          "Device Not Assigned",
-          "This device is not assigned to an alias. Please assign it in Device Setup first.",
+          juce::AlertWindow::WarningIcon, "Device Not Assigned",
+          "This device is not assigned to an alias. Please assign it in Device "
+          "Setup first.",
           "OK");
       aliasName = "Unassigned";
     }
-    
+
     // Save alias name instead of hardware ID
     mappingNode.setProperty("inputAlias", aliasName, nullptr);
-    
+
     // Also keep deviceHash for backward compatibility
-    mappingNode.setProperty("deviceHash",
-                            juce::String::toHexString((juce::int64)deviceToUse)
-                                .toUpperCase(),
-                            nullptr);
+    mappingNode.setProperty(
+        "deviceHash",
+        juce::String::toHexString((juce::int64)deviceToUse).toUpperCase(),
+        nullptr);
     mappingNode.setProperty("type", "CC", nullptr); // Ensure type is CC
 
     // Create display name using KeyNameUtilities
