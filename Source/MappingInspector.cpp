@@ -1043,7 +1043,7 @@ void MappingInspector::updatePitchBendPeakValue(juce::ValueTree &tree) {
   // Note: This method is no longer used since InputProcessor now handles
   // the calculation using global range. However, we keep it for potential
   // future use or if we need to update data2 from the UI side.
-  // The actual calculation happens in InputProcessor::addMappingFromTree
+  // The actual calculation happens in GridCompiler when the grid is rebuilt
   // using SettingsManager::getPitchBendRange().
 }
 

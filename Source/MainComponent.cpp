@@ -356,62 +356,54 @@ MainComponent::~MainComponent() {
   }
 }
 
-// --- LOGGING LOGIC ---
+// --- LOGGING LOGIC (Phase 52.3: Grid-based, no simulateInput) ---
 void MainComponent::logEvent(uintptr_t device, int keyCode, bool isDown) {
-  // 1. Format Input Columns
-  // "Dev: [HANDLE]"
   juce::String devStr =
       "Dev: " + juce::String::toHexString((juce::int64)device).toUpperCase();
-
-  // "DOWN" or "UP  " or "VAL" for axis events
-  juce::String stateStr;
-  if (keyCode == 0x2000 || keyCode == 0x2001) {
-    stateStr = "VAL "; // Value for axis events
-  } else {
-    stateStr = isDown ? "DOWN" : "UP  ";
-  }
-
-  // "Key: Q"
   juce::String keyName = RawInputManager::getKeyName(keyCode);
-  juce::String keyInfo = "Key: " + keyName;
+  juce::String logLine = devStr + " | Key: " + keyName;
 
-  juce::String logLine = devStr + " | " + keyInfo;
-
-  // 2. Simulate input to get action and source (Phase 39: uses
-  // SimulationResult) Convert device handle to alias hash for simulation
-  juce::String aliasName = deviceManager.getAliasForHardware(device);
-  uintptr_t viewDeviceHash = 0;
-  if (aliasName != "Unassigned" && !aliasName.isEmpty()) {
-    // Simple hash: use std::hash on the string
-    viewDeviceHash =
-        static_cast<uintptr_t>(std::hash<juce::String>{}(aliasName));
+  auto ctx = inputProcessor.getContext();
+  if (!ctx) {
+    if (logComponent)
+      logComponent->addEntry(logLine);
+    return;
   }
-  auto result = inputProcessor.simulateInput(viewDeviceHash, keyCode);
 
-  if (result.action.has_value()) {
-    const auto &midiAction = result.action.value();
-    logLine += " -> [MIDI] ";
+  juce::String aliasName = deviceManager.getAliasForHardware(device);
+  juce::String trimmed = aliasName.trim();
+  uintptr_t deviceHash = 0;
+  if (!trimmed.isEmpty() && trimmed != "Unassigned" &&
+      !trimmed.equalsIgnoreCase("Any / Master") &&
+      !trimmed.equalsIgnoreCase("Global (All Devices)")) {
+    deviceHash = static_cast<uintptr_t>(std::hash<juce::String>{}(trimmed));
+  }
 
-    if (midiAction.type == ActionType::Note) {
-      juce::String noteName =
-          MidiNoteUtilities::getMidiNoteName(midiAction.data1);
-      logLine +=
-          "Note " + juce::String(midiAction.data1) + " (" + noteName + ")";
-    } else if (midiAction.type == ActionType::CC) {
-      logLine += "CC " + juce::String(midiAction.data1) +
-                 " | val: " + juce::String(midiAction.data2);
-    }
+  int layer = inputProcessor.getHighestActiveLayerIndex();
+  if (layer < 0)
+    layer = 0;
+  if (layer > 8)
+    layer = 8;
 
-    // Add source description
-    if (!result.sourceDescription.isEmpty()) {
-      logLine += " | Source: " + result.sourceDescription;
-    }
+  std::shared_ptr<const VisualGrid> grid;
+  auto it = ctx->visualLookup.find(deviceHash);
+  if (it != ctx->visualLookup.end() && layer < (int)it->second.size())
+    grid = it->second[(size_t)layer];
+  if (!grid) {
+    auto it0 = ctx->visualLookup.find(0);
+    if (it0 != ctx->visualLookup.end() && layer < (int)it0->second.size())
+      grid = it0->second[(size_t)layer];
+  }
 
-    // Add override/inheritance indicators (Phase 39)
-    if (result.isOverride) {
-      logLine += " [OVERRIDE]";
-    } else if (result.isInherited) {
-      logLine += " [INHERITED]";
+  if (grid && keyCode >= 0 && keyCode < 256) {
+    const auto &slot = (*grid)[(size_t)keyCode];
+    if (slot.state != VisualState::Empty) {
+      logLine += " -> [MIDI] " + slot.label;
+      logLine += " | Source: " + slot.sourceName;
+      if (slot.state == VisualState::Override)
+        logLine += " [OVERRIDE]";
+      else if (slot.state == VisualState::Conflict)
+        logLine += " [CONFLICT]";
     }
   }
 

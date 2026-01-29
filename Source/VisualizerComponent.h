@@ -1,4 +1,6 @@
 #pragma once
+// Phase 52.2: Renders from InputProcessor::getContext() VisualGrid only (no
+// findZoneForKey / isKeyInAnyZone / simulateInput). juce::Timer drives refresh.
 #include "DeviceManager.h"
 #include "RawInputManager.h"
 #include "ZoneManager.h"

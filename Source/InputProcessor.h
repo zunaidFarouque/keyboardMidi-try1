@@ -23,20 +23,6 @@ struct InputIDLess {
   }
 };
 
-// Phase 40: Multi-Layer System. Layer 0 = Base, 1..8 = Overlays.
-// Phase 50.5: Maps removed - data now in CompiledMapContext grids.
-struct Layer {
-  juce::String name;
-  int id = 0;
-  // Phase 40.1: Robust layer state machine.
-  // - isLatched: toggled ON/OFF persistently by commands (and persisted)
-  // - isMomentary: computed from currently held keys (transient)
-  bool isLatched = false;
-  bool isMomentary = false;
-  bool isActive() const {
-    return id == 0 || isLatched || isMomentary;
-  } // Base always on
-};
 class MidiEngine;
 class SettingsManager;
 
@@ -118,12 +104,16 @@ private:
   juce::ReadWriteLock mapLock;
   juce::ReadWriteLock bufferLock;
 
-  // Phase 50.5: Grid-based compiled context (audio + visuals)
+  // Phase 50.5 / 52.1: Grid-based compiled context (audio + visuals). Protected
+  // by mapLock.
   std::shared_ptr<const CompiledMapContext> activeContext;
-  mutable juce::ReadWriteLock contextLock;
 
-  // Phase 40: Multi-Layer. Each layer has its own compiledMap + configMap.
-  std::vector<Layer> layers; // Layer 0 = Base, 1..8 = Overlays (default size 9)
+  // Phase 52.1: Layer state only (data is in activeContext). Track isLatched
+  // (from preset) and isMomentary (from held keys) for the 9 layers.
+  std::vector<bool> layerLatchedState;   // 9 elements, from preset "isActive"
+  std::vector<bool> layerMomentaryState; // 9 elements, from LayerMomentary keys
+  std::vector<bool>
+      layerActiveState; // 9 elements, (i==0) || latched[i] || momentary[i]
 
   // Phase 40.1: currently held keys for state reconstruction
   std::set<InputID, InputIDLess> currentlyHeldKeys;
@@ -156,17 +146,10 @@ private:
 
   // Helpers
   void rebuildGrid();
-  void rebuildMapFromTree();
-  void addMappingFromTree(juce::ValueTree mappingNode);
-  void removeMappingFromTree(juce::ValueTree mappingNode);
-  const MidiAction *findMapping(const InputID &input);
 
-  // Shared lookup logic (used by both processEvent and simulateInput)
-  std::pair<std::optional<MidiAction>, juce::String>
-  lookupAction(uintptr_t deviceHandle, int keyCode);
-
-  // Resolve zone using same InputID as lookupAction (alias hash or 0 for "Any")
-  std::shared_ptr<Zone> getZoneForInputResolved(InputID input);
+  // Phase 52.1: Grid lookup for getMappingForInput / handleAxisEvent (replaces
+  // findMapping)
+  std::optional<MidiAction> lookupActionInGrid(InputID input) const;
 
   // Velocity randomization helper
   int calculateVelocity(int base, int range);

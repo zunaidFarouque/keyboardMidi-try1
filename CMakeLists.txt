@@ -147,6 +147,7 @@ enable_testing()
 add_executable(OmniKey_Tests
     Source/Tests/SanityTest.cpp
     Source/Tests/GridCompilerTests.cpp
+    Source/Tests/InputProcessorTests.cpp
 )
 
 # 12. Link Dependencies

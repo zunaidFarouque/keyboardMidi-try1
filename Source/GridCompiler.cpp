@@ -1,6 +1,8 @@
 #include "GridCompiler.h"
 #include "MidiNoteUtilities.h"
 #include "SettingsManager.h"
+#include <algorithm>
+#include <numeric>
 
 namespace {
 
@@ -224,7 +226,7 @@ void applyVisualSlot(VisualGrid &grid, int keyCode, const juce::Colour &color,
   if (isConflict) {
     // Conflict: Multiple assignments in same layer
     slot.state = VisualState::Conflict;
-    slot.displayColor = juce::Colours::darkred;
+    slot.displayColor = juce::Colours::red;
     slot.label = label + " (!)";
     slot.sourceName = sourceName;
   } else {
@@ -237,8 +239,8 @@ void applyVisualSlot(VisualGrid &grid, int keyCode, const juce::Colour &color,
 }
 
 // Apply a visual slot and replicate to L/R modifier keys if the source key is
-// a generic modifier, using the same stacking override logic.
-// Phase 50.8: Added conflict detection via touchedKeys vector.
+// a generic modifier. Phase 51.6: Only expand to L/R if that key is not already
+// touched (so a specific mapping for LShift can override the generic Shift).
 void applyVisualWithModifiers(VisualGrid &grid, int keyCode,
                               const juce::Colour &color,
                               const juce::String &label,
@@ -246,21 +248,33 @@ void applyVisualWithModifiers(VisualGrid &grid, int keyCode,
                               std::vector<bool> *touchedKeys = nullptr) {
   applyVisualSlot(grid, keyCode, color, label, sourceName, touchedKeys);
 
+  auto shouldExpandTo = [&](int sideKey) -> bool {
+    if (!touchedKeys || sideKey < 0 || sideKey >= (int)touchedKeys->size())
+      return true;
+    return !(*touchedKeys)[(size_t)sideKey];
+  };
+
   if (isGenericShift(keyCode)) {
-    applyVisualSlot(grid, InputTypes::Key_LShift, color, label, sourceName,
-                    touchedKeys);
-    applyVisualSlot(grid, InputTypes::Key_RShift, color, label, sourceName,
-                    touchedKeys);
+    if (shouldExpandTo(InputTypes::Key_LShift))
+      applyVisualSlot(grid, InputTypes::Key_LShift, color, label, sourceName,
+                      touchedKeys);
+    if (shouldExpandTo(InputTypes::Key_RShift))
+      applyVisualSlot(grid, InputTypes::Key_RShift, color, label, sourceName,
+                      touchedKeys);
   } else if (isGenericControl(keyCode)) {
-    applyVisualSlot(grid, InputTypes::Key_LControl, color, label, sourceName,
-                    touchedKeys);
-    applyVisualSlot(grid, InputTypes::Key_RControl, color, label, sourceName,
-                    touchedKeys);
+    if (shouldExpandTo(InputTypes::Key_LControl))
+      applyVisualSlot(grid, InputTypes::Key_LControl, color, label, sourceName,
+                      touchedKeys);
+    if (shouldExpandTo(InputTypes::Key_RControl))
+      applyVisualSlot(grid, InputTypes::Key_RControl, color, label, sourceName,
+                      touchedKeys);
   } else if (isGenericAlt(keyCode)) {
-    applyVisualSlot(grid, InputTypes::Key_LAlt, color, label, sourceName,
-                    touchedKeys);
-    applyVisualSlot(grid, InputTypes::Key_RAlt, color, label, sourceName,
-                    touchedKeys);
+    if (shouldExpandTo(InputTypes::Key_LAlt))
+      applyVisualSlot(grid, InputTypes::Key_LAlt, color, label, sourceName,
+                      touchedKeys);
+    if (shouldExpandTo(InputTypes::Key_RAlt))
+      applyVisualSlot(grid, InputTypes::Key_RAlt, color, label, sourceName,
+                      touchedKeys);
   }
 }
 
@@ -308,281 +322,243 @@ MidiAction buildMidiActionFromMapping(juce::ValueTree mappingNode) {
   return action;
 }
 
+// Phase 51.4: Apply zones for a single layer to vGrid and aGrid.
+// touchedKeys: conflict detection (same key touched twice in this layer).
+// chordPool: append chord vectors for multi-note zones.
+void compileZonesForLayer(VisualGrid &vGrid, AudioGrid &aGrid,
+                          ZoneManager &zoneMgr, DeviceManager &deviceMgr,
+                          uintptr_t aliasHash, int layerId,
+                          std::vector<bool> &touchedKeys,
+                          std::vector<std::vector<MidiAction>> &chordPool) {
+  const int globalChrom = zoneMgr.getGlobalChromaticTranspose();
+  const int globalDeg = zoneMgr.getGlobalDegreeTranspose();
+  const auto zones = zoneMgr.getZones();
+
+  for (const auto &zone : zones) {
+    if (!zone)
+      continue;
+
+    const int zoneLayerId = juce::jlimit(0, 8, zone->layerID);
+    if (zoneLayerId != layerId)
+      continue;
+
+    if (zone->targetAliasHash != aliasHash)
+      continue;
+
+    const auto &keyCodes = zone->getInputKeyCodes();
+    for (int keyCode : keyCodes) {
+      if (keyCode < 0 || keyCode > 0xFF)
+        continue;
+
+      auto chordOpt = zone->getNotesForKey(keyCode, globalChrom, globalDeg);
+      if (!chordOpt.has_value() || chordOpt->empty()) {
+        // Zone covers this key but has no notes (e.g. cache not built yet).
+        // Claim the key for conflict detection (Mapping + Zone = Conflict).
+        touchedKeys[(size_t)keyCode] = true;
+        continue;
+      }
+
+      const auto &chordNotes = chordOpt.value();
+      juce::Colour color = zone->zoneColor;
+      juce::String label = zone->getKeyLabel(keyCode);
+      juce::String sourceName = "Zone: " + zone->name;
+
+      applyVisualWithModifiers(vGrid, keyCode, color, label, sourceName,
+                               &touchedKeys);
+
+      if (vGrid[(size_t)keyCode].state == VisualState::Conflict)
+        continue;
+
+      MidiAction rootAction{};
+      rootAction.type = ActionType::Note;
+      rootAction.channel = zone->midiChannel;
+      rootAction.data1 = chordNotes.front().pitch;
+      rootAction.data2 = zone->baseVelocity;
+      rootAction.velocityRandom = zone->velocityRandom;
+
+      int chordIndex = -1;
+      if (chordNotes.size() > 1) {
+        std::vector<MidiAction> chordActions;
+        chordActions.reserve(chordNotes.size());
+        for (const auto &note : chordNotes) {
+          MidiAction a = rootAction;
+          a.data1 = note.pitch;
+          chordActions.push_back(a);
+        }
+        chordPool.push_back(std::move(chordActions));
+        chordIndex = static_cast<int>(chordPool.size()) - 1;
+      }
+
+      writeAudioSlot(aGrid, keyCode, rootAction);
+      aGrid[(size_t)keyCode].chordIndex = chordIndex;
+    }
+  }
+}
+
+// Phase 51.6: Specific modifier keys (0xA0-0xA5) should be processed before
+// generic (0x10, 0x11, 0x12) so that "LShift -> Note" overrides "Shift -> CC".
+static bool isSpecificModifierKey(int keyCode) {
+  return (keyCode >= 0xA0 && keyCode <= 0xA5);
+}
+static bool isGenericModifierKey(int keyCode) {
+  return (keyCode == 0x10 || keyCode == 0x11 || keyCode == 0x12);
+}
+
+// Phase 51.4: Apply manual mappings for a single layer to vGrid and aGrid.
+void compileMappingsForLayer(VisualGrid &vGrid, AudioGrid &aGrid,
+                             PresetManager &presetMgr, DeviceManager &deviceMgr,
+                             SettingsManager &settingsMgr, uintptr_t aliasHash,
+                             int layerId, std::vector<bool> &touchedKeys) {
+  auto mappingsNode = presetMgr.getMappingsListForLayer(layerId);
+  if (!mappingsNode.isValid())
+    return;
+
+  // Phase 51.6: Process specific modifier keys (LShift, RShift, etc.) before
+  // generic (Shift, Control, Alt) so specific mappings override expansion.
+  std::vector<int> order(mappingsNode.getNumChildren());
+  std::iota(order.begin(), order.end(), 0);
+  std::sort(order.begin(), order.end(), [&](int a, int b) {
+    int keyA = (int)mappingsNode.getChild(a).getProperty("inputKey", 0);
+    int keyB = (int)mappingsNode.getChild(b).getProperty("inputKey", 0);
+    bool specificA = isSpecificModifierKey(keyA);
+    bool specificB = isSpecificModifierKey(keyB);
+    if (specificA != specificB)
+      return specificA; // specific first
+    return a < b;
+  });
+
+  for (int i : order) {
+    auto mapping = mappingsNode.getChild(i);
+    if (!mapping.isValid() || !mapping.hasType("Mapping"))
+      continue;
+
+    const int inputKey = (int)mapping.getProperty("inputKey", 0);
+    if (inputKey < 0 || inputKey > 0xFF)
+      continue;
+
+    juce::String aliasName =
+        mapping.getProperty("inputAlias", "").toString().trim();
+    uintptr_t mappingAliasHash = aliasNameToHash(aliasName);
+
+    juce::var deviceHashVar = mapping.getProperty("deviceHash");
+    bool hasDeviceHash =
+        !deviceHashVar.isVoid() && !deviceHashVar.toString().isEmpty();
+    uintptr_t deviceHash = hasDeviceHash ? parseDeviceHash(deviceHashVar) : 0;
+
+    if (mappingAliasHash == 0 && hasDeviceHash && deviceHash != 0) {
+      juce::String resolvedAlias = deviceMgr.getAliasForHardware(deviceHash);
+      if (resolvedAlias != "Unassigned" && resolvedAlias.isNotEmpty()) {
+        mappingAliasHash = aliasNameToHash(resolvedAlias);
+      }
+      // Unresolved deviceHash: treat as device-specific (only apply when
+      // compiling that device). Tests use alias hash as deviceHash.
+      if (mappingAliasHash == 0)
+        mappingAliasHash = deviceHash;
+    }
+
+    if (mappingAliasHash != aliasHash)
+      continue;
+
+    MidiAction action = buildMidiActionFromMapping(mapping);
+    juce::Colour color = getColorForType(action.type, settingsMgr);
+    juce::String label = makeLabelForAction(action);
+    juce::String sourceName =
+        aliasName.isNotEmpty() ? ("Mapping: " + aliasName) : "Mapping";
+
+    applyVisualWithModifiers(vGrid, inputKey, color, label, sourceName,
+                             &touchedKeys);
+
+    if (vGrid[(size_t)inputKey].state != VisualState::Conflict)
+      writeAudioSlot(aGrid, inputKey, action);
+  }
+}
+
 } // namespace
 
 std::shared_ptr<CompiledMapContext>
 GridCompiler::compile(PresetManager &presetMgr, DeviceManager &deviceMgr,
                       ZoneManager &zoneMgr, SettingsManager &settingsMgr) {
+  // 1. Setup Context
   auto context = std::make_shared<CompiledMapContext>();
 
-  // -------------------------------------------------------------------------
-  // Step 1: Setup – per-device audio layer arrays and visualLookup
-  // -------------------------------------------------------------------------
-
-  // Collect all aliases and their hardware, and ensure AudioGrid arrays exist
-  // for each device (grids for individual layers are created lazily).
-  juce::StringArray aliasNames = deviceMgr.getAllAliasNames();
-  std::vector<uintptr_t> aliasHashes;
-  aliasHashes.reserve((size_t)aliasNames.size() + 1);
-  aliasHashes.push_back(0); // Global (All Devices)
-
-  for (const auto &aliasName : aliasNames) {
-    uintptr_t aliasHash = aliasNameToHash(aliasName);
-    if (aliasHash != 0)
-      aliasHashes.push_back(aliasHash);
-
-    auto hardwareIds = deviceMgr.getHardwareForAlias(aliasName);
-    for (auto hardwareId : hardwareIds) {
-      if (hardwareId == 0)
-        continue;
-      // Default-construct the per-device layer array (all null grids) if
-      // needed.
-      (void)context->deviceGrids[hardwareId];
-    }
-  }
-
-  const int maxLayers = 9;
-
-  // 1. Initialize Visual Lookup Vectors (aliases) – just size; grids filled
-  // during stacking loop.
-  for (auto aliasHash : aliasHashes) {
-    auto &layerVec = context->visualLookup[aliasHash];
-    layerVec.resize(maxLayers);
-  }
-
-  // Phase 50.7: Helper to apply zones for a specific alias/layer to a grid
-  // Phase 50.8: Added touchedKeys parameter for conflict detection
-  auto applyZonesForLayer = [&](VisualGrid &grid, uintptr_t aliasHash,
-                                int layerId, std::vector<bool> *touchedKeys) {
-    const int globalChrom = zoneMgr.getGlobalChromaticTranspose();
-    const int globalDeg = zoneMgr.getGlobalDegreeTranspose();
-    const auto zones = zoneMgr.getZones();
-
-    for (const auto &zone : zones) {
-      if (!zone)
-        continue;
-
-      const int zoneLayerId = juce::jlimit(0, 8, zone->layerID);
-      if (zoneLayerId != layerId)
-        continue;
-
-      const uintptr_t targetAliasHash = zone->targetAliasHash;
-      if (targetAliasHash != aliasHash)
-        continue;
-
-      const auto &keyCodes = zone->getInputKeyCodes();
-      for (int keyCode : keyCodes) {
-        if (keyCode < 0 || keyCode > 0xFF)
-          continue;
-
-        auto chordOpt = zone->getNotesForKey(keyCode, globalChrom, globalDeg);
-        if (!chordOpt.has_value() || chordOpt->empty())
-          continue;
-
-        juce::Colour color = zone->zoneColor;
-        juce::String label = zone->getKeyLabel(keyCode);
-        juce::String sourceName = "Zone: " + zone->name;
-
-        applyVisualWithModifiers(grid, keyCode, color, label, sourceName,
-                                 touchedKeys);
-      }
-    }
-  };
-
-  // Phase 50.7: Helper to apply mappings for a specific alias/layer to a grid
-  // Phase 50.8: Added touchedKeys parameter for conflict detection
-  auto applyMappingsForLayer = [&](VisualGrid &grid, uintptr_t aliasHash,
-                                   int layerId,
-                                   std::vector<bool> *touchedKeys) {
-    auto mappingsNode = presetMgr.getMappingsListForLayer(layerId);
-    if (!mappingsNode.isValid())
-      return;
-
-    for (int i = 0; i < mappingsNode.getNumChildren(); ++i) {
-      auto mapping = mappingsNode.getChild(i);
-      if (!mapping.isValid() || !mapping.hasType("Mapping"))
-        continue;
-
-      const int inputKey = (int)mapping.getProperty("inputKey", 0);
-      if (inputKey < 0 || inputKey > 0xFF)
-        continue;
-
-      // Determine targeting information
-      juce::String aliasName =
-          mapping.getProperty("inputAlias", "").toString().trim();
-      uintptr_t mappingAliasHash = aliasNameToHash(aliasName);
-
-      juce::var deviceHashVar = mapping.getProperty("deviceHash");
-      bool hasDeviceHash =
-          !deviceHashVar.isVoid() && !deviceHashVar.toString().isEmpty();
-      uintptr_t deviceHash = hasDeviceHash ? parseDeviceHash(deviceHashVar) : 0;
-
-      // If alias empty but deviceHash set, try to resolve alias for display.
-      if (mappingAliasHash == 0 && hasDeviceHash && deviceHash != 0) {
-        juce::String resolvedAlias = deviceMgr.getAliasForHardware(deviceHash);
-        if (resolvedAlias != "Unassigned" && resolvedAlias.isNotEmpty()) {
-          mappingAliasHash = aliasNameToHash(resolvedAlias);
-        }
-      }
-
-      // Only apply if this mapping targets the alias we're compiling
-      if (mappingAliasHash != aliasHash)
-        continue;
-
-      // Build MidiAction
-      MidiAction action = buildMidiActionFromMapping(mapping);
-
-      juce::Colour color = getColorForType(action.type, settingsMgr);
-      juce::String label = makeLabelForAction(action);
-      juce::String sourceName =
-          aliasName.isNotEmpty() ? ("Mapping: " + aliasName) : "Mapping";
-
-      applyVisualWithModifiers(grid, inputKey, color, label, sourceName,
-                               touchedKeys);
-    }
-  };
-
-  // Phase 50.7: Helper to apply a single layer's content (zones + mappings)
-  // Phase 50.8: Added conflict detection - track touched keys per layer pass
-  auto applyLayerContent = [&](VisualGrid &grid, uintptr_t aliasHash,
-                               int layerId) {
-    // Phase 50.8: Track which keys have been written to in this layer pass
+  // 2. Define Helper Lambda "applyLayerToGrid"
+  // Encapsulates adding Zones + Mappings to a specific grid instance for one
+  // layer. Zones first, then Mappings (higher priority in same layer).
+  auto applyLayerToGrid = [&](VisualGrid &vGrid, AudioGrid &aGrid, int layerId,
+                              uintptr_t aliasHash) {
     std::vector<bool> touchedKeys(256, false);
-    applyZonesForLayer(grid, aliasHash, layerId, &touchedKeys);
-    applyMappingsForLayer(grid, aliasHash, layerId, &touchedKeys);
+
+    compileZonesForLayer(vGrid, aGrid, zoneMgr, deviceMgr, aliasHash, layerId,
+                         touchedKeys, context->chordPool);
+
+    compileMappingsForLayer(vGrid, aGrid, presetMgr, deviceMgr, settingsMgr,
+                            aliasHash, layerId, touchedKeys);
   };
 
-  // Phase 50.7: PHASE 1 - Compile Global Chain (Hash 0)
-  uintptr_t globalHash = 0;
-  for (int L = 0; L < maxLayers; ++L) {
-    auto grid = makeVisualGrid();
+  // 3. PASS 1: Compile Global Stack (Vertical) – Hash 0 only
+  const uintptr_t globalHash = 0;
+  context->visualLookup[globalHash].resize(9);
+
+  for (int L = 0; L < 9; ++L) {
+    auto vGrid = std::make_shared<VisualGrid>();
+    auto aGrid = std::make_shared<AudioGrid>();
+
+    // INHERITANCE: Copy from layer below, then mark as Inherited
     if (L > 0) {
-      // Inherit from previous Global layer
-      auto prevGrid = context->visualLookup[globalHash][(size_t)(L - 1)];
-      if (prevGrid) {
-        *grid = *prevGrid;
-        // Mark everything copied as INHERITED
-        for (auto &slot : *grid) {
-          if (slot.state == VisualState::Active ||
-              slot.state == VisualState::Override) {
-            slot.state = VisualState::Inherited;
-          }
-        }
-      }
-    }
+      *vGrid = *context->visualLookup[globalHash][(size_t)(L - 1)];
+      *aGrid = *context->globalGrids[(size_t)(L - 1)];
 
-    // Apply Global zones and mappings for this layer
-    applyLayerContent(*grid, globalHash, L);
-    context->visualLookup[globalHash][(size_t)L] = grid;
-  }
-
-  // Phase 50.7: PHASE 2 - Compile Device Chains
-  // For each specific alias, build grids that start with Global[L] and
-  // re-apply device layers 0..L
-  for (uintptr_t aliasHash : aliasHashes) {
-    if (aliasHash == 0)
-      continue; // Skip global, already done
-
-    for (int L = 0; L < maxLayers; ++L) {
-      // Start with the Global state at this layer (Global[L] > Device[L-1])
-      auto globalGrid = context->visualLookup[globalHash][(size_t)L];
-      if (!globalGrid) {
-        // Fallback: create empty grid if global doesn't exist
-        auto grid = makeVisualGrid();
-        context->visualLookup[aliasHash][(size_t)L] = grid;
-        continue;
-      }
-
-      auto grid = std::make_shared<VisualGrid>(*globalGrid);
-      // Mark everything from global as INHERITED (device will override)
-      for (auto &slot : *grid) {
-        if (slot.state == VisualState::Active ||
-            slot.state == VisualState::Override) {
+      for (auto &slot : *vGrid) {
+        if (slot.state != VisualState::Empty) {
           slot.state = VisualState::Inherited;
+          // Dim inherited slots (~0.3f alpha)
+          slot.displayColor =
+              slot.displayColor.withAlpha(static_cast<juce::uint8>(76));
         }
       }
-
-      // Re-apply specific device stack from 0 to L (Device[K] > Global[K])
-      for (int k = 0; k <= L; ++k) {
-        applyLayerContent(*grid, aliasHash, k);
-      }
-
-      context->visualLookup[aliasHash][(size_t)L] = grid;
     }
+
+    applyLayerToGrid(*vGrid, *aGrid, L, globalHash);
+
+    context->visualLookup[globalHash][(size_t)L] = vGrid;
+    context->globalGrids[(size_t)L] = aGrid;
   }
 
-  // Phase 50.7: Apply Audio targeting (unchanged - audio doesn't need
-  // interleaved stacking)
-  for (int layerId = 0; layerId < maxLayers; ++layerId) {
-    // B. Apply Zones for this Layer (zones first)
-    GridCompiler::compileZones(*context, zoneMgr, deviceMgr, layerId);
-
-    // C. Apply Manual Mappings for this Layer
-    auto mappingsNode = presetMgr.getMappingsListForLayer(layerId);
-    if (!mappingsNode.isValid())
+  // 4. PASS 2: Compile Device Stacks (Horizontal – Device inherits Global,
+  // then applies device-specific layers 0..L)
+  juce::StringArray aliases = deviceMgr.getAllAliasNames();
+  for (const auto &aliasName : aliases) {
+    uintptr_t devHash =
+        static_cast<uintptr_t>(std::hash<juce::String>{}(aliasName.trim()));
+    if (devHash == 0)
       continue;
 
-    for (int i = 0; i < mappingsNode.getNumChildren(); ++i) {
-      auto mapping = mappingsNode.getChild(i);
-      if (!mapping.isValid() || !mapping.hasType("Mapping"))
-        continue;
+    context->visualLookup[devHash].resize(9);
 
-      const int inputKey = (int)mapping.getProperty("inputKey", 0);
-      if (inputKey < 0 || inputKey > 0xFF)
-        continue; // Out of grid range
+    for (int L = 0; L < 9; ++L) {
+      auto vGrid = std::make_shared<VisualGrid>();
+      auto aGrid = std::make_shared<AudioGrid>();
 
-      // Build MidiAction
-      MidiAction action = buildMidiActionFromMapping(mapping);
+      // STEP A: INHERIT FROM GLOBAL AT THIS LAYER
+      *vGrid = *context->visualLookup[globalHash][(size_t)L];
+      *aGrid = *context->globalGrids[(size_t)L];
 
-      // Determine targeting information
-      juce::String aliasName =
-          mapping.getProperty("inputAlias", "").toString().trim();
-      uintptr_t aliasHash = aliasNameToHash(aliasName);
-
-      juce::var deviceHashVar = mapping.getProperty("deviceHash");
-      bool hasDeviceHash =
-          !deviceHashVar.isVoid() && !deviceHashVar.toString().isEmpty();
-      uintptr_t deviceHash = hasDeviceHash ? parseDeviceHash(deviceHashVar) : 0;
-
-      // AUDIO TARGETING -----------------------------------------------------
-      auto writeToAllDevicesAndGlobal = [&]() {
-        // Global grid for this layer
-        auto globalGrid =
-            getMutableAudioGrid(context->globalGrids[(size_t)layerId]);
-        writeAudioSlot(*globalGrid, inputKey, action);
-        // All existing device grids for this layer
-        for (auto &pair : context->deviceGrids) {
-          auto deviceGrid = getMutableAudioGrid(pair.second[(size_t)layerId]);
-          writeAudioSlot(*deviceGrid, inputKey, action);
-        }
-      };
-
-      if ((hasDeviceHash && deviceHash == 0) || aliasHash == 0) {
-        // Global mapping: write to global grid and every device grid.
-        writeToAllDevicesAndGlobal();
-      } else {
-        juce::Array<uintptr_t> hardwareTargets;
-
-        if (!aliasName.isEmpty()) {
-          hardwareTargets = deviceMgr.getHardwareForAlias(aliasName);
-        } else if (hasDeviceHash && deviceHash != 0) {
-          hardwareTargets.add(deviceHash);
-        }
-
-        for (auto hardwareId : hardwareTargets) {
-          if (hardwareId == 0)
-            continue;
-
-          auto &gridPtr = context->deviceGrids[hardwareId][(size_t)layerId];
-          auto deviceGrid = getMutableAudioGrid(gridPtr);
-          writeAudioSlot(*deviceGrid, inputKey, action);
-        }
-
-        // If nothing targeted and aliasHash is still 0, treat as global.
-        if (hardwareTargets.isEmpty() && aliasHash == 0) {
-          writeToAllDevicesAndGlobal();
+      // VISUAL TRANSITION: Global data is "Inherited" from the device's
+      // perspective
+      for (auto &slot : *vGrid) {
+        if (slot.state != VisualState::Empty) {
+          slot.state = VisualState::Inherited;
+          slot.displayColor =
+              slot.displayColor.withAlpha(static_cast<juce::uint8>(76));
         }
       }
+
+      // STEP B: APPLY DEVICE SPECIFIC STACK (0 to L)
+      for (int k = 0; k <= L; ++k)
+        applyLayerToGrid(*vGrid, *aGrid, k, devHash);
+
+      context->visualLookup[devHash][(size_t)L] = vGrid;
+      context->deviceGrids[devHash][(size_t)L] = aGrid;
     }
   }
 

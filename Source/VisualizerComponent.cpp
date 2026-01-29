@@ -116,10 +116,14 @@ VisualizerComponent::~VisualizerComponent() {
 }
 
 void VisualizerComponent::refreshCache() {
-  // SAFETY: Prevent creating 0x0 images or drawing into invalid bounds
+  // Phase 52.2: Render pre-compiled VisualGrid from InputProcessor only.
   if (getWidth() <= 0 || getHeight() <= 0) {
     cacheValid = false;
     backgroundCache = juce::Image();
+    return;
+  }
+  if (!inputProcessor) {
+    cacheValid = false;
     return;
   }
   if (!zoneManager) {
@@ -264,28 +268,26 @@ void VisualizerComponent::refreshCache() {
           labelText = slot.label;
       }
 
-      // Determine alpha and border styling from VisualState
-      // Phase 50.8: Enhanced conflict rendering
+      // Phase 52.2: Drawing rules from pre-compiled VisualGrid (slot data only)
       juce::Colour textColor = juce::Colours::white;
 
       if (state == VisualState::Inherited) {
         alpha = 0.3f;
-        borderColor = juce::Colours::darkgrey;
+        borderColor = juce::Colours::grey;
         borderWidth = 1.0f;
       } else if (state == VisualState::Override) {
         alpha = 1.0f;
         borderColor = juce::Colours::orange;
-        borderWidth = 2.0f;
-      } else if (state == VisualState::Conflict) {
-        // Phase 50.8: "Red Backdrop, Red Text" style
-        alpha = 1.0f;
-        underlayColor = juce::Colours::darkred; // Darker red background
-        borderColor = juce::Colours::red;       // Bright red border
-        textColor = juce::Colours::red;         // Bright red text
         borderWidth = 2.5f;
+      } else if (state == VisualState::Conflict) {
+        alpha = 1.0f;
+        underlayColor = juce::Colours::darkred;
+        borderColor = juce::Colours::yellow;
+        borderWidth = 2.5f;
+        textColor = juce::Colours::white;
       } else if (state == VisualState::Active) {
         alpha = 1.0f;
-        borderColor = juce::Colours::lightgrey;
+        borderColor = juce::Colours::grey;
         borderWidth = 1.0f;
       } else {
         alpha = 1.0f;
@@ -423,7 +425,8 @@ void VisualizerComponent::paint(juce::Graphics &g) {
     }
   }
 
-  // --- Draw Dynamic Keys (Active/Latched) on Top of Cache ---
+  // Phase 52.2: Live input overlays only (no simulateInput). Yellow = pressed,
+  // Cyan = latched.
   for (int keyCode : keysToRender) {
     auto it = layout.find(keyCode);
     if (it == layout.end())

@@ -1,12 +1,13 @@
+#include "../ChordUtilities.h"
 #include "../DeviceManager.h"
 #include "../GridCompiler.h"
 #include "../MappingTypes.h"
 #include "../PresetManager.h"
 #include "../ScaleLibrary.h"
 #include "../SettingsManager.h"
+#include "../Zone.h"
 #include "../ZoneManager.h"
 #include <gtest/gtest.h>
-
 
 class GridCompilerTest : public ::testing::Test {
 protected:
@@ -129,4 +130,89 @@ TEST_F(GridCompilerTest, DeviceOverridesGlobal) {
   // Assert: Device Grid should be Override (Local overrides inherited Global)
   auto deviceGrid = context->visualLookup[aliasHash][0];
   EXPECT_EQ((*deviceGrid)[81].state, VisualState::Override);
+}
+
+// TEST C: Horizontal Inheritance (Global flows into Device)
+TEST_F(GridCompilerTest, DeviceInheritsFromGlobal) {
+  // Arrange: Map Q globally on Layer 0
+  addMapping(0, 81, 0);
+
+  // Act
+  auto context =
+      GridCompiler::compile(presetMgr, deviceMgr, zoneMgr, settingsMgr);
+
+  // Assert: The specific device should see this as Inherited
+  auto deviceGrid = context->visualLookup[aliasHash][0];
+  EXPECT_EQ((*deviceGrid)[81].state, VisualState::Inherited);
+}
+
+// TEST D: Horizontal Override (Device masks Global) – device maps Q to CC
+TEST_F(GridCompilerTest, DeviceOverridesGlobalWithCC) {
+  // Arrange
+  addMapping(0, 81, 0);                         // Global maps Q to Note
+  addMapping(0, 81, aliasHash, ActionType::CC); // Device maps Q to CC
+
+  // Act
+  auto context =
+      GridCompiler::compile(presetMgr, deviceMgr, zoneMgr, settingsMgr);
+
+  // Assert: Device grid should show Override
+  auto deviceGrid = context->visualLookup[aliasHash][0];
+  EXPECT_EQ((*deviceGrid)[81].state, VisualState::Override);
+}
+
+// TEST F: Generic Modifier Expansion
+// If I map "Shift" (0x10), it should automatically map LShift (0xA0) and RShift
+// (0xA1).
+TEST_F(GridCompilerTest, GenericShiftExpandsToSides) {
+  addMapping(0, 0x10, 0); // VK_SHIFT
+
+  auto context =
+      GridCompiler::compile(presetMgr, deviceMgr, zoneMgr, settingsMgr);
+  auto grid = context->visualLookup[0][0];
+
+  EXPECT_EQ((*grid)[0xA0].state, VisualState::Active); // Left Shift
+  EXPECT_EQ((*grid)[0xA1].state, VisualState::Active); // Right Shift
+}
+
+// TEST G: Generic Modifier Override
+// If I map "Shift" (Generic) to CC, but then specifically map "LShift" to Note,
+// LShift uses the specific mapping.
+TEST_F(GridCompilerTest, SpecificModifierOverridesGeneric) {
+  addMapping(0, 0x10, 0, ActionType::CC);   // Generic -> CC
+  addMapping(0, 0xA0, 0, ActionType::Note); // LShift -> Note
+
+  auto context =
+      GridCompiler::compile(presetMgr, deviceMgr, zoneMgr, settingsMgr);
+  auto grid = context->visualLookup[0][0];
+
+  // LShift: specific Note (default data1=60 -> "C4")
+  EXPECT_EQ((*grid)[0xA0].label, "C4");
+  // RShift: inherited generic CC (default data1=60)
+  EXPECT_EQ((*grid)[0xA1].label, "CC 60");
+}
+
+// TEST H: Chord Compilation (Audio Data)
+TEST_F(GridCompilerTest, ZoneCompilesToChordPool) {
+  auto zone = std::make_shared<Zone>();
+  zone->name = "Triad Zone";
+  zone->layerID = 0;
+  zone->targetAliasHash = 0;
+  zone->inputKeyCodes = {81};
+  zone->chordType = ChordUtilities::ChordType::Triad;
+  zone->scaleName = "Major";
+  zone->rootNote = 60;
+  zoneMgr.addZone(zone); // addZone calls rebuildZoneCache
+
+  auto context =
+      GridCompiler::compile(presetMgr, deviceMgr, zoneMgr, settingsMgr);
+  auto audioGrid = context->globalGrids[0];
+
+  const auto &slot = (*audioGrid)[81];
+  EXPECT_TRUE(slot.isActive);
+  EXPECT_GE(slot.chordIndex, 0);
+
+  ASSERT_LT(static_cast<size_t>(slot.chordIndex), context->chordPool.size());
+  const auto &chord = context->chordPool[static_cast<size_t>(slot.chordIndex)];
+  EXPECT_EQ(chord.size(), 3u); // Triad = 3 notes
 }
