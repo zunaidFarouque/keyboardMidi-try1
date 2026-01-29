@@ -34,6 +34,16 @@ VisualizerComponent::VisualizerComponent(ZoneManager *zoneMgr,
   // Ensure selector is on top to receive mouse events
   viewSelector.toFront(false);
 
+  // Phase 50.9.1: Follow Input toggle
+  addAndMakeVisible(followButton);
+  followButton.setClickingTogglesState(true);
+  followButton.onClick = [this] {
+    followInputEnabled.store(followButton.getToggleState(),
+                             std::memory_order_release);
+    updateFollowButtonAppearance();
+  };
+  updateFollowButtonAppearance();
+
   // Hide view selector if Studio Mode is OFF (Phase 9.5)
   if (settingsManager) {
     viewSelector.setVisible(settingsManager->isStudioMode());
@@ -46,27 +56,8 @@ VisualizerComponent::VisualizerComponent(ZoneManager *zoneMgr,
 
   // Initial positioning (will be updated in resized(), but set initial bounds)
   viewSelector.setBounds(0, 0, 200, 25);
-  vBlankAttachment = std::make_unique<juce::VBlankAttachment>(this, [this] {
-    // OPTIMIZATION: Stop all processing if window is minimized
-    if (auto *peer = getPeer()) {
-      if (peer->isMinimised()) {
-        return;
-      }
-    }
-
-    // 1. Poll External States (VoiceManager)
-    bool currentSustain = voiceManager.isSustainActive();
-
-    if (currentSustain != lastSustainState) {
-      lastSustainState = currentSustain;
-      needsRepaint = true;
-    }
-
-    // 2. Check Dirty Flag
-    if (needsRepaint.exchange(false)) { // Atomic read-and-reset
-      repaint();
-    }
-  });
+  // Phase 50.9: Use juce::Timer at ~30 FPS instead of VBlankAttachment
+  startTimer(33);
 }
 
 void VisualizerComponent::setVisualizedLayer(int layerId) {
@@ -97,8 +88,8 @@ void VisualizerComponent::initialize() {
 }
 
 VisualizerComponent::~VisualizerComponent() {
-  // Stop callbacks immediately
-  vBlankAttachment = nullptr;
+  // Stop timer callbacks immediately
+  stopTimer();
 
   // Unregister listeners
   // Note: rawInputManager listener is removed by MainComponent destructor
@@ -274,6 +265,9 @@ void VisualizerComponent::refreshCache() {
       }
 
       // Determine alpha and border styling from VisualState
+      // Phase 50.8: Enhanced conflict rendering
+      juce::Colour textColor = juce::Colours::white;
+
       if (state == VisualState::Inherited) {
         alpha = 0.3f;
         borderColor = juce::Colours::darkgrey;
@@ -283,11 +277,12 @@ void VisualizerComponent::refreshCache() {
         borderColor = juce::Colours::orange;
         borderWidth = 2.0f;
       } else if (state == VisualState::Conflict) {
+        // Phase 50.8: "Red Backdrop, Red Text" style
         alpha = 1.0f;
-        borderColor = juce::Colours::red;
-        borderWidth = 2.0f;
-        // In conflict, force red fill.
-        underlayColor = juce::Colours::red;
+        underlayColor = juce::Colours::darkred; // Darker red background
+        borderColor = juce::Colours::red;       // Bright red border
+        textColor = juce::Colours::red;         // Bright red text
+        borderWidth = 2.5f;
       } else if (state == VisualState::Active) {
         alpha = 1.0f;
         borderColor = juce::Colours::lightgrey;
@@ -315,8 +310,7 @@ void VisualizerComponent::refreshCache() {
       g.setColour(borderColor);
       g.drawRoundedRectangle(keyBounds, 6.0f, borderWidth);
 
-      // Layer 4: Text (white; conflict already shown via border/fill)
-      juce::Colour textColor = juce::Colours::white;
+      // Layer 4: Text (Phase 50.8: red for conflicts, white otherwise)
       g.setColour(textColor);
       g.setFont(keySize * 0.4f);
       g.drawText(labelText, keyBounds, juce::Justification::centred, false);
@@ -509,8 +503,18 @@ void VisualizerComponent::resized() {
     int selectorHeight = 25;
     int margin = 10;
     int selectorY = headerHeight + margin; // Position below status bar
-    viewSelector.setBounds(getWidth() - selectorWidth - margin, selectorY,
-                           selectorWidth, selectorHeight);
+    int buttonWidth = 110;
+    int buttonHeight = selectorHeight;
+
+    // Place follow button to the left of the view selector
+    int selectorX = getWidth() - selectorWidth - margin;
+    int buttonX = selectorX - buttonWidth - 8;
+
+    followButton.setBounds(buttonX, selectorY, buttonWidth, buttonHeight);
+    viewSelector.setBounds(selectorX, selectorY, selectorWidth, selectorHeight);
+  } else {
+    // If the selector is hidden (Studio Mode off), hide follow button too.
+    followButton.setBounds(0, 0, 0, 0);
   }
 
   cacheValid = false; // Invalidate cache on resize
@@ -518,14 +522,39 @@ void VisualizerComponent::resized() {
   repaint(); // Resize needs immediate repaint
 }
 
+void VisualizerComponent::updateFollowButtonAppearance() {
+  const bool enabled = followInputEnabled.load(std::memory_order_relaxed);
+  followButton.setToggleState(enabled, juce::dontSendNotification);
+
+  // Simple visual cue
+  followButton.setColour(juce::TextButton::buttonColourId,
+                         enabled ? juce::Colours::darkgreen
+                                 : juce::Colours::darkgrey);
+  followButton.setColour(juce::TextButton::textColourOffId,
+                         juce::Colours::white);
+  followButton.setColour(juce::TextButton::textColourOnId,
+                         juce::Colours::white);
+}
+
 void VisualizerComponent::handleRawKeyEvent(uintptr_t deviceHandle, int keyCode,
                                             bool isDown) {
-  juce::ScopedLock lock(keyStateLock);
-  if (isDown)
-    activeKeys.insert(keyCode);
-  else
-    activeKeys.erase(keyCode);
-  needsRepaint = true;
+  // Phase 50.9: Hot path – keep this extremely lightweight.
+  // 1) Update mailbox with last input device (for Dynamic View), on key-down.
+  if (isDown) {
+    lastInputDeviceHandle.store(deviceHandle, std::memory_order_relaxed);
+  }
+
+  // 2) Track active keys (kept for visual overlays; guarded by lock).
+  {
+    juce::ScopedLock lock(keyStateLock);
+    if (isDown)
+      activeKeys.insert(keyCode);
+    else
+      activeKeys.erase(keyCode);
+  }
+
+  // 3) Mark dirty, but DO NOT repaint here – timerCallback() owns repaint.
+  needsRepaint.store(true, std::memory_order_release);
 }
 
 void VisualizerComponent::handleAxisEvent(uintptr_t deviceHandle, int inputCode,
@@ -630,6 +659,70 @@ void VisualizerComponent::onViewSelectorChanged() {
   // Invalidate cache and repaint
   cacheValid = false;
   needsRepaint = true;
+}
+
+void VisualizerComponent::timerCallback() {
+  // Phase 50.9: Async Dynamic View and 30Hz UI polling. Runs on the message
+  // thread only.
+
+  // Step 1: Dynamic View – adjust view + layer based on last input.
+  if (followInputEnabled.load(std::memory_order_acquire)) {
+    // A. Device Switching
+    uintptr_t handle = lastInputDeviceHandle.load(std::memory_order_relaxed);
+    if (handle != 0 && deviceManager != nullptr && viewSelector.isVisible()) {
+      juce::String aliasName = deviceManager->getAliasForHardware(handle);
+      uintptr_t aliasHash =
+          (aliasName != "Unassigned" && aliasName.isNotEmpty())
+              ? aliasNameToHash(aliasName)
+              : 0;
+
+      if (aliasHash != currentViewHash) {
+        currentViewHash = aliasHash;
+
+        // Update selector UI to match the new hash (no notifications)
+        int idxToSelect = 0;
+        for (size_t i = 0; i < viewHashes.size(); ++i) {
+          if (viewHashes[i] == currentViewHash) {
+            idxToSelect = (int)i;
+            break;
+          }
+        }
+        viewSelector.setSelectedItemIndex(idxToSelect,
+                                          juce::dontSendNotification);
+
+        cacheValid = false;
+        needsRepaint.store(true, std::memory_order_release);
+      }
+    }
+
+    // B. Layer Switching – follow the highest active layer from InputProcessor.
+    if (inputProcessor) {
+      int activeLayer = inputProcessor->getHighestActiveLayerIndex();
+      if (currentVisualizedLayer != activeLayer) {
+        setVisualizedLayer(activeLayer); // invalidates cache + marks dirty
+        needsRepaint.store(true, std::memory_order_release);
+      }
+    }
+  }
+
+  // Step 2: Poll external state + rebuild cache / repaint on demand.
+
+  // Check external Sustain state
+  bool sus = voiceManager.isSustainActive();
+  if (lastSustainState != sus) {
+    lastSustainState = sus;
+    needsRepaint.store(true, std::memory_order_release);
+  }
+
+  // Rebuild Cache if invalid
+  if (!cacheValid) {
+    refreshCache();
+  }
+
+  // Repaint if needed
+  if (needsRepaint.exchange(false, std::memory_order_acq_rel)) {
+    repaint();
+  }
 }
 
 void VisualizerComponent::valueTreeChildAdded(

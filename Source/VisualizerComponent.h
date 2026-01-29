@@ -6,7 +6,6 @@
 #include <atomic>
 #include <set>
 
-
 class InputProcessor;
 class PresetManager;
 class SettingsManager;
@@ -15,7 +14,8 @@ class VoiceManager;
 class VisualizerComponent : public juce::Component,
                             public RawInputManager::Listener,
                             public juce::ChangeListener,
-                            public juce::ValueTree::Listener {
+                            public juce::ValueTree::Listener,
+                            public juce::Timer {
 public:
   VisualizerComponent(ZoneManager *zoneMgr, DeviceManager *deviceMgr,
                       const VoiceManager &voiceMgr,
@@ -63,7 +63,14 @@ private:
   int currentVisualizedLayer = 0; // Phase 45.3: which layer we are inspecting
   std::set<int> activeKeys;
   mutable juce::CriticalSection keyStateLock;
-  std::unique_ptr<juce::VBlankAttachment> vBlankAttachment;
+
+  // Phase 50.9: Async Dynamic View (mailbox-style atomics)
+  std::atomic<uintptr_t> lastInputDeviceHandle{0}; // Written by Input Thread
+  std::atomic<bool> followInputEnabled{false};     // UI State
+
+  // Phase 50.9.1: Follow toggle UI (kept simple for clarity)
+  juce::TextButton followButton{"Follow Input"};
+  void updateFollowButtonAppearance();
 
   // Dirty flag for rendering optimization
   std::atomic<bool> needsRepaint{true};
@@ -82,6 +89,9 @@ private:
   std::vector<uintptr_t> viewHashes; // Store full 64-bit hashes (Phase 39.2)
   void updateViewSelector();
   void onViewSelectorChanged();
+
+  // Phase 50.9: 30Hz UI polling
+  void timerCallback() override;
 
   JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(VisualizerComponent)
 };

@@ -1354,6 +1354,15 @@ juce::StringArray InputProcessor::getActiveLayerNames() {
   return result;
 }
 
+int InputProcessor::getHighestActiveLayerIndex() const {
+  juce::ScopedReadLock lock(mapLock);
+  for (int i = static_cast<int>(layers.size()) - 1; i >= 0; --i) {
+    if (layers[(size_t)i].isActive())
+      return i;
+  }
+  return 0;
+}
+
 bool InputProcessor::hasManualMappingForKey(int keyCode) {
   juce::ScopedReadLock ctxLock(contextLock);
   auto ctx = activeContext;

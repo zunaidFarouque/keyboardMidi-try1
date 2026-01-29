@@ -58,3 +58,11 @@ then, what if we make a system:
 we need to add icon to our software.
 
 
+
+---
+
+===
+
+---
+
+Thank you... now that the compiler is unified and optimized, we need to make the logger optimized and unified too.

@@ -200,38 +200,67 @@ void writeAudioSlot(AudioGrid &grid, int keyCode, const MidiAction &action) {
 
 // Apply a visual slot with stacking semantics: if the slot already has a value
 // (from a lower layer), mark as Override, otherwise Active.
+// Phase 50.8: Added conflict detection via touchedKeys vector.
 void applyVisualSlot(VisualGrid &grid, int keyCode, const juce::Colour &color,
-                     const juce::String &label,
-                     const juce::String &sourceName) {
+                     const juce::String &label, const juce::String &sourceName,
+                     std::vector<bool> *touchedKeys = nullptr) {
   if (keyCode < 0 || keyCode >= (int)grid.size())
     return;
 
   auto &slot = grid[(size_t)keyCode];
   const bool hadContent = (slot.state != VisualState::Empty);
 
-  slot.displayColor = color;
-  slot.label = label;
-  slot.sourceName = sourceName;
-  slot.state = hadContent ? VisualState::Override : VisualState::Active;
+  // Phase 50.8: Conflict detection - check if this key was already written to
+  // in the current layer pass
+  bool isConflict = false;
+  if (touchedKeys && keyCode < (int)touchedKeys->size()) {
+    if ((*touchedKeys)[(size_t)keyCode]) {
+      isConflict = true;
+    } else {
+      (*touchedKeys)[(size_t)keyCode] = true;
+    }
+  }
+
+  if (isConflict) {
+    // Conflict: Multiple assignments in same layer
+    slot.state = VisualState::Conflict;
+    slot.displayColor = juce::Colours::darkred;
+    slot.label = label + " (!)";
+    slot.sourceName = sourceName;
+  } else {
+    // Normal assignment
+    slot.displayColor = color;
+    slot.label = label;
+    slot.sourceName = sourceName;
+    slot.state = hadContent ? VisualState::Override : VisualState::Active;
+  }
 }
 
 // Apply a visual slot and replicate to L/R modifier keys if the source key is
 // a generic modifier, using the same stacking override logic.
+// Phase 50.8: Added conflict detection via touchedKeys vector.
 void applyVisualWithModifiers(VisualGrid &grid, int keyCode,
                               const juce::Colour &color,
                               const juce::String &label,
-                              const juce::String &sourceName) {
-  applyVisualSlot(grid, keyCode, color, label, sourceName);
+                              const juce::String &sourceName,
+                              std::vector<bool> *touchedKeys = nullptr) {
+  applyVisualSlot(grid, keyCode, color, label, sourceName, touchedKeys);
 
   if (isGenericShift(keyCode)) {
-    applyVisualSlot(grid, InputTypes::Key_LShift, color, label, sourceName);
-    applyVisualSlot(grid, InputTypes::Key_RShift, color, label, sourceName);
+    applyVisualSlot(grid, InputTypes::Key_LShift, color, label, sourceName,
+                    touchedKeys);
+    applyVisualSlot(grid, InputTypes::Key_RShift, color, label, sourceName,
+                    touchedKeys);
   } else if (isGenericControl(keyCode)) {
-    applyVisualSlot(grid, InputTypes::Key_LControl, color, label, sourceName);
-    applyVisualSlot(grid, InputTypes::Key_RControl, color, label, sourceName);
+    applyVisualSlot(grid, InputTypes::Key_LControl, color, label, sourceName,
+                    touchedKeys);
+    applyVisualSlot(grid, InputTypes::Key_RControl, color, label, sourceName,
+                    touchedKeys);
   } else if (isGenericAlt(keyCode)) {
-    applyVisualSlot(grid, InputTypes::Key_LAlt, color, label, sourceName);
-    applyVisualSlot(grid, InputTypes::Key_RAlt, color, label, sourceName);
+    applyVisualSlot(grid, InputTypes::Key_LAlt, color, label, sourceName,
+                    touchedKeys);
+    applyVisualSlot(grid, InputTypes::Key_RAlt, color, label, sourceName,
+                    touchedKeys);
   }
 }
 
@@ -322,8 +351,9 @@ GridCompiler::compile(PresetManager &presetMgr, DeviceManager &deviceMgr,
   }
 
   // Phase 50.7: Helper to apply zones for a specific alias/layer to a grid
+  // Phase 50.8: Added touchedKeys parameter for conflict detection
   auto applyZonesForLayer = [&](VisualGrid &grid, uintptr_t aliasHash,
-                                int layerId) {
+                                int layerId, std::vector<bool> *touchedKeys) {
     const int globalChrom = zoneMgr.getGlobalChromaticTranspose();
     const int globalDeg = zoneMgr.getGlobalDegreeTranspose();
     const auto zones = zoneMgr.getZones();
@@ -353,14 +383,17 @@ GridCompiler::compile(PresetManager &presetMgr, DeviceManager &deviceMgr,
         juce::String label = zone->getKeyLabel(keyCode);
         juce::String sourceName = "Zone: " + zone->name;
 
-        applyVisualWithModifiers(grid, keyCode, color, label, sourceName);
+        applyVisualWithModifiers(grid, keyCode, color, label, sourceName,
+                                 touchedKeys);
       }
     }
   };
 
   // Phase 50.7: Helper to apply mappings for a specific alias/layer to a grid
+  // Phase 50.8: Added touchedKeys parameter for conflict detection
   auto applyMappingsForLayer = [&](VisualGrid &grid, uintptr_t aliasHash,
-                                   int layerId) {
+                                   int layerId,
+                                   std::vector<bool> *touchedKeys) {
     auto mappingsNode = presetMgr.getMappingsListForLayer(layerId);
     if (!mappingsNode.isValid())
       return;
@@ -404,15 +437,19 @@ GridCompiler::compile(PresetManager &presetMgr, DeviceManager &deviceMgr,
       juce::String sourceName =
           aliasName.isNotEmpty() ? ("Mapping: " + aliasName) : "Mapping";
 
-      applyVisualWithModifiers(grid, inputKey, color, label, sourceName);
+      applyVisualWithModifiers(grid, inputKey, color, label, sourceName,
+                               touchedKeys);
     }
   };
 
   // Phase 50.7: Helper to apply a single layer's content (zones + mappings)
+  // Phase 50.8: Added conflict detection - track touched keys per layer pass
   auto applyLayerContent = [&](VisualGrid &grid, uintptr_t aliasHash,
                                int layerId) {
-    applyZonesForLayer(grid, aliasHash, layerId);
-    applyMappingsForLayer(grid, aliasHash, layerId);
+    // Phase 50.8: Track which keys have been written to in this layer pass
+    std::vector<bool> touchedKeys(256, false);
+    applyZonesForLayer(grid, aliasHash, layerId, &touchedKeys);
+    applyMappingsForLayer(grid, aliasHash, layerId, &touchedKeys);
   };
 
   // Phase 50.7: PHASE 1 - Compile Global Chain (Hash 0)

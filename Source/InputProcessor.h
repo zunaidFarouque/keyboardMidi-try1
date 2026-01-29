@@ -81,6 +81,9 @@ public:
   // Phase 45: Get names of all active layers (thread-safe)
   juce::StringArray getActiveLayerNames();
 
+  // Phase 50.9: Get highest active layer index (for Dynamic View following)
+  int getHighestActiveLayerIndex() const;
+
   // True if any manual mapping exists for this keyCode (for conflict highlight
   // in visualizer)
   bool hasManualMappingForKey(int keyCode);
