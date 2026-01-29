@@ -47,4 +47,4 @@
 ## ⚠️ Critical Constraints (Do Not Break)
 1.  **Shutdown:** `Visualizer`, `MappingEditor`, etc. use `SafePointer` or explicit `shutdown()` calls. Do not remove these checks.
 2.  **Layers:** Layer 0 is the Base. Layers 1-8 are toggled via Commands (`LayerMomentary`, `LayerToggle`).
-3.  **Presets:** `PresetManager` uses a Transaction (`isLoading` flag) to prevent Event Storms during load.
+3.  **Presets:** `PresetManager` uses a Transaction (`isLoading` flag) to prevent Event Storms during load. 
