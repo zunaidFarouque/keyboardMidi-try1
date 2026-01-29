@@ -1,10 +1,10 @@
 #include "VisualizerComponent.h"
 #include "InputProcessor.h"
+#include "KeyboardLayoutUtils.h"
 #include "PresetManager.h"
 #include "RawInputManager.h"
 #include "SettingsManager.h"
 #include "VoiceManager.h"
-#include "Zone.h"
 #include <JuceHeader.h>
 #include <algorithm>
 
@@ -211,6 +211,33 @@ void VisualizerComponent::refreshCache() {
     float startX = (static_cast<float>(width) - totalWidth) / 2.0f;
 
     // --- 2. Iterate Keys (Draw Static State Only) ---
+    // Acquire baked visual grid from InputProcessor (Phase 50.6).
+    std::shared_ptr<const CompiledMapContext> contextPtr;
+    std::shared_ptr<const VisualGrid> targetGrid;
+
+    if (inputProcessor) {
+      contextPtr = inputProcessor->getContext();
+    }
+    if (contextPtr) {
+      const auto &visualLookup = contextPtr->visualLookup;
+      const std::vector<std::shared_ptr<const VisualGrid>> *layerVec = nullptr;
+
+      auto it = visualLookup.find(currentViewHash);
+      if (it != visualLookup.end() && currentViewHash != 0) {
+        layerVec = &it->second;
+      } else {
+        auto itGlobal = visualLookup.find(0);
+        if (itGlobal != visualLookup.end()) {
+          layerVec = &itGlobal->second;
+        }
+      }
+
+      if (layerVec && currentVisualizedLayer >= 0 &&
+          currentVisualizedLayer < (int)layerVec->size()) {
+        targetGrid = (*layerVec)[(size_t)currentVisualizedLayer];
+      }
+    }
+
     const auto &layout = KeyboardLayoutUtils::getLayout();
     for (const auto &pair : layout) {
       int keyCode = pair.first;
@@ -228,130 +255,47 @@ void VisualizerComponent::refreshCache() {
       float padding = keySize * 0.1f;
       auto keyBounds = fullBounds.reduced(padding);
 
-      // --- 3. Get Data from Engine using SimulationResult (Phase 39.1/39.5)
-      // ---
-      SimulationResult simResult;
+      // --- 3. Get Data from pre-baked VisualGrid (Phase 50.4/50.6) ---
       juce::Colour underlayColor = juce::Colours::transparentBlack;
       juce::Colour borderColor = juce::Colours::grey;
       float borderWidth = 1.0f;
       float alpha = 1.0f;
 
-      if (inputProcessor && settingsManager) {
-        // Phase 9.5: When Studio Mode is OFF, simulateInput will force
-        // viewDeviceHash to 0 So we can always call it, but use currentViewHash
-        // (which is 0 when Studio Mode is OFF)
-        simResult = inputProcessor->simulateInput(currentViewHash, keyCode,
-                                                  currentVisualizedLayer);
-
-        // Phase 39.5: Fix color determination logic
-        // Note: When Studio Mode is OFF, simulateInput forces viewDeviceHash to
-        // 0, so this works correctly
-        if (simResult.state != VisualState::Empty) {
-          // 1. Determine Base Color
-          if (simResult.isZone) {
-            // Phase 47: color lookup should not depend on VisualState.
-            // Try current view first, then fall back to Global.
-            auto findZoneColorInLayerStack = [&](uintptr_t viewHash) {
-              // Try current visualized layer first
-              auto z = zoneManager->getZoneColorForKey(keyCode, viewHash,
-                                                       currentVisualizedLayer);
-              if (!z.has_value() && viewHash != 0) {
-                z = zoneManager->getZoneColorForKey(keyCode, 0,
-                                                    currentVisualizedLayer);
-              }
-              // Inherit from lower layers if not found
-              for (int li = currentVisualizedLayer - 1;
-                   !z.has_value() && li >= 0; --li) {
-                z = zoneManager->getZoneColorForKey(keyCode, viewHash, li);
-                if (!z.has_value() && viewHash != 0)
-                  z = zoneManager->getZoneColorForKey(keyCode, 0, li);
-              }
-              return z;
-            };
-
-            auto zColor = findZoneColorInLayerStack(currentViewHash);
-
-            if (zColor.has_value())
-              underlayColor = zColor.value();
-          } else if (simResult.action.has_value()) {
-            // Manual Mapping: use type color
-            underlayColor =
-                settingsManager->getTypeColor(simResult.action->type);
-          }
-
-          // 2. Determine Alpha / Style
-          if (simResult.state == VisualState::Conflict) {
-            // Phase 39.7/39.8: Conflict state (zone overlaps or Manual vs Zone
-            // collision) Force Red - overwrites base color
-            underlayColor = juce::Colours::red;
-            borderColor = juce::Colours::red;
-            alpha = 1.0f;
-            borderWidth = 2.0f;
-          } else if (simResult.state == VisualState::Inherited) {
-            alpha = 0.3f; // Dim for inherited
-            borderColor = juce::Colours::darkgrey;
-            borderWidth = 1.0f;
-          } else if (simResult.state == VisualState::Override) {
-            alpha = 1.0f;
-            borderColor = juce::Colours::orange; // Highlight override
-            borderWidth = 2.0f;
-          } else if (simResult.state == VisualState::Active) {
-            alpha = 1.0f;
-            borderColor = juce::Colours::lightgrey;
-            borderWidth = 1.0f;
-          }
-
-          // Phase 47.1: apply alpha at draw time (after all overrides)
-        }
-      } else {
-        // Fallback for non-Studio Mode (use old logic)
-        int zoneCount = zoneManager->getZoneCountForKey(keyCode);
-        bool hasManual =
-            inputProcessor && inputProcessor->hasManualMappingForKey(keyCode);
-        bool isConflict = (zoneCount >= 2) || (zoneCount >= 1 && hasManual);
-
-        if (isConflict) {
-          underlayColor = juce::Colours::red.withAlpha(0.7f);
-        } else {
-          auto manualType = (inputProcessor && settingsManager)
-                                ? inputProcessor->getMappingType(keyCode, 0)
-                                : std::optional<ActionType>{};
-          if (manualType.has_value()) {
-            underlayColor = settingsManager->getTypeColor(manualType.value());
-          } else {
-            auto zoneColor = zoneManager->getZoneColorForKey(keyCode, 0, 0);
-            if (zoneColor.has_value()) {
-              underlayColor = zoneColor.value();
-            }
-          }
-        }
-      }
-
-      // C. Text/Label - Use simResult which already has correct hierarchy
+      VisualState state = VisualState::Empty;
       juce::String labelText = geometry.label;
 
-      if (simResult.action.has_value()) {
-        if (simResult.action->type == ActionType::Note) {
-          labelText =
-              MidiNoteUtilities::getMidiNoteName(simResult.action->data1);
-        }
-      } else {
-        // Fallback: Try to find zone label if no action found
-        // Check current view hash first, then global
-        std::pair<std::shared_ptr<Zone>, bool> zoneInfo{nullptr, false};
-        if (currentViewHash != 0) {
-          zoneInfo = findZoneForKey(keyCode, currentViewHash);
-        }
-        if (!zoneInfo.first) {
-          zoneInfo = findZoneForKey(keyCode, 0);
-        }
+      if (targetGrid && keyCode >= 0 && keyCode < (int)targetGrid->size()) {
+        const auto &slot = (*targetGrid)[(size_t)keyCode];
+        state = slot.state;
+        if (!slot.displayColor.isTransparent())
+          underlayColor = slot.displayColor;
+        if (slot.label.isNotEmpty())
+          labelText = slot.label;
+      }
 
-        if (zoneInfo.first) {
-          juce::String cachedLabel = zoneInfo.first->getKeyLabel(keyCode);
-          if (cachedLabel.isNotEmpty()) {
-            labelText = cachedLabel;
-          }
-        }
+      // Determine alpha and border styling from VisualState
+      if (state == VisualState::Inherited) {
+        alpha = 0.3f;
+        borderColor = juce::Colours::darkgrey;
+        borderWidth = 1.0f;
+      } else if (state == VisualState::Override) {
+        alpha = 1.0f;
+        borderColor = juce::Colours::orange;
+        borderWidth = 2.0f;
+      } else if (state == VisualState::Conflict) {
+        alpha = 1.0f;
+        borderColor = juce::Colours::red;
+        borderWidth = 2.0f;
+        // In conflict, force red fill.
+        underlayColor = juce::Colours::red;
+      } else if (state == VisualState::Active) {
+        alpha = 1.0f;
+        borderColor = juce::Colours::lightgrey;
+        borderWidth = 1.0f;
+      } else {
+        alpha = 1.0f;
+        borderColor = juce::Colours::grey;
+        borderWidth = 1.0f;
       }
 
       // --- 4. Render Static Layers (Off State) ---
@@ -371,10 +315,8 @@ void VisualizerComponent::refreshCache() {
       g.setColour(borderColor);
       g.drawRoundedRectangle(keyBounds, 6.0f, borderWidth);
 
-      // Layer 4: Text (white for normal/override, red only for conflicts)
-      juce::Colour textColor = (simResult.state == VisualState::Conflict)
-                                   ? juce::Colours::red
-                                   : juce::Colours::white;
+      // Layer 4: Text (white; conflict already shown via border/fill)
+      juce::Colour textColor = juce::Colours::white;
       g.setColour(textColor);
       g.setFont(keySize * 0.4f);
       g.drawText(labelText, keyBounds, juce::Justification::centred, false);
@@ -507,46 +449,12 @@ void VisualizerComponent::paint(juce::Graphics &g) {
     float padding = keySize * 0.1f;
     auto keyBounds = fullBounds.reduced(padding);
 
-    // Get key state
+    // Get key state (input overlays only – no simulation in paint)
     bool isPressed =
         (activeKeysSnapshot.find(keyCode) != activeKeysSnapshot.end());
     bool isLatched = voiceManager.isKeyLatched(keyCode);
 
-    // Get simulation result for dynamic rendering (Phase 39.1)
-    SimulationResult dynamicSimResult;
-    if (inputProcessor && settingsManager) {
-      // Phase 9.5: When Studio Mode is OFF, simulateInput will force
-      // viewDeviceHash to 0
-      dynamicSimResult = inputProcessor->simulateInput(currentViewHash, keyCode,
-                                                       currentVisualizedLayer);
-    }
-
-    // Get label text - Use dynamicSimResult which already has correct hierarchy
     juce::String labelText = geometry.label;
-
-    if (dynamicSimResult.action.has_value()) {
-      if (dynamicSimResult.action->type == ActionType::Note) {
-        labelText =
-            MidiNoteUtilities::getMidiNoteName(dynamicSimResult.action->data1);
-      }
-    } else {
-      // Fallback: Try to find zone label if no action found
-      // Check current view hash first, then global
-      std::pair<std::shared_ptr<Zone>, bool> zoneInfo{nullptr, false};
-      if (currentViewHash != 0) {
-        zoneInfo = findZoneForKey(keyCode, currentViewHash);
-      }
-      if (!zoneInfo.first) {
-        zoneInfo = findZoneForKey(keyCode, 0);
-      }
-
-      if (zoneInfo.first) {
-        juce::String cachedLabel = zoneInfo.first->getKeyLabel(keyCode);
-        if (cachedLabel.isNotEmpty()) {
-          labelText = cachedLabel;
-        }
-      }
-    }
 
     // Draw Latched State (Cyan)
     if (isLatched) {
@@ -560,33 +468,15 @@ void VisualizerComponent::paint(juce::Graphics &g) {
       g.fillRoundedRectangle(keyBounds, 6.0f);
     }
 
-    // Redraw Border (Phase 39.1: Use VisualState)
+    // Redraw Border (simple overlay border)
     juce::Colour dynamicBorderColor = juce::Colours::grey;
     float dynamicBorderWidth = 1.0f;
-    if (inputProcessor && settingsManager) {
-      if (dynamicSimResult.state == VisualState::Override) {
-        dynamicBorderColor = juce::Colours::orange;
-        dynamicBorderWidth = 2.0f;
-      } else if (dynamicSimResult.state == VisualState::Active) {
-        dynamicBorderColor = juce::Colours::lightgrey;
-        dynamicBorderWidth = 1.0f;
-      } else if (dynamicSimResult.state == VisualState::Inherited) {
-        dynamicBorderColor = juce::Colours::darkgrey;
-        dynamicBorderWidth = 1.0f;
-      }
-    }
     g.setColour(dynamicBorderColor);
     g.drawRoundedRectangle(keyBounds, 6.0f, dynamicBorderWidth);
 
     // Redraw Text (Important: text must be on top of highlight)
-    juce::Colour textColor;
-    if (dynamicSimResult.state == VisualState::Override) {
-      textColor = juce::Colours::red;
-    } else if (isPressed) {
-      textColor = juce::Colours::black;
-    } else {
-      textColor = juce::Colours::white;
-    }
+    juce::Colour textColor =
+        isPressed ? juce::Colours::black : juce::Colours::white;
     g.setColour(textColor);
     g.setFont(keySize * 0.4f);
     g.drawText(labelText, keyBounds, juce::Justification::centred, false);
@@ -774,99 +664,4 @@ void VisualizerComponent::valueTreeParentChanged(
     return;
   cacheValid = false;
   needsRepaint = true;
-}
-
-bool VisualizerComponent::isKeyInAnyZone(int keyCode, uintptr_t aliasHash) {
-  if (!zoneManager)
-    return false;
-
-  const auto zones = zoneManager->getZones();
-  for (const auto &zone : zones) {
-    if (zone->targetAliasHash != aliasHash)
-      continue;
-
-    // Check if key is in this zone's inputKeyCodes
-    auto it = std::find(zone->inputKeyCodes.begin(), zone->inputKeyCodes.end(),
-                        keyCode);
-    if (it != zone->inputKeyCodes.end()) {
-      return true;
-    }
-  }
-
-  return false;
-}
-
-std::pair<std::shared_ptr<Zone>, bool>
-VisualizerComponent::findZoneForKey(int keyCode, uintptr_t aliasHash) {
-  if (!zoneManager)
-    return {nullptr, false};
-
-  const auto zones = zoneManager->getZones();
-  for (const auto &zone : zones) {
-    if (zone->targetAliasHash != aliasHash)
-      continue;
-
-    // Check if key is in this zone's inputKeyCodes
-    auto it = std::find(zone->inputKeyCodes.begin(), zone->inputKeyCodes.end(),
-                        keyCode);
-    if (it != zone->inputKeyCodes.end()) {
-      // Calculate the degree (same logic as Zone::processKey)
-      int degree = 0;
-
-      if (zone->layoutStrategy == Zone::LayoutStrategy::Linear) {
-        // Linear mode: Use index
-        int index =
-            static_cast<int>(std::distance(zone->inputKeyCodes.begin(), it));
-        degree = index;
-      } else {
-        // Grid mode: Calculate based on keyboard geometry
-        const auto &layout = KeyboardLayoutUtils::getLayout();
-
-        auto currentKeyIt = layout.find(keyCode);
-        if (currentKeyIt == layout.end()) {
-          // Fallback to Linear if key not in layout
-          int index =
-              static_cast<int>(std::distance(zone->inputKeyCodes.begin(), it));
-          degree = index;
-        } else {
-          // Get anchor key (first key in inputKeyCodes)
-          if (zone->inputKeyCodes.empty()) {
-            return {nullptr, false};
-          }
-
-          auto anchorKeyIt = layout.find(zone->inputKeyCodes[0]);
-          if (anchorKeyIt == layout.end()) {
-            // Fallback to Linear if anchor not in layout
-            int index = static_cast<int>(
-                std::distance(zone->inputKeyCodes.begin(), it));
-            degree = index;
-          } else {
-            const auto &currentKey = currentKeyIt->second;
-            const auto &anchorKey = anchorKeyIt->second;
-
-            int deltaCol = static_cast<int>(currentKey.col) -
-                           static_cast<int>(anchorKey.col);
-            int deltaRow = currentKey.row - anchorKey.row;
-
-            // Degree = deltaCol + (deltaRow * gridInterval)
-            degree = deltaCol + (deltaRow * zone->gridInterval);
-          }
-        }
-      }
-
-      // Calculate effective transposition
-      int effDegTrans =
-          zone->isTransposeLocked ? 0 : zoneManager->getGlobalDegreeTranspose();
-
-      // Calculate final degree (same as Zone::processKey)
-      int finalDegree = degree + zone->degreeOffset + effDegTrans;
-
-      // Check if this is the root (finalDegree == 0)
-      bool isRoot = (finalDegree == 0);
-
-      return {zone, isRoot};
-    }
-  }
-
-  return {nullptr, false};
 }

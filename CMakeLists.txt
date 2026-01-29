@@ -63,6 +63,7 @@ target_sources(OmniKey PRIVATE
     Source/SettingsManager.cpp
     Source/SettingsPanel.cpp
     Source/MiniStatusWindow.cpp
+    Source/GridCompiler.cpp
 )
 
 # 5. Definitions (Fixes Macro Hell globally)

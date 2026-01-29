@@ -1,8 +1,5 @@
 #pragma once
 #include "DeviceManager.h"
-#include "KeyboardLayoutUtils.h"
-#include "MappingTypes.h"
-#include "MidiNoteUtilities.h"
 #include "RawInputManager.h"
 #include "ZoneManager.h"
 #include <JuceHeader.h>
@@ -85,14 +82,6 @@ private:
   std::vector<uintptr_t> viewHashes; // Store full 64-bit hashes (Phase 39.2)
   void updateViewSelector();
   void onViewSelectorChanged();
-
-  // Helper to check if a key belongs to any zone
-  bool isKeyInAnyZone(int keyCode, uintptr_t aliasHash);
-
-  // Helper to find which zone contains a key (returns root note if it's the
-  // root)
-  std::pair<std::shared_ptr<Zone>, bool> findZoneForKey(int keyCode,
-                                                        uintptr_t aliasHash);
 
   JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(VisualizerComponent)
 };

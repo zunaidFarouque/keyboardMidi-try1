@@ -1,8 +1,12 @@
 #pragma once
 #include <JuceHeader.h>
+#include <array>
 #include <cstdint>
 #include <functional> // For std::hash
+#include <memory>     // For std::shared_ptr
 #include <optional>   // For std::optional
+#include <unordered_map>
+#include <vector>
 
 // Action types for MIDI mapping
 enum class ActionType {
@@ -41,12 +45,21 @@ enum class CommandID : int {
 };
 }
 
-// Pseudo-codes for non-keyboard inputs (Mouse/Trackpad)
+// Pseudo-codes for non-keyboard inputs (Mouse/Trackpad) and explicit modifier
+// key codes (mirroring Windows VK codes without including <windows.h>)
 namespace InputTypes {
 constexpr int ScrollUp = 0x1001;
 constexpr int ScrollDown = 0x1002;
 constexpr int PointerX = 0x2000;
 constexpr int PointerY = 0x2001;
+
+// Explicit Modifier Codes (mirroring Windows VK codes)
+constexpr int Key_LShift = 0xA0;
+constexpr int Key_RShift = 0xA1;
+constexpr int Key_LControl = 0xA2;
+constexpr int Key_RControl = 0xA3;
+constexpr int Key_LAlt = 0xA4;
+constexpr int Key_RAlt = 0xA5;
 } // namespace InputTypes
 
 // ADSR envelope target types (Phase 25.1)
@@ -149,3 +162,57 @@ struct SimulationResult {
     isInherited = (state == VisualState::Inherited);
   }
 };
+
+// ---------------------------------------------------------------------------
+// Phase 50.1 - Grid-based Compiler Data Structures
+// ---------------------------------------------------------------------------
+
+// Lightweight atom for the Audio Thread.
+// For simple mappings, 'action' is used directly.
+// For chords or complex sequences, 'chordIndex' points into
+// CompiledContext::chordPool.
+struct KeyAudioSlot {
+  bool isActive = false;
+  MidiAction action; // The primary action
+
+  // For Chords or complex sequences, we index into a pool in CompiledContext.
+  // -1 means use 'action' directly. >= 0 means look up chordPool[chordIndex].
+  int chordIndex = -1;
+};
+
+// Rich data for the UI / Visualizer thread.
+struct KeyVisualSlot {
+  VisualState state = VisualState::Empty;
+  juce::Colour displayColor = juce::Colours::transparentBlack;
+  juce::String label;      // Pre-calculated text (e.g., "C# Maj7")
+  juce::String sourceName; // e.g., "Zone: Main", "Mapping: Base"
+};
+
+// 256 slots covering all Virtual Key Codes (0x00 - 0xFF)
+using AudioGrid = std::array<KeyAudioSlot, 256>;
+using VisualGrid = std::array<KeyVisualSlot, 256>;
+
+// Holds the entire pre-calculated state of the engine.
+struct CompiledContext {
+  // 1. Audio Data (Read by InputProcessor/AudioThread)
+  // Map HardwareHash -> Array of 9 AudioGrids (one per layer 0..8)
+  std::unordered_map<uintptr_t,
+                     std::array<std::shared_ptr<const AudioGrid>, 9>>
+      deviceGrids;
+
+  // Global fallback: 9 AudioGrids (one per layer 0..8)
+  std::array<std::shared_ptr<const AudioGrid>, 9> globalGrids;
+
+  // Pool for complex chords (referenced by KeyAudioSlot::chordIndex)
+  // Vector of MidiActions (one vector per chord)
+  std::vector<std::vector<MidiAction>> chordPool;
+
+  // 2. Visual Data (Read by Visualizer/MessageThread)
+  // Map AliasHash -> LayerID (0-8) -> VisualGrid
+  // Using vector for layers for O(1) access [0..8]
+  std::unordered_map<uintptr_t, std::vector<std::shared_ptr<const VisualGrid>>>
+      visualLookup;
+};
+
+// Backward-compatible alias used in development docs/prompts.
+using CompiledMapContext = CompiledContext;

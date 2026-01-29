@@ -1,6 +1,7 @@
 #pragma once
 #include "DeviceManager.h"
 #include "ExpressionEngine.h"
+#include "GridCompiler.h"
 #include "MappingTypes.h"
 #include "PresetManager.h"
 #include "RhythmAnalyzer.h"
@@ -23,6 +24,7 @@ struct InputIDLess {
 };
 
 // Phase 40: Multi-Layer System. Layer 0 = Base, 1..8 = Overlays.
+// Phase 50.5: Maps removed - data now in CompiledMapContext grids.
 struct Layer {
   juce::String name;
   int id = 0;
@@ -34,9 +36,6 @@ struct Layer {
   bool isActive() const {
     return id == 0 || isLatched || isMomentary;
   } // Base always on
-
-  std::unordered_map<InputID, MidiAction> compiledMap; // HardwareID -> Action
-  std::unordered_map<InputID, MidiAction> configMap;   // AliasHash -> Action
 };
 class MidiEngine;
 class SettingsManager;
@@ -68,6 +67,10 @@ public:
   // Phase 45.3: simulate for a specific layer context (editing view)
   SimulationResult simulateInput(uintptr_t viewDeviceHash, int keyCode,
                                  int targetLayerId);
+
+  // Phase 50.6: expose compiled context for visualizer (thread-safe)
+  // Returns a copy of the shared_ptr so it stays alive while in use.
+  std::shared_ptr<const CompiledMapContext> getContext() const;
 
   // Zone management
   ZoneManager &getZoneManager() { return zoneManager; }
@@ -112,6 +115,10 @@ private:
   juce::ReadWriteLock mapLock;
   juce::ReadWriteLock bufferLock;
 
+  // Phase 50.5: Grid-based compiled context (audio + visuals)
+  std::shared_ptr<const CompiledMapContext> activeContext;
+  mutable juce::ReadWriteLock contextLock;
+
   // Phase 40: Multi-Layer. Each layer has its own compiledMap + configMap.
   std::vector<Layer> layers; // Layer 0 = Base, 1..8 = Overlays (default size 9)
 
@@ -145,6 +152,7 @@ private:
                                 const juce::Identifier &property) override;
 
   // Helpers
+  void rebuildGrid();
   void rebuildMapFromTree();
   void addMappingFromTree(juce::ValueTree mappingNode);
   void removeMappingFromTree(juce::ValueTree mappingNode);
@@ -159,6 +167,13 @@ private:
 
   // Velocity randomization helper
   int calculateVelocity(int base, int range);
+
+  // Phase 50.5: Zone processing helpers (extract complex zone logic)
+  void processZoneNote(InputID input, std::shared_ptr<Zone> zone,
+                       const MidiAction &action);
+  void processZoneChord(InputID input, std::shared_ptr<Zone> zone,
+                        const std::vector<MidiAction> &chordActions,
+                        const MidiAction &rootAction);
 
   // Random number generator for velocity humanization
   juce::Random random;
