@@ -1,0 +1,140 @@
+{
+  "tests": 22,
+  "name": "AllTests",
+  "testsuites": [
+    {
+      "name": "SanityCheck",
+      "tests": 3,
+      "testsuite": [
+        {
+          "name": "MathWorks",
+          "file": "D:\\_installed\\VScode repos\\AI\\Cursor\\keyboardMidi-try1\\Source\\Tests\\SanityTest.cpp",
+          "line": 7
+        },
+        {
+          "name": "CanAccessCoreEnums",
+          "file": "D:\\_installed\\VScode repos\\AI\\Cursor\\keyboardMidi-try1\\Source\\Tests\\SanityTest.cpp",
+          "line": 10
+        },
+        {
+          "name": "ScaleLogicFunction",
+          "file": "D:\\_installed\\VScode repos\\AI\\Cursor\\keyboardMidi-try1\\Source\\Tests\\SanityTest.cpp",
+          "line": 17
+        }
+      ]
+    },
+    {
+      "name": "GridCompilerTest",
+      "tests": 12,
+      "testsuite": [
+        {
+          "name": "VerticalInheritance",
+          "file": "D:\\_installed\\VScode repos\\AI\\Cursor\\keyboardMidi-try1\\Source\\Tests\\GridCompilerTests.cpp",
+          "line": 83
+        },
+        {
+          "name": "VerticalOverride",
+          "file": "D:\\_installed\\VScode repos\\AI\\Cursor\\keyboardMidi-try1\\Source\\Tests\\GridCompilerTests.cpp",
+          "line": 103
+        },
+        {
+          "name": "ConflictDetection",
+          "file": "D:\\_installed\\VScode repos\\AI\\Cursor\\keyboardMidi-try1\\Source\\Tests\\GridCompilerTests.cpp",
+          "line": 118
+        },
+        {
+          "name": "DeviceOverridesGlobal",
+          "file": "D:\\_installed\\VScode repos\\AI\\Cursor\\keyboardMidi-try1\\Source\\Tests\\GridCompilerTests.cpp",
+          "line": 137
+        },
+        {
+          "name": "DeviceInheritsFromGlobal",
+          "file": "D:\\_installed\\VScode repos\\AI\\Cursor\\keyboardMidi-try1\\Source\\Tests\\GridCompilerTests.cpp",
+          "line": 156
+        },
+        {
+          "name": "DeviceOverridesGlobalWithCC",
+          "file": "D:\\_installed\\VScode repos\\AI\\Cursor\\keyboardMidi-try1\\Source\\Tests\\GridCompilerTests.cpp",
+          "line": 170
+        },
+        {
+          "name": "GenericShiftExpandsToSides",
+          "file": "D:\\_installed\\VScode repos\\AI\\Cursor\\keyboardMidi-try1\\Source\\Tests\\GridCompilerTests.cpp",
+          "line": 187
+        },
+        {
+          "name": "SpecificModifierOverridesGeneric",
+          "file": "D:\\_installed\\VScode repos\\AI\\Cursor\\keyboardMidi-try1\\Source\\Tests\\GridCompilerTests.cpp",
+          "line": 201
+        },
+        {
+          "name": "ZoneCompilesToChordPool",
+          "file": "D:\\_installed\\VScode repos\\AI\\Cursor\\keyboardMidi-try1\\Source\\Tests\\GridCompilerTests.cpp",
+          "line": 216
+        },
+        {
+          "name": "LayerCommandsAreNotInherited",
+          "file": "D:\\_installed\\VScode repos\\AI\\Cursor\\keyboardMidi-try1\\Source\\Tests\\GridCompilerTests.cpp",
+          "line": 242
+        },
+        {
+          "name": "DeviceVerticalInheritanceIsDimmed",
+          "file": "D:\\_installed\\VScode repos\\AI\\Cursor\\keyboardMidi-try1\\Source\\Tests\\GridCompilerTests.cpp",
+          "line": 258
+        },
+        {
+          "name": "DeviceBaseOverridesGlobalLayer",
+          "file": "D:\\_installed\\VScode repos\\AI\\Cursor\\keyboardMidi-try1\\Source\\Tests\\GridCompilerTests.cpp",
+          "line": 273
+        }
+      ]
+    },
+    {
+      "name": "InputProcessorTest",
+      "tests": 3,
+      "testsuite": [
+        {
+          "name": "LayerMomentarySwitching",
+          "file": "D:\\_installed\\VScode repos\\AI\\Cursor\\keyboardMidi-try1\\Source\\Tests\\InputProcessorTests.cpp",
+          "line": 30
+        },
+        {
+          "name": "HoldLayerAndPlayNote",
+          "file": "D:\\_installed\\VScode repos\\AI\\Cursor\\keyboardMidi-try1\\Source\\Tests\\InputProcessorTests.cpp",
+          "line": 84
+        },
+        {
+          "name": "DeviceSpecificLayerSwitching",
+          "file": "D:\\_installed\\VScode repos\\AI\\Cursor\\keyboardMidi-try1\\Source\\Tests\\InputProcessorTests.cpp",
+          "line": 143
+        }
+      ]
+    },
+    {
+      "name": "MappingDefinitionTest",
+      "tests": 4,
+      "testsuite": [
+        {
+          "name": "SchemaGeneration",
+          "file": "D:\\_installed\\VScode repos\\AI\\Cursor\\keyboardMidi-try1\\Source\\Tests\\MappingDefinitionTests.cpp",
+          "line": 5
+        },
+        {
+          "name": "CommandContext",
+          "file": "D:\\_installed\\VScode repos\\AI\\Cursor\\keyboardMidi-try1\\Source\\Tests\\MappingDefinitionTests.cpp",
+          "line": 38
+        },
+        {
+          "name": "EnvelopeContext",
+          "file": "D:\\_installed\\VScode repos\\AI\\Cursor\\keyboardMidi-try1\\Source\\Tests\\MappingDefinitionTests.cpp",
+          "line": 59
+        },
+        {
+          "name": "CCCompactDependentLayout",
+          "file": "D:\\_installed\\VScode repos\\AI\\Cursor\\keyboardMidi-try1\\Source\\Tests\\MappingDefinitionTests.cpp",
+          "line": 79
+        }
+      ]
+    }
+  ]
+}

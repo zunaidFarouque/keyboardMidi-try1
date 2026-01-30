@@ -424,8 +424,9 @@ static bool isLayerCommand(const MidiAction &action) {
 // device Pass 2 (Inherited vs Active).
 void compileMappingsForLayer(VisualGrid &vGrid, AudioGrid &aGrid,
                              PresetManager &presetMgr, DeviceManager &deviceMgr,
-                             SettingsManager &settingsMgr, uintptr_t aliasHash,
-                             int layerId, std::vector<bool> &touchedKeys,
+                             ZoneManager &zoneMgr, SettingsManager &settingsMgr,
+                             uintptr_t aliasHash, int layerId,
+                             std::vector<bool> &touchedKeys,
                              VisualState targetState) {
   auto mappingsNode = presetMgr.getMappingsListForLayer(layerId);
   if (!mappingsNode.isValid())
@@ -478,6 +479,26 @@ void compileMappingsForLayer(VisualGrid &vGrid, AudioGrid &aGrid,
       continue;
 
     MidiAction action = buildMidiActionFromMapping(mapping);
+
+    // Phase 55.4: Note options (followTranspose, sendNoteOff)
+    if (action.type == ActionType::Note) {
+      bool followTranspose =
+          (bool)mapping.getProperty("followTranspose", false);
+      if (followTranspose) {
+        int chrom = zoneMgr.getGlobalChromaticTranspose();
+        action.data1 = juce::jlimit(0, 127, action.data1 + chrom);
+      }
+      bool sendNoteOff = (bool)mapping.getProperty("sendNoteOff", true);
+      action.isOneShot = !sendNoteOff;
+    }
+
+    // Phase 55.4: CC options (sendReleaseValue, releaseValue)
+    if (action.type == ActionType::CC) {
+      action.sendReleaseValue =
+          (bool)mapping.getProperty("sendReleaseValue", false);
+      action.releaseValue = (int)mapping.getProperty("releaseValue", 0);
+    }
+
     juce::Colour color = getColorForType(action.type, settingsMgr);
     juce::String label = makeLabelForAction(action);
     juce::String sourceName =
@@ -510,8 +531,9 @@ GridCompiler::compile(PresetManager &presetMgr, DeviceManager &deviceMgr,
     compileZonesForLayer(vGrid, aGrid, zoneMgr, deviceMgr, aliasHash, layerId,
                          touchedKeys, context->chordPool, targetState);
 
-    compileMappingsForLayer(vGrid, aGrid, presetMgr, deviceMgr, settingsMgr,
-                            aliasHash, layerId, touchedKeys, targetState);
+    compileMappingsForLayer(vGrid, aGrid, presetMgr, deviceMgr, zoneMgr,
+                            settingsMgr, aliasHash, layerId, touchedKeys,
+                            targetState);
   };
 
   // 3. PASS 1: Compile Global Stack (Vertical) – Hash 0 only

@@ -98,5 +98,17 @@ so, no prompt, give me detailed understanding of you about the mappings. every t
 ---
 ===
 
-in visualizer
-text color should be based on fill color, not backdrop color
+THINK: if we have Envelope, we dont need CC because envelope can handle it.
+lets call it `Expression (ADSR)` or something better name that should contain the things of what it has as options.
+
+rename:
+envelope
+
+remove:
+- add scroll mapping
+- add Trackpad X
+- add Trackpad Y
+
+modify:
+the plus button should start listening for key (a popup will show that will say - press key to map). it will automatically turn on global midi mode just to capture the key (if not on already. also store the info whether it was turned on or off). there will also be option to skip listening (pop up will go away, a new mapping will be created with default things (exactly what happens now), because user did not want to press the key now).
+either it captures the global midi mode, or it is skipped, the listening will stop (only if it was turned off and we turned it on to catch the key)

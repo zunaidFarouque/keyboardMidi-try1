@@ -1,5 +1,7 @@
 #pragma once
+#include "MappingDefinition.h"
 #include <JuceHeader.h>
+#include <memory>
 #include <vector>
 
 class DeviceManager;
@@ -14,74 +16,49 @@ public:
   void paint(juce::Graphics &) override;
   void resized() override;
 
-  // Main entry point: update UI based on selection
   void setSelection(const std::vector<juce::ValueTree> &selection);
-
-  // Get required height for self-sizing
   int getRequiredHeight() const;
 
-  // ValueTree::Listener implementation
   void valueTreePropertyChanged(juce::ValueTree &tree,
                                 const juce::Identifier &property) override;
-
-  // ChangeListener implementation (for DeviceManager changes)
   void changeListenerCallback(juce::ChangeBroadcaster *source) override;
 
 private:
   juce::UndoManager &undoManager;
   DeviceManager &deviceManager;
   std::vector<juce::ValueTree> selectedTrees;
-  bool isUpdatingFromTree = false; // Phase 45.8: recursion guard
+  bool isUpdatingFromTree = false;
 
-  // UI Controls
-  juce::ComboBox typeSelector;
-  juce::ComboBox aliasSelector;
-  juce::Slider channelSlider;
-  juce::Slider data1Slider;
-  juce::Slider data2Slider;
-  juce::Slider randVelSlider;
-  juce::Label channelLabel;
-  juce::Label data1Label;
-  juce::Label data2Label;
-  juce::Label randVelLabel;
-  juce::Label typeLabel;
-  juce::Label aliasLabel;
-  juce::Label commandLabel;
-  juce::ComboBox commandSelector;
-  juce::Label targetLayerLabel;
-  juce::ComboBox targetLayerSelector;
+  // Phase 55.6: Multiple items per row (side-by-side toggles)
+  struct UiItem {
+    std::unique_ptr<juce::Component> component;
+    float weight = 1.0f;
+    bool isAutoWidth = false; // Phase 55.10: fit to content
+  };
+  struct UiRow {
+    std::vector<UiItem> items;
+    bool isSeparatorRow = false; // Phase 55.9: reduced height for separator rows
+  };
+  std::vector<UiRow> uiRows;
 
-  // ADSR controls (for Envelope type)
-  juce::Slider attackSlider;
-  juce::Slider decaySlider;
-  juce::Slider sustainSlider;
-  juce::Slider releaseSlider;
-  juce::Label attackLabel;
-  juce::Label decayLabel;
-  juce::Label sustainLabel;
-  juce::Label releaseLabel;
-  juce::ComboBox envTargetSelector;
-  juce::Label envTargetLabel;
+  // Phase 55.9: Draws separator line (optionally with label)
+  class SeparatorComponent : public juce::Component {
+  public:
+    SeparatorComponent(const juce::String &label,
+                       juce::Justification justification);
+    void paint(juce::Graphics &g) override;
 
-  // Pitch Bend musical controls (for Envelope with PitchBend target)
-  juce::Slider pbShiftSlider;
-  juce::Label pbShiftLabel;
-  juce::Label pbGlobalRangeLabel; // "Uses Global Range" label
+  private:
+    juce::String labelText;
+    juce::Justification textAlign;
+  };
 
-  // Smart Scale Bend controls (for Envelope with SmartScaleBend target)
-  juce::Slider smartStepSlider;
-  juce::Label smartStepLabel;
+  void rebuildUI();
+  void createControl(const InspectorControl &def, UiRow &currentRow);
+  void createAliasRow();
 
-  // Helper methods
-  void updateControlsFromSelection();
-  void enableControls(bool enabled);
   bool allTreesHaveSameValue(const juce::Identifier &property);
   juce::var getCommonValue(const juce::Identifier &property);
-  void refreshAliasSelector();
-  void updatePitchBendPeakValue(
-      juce::ValueTree &tree); // Calculate and set data2 from pbRange/pbShift
-  void
-  updateVisibility(); // Phase 44: show/hide Target Layer for Layer commands
 
   JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(MappingInspector)
 };

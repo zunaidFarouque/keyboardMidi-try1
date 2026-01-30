@@ -1,288 +1,419 @@
 #include "MappingInspector.h"
 #include "DeviceManager.h"
-#include "MappingTypes.h"
 #include "MidiNoteUtilities.h"
+
+namespace {
+// Phase 55.6: Invisible container for Label + Editor as one layout unit
+struct LabelEditorRow : juce::Component {
+  std::unique_ptr<juce::Label> label;
+  std::unique_ptr<juce::Component> editor;
+  static constexpr int labelWidth = 80;
+  void resized() override {
+    auto r = getLocalBounds();
+    if (label)
+      label->setBounds(r.removeFromLeft(labelWidth));
+    if (editor)
+      editor->setBounds(r);
+  }
+};
+
+// Phase 55.8: Label on left, editor on right; label width from text
+class LabeledControl : public juce::Component {
+public:
+  LabeledControl(std::unique_ptr<juce::Label> l,
+                 std::unique_ptr<juce::Component> c)
+      : label(std::move(l)), editor(std::move(c)) {
+    if (label)
+      addAndMakeVisible(*label);
+    addAndMakeVisible(*editor);
+  }
+  void resized() override {
+    auto area = getLocalBounds();
+    if (label) {
+      int textWidth =
+          label->getFont().getStringWidth(label->getText()) + 10;
+      label->setBounds(area.removeFromLeft(textWidth));
+    }
+    editor->setBounds(area);
+  }
+  // Phase 55.10: For auto-width layout - fit to content
+  int getIdealWidth() const {
+    int w = 0;
+    if (label)
+      w += label->getFont().getStringWidth(label->getText()) + 10;
+    w += 30; // ToggleButton / editor minimum
+    return w;
+  }
+
+private:
+  std::unique_ptr<juce::Label> label;
+  std::unique_ptr<juce::Component> editor;
+};
+} // namespace
 
 MappingInspector::MappingInspector(juce::UndoManager &undoMgr,
                                    DeviceManager &deviceMgr)
     : undoManager(undoMgr), deviceManager(deviceMgr) {
-  // Setup Labels
-  typeLabel.setText("Type:", juce::dontSendNotification);
-  typeLabel.attachToComponent(&typeSelector, true);
-  addAndMakeVisible(typeLabel);
-  addAndMakeVisible(typeSelector);
+  deviceManager.addChangeListener(this);
+}
 
-  channelLabel.setText("Channel:", juce::dontSendNotification);
-  channelLabel.attachToComponent(&channelSlider, true);
-  addAndMakeVisible(channelLabel);
-  addAndMakeVisible(channelSlider);
+MappingInspector::~MappingInspector() {
+  deviceManager.removeChangeListener(this);
+  for (auto &tree : selectedTrees) {
+    if (tree.isValid())
+      tree.removeListener(this);
+  }
+}
 
-  data1Label.setText("Data1:", juce::dontSendNotification);
-  data1Label.attachToComponent(&data1Slider, true);
-  addAndMakeVisible(data1Label);
-  addAndMakeVisible(data1Slider);
+void MappingInspector::paint(juce::Graphics &g) {
+  g.fillAll(juce::Colour(0xff2a2a2a));
+  if (selectedTrees.empty()) {
+    g.setColour(juce::Colours::grey);
+    g.setFont(14.0f);
+    g.drawText("No selection", getLocalBounds(),
+               juce::Justification::centred, true);
+  }
+}
 
-  data2Label.setText("Data2:", juce::dontSendNotification);
-  data2Label.attachToComponent(&data2Slider, true);
-  addAndMakeVisible(data2Label);
-  addAndMakeVisible(data2Slider);
+void MappingInspector::setSelection(
+    const std::vector<juce::ValueTree> &selection) {
+  isUpdatingFromTree = true;
+  for (auto &tree : selectedTrees) {
+    if (tree.isValid())
+      tree.removeListener(this);
+  }
+  selectedTrees = selection;
+  for (auto &tree : selectedTrees) {
+    if (tree.isValid())
+      tree.addListener(this);
+  }
+  rebuildUI();
+  isUpdatingFromTree = false;
+}
 
-  randVelLabel.setText("Velocity Random:", juce::dontSendNotification);
-  randVelLabel.attachToComponent(&randVelSlider, true);
-  addAndMakeVisible(randVelLabel);
-  addAndMakeVisible(randVelSlider);
-  randVelSlider.setVisible(false);
-  randVelLabel.setVisible(false);
-
-  commandLabel.setText("Command:", juce::dontSendNotification);
-  commandLabel.attachToComponent(&commandSelector, true);
-  addAndMakeVisible(commandLabel);
-  addAndMakeVisible(commandSelector);
-  commandSelector.setVisible(false);
-  commandLabel.setVisible(false);
-
-  targetLayerLabel.setText("Target Layer:", juce::dontSendNotification);
-  targetLayerLabel.attachToComponent(&targetLayerSelector, true);
-  addAndMakeVisible(targetLayerLabel);
-  addAndMakeVisible(targetLayerSelector);
-  targetLayerSelector.setVisible(false);
-  targetLayerLabel.setVisible(false);
-  for (int i = 0; i <= 8; ++i)
-    targetLayerSelector.addItem(
-        i == 0 ? "0: Base" : (juce::String(i) + ": Layer " + juce::String(i)),
-        i + 1);
-  targetLayerSelector.onChange = [this] {
-    if (selectedTrees.empty())
-      return;
-    int layerId = targetLayerSelector.getSelectedId() - 1;
-    if (layerId < 0 || layerId > 8)
-      return;
-    undoManager.beginNewTransaction("Change Target Layer");
-    for (auto &tree : selectedTrees) {
-      if (tree.isValid())
-        tree.setProperty("data2", layerId, &undoManager);
+void MappingInspector::rebuildUI() {
+  for (auto &row : uiRows) {
+    for (auto &item : row.items) {
+      if (item.component)
+        removeChildComponent(item.component.get());
     }
+  }
+  uiRows.clear();
+
+  if (selectedTrees.empty())
+    return;
+
+  InspectorSchema schema =
+      MappingDefinition::getSchema(selectedTrees[0]);
+  for (const auto &def : schema) {
+    // Phase 55.9: Handle explicit Separator items
+    if (def.controlType == InspectorControl::Type::Separator) {
+      UiRow row;
+      row.isSeparatorRow = true;
+      auto sepComp =
+          std::make_unique<SeparatorComponent>(def.label, def.separatorAlign);
+      addAndMakeVisible(*sepComp);
+      row.items.push_back({std::move(sepComp), 1.0f, false});
+      uiRows.push_back(std::move(row));
+      continue;
+    }
+    if (!def.sameLine || uiRows.empty()) {
+      UiRow row;
+      row.isSeparatorRow = false;
+      uiRows.push_back(std::move(row));
+    }
+    createControl(def, uiRows.back());
+  }
+  createAliasRow();
+
+  resized();
+}
+
+MappingInspector::SeparatorComponent::SeparatorComponent(
+    const juce::String &label, juce::Justification justification)
+    : labelText(label), textAlign(justification) {}
+
+void MappingInspector::SeparatorComponent::paint(juce::Graphics &g) {
+  auto bounds = getLocalBounds();
+  const float centreY = bounds.getCentreY();
+  const int lineY = static_cast<int>(centreY - 0.5f);
+  const int lineHeight = 1;
+  const int pad = 5;
+
+  g.setColour(juce::Colours::grey);
+
+  if (labelText.isEmpty()) {
+    g.fillRect(bounds.getX(), lineY, bounds.getWidth(), lineHeight);
+    return;
+  }
+
+  juce::Font font(14.0f, juce::Font::bold);
+  const int textBlockWidth = font.getStringWidth(labelText) + pad * 2;
+  int textLeft;
+  int textRight;
+
+  if ((textAlign.getFlags() & juce::Justification::centredLeft) != 0) {
+    textLeft = bounds.getX();
+    textRight = textLeft + textBlockWidth;
+  } else if ((textAlign.getFlags() & juce::Justification::centredRight) != 0) {
+    textRight = bounds.getRight();
+    textLeft = textRight - textBlockWidth;
+  } else {
+    textLeft = bounds.getCentreX() - textBlockWidth / 2;
+    textRight = textLeft + textBlockWidth;
+  }
+
+  g.setColour(juce::Colours::lightgrey);
+  g.setFont(font);
+  g.drawText(labelText, textLeft, bounds.getY(), textBlockWidth,
+             bounds.getHeight(), textAlign, true);
+
+  if (textLeft - pad > bounds.getX()) {
+    g.setColour(juce::Colours::grey);
+    g.fillRect(bounds.getX(), lineY, textLeft - pad - bounds.getX(),
+               lineHeight);
+  }
+  if (textRight + pad < bounds.getRight()) {
+    g.setColour(juce::Colours::grey);
+    g.fillRect(textRight + pad, lineY,
+               bounds.getRight() - (textRight + pad), lineHeight);
+  }
+}
+
+void MappingInspector::createControl(const InspectorControl &def,
+                                     UiRow &currentRow) {
+  const juce::Identifier propId(def.propertyId.toStdString());
+  const bool sameVal = allTreesHaveSameValue(propId);
+  juce::var currentVal = getCommonValue(propId);
+
+  auto addItem = [this, &currentRow](std::unique_ptr<juce::Component> comp,
+                                     float weight, bool isAuto = false) {
+    if (!comp)
+      return;
+    addAndMakeVisible(*comp);
+    currentRow.items.push_back({std::move(comp), weight, isAuto});
   };
 
-  aliasLabel.setText("Alias:", juce::dontSendNotification);
-  aliasLabel.attachToComponent(&aliasSelector, true);
-  addAndMakeVisible(aliasLabel);
-  addAndMakeVisible(aliasSelector);
+  switch (def.controlType) {
+  case InspectorControl::Type::Slider: {
+    auto sl = std::make_unique<juce::Slider>();
+    sl->setRange(def.min, def.max, def.step);
+    if (def.suffix.isNotEmpty())
+      sl->setTextValueSuffix(" " + def.suffix);
+    sl->setEnabled(def.isEnabled);
 
-  // Setup ADSR controls (initially hidden)
-  attackLabel.setText("A:", juce::dontSendNotification);
-  attackLabel.attachToComponent(&attackSlider, true);
-  addAndMakeVisible(attackLabel);
-  addAndMakeVisible(attackSlider);
-  attackSlider.setRange(0, 5000, 1);
-  attackSlider.setTextValueSuffix(" ms");
-  attackSlider.setVisible(false);
-  attackLabel.setVisible(false);
-
-  decayLabel.setText("D:", juce::dontSendNotification);
-  decayLabel.attachToComponent(&decaySlider, true);
-  addAndMakeVisible(decayLabel);
-  addAndMakeVisible(decaySlider);
-  decaySlider.setRange(0, 5000, 1);
-  decaySlider.setTextValueSuffix(" ms");
-  decaySlider.setVisible(false);
-  decayLabel.setVisible(false);
-
-  sustainLabel.setText("S:", juce::dontSendNotification);
-  sustainLabel.attachToComponent(&sustainSlider, true);
-  addAndMakeVisible(sustainLabel);
-  addAndMakeVisible(sustainSlider);
-  sustainSlider.setRange(0, 127, 1);
-  sustainSlider.setTextValueSuffix("");
-  sustainSlider.setVisible(false);
-  sustainLabel.setVisible(false);
-
-  releaseLabel.setText("R:", juce::dontSendNotification);
-  releaseLabel.attachToComponent(&releaseSlider, true);
-  addAndMakeVisible(releaseLabel);
-  addAndMakeVisible(releaseSlider);
-  releaseSlider.setRange(0, 5000, 1);
-  releaseSlider.setTextValueSuffix(" ms");
-  releaseSlider.setVisible(false);
-  releaseLabel.setVisible(false);
-
-  envTargetLabel.setText("Target:", juce::dontSendNotification);
-  envTargetLabel.attachToComponent(&envTargetSelector, true);
-  addAndMakeVisible(envTargetLabel);
-  addAndMakeVisible(envTargetSelector);
-  envTargetSelector.addItem("CC", 1);
-  envTargetSelector.addItem("Pitch Bend", 2);
-  envTargetSelector.addItem("Smart Scale Bend", 3);
-  envTargetSelector.setVisible(false);
-  envTargetLabel.setVisible(false);
-
-  // ADSR slider callbacks
-  attackSlider.onValueChange = [this] {
-    if (selectedTrees.empty())
-      return;
-    if (attackSlider.getTextValueSuffix().contains("---"))
-      return;
-    undoManager.beginNewTransaction("Change ADSR Attack");
-    int value = static_cast<int>(attackSlider.getValue());
-    for (auto &tree : selectedTrees) {
-      if (tree.isValid())
-        tree.setProperty("adsrAttack", value, &undoManager);
+    // Phase 55.7: Handle enabled condition property
+    if (def.enabledConditionProperty.isNotEmpty()) {
+      bool isEnabled = selectedTrees[0].getProperty(
+          juce::Identifier(def.enabledConditionProperty.toStdString()), false);
+      sl->setEnabled(isEnabled);
     }
-  };
 
-  decaySlider.onValueChange = [this] {
-    if (selectedTrees.empty())
-      return;
-    if (decaySlider.getTextValueSuffix().contains("---"))
-      return;
-    undoManager.beginNewTransaction("Change ADSR Decay");
-    int value = static_cast<int>(decaySlider.getValue());
-    for (auto &tree : selectedTrees) {
-      if (tree.isValid())
-        tree.setProperty("adsrDecay", value, &undoManager);
+    if (def.valueFormat == InspectorControl::Format::NoteName) {
+      sl->textFromValueFunction = [](double val) {
+        return MidiNoteUtilities::getMidiNoteName(static_cast<int>(val));
+      };
+      sl->valueFromTextFunction = [](const juce::String &text) {
+        return static_cast<double>(
+            MidiNoteUtilities::getMidiNoteFromText(text));
+      };
     }
-  };
 
-  sustainSlider.onValueChange = [this] {
-    if (selectedTrees.empty())
-      return;
-    if (sustainSlider.getTextValueSuffix().contains("---"))
-      return;
-    undoManager.beginNewTransaction("Change ADSR Sustain");
-    int value = static_cast<int>(sustainSlider.getValue());
-    for (auto &tree : selectedTrees) {
-      if (tree.isValid())
-        tree.setProperty("adsrSustain", value, &undoManager);
+    if (sameVal && !currentVal.isVoid())
+      sl->setValue(static_cast<double>(currentVal), juce::dontSendNotification);
+    else if (!sameVal) {
+      sl->setValue((def.min + def.max) * 0.5, juce::dontSendNotification);
+      sl->setTextValueSuffix(" (---)");
     }
-  };
 
-  releaseSlider.onValueChange = [this] {
-    if (selectedTrees.empty())
-      return;
-    if (releaseSlider.getTextValueSuffix().contains("---"))
-      return;
-    undoManager.beginNewTransaction("Change ADSR Release");
-    int value = static_cast<int>(releaseSlider.getValue());
-    for (auto &tree : selectedTrees) {
-      if (tree.isValid())
-        tree.setProperty("adsrRelease", value, &undoManager);
+    juce::Slider *slPtr = sl.get();
+    sl->onValueChange = [this, propId, def, slPtr]() {
+      if (selectedTrees.empty())
+        return;
+      if (slPtr->getTextValueSuffix().contains("---"))
+        return;
+      undoManager.beginNewTransaction("Change " + def.label);
+      double v = slPtr->getValue();
+      juce::var valueToSet =
+          (def.step >= 1.0) ? juce::var(static_cast<int>(std::round(v)))
+                            : juce::var(v);
+      for (auto &tree : selectedTrees) {
+        if (tree.isValid())
+          tree.setProperty(propId, valueToSet, &undoManager);
+      }
+    };
+
+    // Phase 55.7: Handle empty labels (no container needed)
+    if (def.label.isEmpty()) {
+      addItem(std::move(sl), def.widthWeight, def.autoWidth);
+    } else {
+      auto rowComp = std::make_unique<LabelEditorRow>();
+      rowComp->label = std::make_unique<juce::Label>();
+      rowComp->label->setText(def.label + ":", juce::dontSendNotification);
+      rowComp->editor = std::move(sl);
+      rowComp->addAndMakeVisible(*rowComp->label);
+      rowComp->addAndMakeVisible(*rowComp->editor);
+      addItem(std::move(rowComp), def.widthWeight, def.autoWidth);
     }
-  };
+    break;
+  }
+  case InspectorControl::Type::ComboBox: {
+    auto cb = std::make_unique<juce::ComboBox>();
+    for (const auto &p : def.options)
+      cb->addItem(p.second, p.first);
 
-  envTargetSelector.onChange = [this] {
-    if (selectedTrees.empty())
-      return;
-    if (envTargetSelector.getSelectedId() < 1 ||
-        envTargetSelector.getSelectedId() > 3)
-      return;
-    undoManager.beginNewTransaction("Change Envelope Target");
-    juce::String targetStr;
-    if (envTargetSelector.getSelectedId() == 1)
-      targetStr = "CC";
-    else if (envTargetSelector.getSelectedId() == 2)
-      targetStr = "PitchBend";
-    else if (envTargetSelector.getSelectedId() == 3)
-      targetStr = "SmartScaleBend";
-    for (auto &tree : selectedTrees) {
-      if (tree.isValid())
-        tree.setProperty("adsrTarget", targetStr, &undoManager);
+    if (def.propertyId == "type") {
+      juce::String typeStr = currentVal.toString();
+      for (const auto &p : def.options) {
+        if (p.second == typeStr) {
+          cb->setSelectedId(p.first, juce::dontSendNotification);
+          break;
+        }
+      }
+    } else if (def.propertyId == "adsrTarget") {
+      juce::String targetStr = currentVal.toString();
+      if (targetStr.isEmpty())
+        targetStr = "CC";
+      for (const auto &p : def.options) {
+        if (p.second == targetStr) {
+          cb->setSelectedId(p.first, juce::dontSendNotification);
+          break;
+        }
+      }
+    } else if (sameVal && !currentVal.isVoid()) {
+      int id = static_cast<int>(currentVal);
+      cb->setSelectedId(id, juce::dontSendNotification);
     }
-    // Update visibility when target changes
-    updateControlsFromSelection();
-  };
 
-  // Setup Pitch Bend musical controls (initially hidden)
-  pbShiftLabel.setText("PB Shift:", juce::dontSendNotification);
-  pbShiftLabel.attachToComponent(&pbShiftSlider, true);
-  addAndMakeVisible(pbShiftLabel);
-  addAndMakeVisible(pbShiftSlider);
-  pbShiftSlider.setRange(-24, 24, 1);
-  pbShiftSlider.setTextValueSuffix(" semitones");
-  pbShiftSlider.setVisible(false);
-  pbShiftLabel.setVisible(false);
+    juce::ComboBox *cbPtr = cb.get();
+    cb->onChange = [this, propId, def, cbPtr]() {
+      if (selectedTrees.empty())
+        return;
+      undoManager.beginNewTransaction("Change " + def.label);
+      juce::var valueToSet;
+      if (def.propertyId == "type" || def.propertyId == "adsrTarget") {
+        int id = cbPtr->getSelectedId();
+        auto it = def.options.find(id);
+        valueToSet = (it != def.options.end()) ? juce::var(it->second)
+                                                : juce::var();
+      } else {
+        valueToSet = cbPtr->getSelectedId();
+      }
+      for (auto &tree : selectedTrees) {
+        if (tree.isValid())
+          tree.setProperty(propId, valueToSet, &undoManager);
+      }
+      if (def.propertyId == "type" || def.propertyId == "data1")
+        juce::MessageManager::callAsync([this]() { rebuildUI(); });
+    };
 
-  // "Uses Global Range" label
-  pbGlobalRangeLabel.setText("Uses Global Range", juce::dontSendNotification);
-  pbGlobalRangeLabel.setColour(juce::Label::textColourId,
-                               juce::Colours::lightgrey);
-  addAndMakeVisible(pbGlobalRangeLabel);
-  pbGlobalRangeLabel.setVisible(false);
+    auto rowComp = std::make_unique<LabelEditorRow>();
+    rowComp->label = std::make_unique<juce::Label>();
+    rowComp->label->setText(def.label + ":", juce::dontSendNotification);
+    rowComp->editor = std::move(cb);
+    rowComp->addAndMakeVisible(*rowComp->label);
+    rowComp->addAndMakeVisible(*rowComp->editor);
+    addItem(std::move(rowComp), def.widthWeight, def.autoWidth);
+    break;
+  }
+  case InspectorControl::Type::Toggle: {
+    auto tb = std::make_unique<juce::ToggleButton>();
+    // Phase 55.8: No button text; label is separate on the left
+    if (sameVal && !currentVal.isVoid())
+      tb->setToggleState(static_cast<bool>(currentVal),
+                         juce::dontSendNotification);
+    else
+      tb->setToggleState(false, juce::dontSendNotification);
 
-  // Setup Smart Scale Bend controls (initially hidden)
-  smartStepLabel.setText("Scale Steps:", juce::dontSendNotification);
-  smartStepLabel.attachToComponent(&smartStepSlider, true);
-  addAndMakeVisible(smartStepLabel);
-  addAndMakeVisible(smartStepSlider);
-  smartStepSlider.setRange(-7, 7, 1);
-  smartStepSlider.setTextValueSuffix(" steps");
-  smartStepSlider.setVisible(false);
-  smartStepLabel.setVisible(false);
+    tb->onClick = [this, propId, def, tb = tb.get()]() {
+      if (selectedTrees.empty())
+        return;
+      undoManager.beginNewTransaction("Change " + def.label);
+      bool v = tb->getToggleState();
+      for (auto &tree : selectedTrees) {
+        if (tree.isValid())
+          tree.setProperty(propId, v, &undoManager);
+      }
+    };
 
-  // Smart Step slider callback
-  smartStepSlider.onValueChange = [this] {
-    if (selectedTrees.empty())
-      return;
-    if (smartStepSlider.getTextValueSuffix().contains("---"))
-      return;
-    undoManager.beginNewTransaction("Change Smart Step Shift");
-    int value = static_cast<int>(smartStepSlider.getValue());
-    for (auto &tree : selectedTrees) {
-      if (tree.isValid())
-        tree.setProperty("smartStepShift", value, &undoManager);
-    }
-  };
+    auto lbl = std::make_unique<juce::Label>("", def.label + ":");
+    lbl->setJustificationType(juce::Justification::centredLeft);
+    auto container = std::make_unique<LabeledControl>(std::move(lbl),
+                                                      std::move(tb));
+    addItem(std::move(container), def.widthWeight, def.autoWidth);
+    break;
+  }
+  case InspectorControl::Type::LabelOnly: {
+    auto label = std::make_unique<juce::Label>();
+    label->setText(def.label, juce::dontSendNotification);
+    addItem(std::move(label), def.widthWeight, def.autoWidth);
+    break;
+  }
+  case InspectorControl::Type::Separator:
+    // Phase 55.9: Separators handled in rebuildUI, not here
+    break;
+  default:
+    break;
+  }
+}
 
-  // Pitch Bend slider callbacks
-  pbShiftSlider.onValueChange = [this] {
-    if (selectedTrees.empty())
-      return;
-    if (pbShiftSlider.getTextValueSuffix().contains("---"))
-      return;
-    undoManager.beginNewTransaction("Change PB Shift");
-    int value = static_cast<int>(pbShiftSlider.getValue());
-    for (auto &tree : selectedTrees) {
-      if (tree.isValid()) {
-        tree.setProperty("pbShift", value, &undoManager);
-        // Note: data2 will be recalculated by InputProcessor when it rebuilds
-        // the map from tree, using the global range from SettingsManager
+void MappingInspector::createAliasRow() {
+  UiRow row;
+  row.isSeparatorRow = false;
+
+  auto rowComp = std::make_unique<LabelEditorRow>();
+  rowComp->label = std::make_unique<juce::Label>();
+  rowComp->label->setText("Alias:", juce::dontSendNotification);
+
+  auto aliasCombo = std::make_unique<juce::ComboBox>();
+  aliasCombo->addItem("Global (All Devices)", 1);
+  juce::StringArray aliases = deviceManager.getAllAliasNames();
+  for (int i = 0; i < aliases.size(); ++i)
+    aliasCombo->addItem(aliases[i], i + 2);
+
+  juce::String aliasName = "Global (All Devices)";
+  if (allTreesHaveSameValue("deviceHash")) {
+    juce::String hashStr = getCommonValue("deviceHash").toString();
+    if (!hashStr.isEmpty()) {
+      uintptr_t hash = static_cast<uintptr_t>(hashStr.getHexValue64());
+      if (hash != 0) {
+        aliasName = deviceManager.getAliasName(hash);
+        if (aliasName == "Unknown")
+          aliasName = "Global (All Devices)";
       }
     }
-  };
+  } else {
+    aliasCombo->setSelectedId(-1, juce::dontSendNotification);
+  }
 
-  // Setup Alias Selector
-  refreshAliasSelector();
-  aliasSelector.onChange = [this] {
-    if (selectedTrees.empty())
+  if (!aliasName.isEmpty() && aliasName != "Unknown") {
+    for (int i = 0; i < aliasCombo->getNumItems(); ++i) {
+      if (aliasCombo->getItemText(i) == aliasName) {
+        aliasCombo->setSelectedItemIndex(i, juce::dontSendNotification);
+        break;
+      }
+    }
+  }
+
+  juce::ComboBox *aliasComboPtr = aliasCombo.get();
+  aliasCombo->onChange = [this, aliasComboPtr]() {
+    if (selectedTrees.empty() || aliasComboPtr->getSelectedId() == -1)
       return;
-
-    // Don't update if showing mixed value (no selection or multiple different
-    // values)
-    if (aliasSelector.getSelectedId() == -1)
-      return;
-
-    juce::String aliasName = aliasSelector.getText();
-
-    // Phase 46.5: deviceHash is the single source of truth.
-    // Compute the alias hash from the selected name.
+    juce::String aliasName = aliasComboPtr->getText();
     uintptr_t newHash = 0;
     if (aliasName != "Global (All Devices)" && aliasName != "Any / Master" &&
         aliasName != "Unassigned" && !aliasName.isEmpty()) {
-      newHash = static_cast<uintptr_t>(std::hash<juce::String>{}(aliasName));
+      newHash =
+          static_cast<uintptr_t>(std::hash<juce::String>{}(aliasName));
     }
-
     undoManager.beginNewTransaction("Change Alias");
     for (auto &tree : selectedTrees) {
       if (!tree.isValid())
         continue;
-
       tree.setProperty(
           "deviceHash",
           juce::String::toHexString((juce::int64)newHash).toUpperCase(),
           &undoManager);
-
-      // Optional: keep human-readable name in XML for debugging.
-      // Do NOT read from this as the primary source (deviceHash is
-      // authoritative).
       if (newHash == 0)
         tree.setProperty("inputAlias", "", &undoManager);
       else
@@ -290,741 +421,96 @@ MappingInspector::MappingInspector(juce::UndoManager &undoMgr,
     }
   };
 
-  // Setup Type Selector
-  typeSelector.addItem("Note", 1);
-  typeSelector.addItem("CC", 2);
-  typeSelector.addItem("Command", 3);
-  typeSelector.addItem("Macro", 4);
-  typeSelector.addItem("Envelope", 5);
-  typeSelector.onChange = [this] {
-    if (selectedTrees.empty())
-      return;
-
-    juce::String typeStr;
-    int selectedId = typeSelector.getSelectedId();
-    if (selectedId == 1)
-      typeStr = "Note";
-    else if (selectedId == 2)
-      typeStr = "CC";
-    else if (selectedId == 3)
-      typeStr = "Command";
-    else if (selectedId == 4)
-      typeStr = "Macro";
-    else if (selectedId == 5)
-      typeStr = "Envelope";
-    else
-      return; // Invalid selection
-
-    undoManager.beginNewTransaction("Change Type");
-    for (auto &tree : selectedTrees) {
-      if (tree.isValid())
-        tree.setProperty("type", typeStr, &undoManager);
-    }
-    // Transaction ends automatically when next beginNewTransaction() is called
-  };
-
-  // Setup Command Selector (IDs 1-13 map to CommandID 0-12)
-  commandSelector.addItem("Sustain (Momentary)", 1);
-  commandSelector.addItem("Sustain (Toggle)", 2);
-  commandSelector.addItem("Sustain (Inverse)", 3);
-  commandSelector.addItem("Latch (Toggle)", 4);
-  commandSelector.addItem("Panic (All Off)", 5);
-  commandSelector.addItem("Panic (Latched Only)", 6);
-  commandSelector.addItem("Global Pitch +1", 7);
-  commandSelector.addItem("Global Pitch -1", 8);
-  commandSelector.addItem("Global Mode +1", 9);
-  commandSelector.addItem("Global Mode -1", 10);
-  // Phase 41: Layer commands
-  commandSelector.addItem("Layer Momentary (Hold)", 11);
-  commandSelector.addItem("Layer Toggle", 12);
-  commandSelector.addItem("Layer Solo", 13);
-  commandSelector.onChange = [this] {
-    if (selectedTrees.empty())
-      return;
-
-    int selectedId = commandSelector.getSelectedId();
-    if (selectedId < 1 || selectedId > 13)
-      return;
-
-    // Map ComboBox ID (1-13) to CommandID enum value (0-12)
-    int cmdValue = selectedId - 1;
-
-    undoManager.beginNewTransaction("Change Command");
-    for (auto &tree : selectedTrees) {
-      if (tree.isValid()) {
-        tree.setProperty("data1", cmdValue, &undoManager);
-        // Phase 41: For layer commands, initialize data2 to 0 if not set
-        if (cmdValue >= 10 && cmdValue <= 12) {
-          if (!tree.hasProperty("data2")) {
-            tree.setProperty("data2", 0, &undoManager);
-          }
-        }
-      }
-    }
-
-    updateVisibility();
-    updateControlsFromSelection();
-  };
-
-  // Setup Channel Slider
-  channelSlider.setRange(1, 16, 1);
-  channelSlider.setTextValueSuffix("");
-  channelSlider.onValueChange = [this] {
-    if (selectedTrees.empty())
-      return;
-
-    // Don't update if showing mixed value (suffix contains "---")
-    if (channelSlider.getTextValueSuffix().contains("---"))
-      return;
-
-    undoManager.beginNewTransaction("Change Channel");
-    int value = static_cast<int>(channelSlider.getValue());
-    for (auto &tree : selectedTrees) {
-      if (tree.isValid())
-        tree.setProperty("channel", value, &undoManager);
-    }
-    // Transaction ends automatically when next beginNewTransaction() is called
-  };
-
-  // Setup Data1 Slider
-  data1Slider.setRange(0, 127, 1);
-  data1Slider.setTextValueSuffix("");
-  data1Slider.setTextBoxStyle(juce::Slider::TextBoxLeft, false, 80, 20);
-  data1Slider.onValueChange = [this] {
-    if (selectedTrees.empty())
-      return;
-
-    // Don't update if showing mixed value (suffix contains "---")
-    if (data1Slider.getTextValueSuffix().contains("---"))
-      return;
-
-    // Phase 41: Check if this is a layer command (data1Slider is showing layer
-    // ID)
-    bool isLayerCommand = false;
-    if (allTreesHaveSameValue("type") &&
-        getCommonValue("type").toString() == "Command") {
-      if (allTreesHaveSameValue("data1")) {
-        int cmdId = static_cast<int>(getCommonValue("data1"));
-        isLayerCommand = (cmdId >= 10 && cmdId <= 12);
-      }
-    }
-
-    undoManager.beginNewTransaction(isLayerCommand ? "Change Layer ID"
-                                                   : "Change Data1");
-    int value = static_cast<int>(data1Slider.getValue());
-    for (auto &tree : selectedTrees) {
-      if (tree.isValid()) {
-        if (isLayerCommand) {
-          // Phase 41: For layer commands, save layer ID to data2
-          tree.setProperty("data2", value, &undoManager);
-        } else {
-          tree.setProperty("data1", value, &undoManager);
-        }
-      }
-    }
-    // Transaction ends automatically when next beginNewTransaction() is called
-  };
-
-  // Setup Data2 Slider
-  data2Slider.setRange(0, 127, 1);
-  data2Slider.setTextValueSuffix("");
-  data2Slider.onValueChange = [this] {
-    if (selectedTrees.empty())
-      return;
-
-    // Don't update if showing mixed value (suffix contains "---")
-    if (data2Slider.getTextValueSuffix().contains("---"))
-      return;
-
-    undoManager.beginNewTransaction("Change Data2");
-    int value = static_cast<int>(data2Slider.getValue());
-    for (auto &tree : selectedTrees) {
-      if (tree.isValid())
-        tree.setProperty("data2", value, &undoManager);
-    }
-    // Transaction ends automatically when next beginNewTransaction() is called
-  };
-
-  // Setup Velocity Random Slider (only for Note type)
-  randVelSlider.setRange(0, 64, 1);
-  randVelSlider.setTextValueSuffix("");
-  randVelSlider.onValueChange = [this] {
-    if (selectedTrees.empty())
-      return;
-
-    // Don't update if showing mixed value
-    if (randVelSlider.getTextValueSuffix().contains("---"))
-      return;
-
-    undoManager.beginNewTransaction("Change Velocity Random");
-    int value = static_cast<int>(randVelSlider.getValue());
-    for (auto &tree : selectedTrees) {
-      if (tree.isValid())
-        tree.setProperty("velRandom", value, &undoManager);
-    }
-    // Transaction ends automatically when next beginNewTransaction() is called
-  };
-
-  // Register with DeviceManager for changes
-  deviceManager.addChangeListener(this);
-
-  // Initially disable all controls
-  enableControls(false);
-}
-
-MappingInspector::~MappingInspector() {
-  deviceManager.removeChangeListener(this);
-
-  // Remove listeners from selection
-  for (auto &tree : selectedTrees) {
-    if (tree.isValid())
-      tree.removeListener(this);
-  }
-}
-
-void MappingInspector::changeListenerCallback(juce::ChangeBroadcaster *source) {
-  if (source == &deviceManager) {
-    // Device alias configuration changed, refresh the selector
-    refreshAliasSelector();
-    updateControlsFromSelection();
-  }
-}
-
-void MappingInspector::refreshAliasSelector() {
-  aliasSelector.clear(juce::dontSendNotification);
-
-  // Add "Global (All Devices)" option (hash 0)
-  aliasSelector.addItem("Global (All Devices)", 1);
-
-  // Add all aliases
-  auto aliases = deviceManager.getAllAliasNames();
-  for (int i = 0; i < aliases.size(); ++i) {
-    aliasSelector.addItem(aliases[i], i + 2); // Start IDs from 2
-  }
-}
-
-void MappingInspector::paint(juce::Graphics &g) {
-  g.fillAll(juce::Colour(0xff2a2a2a));
-
-  if (selectedTrees.empty()) {
-    g.setColour(juce::Colours::grey);
-    g.setFont(14.0f);
-    g.drawText("No selection", getLocalBounds(), juce::Justification::centred,
-               true);
-  }
+  rowComp->editor = std::move(aliasCombo);
+  rowComp->addAndMakeVisible(*rowComp->label);
+  rowComp->addAndMakeVisible(*rowComp->editor);
+  addAndMakeVisible(*rowComp);
+  row.items.push_back({std::move(rowComp), 1.0f, false});
+  uiRows.push_back(std::move(row));
 }
 
 void MappingInspector::resized() {
-  auto area = getLocalBounds().reduced(10);
-  int labelWidth = 80;
-  int controlHeight = 25;
-  int spacing = 10;
-  int topPadding = 10;
-  int leftMargin = area.getX() + labelWidth;
-  int width = area.getWidth() - labelWidth;
+  const int rowHeight = 25;
+  const int separatorRowHeight = 15; // Phase 55.9: smaller for separator rows
+  const int spacing = 4;  // Phase 55.10: tighter layout
+  const int topPadding = 4;
+  auto bounds = getLocalBounds().reduced(4);
+  int y = bounds.getY() + topPadding;
 
-  int y = topPadding;
+  for (auto &row : uiRows) {
+    if (row.items.empty())
+      continue;
 
-  typeSelector.setBounds(leftMargin, y, width, controlHeight);
-  y += controlHeight + spacing;
+    // Phase 55.11: Extra top margin before separator rows for readability
+    if (row.isSeparatorRow)
+      y += 12;
 
-  if (channelSlider.isVisible()) {
-    channelSlider.setBounds(leftMargin, y, width, controlHeight);
-    y += controlHeight + spacing;
-  }
+    const int h = row.isSeparatorRow ? separatorRowHeight : rowHeight;
+    const int totalAvailable = bounds.getWidth();
+    int usedWidth = 0;
+    float totalWeight = 0.0f;
 
-  aliasSelector.setBounds(leftMargin, y, width, controlHeight);
-  y += controlHeight + spacing;
-
-  if (commandSelector.isVisible()) {
-    commandSelector.setBounds(leftMargin, y, width, controlHeight);
-    y += controlHeight + spacing;
-  }
-  if (targetLayerSelector.isVisible()) {
-    targetLayerSelector.setBounds(leftMargin, y, width, controlHeight);
-    y += controlHeight + spacing;
-  }
-
-  if (data1Slider.isVisible()) {
-    data1Slider.setBounds(leftMargin, y, width, controlHeight);
-    y += controlHeight + spacing;
-  }
-
-  if (data2Slider.isVisible()) {
-    data2Slider.setBounds(leftMargin, y, width, controlHeight);
-    y += controlHeight + spacing;
-  }
-
-  if (randVelSlider.isVisible()) {
-    randVelSlider.setBounds(leftMargin, y, width, controlHeight);
-    y += controlHeight + spacing;
-  }
-
-  // ADSR controls (for Envelope type) - layout in a 2x2 grid
-  if (attackSlider.isVisible()) {
-    int adsrY = y;
-    int adsrWidth = (width - spacing) / 2;
-
-    attackSlider.setBounds(leftMargin, adsrY, adsrWidth, controlHeight);
-    decaySlider.setBounds(leftMargin + adsrWidth + spacing, adsrY, adsrWidth,
-                          controlHeight);
-    adsrY += controlHeight + spacing;
-
-    sustainSlider.setBounds(leftMargin, adsrY, adsrWidth, controlHeight);
-    releaseSlider.setBounds(leftMargin + adsrWidth + spacing, adsrY, adsrWidth,
-                            controlHeight);
-    adsrY += controlHeight + spacing;
-
-    envTargetSelector.setBounds(leftMargin, adsrY, width, controlHeight);
-    adsrY += controlHeight + spacing;
-
-    // Pitch Bend controls (if visible)
-    if (pbShiftSlider.isVisible()) {
-      pbShiftSlider.setBounds(leftMargin, adsrY, width, controlHeight);
-      adsrY += controlHeight + spacing;
-      pbGlobalRangeLabel.setBounds(leftMargin, adsrY, width, controlHeight);
-      adsrY += controlHeight + spacing;
+    // Phase 55.10: Measure auto-width items
+    for (auto &item : row.items) {
+      if (item.isAutoWidth) {
+        if (auto *lc = dynamic_cast<LabeledControl *>(item.component.get())) {
+          usedWidth += lc->getIdealWidth();
+        } else {
+          usedWidth += 100;
+        }
+      } else {
+        totalWeight += item.weight;
+      }
     }
 
-    // Smart Scale Bend controls (if visible)
-    if (smartStepSlider.isVisible()) {
-      smartStepSlider.setBounds(leftMargin, adsrY, width, controlHeight);
-      adsrY += controlHeight + spacing;
+    int remainingWidth = std::max(0, totalAvailable - usedWidth);
+    int x = bounds.getX();
+
+    for (auto &item : row.items) {
+      int w = 0;
+      if (item.isAutoWidth) {
+        if (auto *lc = dynamic_cast<LabeledControl *>(item.component.get())) {
+          w = lc->getIdealWidth();
+        } else {
+          w = 100;
+        }
+      } else {
+        if (totalWeight > 0.0f) {
+          w = static_cast<int>((item.weight / totalWeight) * remainingWidth);
+        } else {
+          w = remainingWidth;
+        }
+      }
+
+      if (item.component)
+        item.component->setBounds(x, y, w, h);
+      x += w;
     }
 
-    y = adsrY;
+    y += h + spacing;
   }
-
-  y += 10; // Bottom padding
-
-  // Set component size based on calculated height
-  setSize(getWidth(), y);
+  setSize(getWidth(), y + 4);
 }
 
 int MappingInspector::getRequiredHeight() const {
-  int controlHeight = 25;
-  int spacing = 10;
-  int topPadding = 10;
-  int bottomPadding = 10;
-
-  // 5 controls: Type, Channel, Alias, Data1, Data2
-  int numControls = 5;
-
-  return topPadding + (numControls * (controlHeight + spacing)) + bottomPadding;
-}
-
-void MappingInspector::setSelection(
-    const std::vector<juce::ValueTree> &selection) {
-  isUpdatingFromTree = true;
-  // Remove listeners from old selection
-  for (auto &tree : selectedTrees) {
-    if (tree.isValid())
-      tree.removeListener(this);
+  const int controlHeight = 25;
+  const int separatorHeight = 15; // Phase 55.9
+  const int separatorTopMargin = 12; // Phase 55.11: extra space before separator
+  const int spacing = 4;  // Phase 55.10: matches resized()
+  const int topPadding = 4;
+  const int bottomPadding = 4;
+  int total = topPadding + bottomPadding;
+  for (const auto &row : uiRows) {
+    if (row.isSeparatorRow)
+      total += separatorTopMargin;
+    total += (row.isSeparatorRow ? separatorHeight : controlHeight) + spacing;
   }
-
-  // Cache new selection
-  selectedTrees = selection;
-
-  // Add listeners to new selection
-  for (auto &tree : selectedTrees) {
-    if (tree.isValid())
-      tree.addListener(this);
-  }
-
-  // Update UI
-  updateControlsFromSelection();
-  isUpdatingFromTree = false;
-}
-
-void MappingInspector::updateControlsFromSelection() {
-  if (selectedTrees.empty()) {
-    enableControls(false);
-    return;
-  }
-
-  enableControls(true);
-
-  // Update Type Selector and configure Data1 slider based on type
-  juce::String typeStr;
-  if (allTreesHaveSameValue("type")) {
-    typeStr = getCommonValue("type").toString();
-    if (typeStr == "Note")
-      typeSelector.setSelectedId(1, juce::dontSendNotification);
-    else if (typeStr == "CC")
-      typeSelector.setSelectedId(2, juce::dontSendNotification);
-    else if (typeStr == "Command")
-      typeSelector.setSelectedId(3, juce::dontSendNotification);
-    else if (typeStr == "Macro")
-      typeSelector.setSelectedId(4, juce::dontSendNotification);
-    else if (typeStr == "Envelope")
-      typeSelector.setSelectedId(5, juce::dontSendNotification);
-    else
-      typeSelector.setSelectedId(-1, juce::dontSendNotification);
-  } else {
-    typeSelector.setSelectedId(-1, juce::dontSendNotification);
-    typeStr = ""; // Mixed types
-  }
-
-  // Show/hide controls based on type
-  bool isCommand = (typeStr == "Command");
-  bool isNoteOrCC =
-      (typeStr == "Note" || typeStr == "CC" || typeStr == "Macro");
-  bool isNote = (typeStr == "Note");
-  bool isEnvelope = (typeStr == "Envelope");
-
-  channelSlider.setVisible(isNoteOrCC || isEnvelope);
-  channelLabel.setVisible(isNoteOrCC || isEnvelope);
-  // data1Slider visibility for Envelope will be set later based on target
-  if (!isEnvelope) {
-    data1Slider.setVisible(isNoteOrCC);
-    data1Label.setVisible(isNoteOrCC);
-  }
-  data2Slider.setVisible(isNoteOrCC || isEnvelope);
-  data2Label.setVisible(isNoteOrCC || isEnvelope);
-  randVelSlider.setVisible(isNote);
-  randVelLabel.setVisible(isNote);
-
-  commandSelector.setVisible(isCommand);
-  commandLabel.setVisible(isCommand);
-  updateVisibility();
-
-  // ADSR controls visibility
-  attackSlider.setVisible(isEnvelope);
-  attackLabel.setVisible(isEnvelope);
-  decaySlider.setVisible(isEnvelope);
-  decayLabel.setVisible(isEnvelope);
-  sustainSlider.setVisible(isEnvelope);
-  sustainLabel.setVisible(isEnvelope);
-  releaseSlider.setVisible(isEnvelope);
-  releaseLabel.setVisible(isEnvelope);
-  envTargetSelector.setVisible(isEnvelope);
-  envTargetLabel.setVisible(isEnvelope);
-
-  // Pitch Bend controls visibility (only for Envelope with PitchBend target)
-  juce::String target = allTreesHaveSameValue("adsrTarget")
-                            ? getCommonValue("adsrTarget").toString()
-                            : "";
-  bool isPitchBend = (isEnvelope && target == "PitchBend");
-  bool isSmartScaleBend = (isEnvelope && target == "SmartScaleBend");
-  pbShiftSlider.setVisible(isPitchBend);
-  pbShiftLabel.setVisible(isPitchBend);
-  pbGlobalRangeLabel.setVisible(isPitchBend);
-
-  // Smart Scale Bend controls visibility
-  smartStepSlider.setVisible(isSmartScaleBend);
-  smartStepLabel.setVisible(isSmartScaleBend);
-
-  // Hide data1Slider and data2Slider for Pitch Bend and SmartScaleBend (use
-  // musical controls instead)
-  if (isPitchBend || isSmartScaleBend) {
-    data1Slider.setVisible(false);
-    data1Label.setVisible(false);
-    data2Slider.setVisible(false);
-    data2Label.setVisible(false);
-  }
-
-  // Configure Data1 slider based on type (only for Note/CC/Macro)
-  if (typeStr == "Note") {
-    data1Label.setText("Note:", juce::dontSendNotification);
-    data1Slider.setRange(0, 127, 1);
-    data1Slider.setEnabled(true);
-    // Install smart lambda for note names
-    data1Slider.textFromValueFunction = [](double val) {
-      return MidiNoteUtilities::getMidiNoteName(static_cast<int>(val));
-    };
-    data1Slider.valueFromTextFunction = [](const juce::String &text) {
-      return static_cast<double>(MidiNoteUtilities::getMidiNoteFromText(text));
-    };
-    data1Slider.updateText();
-  } else if (typeStr == "CC") {
-    data1Label.setText("CC Number:", juce::dontSendNotification);
-    data1Slider.setRange(0, 127, 1);
-    data1Slider.setEnabled(true);
-    // Remove smart lambda, revert to default numeric display
-    data1Slider.textFromValueFunction = nullptr;
-    data1Slider.valueFromTextFunction = nullptr;
-    data1Slider.updateText();
-  } else if (typeStr == "Macro") {
-    data1Label.setText("Macro ID:", juce::dontSendNotification);
-    data1Slider.setRange(0, 127, 1);
-    data1Slider.setEnabled(true);
-    // Use default numeric display for macros
-    data1Slider.textFromValueFunction = nullptr;
-    data1Slider.valueFromTextFunction = nullptr;
-    data1Slider.updateText();
-  } else if (typeStr == "Envelope") {
-    // For Envelope: data1 = CC number (if target is CC), data2 = peak value
-    data1Label.setText("CC Number:", juce::dontSendNotification);
-    data1Slider.setRange(0, 127, 1);
-    data1Slider.setEnabled(true);
-    data1Slider.textFromValueFunction = nullptr;
-    data1Slider.valueFromTextFunction = nullptr;
-    data1Slider.updateText();
-    data2Label.setText("Peak Value:", juce::dontSendNotification);
-    data2Slider.setRange(0, 16383, 1); // Allow up to Pitch Bend range
-    data2Slider.updateText();
-  } else {
-    // Reset data2Slider range for non-Envelope types
-    if (data2Slider.getMaximum() > 127) {
-      data2Slider.setRange(0, 127, 1);
-      data2Slider.updateText();
-    }
-  }
-
-  if (typeStr == "Command") {
-    // Command type - update commandSelector from data1
-    if (allTreesHaveSameValue("data1")) {
-      int data1 = static_cast<int>(getCommonValue("data1"));
-      // Map CommandID enum value (0-12) to ComboBox ID (1-13)
-      if (data1 >= 0 && data1 <= 12) {
-        commandSelector.setSelectedId(data1 + 1, juce::dontSendNotification);
-        // Layer commands now use targetLayerSelector; keep data1Slider in its
-        // default range and label for non-layer commands.
-        if (data1 < 10 || data1 > 12) {
-          data1Label.setText("Data1:", juce::dontSendNotification);
-        }
-      } else {
-        commandSelector.setSelectedId(-1, juce::dontSendNotification);
-      }
-    } else {
-      commandSelector.setSelectedId(-1, juce::dontSendNotification);
-    }
-  } else {
-    // Mixed or unknown type - disable smart functions
-    data1Label.setText("Data1:", juce::dontSendNotification);
-    data1Slider.textFromValueFunction = nullptr;
-    data1Slider.valueFromTextFunction = nullptr;
-    data1Slider.updateText();
-  }
-
-  // Update Channel Slider
-  if (allTreesHaveSameValue("channel")) {
-    int channel = static_cast<int>(getCommonValue("channel"));
-    channelSlider.setValue(channel, juce::dontSendNotification);
-    channelSlider.setTextValueSuffix("");
-  } else {
-    // Mixed value - set to middle and show "---"
-    channelSlider.setValue(8, juce::dontSendNotification);
-    channelSlider.setTextValueSuffix(" (---)");
-  }
-
-  // Update Alias Selector
-  {
-    juce::String aliasName = "Global (All Devices)"; // default
-
-    // Phase 46.5: Source of truth is deviceHash (NOT inputAlias).
-    if (allTreesHaveSameValue("deviceHash")) {
-      juce::String hashStr = getCommonValue("deviceHash").toString();
-      uintptr_t hash = 0;
-      if (!hashStr.isEmpty())
-        hash = static_cast<uintptr_t>(hashStr.getHexValue64());
-
-      if (hash != 0) {
-        aliasName = deviceManager.getAliasName(hash);
-        if (aliasName == "Unknown")
-          aliasName = "Global (All Devices)"; // fallback
-      }
-    } else {
-      // Mixed selection: clear
-      aliasSelector.setSelectedId(-1, juce::dontSendNotification);
-      aliasName.clear();
-    }
-
-    // Set selection if we found a single alias.
-    // Phase 46.3: match by displayed text (robust even if IDs/order change).
-    if (!aliasName.isEmpty() && aliasName != "Unknown") {
-      bool found = false;
-      for (int i = 0; i < aliasSelector.getNumItems(); ++i) {
-        if (aliasSelector.getItemText(i) == aliasName) {
-          aliasSelector.setSelectedItemIndex(i, juce::dontSendNotification);
-          found = true;
-          break;
-        }
-      }
-      if (!found) {
-        aliasSelector.setSelectedItemIndex(0, juce::dontSendNotification);
-      }
-    } else {
-      aliasSelector.setSelectedId(-1, juce::dontSendNotification);
-    }
-  }
-
-  // Update Data1 Slider (or Layer ID slider for layer commands)
-  if (typeStr == "Command" && allTreesHaveSameValue("data1")) {
-    int cmdId = static_cast<int>(getCommonValue("data1"));
-    if (cmdId >= 10 && cmdId <= 12) {
-      // Phase 44: Layer command - sync Target Layer selector from data2
-      if (allTreesHaveSameValue("data2")) {
-        int layerId = static_cast<int>(getCommonValue("data2"));
-        layerId = juce::jlimit(0, 8, layerId);
-        targetLayerSelector.setSelectedId(layerId + 1,
-                                          juce::dontSendNotification);
-      } else {
-        targetLayerSelector.setSelectedId(
-            1, juce::dontSendNotification); // Base when mixed
-      }
-    } else {
-      // Regular command - show data1
-      int data1 = cmdId;
-      data1Slider.setValue(data1, juce::dontSendNotification);
-      data1Slider.setTextValueSuffix("");
-    }
-  } else if (allTreesHaveSameValue("data1")) {
-    int data1 = static_cast<int>(getCommonValue("data1"));
-    data1Slider.setValue(data1, juce::dontSendNotification);
-    data1Slider.setTextValueSuffix("");
-  } else {
-    // Mixed value - set to middle and show "---"
-    data1Slider.setValue(64, juce::dontSendNotification);
-    data1Slider.setTextValueSuffix(" (---)");
-  }
-
-  // Update Data2 Slider
-  if (allTreesHaveSameValue("data2")) {
-    int data2 = static_cast<int>(getCommonValue("data2"));
-    data2Slider.setValue(data2, juce::dontSendNotification);
-    data2Slider.setTextValueSuffix("");
-  } else {
-    // Mixed value - set to middle and show "---"
-    data2Slider.setValue(64, juce::dontSendNotification);
-    data2Slider.setTextValueSuffix(" (---)");
-  }
-
-  // Update Velocity Random Slider (only for Note type)
-  if (typeStr == "Note") {
-    if (allTreesHaveSameValue("velRandom")) {
-      int velRandom = static_cast<int>(getCommonValue("velRandom"));
-      randVelSlider.setValue(velRandom, juce::dontSendNotification);
-      randVelSlider.setTextValueSuffix("");
-    } else {
-      // Mixed value - set to 0 and show "---"
-      randVelSlider.setValue(0, juce::dontSendNotification);
-      randVelSlider.setTextValueSuffix(" (---)");
-    }
-  }
-
-  // Update ADSR controls (only for Envelope type)
-  if (isEnvelope) {
-    // Update Attack
-    if (allTreesHaveSameValue("adsrAttack")) {
-      int attack = static_cast<int>(getCommonValue("adsrAttack"));
-      attackSlider.setValue(attack, juce::dontSendNotification);
-      attackSlider.setTextValueSuffix(" ms");
-    } else {
-      attackSlider.setValue(50, juce::dontSendNotification);
-      attackSlider.setTextValueSuffix(" ms (---)");
-    }
-
-    // Update Decay
-    if (allTreesHaveSameValue("adsrDecay")) {
-      int decay = static_cast<int>(getCommonValue("adsrDecay"));
-      decaySlider.setValue(decay, juce::dontSendNotification);
-      decaySlider.setTextValueSuffix(" ms");
-    } else {
-      decaySlider.setValue(0, juce::dontSendNotification);
-      decaySlider.setTextValueSuffix(" ms (---)");
-    }
-
-    // Update Sustain
-    if (allTreesHaveSameValue("adsrSustain")) {
-      int sustain = static_cast<int>(getCommonValue("adsrSustain"));
-      sustainSlider.setValue(sustain, juce::dontSendNotification);
-      sustainSlider.setTextValueSuffix("");
-    } else {
-      sustainSlider.setValue(127, juce::dontSendNotification);
-      sustainSlider.setTextValueSuffix(" (---)");
-    }
-
-    // Update Release
-    if (allTreesHaveSameValue("adsrRelease")) {
-      int release = static_cast<int>(getCommonValue("adsrRelease"));
-      releaseSlider.setValue(release, juce::dontSendNotification);
-      releaseSlider.setTextValueSuffix(" ms");
-    } else {
-      releaseSlider.setValue(50, juce::dontSendNotification);
-      releaseSlider.setTextValueSuffix(" ms (---)");
-    }
-
-    // Update Target Selector
-    if (allTreesHaveSameValue("adsrTarget")) {
-      juce::String target = getCommonValue("adsrTarget").toString();
-      if (target == "CC" || target.isEmpty())
-        envTargetSelector.setSelectedId(1, juce::dontSendNotification);
-      else if (target == "PitchBend")
-        envTargetSelector.setSelectedId(2, juce::dontSendNotification);
-      else if (target == "SmartScaleBend")
-        envTargetSelector.setSelectedId(3, juce::dontSendNotification);
-      else
-        envTargetSelector.setSelectedId(-1, juce::dontSendNotification);
-    } else {
-      envTargetSelector.setSelectedId(-1, juce::dontSendNotification);
-    }
-
-    // Update Pitch Bend sliders
-    if (target == "PitchBend") {
-      // Update PB Shift
-      if (allTreesHaveSameValue("pbShift")) {
-        int pbShift = static_cast<int>(getCommonValue("pbShift"));
-        pbShiftSlider.setValue(pbShift, juce::dontSendNotification);
-        pbShiftSlider.setTextValueSuffix(" semitones");
-      } else {
-        pbShiftSlider.setValue(0, juce::dontSendNotification);
-        pbShiftSlider.setTextValueSuffix(" semitones (---)");
-      }
-    }
-
-    // Update Smart Scale Bend slider
-    if (target == "SmartScaleBend") {
-      // Update Smart Step Shift
-      if (allTreesHaveSameValue("smartStepShift")) {
-        int smartStep = static_cast<int>(getCommonValue("smartStepShift"));
-        smartStepSlider.setValue(smartStep, juce::dontSendNotification);
-        smartStepSlider.setTextValueSuffix(" steps");
-      } else {
-        smartStepSlider.setValue(0, juce::dontSendNotification);
-        smartStepSlider.setTextValueSuffix(" steps (---)");
-      }
-    }
-
-    // Update data1Slider visibility based on target
-    bool showData1 = (target != "PitchBend");
-    data1Slider.setVisible(showData1);
-    data1Label.setVisible(showData1);
-  }
-
-  // Trigger layout update after visibility changes
-  resized();
-}
-
-void MappingInspector::updateVisibility() {
-  bool isLayerCmd = false;
-  if (!selectedTrees.empty() && allTreesHaveSameValue("type") &&
-      getCommonValue("type").toString() == "Command" &&
-      allTreesHaveSameValue("data1")) {
-    int cmdId = static_cast<int>(getCommonValue("data1"));
-    isLayerCmd =
-        (cmdId >= static_cast<int>(OmniKey::CommandID::LayerMomentary) &&
-         cmdId <= static_cast<int>(OmniKey::CommandID::LayerSolo));
-  }
-  targetLayerSelector.setVisible(isLayerCmd);
-  targetLayerLabel.setVisible(isLayerCmd);
-}
-
-void MappingInspector::enableControls(bool enabled) {
-  typeSelector.setEnabled(enabled);
-  channelSlider.setEnabled(enabled);
-  aliasSelector.setEnabled(enabled);
-  data1Slider.setEnabled(enabled);
-  data2Slider.setEnabled(enabled);
-  randVelSlider.setEnabled(enabled);
-  commandSelector.setEnabled(enabled);
-  targetLayerSelector.setEnabled(enabled);
+  return total;
 }
 
 bool MappingInspector::allTreesHaveSameValue(const juce::Identifier &property) {
   if (selectedTrees.empty())
     return false;
-
   juce::var firstValue = selectedTrees[0].getProperty(property);
   for (size_t i = 1; i < selectedTrees.size(); ++i) {
     if (selectedTrees[i].getProperty(property) != firstValue)
@@ -1039,37 +525,15 @@ juce::var MappingInspector::getCommonValue(const juce::Identifier &property) {
   return juce::var();
 }
 
-void MappingInspector::updatePitchBendPeakValue(juce::ValueTree &tree) {
-  // Note: This method is no longer used since InputProcessor now handles
-  // the calculation using global range. However, we keep it for potential
-  // future use or if we need to update data2 from the UI side.
-  // The actual calculation happens in GridCompiler when the grid is rebuilt
-  // using SettingsManager::getPitchBendRange().
+void MappingInspector::changeListenerCallback(juce::ChangeBroadcaster *source) {
+  if (source == &deviceManager)
+    rebuildUI();
 }
 
 void MappingInspector::valueTreePropertyChanged(
     juce::ValueTree &tree, const juce::Identifier &property) {
-  // Phase 45.8: avoid feedback loops if we are already syncing from the tree
   if (isUpdatingFromTree)
     return;
-
-  // Only react to properties that the inspector actually displays
-  if (!(property == juce::Identifier("type") ||
-        property == juce::Identifier("channel") ||
-        property == juce::Identifier("data1") ||
-        property == juce::Identifier("data2") ||
-        property == juce::Identifier("inputAlias") ||
-        property == juce::Identifier("deviceHash") ||
-        property == juce::Identifier("adsrAttack") ||
-        property == juce::Identifier("adsrDecay") ||
-        property == juce::Identifier("adsrSustain") ||
-        property == juce::Identifier("adsrRelease") ||
-        property == juce::Identifier("adsrTarget") ||
-        property == juce::Identifier("pbShift") ||
-        property == juce::Identifier("smartStepShift")))
-    return;
-
-  // Check if this tree is part of the current selection
   bool isRelevant = false;
   for (const auto &t : selectedTrees) {
     if (t == tree) {
@@ -1079,13 +543,24 @@ void MappingInspector::valueTreePropertyChanged(
   }
   if (!isRelevant)
     return;
-
-  // Refresh UI on the message thread, reusing current selection
-  juce::MessageManager::callAsync([this]() {
-    if (selectedTrees.empty())
-      return;
-    isUpdatingFromTree = true;
-    setSelection(selectedTrees);
-    isUpdatingFromTree = false;
-  });
+  // Phase 55.6: Rebuild only when schema structure changes (avoids rebuild during slider drag)
+  bool needsRebuild = false;
+  if (property == juce::Identifier("type") ||
+      property == juce::Identifier("adsrTarget") ||
+      property == juce::Identifier("sendReleaseValue")) {
+    needsRebuild = true;
+  } else if (property == juce::Identifier("data1")) {
+    if (allTreesHaveSameValue("type") &&
+        getCommonValue("type").toString() == "Command")
+      needsRebuild = true;
+  }
+  if (needsRebuild) {
+    juce::MessageManager::callAsync([this]() {
+      if (selectedTrees.empty())
+        return;
+      rebuildUI();
+    });
+  } else {
+    repaint();
+  }
 }

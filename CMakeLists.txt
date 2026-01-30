@@ -23,6 +23,7 @@ add_subdirectory(JUCE)
 add_library(OmniKey_Core STATIC
     Source/GridCompiler.cpp
     Source/InputProcessor.cpp
+    Source/MappingDefinition.cpp
     Source/PresetManager.cpp
     Source/DeviceManager.cpp
     Source/ZoneManager.cpp
@@ -69,6 +70,10 @@ target_compile_definitions(OmniKey_Core PRIVATE
     NOMINMAX
     WIN32_LEAN_AND_MEAN
 )
+# Allow parallel compiles to write to same PDB (avoids C1041)
+if(MSVC)
+  target_compile_options(OmniKey_Core PRIVATE /FS)
+endif()
 
 # 5. Create the GUI App
 juce_add_gui_app(OmniKey
@@ -148,6 +153,7 @@ add_executable(OmniKey_Tests
     Source/Tests/SanityTest.cpp
     Source/Tests/GridCompilerTests.cpp
     Source/Tests/InputProcessorTests.cpp
+    Source/Tests/MappingDefinitionTests.cpp
 )
 
 # 12. Link Dependencies

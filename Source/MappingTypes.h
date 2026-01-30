@@ -95,6 +95,13 @@ struct MidiAction {
   AdsrSettings adsrSettings;        // ADSR settings (for ActionType::Envelope)
   std::vector<int> smartBendLookup; // Pre-compiled PB lookup table (128
                                     // entries) for SmartScaleBend
+
+  // Phase 55.4: Note options
+  bool isOneShot = false; // If true, do not send NoteOff on key release
+
+  // Phase 55.4: CC options
+  bool sendReleaseValue = false; // If true, send a specific value on key release
+  int releaseValue = 0;
 };
 
 // Represents a unique input source (device + key)

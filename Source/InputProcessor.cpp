@@ -413,6 +413,16 @@ void InputProcessor::processEvent(InputID input, bool isDown) {
           expressionEngine.releaseEnvelope(input);
           return;
         }
+        // Phase 55.4: Note one-shot – do not send NoteOff on release
+        if (midiAction.type == ActionType::Note && midiAction.isOneShot) {
+          return;
+        }
+        // Phase 55.4: CC release value – send specific value on key release
+        if (midiAction.type == ActionType::CC && midiAction.sendReleaseValue) {
+          voiceManager.sendCC(midiAction.channel, midiAction.data1,
+                              midiAction.releaseValue);
+          return;
+        }
         if (zone && zone->playMode == Zone::PlayMode::Strum) {
           juce::ScopedWriteLock lock(bufferLock);
           noteBuffer.clear();
