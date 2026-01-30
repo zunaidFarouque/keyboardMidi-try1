@@ -356,10 +356,17 @@ MainComponent::~MainComponent() {
   }
 }
 
-// --- LOGGING LOGIC (Phase 52.3: Grid-based, no simulateInput) ---
+// --- LOGGING LOGIC (Phase 52.3: Grid-based; Phase 54.2: Studio Mode) ---
 void MainComponent::logEvent(uintptr_t device, int keyCode, bool isDown) {
+  // 1. Determine Effective Device (match InputProcessor logic)
+  uintptr_t effectiveDevice = device;
+  if (!settingsManager.isStudioMode())
+    effectiveDevice = 0;
+
   juce::String devStr =
       "Dev: " + juce::String::toHexString((juce::int64)device).toUpperCase();
+  if (effectiveDevice == 0 && device != 0)
+    devStr += " (Studio Mode OFF)";
   juce::String keyName = RawInputManager::getKeyName(keyCode);
   juce::String logLine = devStr + " | Key: " + keyName;
 
@@ -370,23 +377,24 @@ void MainComponent::logEvent(uintptr_t device, int keyCode, bool isDown) {
     return;
   }
 
-  juce::String aliasName = deviceManager.getAliasForHardware(device);
-  juce::String trimmed = aliasName.trim();
-  uintptr_t deviceHash = 0;
-  if (!trimmed.isEmpty() && trimmed != "Unassigned" &&
-      !trimmed.equalsIgnoreCase("Any / Master") &&
-      !trimmed.equalsIgnoreCase("Global (All Devices)")) {
-    deviceHash = static_cast<uintptr_t>(std::hash<juce::String>{}(trimmed));
+  // 2. Lookup Alias Hash (for visual grid)
+  juce::String aliasName = deviceManager.getAliasForHardware(effectiveDevice);
+  uintptr_t viewHash = 0;
+  if (aliasName.isNotEmpty() && aliasName != "Unassigned") {
+    viewHash =
+        static_cast<uintptr_t>(std::hash<juce::String>{}(aliasName.trim()));
   }
 
+  // 3. Get Active Layer
   int layer = inputProcessor.getHighestActiveLayerIndex();
   if (layer < 0)
     layer = 0;
   if (layer > 8)
     layer = 8;
 
+  // 4. Lookup in Visual Grid using viewHash and layer
   std::shared_ptr<const VisualGrid> grid;
-  auto it = ctx->visualLookup.find(deviceHash);
+  auto it = ctx->visualLookup.find(viewHash);
   if (it != ctx->visualLookup.end() && layer < (int)it->second.size())
     grid = it->second[(size_t)layer];
   if (!grid) {

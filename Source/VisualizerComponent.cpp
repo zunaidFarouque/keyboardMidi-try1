@@ -258,17 +258,19 @@ void VisualizerComponent::refreshCache() {
 
       VisualState state = VisualState::Empty;
       juce::String labelText = geometry.label;
+      bool isGhost = false;
 
       if (targetGrid && keyCode >= 0 && keyCode < (int)targetGrid->size()) {
         const auto &slot = (*targetGrid)[(size_t)keyCode];
         state = slot.state;
+        isGhost = slot.isGhost;
         if (!slot.displayColor.isTransparent())
           underlayColor = slot.displayColor;
         if (slot.label.isNotEmpty())
           labelText = slot.label;
       }
 
-      // Phase 52.2: Drawing rules from pre-compiled VisualGrid (slot data only)
+      // Phase 52.2 / 54.1: Drawing rules from pre-compiled VisualGrid
       juce::Colour textColor = juce::Colours::white;
 
       if (state == VisualState::Inherited) {
@@ -293,6 +295,32 @@ void VisualizerComponent::refreshCache() {
         alpha = 1.0f;
         borderColor = juce::Colours::grey;
         borderWidth = 1.0f;
+      }
+
+      // Phase 54.1: Ghost keys (e.g. passing tones) – dimmer
+      if (isGhost &&
+          (state == VisualState::Active || state == VisualState::Inherited))
+        alpha *= 0.5f;
+
+      // Phase 54.1/54.4: Smart contrast – legible text
+      // 1. Conflict: Always White on Red
+      if (state == VisualState::Conflict) {
+        textColor = juce::Colours::white;
+      }
+      // 2. Inherited (Dim): Always White (alpha 0.3 over dark grey is dark)
+      else if (state == VisualState::Inherited) {
+        textColor = juce::Colours::white;
+      }
+      // 3. Active/Override: Use effective color and higher threshold (0.7)
+      else {
+        juce::Colour backColor = underlayColor.isTransparent()
+                                     ? juce::Colour(0xff333333)
+                                     : underlayColor;
+        const juce::Colour bgBase(0xff333333);
+        juce::Colour effective = bgBase.interpolatedWith(backColor, alpha);
+        float brightness = effective.getPerceivedBrightness();
+        textColor =
+            (brightness > 0.7f) ? juce::Colours::black : juce::Colours::white;
       }
 
       // --- 4. Render Static Layers (Off State) ---

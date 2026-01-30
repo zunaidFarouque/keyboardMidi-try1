@@ -103,17 +103,19 @@ private:
   // Thread Safety
   juce::ReadWriteLock mapLock;
   juce::ReadWriteLock bufferLock;
+  mutable juce::CriticalSection stateLock; // Phase 53.7: layer state only
 
   // Phase 50.5 / 52.1: Grid-based compiled context (audio + visuals). Protected
   // by mapLock.
   std::shared_ptr<const CompiledMapContext> activeContext;
 
-  // Phase 52.1: Layer state only (data is in activeContext). Track isLatched
-  // (from preset) and isMomentary (from held keys) for the 9 layers.
-  std::vector<bool> layerLatchedState;   // 9 elements, from preset "isActive"
-  std::vector<bool> layerMomentaryState; // 9 elements, from LayerMomentary keys
-  std::vector<bool>
-      layerActiveState; // 9 elements, (i==0) || latched[i] || momentary[i]
+  // Phase 53.2: Layer state – Latched (persistent) vs Momentary (ref count).
+  std::vector<bool> layerLatchedState; // 9 elements, from preset / Toggle/Solo
+  std::vector<int> layerMomentaryCounts; // 9 elements, ref count for held keys
+
+  // Helper: Layer 0 always active; else active if latched or momentary count >
+  // 0
+  bool isLayerActive(int layerIdx) const;
 
   // Phase 40.1: currently held keys for state reconstruction
   std::set<InputID, InputIDLess> currentlyHeldKeys;

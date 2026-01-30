@@ -38,11 +38,31 @@ protected:
     auto mappings = presetMgr.getMappingsListForLayer(layerId);
     juce::ValueTree m("Mapping");
     m.setProperty("inputKey", keyCode, nullptr);
-    // We use the hex string format that DeviceManager expects
     m.setProperty("deviceHash",
                   juce::String::toHexString((juce::int64)deviceH).toUpperCase(),
                   nullptr);
-    m.setProperty("type", (type == ActionType::Note ? "Note" : "CC"), nullptr);
+    juce::String typeStr = "Note";
+    if (type == ActionType::CC)
+      typeStr = "CC";
+    else if (type == ActionType::Command)
+      typeStr = "Command";
+    m.setProperty("type", typeStr, nullptr);
+    m.setProperty("layerID", layerId, nullptr);
+    mappings.addChild(m, -1, nullptr);
+  }
+
+  // Helper to add a Command mapping (e.g. LayerMomentary)
+  void addCommandMapping(int layerId, int keyCode, uintptr_t deviceH,
+                         int commandId, int data2) {
+    auto mappings = presetMgr.getMappingsListForLayer(layerId);
+    juce::ValueTree m("Mapping");
+    m.setProperty("inputKey", keyCode, nullptr);
+    m.setProperty("deviceHash",
+                  juce::String::toHexString((juce::int64)deviceH).toUpperCase(),
+                  nullptr);
+    m.setProperty("type", "Command", nullptr);
+    m.setProperty("data1", commandId, nullptr);
+    m.setProperty("data2", data2, nullptr);
     m.setProperty("layerID", layerId, nullptr);
     mappings.addChild(m, -1, nullptr);
   }
@@ -215,4 +235,49 @@ TEST_F(GridCompilerTest, ZoneCompilesToChordPool) {
   ASSERT_LT(static_cast<size_t>(slot.chordIndex), context->chordPool.size());
   const auto &chord = context->chordPool[static_cast<size_t>(slot.chordIndex)];
   EXPECT_EQ(chord.size(), 3u); // Triad = 3 notes
+}
+
+// Phase 53.4: Layer Commands (e.g. LayerMomentary) must not be inherited.
+// Key 10 on Layer 0 is the command; Layer 1 should show Empty for that key.
+TEST_F(GridCompilerTest, LayerCommandsAreNotInherited) {
+  addCommandMapping(0, 10, 0,
+                    static_cast<int>(OmniKey::CommandID::LayerMomentary), 1);
+
+  auto context =
+      GridCompiler::compile(presetMgr, deviceMgr, zoneMgr, settingsMgr);
+
+  auto l0 = context->visualLookup[0][0];
+  EXPECT_EQ((*l0)[10].state, VisualState::Active);
+
+  auto l1 = context->visualLookup[0][1];
+  EXPECT_EQ((*l1)[10].state, VisualState::Empty);
+}
+
+// Phase 53.4: Device view vertical inheritance – Layer 0 mapping on device
+// should appear as Inherited on Layer 1 of the same device view.
+TEST_F(GridCompilerTest, DeviceVerticalInheritanceIsDimmed) {
+  addMapping(0, 20, aliasHash); // Key 20 on Layer 0 for TestDevice only
+
+  auto context =
+      GridCompiler::compile(presetMgr, deviceMgr, zoneMgr, settingsMgr);
+
+  auto devL0 = context->visualLookup[aliasHash][0];
+  EXPECT_EQ((*devL0)[20].state, VisualState::Active);
+
+  auto devL1 = context->visualLookup[aliasHash][1];
+  EXPECT_EQ((*devL1)[20].state, VisualState::Inherited);
+}
+
+// Phase 51.7 / 53.5.1: Device supremacy – Device Layer 0 overrides Global
+// Layer 1. Device View Layer 1 should show Device Action as Inherited.
+TEST_F(GridCompilerTest, DeviceBaseOverridesGlobalLayer) {
+  addMapping(1, 81, 0);         // Global Layer 1 (Q -> Note)
+  addMapping(0, 81, aliasHash); // Device Layer 0 (Q -> Note)
+
+  auto context =
+      GridCompiler::compile(presetMgr, deviceMgr, zoneMgr, settingsMgr);
+  auto deviceGrid = context->visualLookup[aliasHash][1]; // View Layer 1
+
+  // Device Layer 0 wins over Global Layer 1; from Layer 0 -> Inherited
+  EXPECT_EQ((*deviceGrid)[81].state, VisualState::Inherited);
 }

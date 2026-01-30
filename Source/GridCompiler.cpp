@@ -200,20 +200,19 @@ void writeAudioSlot(AudioGrid &grid, int keyCode, const MidiAction &action) {
   }
 }
 
-// Apply a visual slot with stacking semantics: if the slot already has a value
-// (from a lower layer), mark as Override, otherwise Active.
-// Phase 50.8: Added conflict detection via touchedKeys vector.
+// Phase 53.5: targetState = Active for "current layer" content, Inherited for
+// "lower layer" content (device Pass 2). When slot already has content, Active
+// -> Override, Inherited -> stays Inherited.
 void applyVisualSlot(VisualGrid &grid, int keyCode, const juce::Colour &color,
                      const juce::String &label, const juce::String &sourceName,
-                     std::vector<bool> *touchedKeys = nullptr) {
+                     std::vector<bool> *touchedKeys = nullptr,
+                     VisualState targetState = VisualState::Active) {
   if (keyCode < 0 || keyCode >= (int)grid.size())
     return;
 
   auto &slot = grid[(size_t)keyCode];
   const bool hadContent = (slot.state != VisualState::Empty);
 
-  // Phase 50.8: Conflict detection - check if this key was already written to
-  // in the current layer pass
   bool isConflict = false;
   if (touchedKeys && keyCode < (int)touchedKeys->size()) {
     if ((*touchedKeys)[(size_t)keyCode]) {
@@ -224,29 +223,33 @@ void applyVisualSlot(VisualGrid &grid, int keyCode, const juce::Colour &color,
   }
 
   if (isConflict) {
-    // Conflict: Multiple assignments in same layer
     slot.state = VisualState::Conflict;
     slot.displayColor = juce::Colours::red;
     slot.label = label + " (!)";
     slot.sourceName = sourceName;
   } else {
-    // Normal assignment
     slot.displayColor = color;
     slot.label = label;
     slot.sourceName = sourceName;
-    slot.state = hadContent ? VisualState::Override : VisualState::Active;
+    if (!hadContent)
+      slot.state = targetState;
+    else
+      slot.state = (targetState == VisualState::Active)
+                       ? VisualState::Override
+                       : VisualState::Inherited;
   }
 }
 
 // Apply a visual slot and replicate to L/R modifier keys if the source key is
-// a generic modifier. Phase 51.6: Only expand to L/R if that key is not already
-// touched (so a specific mapping for LShift can override the generic Shift).
+// a generic modifier. Phase 53.5: targetState passed through for inheritance.
 void applyVisualWithModifiers(VisualGrid &grid, int keyCode,
                               const juce::Colour &color,
                               const juce::String &label,
                               const juce::String &sourceName,
-                              std::vector<bool> *touchedKeys = nullptr) {
-  applyVisualSlot(grid, keyCode, color, label, sourceName, touchedKeys);
+                              std::vector<bool> *touchedKeys = nullptr,
+                              VisualState targetState = VisualState::Active) {
+  applyVisualSlot(grid, keyCode, color, label, sourceName, touchedKeys,
+                  targetState);
 
   auto shouldExpandTo = [&](int sideKey) -> bool {
     if (!touchedKeys || sideKey < 0 || sideKey >= (int)touchedKeys->size())
@@ -257,24 +260,24 @@ void applyVisualWithModifiers(VisualGrid &grid, int keyCode,
   if (isGenericShift(keyCode)) {
     if (shouldExpandTo(InputTypes::Key_LShift))
       applyVisualSlot(grid, InputTypes::Key_LShift, color, label, sourceName,
-                      touchedKeys);
+                      touchedKeys, targetState);
     if (shouldExpandTo(InputTypes::Key_RShift))
       applyVisualSlot(grid, InputTypes::Key_RShift, color, label, sourceName,
-                      touchedKeys);
+                      touchedKeys, targetState);
   } else if (isGenericControl(keyCode)) {
     if (shouldExpandTo(InputTypes::Key_LControl))
       applyVisualSlot(grid, InputTypes::Key_LControl, color, label, sourceName,
-                      touchedKeys);
+                      touchedKeys, targetState);
     if (shouldExpandTo(InputTypes::Key_RControl))
       applyVisualSlot(grid, InputTypes::Key_RControl, color, label, sourceName,
-                      touchedKeys);
+                      touchedKeys, targetState);
   } else if (isGenericAlt(keyCode)) {
     if (shouldExpandTo(InputTypes::Key_LAlt))
       applyVisualSlot(grid, InputTypes::Key_LAlt, color, label, sourceName,
-                      touchedKeys);
+                      touchedKeys, targetState);
     if (shouldExpandTo(InputTypes::Key_RAlt))
       applyVisualSlot(grid, InputTypes::Key_RAlt, color, label, sourceName,
-                      touchedKeys);
+                      touchedKeys, targetState);
   }
 }
 
@@ -322,14 +325,14 @@ MidiAction buildMidiActionFromMapping(juce::ValueTree mappingNode) {
   return action;
 }
 
-// Phase 51.4: Apply zones for a single layer to vGrid and aGrid.
-// touchedKeys: conflict detection (same key touched twice in this layer).
-// chordPool: append chord vectors for multi-note zones.
+// Phase 51.4 / 53.5: Apply zones for a single layer. targetState = Active or
+// Inherited for device Pass 2.
 void compileZonesForLayer(VisualGrid &vGrid, AudioGrid &aGrid,
                           ZoneManager &zoneMgr, DeviceManager &deviceMgr,
                           uintptr_t aliasHash, int layerId,
                           std::vector<bool> &touchedKeys,
-                          std::vector<std::vector<MidiAction>> &chordPool) {
+                          std::vector<std::vector<MidiAction>> &chordPool,
+                          VisualState targetState) {
   const int globalChrom = zoneMgr.getGlobalChromaticTranspose();
   const int globalDeg = zoneMgr.getGlobalDegreeTranspose();
   const auto zones = zoneMgr.getZones();
@@ -364,7 +367,10 @@ void compileZonesForLayer(VisualGrid &vGrid, AudioGrid &aGrid,
       juce::String sourceName = "Zone: " + zone->name;
 
       applyVisualWithModifiers(vGrid, keyCode, color, label, sourceName,
-                               &touchedKeys);
+                               &touchedKeys, targetState);
+
+      if (!chordNotes.empty() && chordNotes.front().isGhost)
+        vGrid[(size_t)keyCode].isGhost = true;
 
       if (vGrid[(size_t)keyCode].state == VisualState::Conflict)
         continue;
@@ -404,11 +410,23 @@ static bool isGenericModifierKey(int keyCode) {
   return (keyCode == 0x10 || keyCode == 0x11 || keyCode == 0x12);
 }
 
-// Phase 51.4: Apply manual mappings for a single layer to vGrid and aGrid.
+// Phase 53.5: Layer switching commands must not be inherited to higher layers.
+static bool isLayerCommand(const MidiAction &action) {
+  if (action.type != ActionType::Command)
+    return false;
+  const int cmd = action.data1;
+  return (cmd == static_cast<int>(OmniKey::CommandID::LayerMomentary) ||
+          cmd == static_cast<int>(OmniKey::CommandID::LayerToggle) ||
+          cmd == static_cast<int>(OmniKey::CommandID::LayerSolo));
+}
+
+// Phase 51.4 / 53.5: Apply manual mappings for a single layer. targetState for
+// device Pass 2 (Inherited vs Active).
 void compileMappingsForLayer(VisualGrid &vGrid, AudioGrid &aGrid,
                              PresetManager &presetMgr, DeviceManager &deviceMgr,
                              SettingsManager &settingsMgr, uintptr_t aliasHash,
-                             int layerId, std::vector<bool> &touchedKeys) {
+                             int layerId, std::vector<bool> &touchedKeys,
+                             VisualState targetState) {
   auto mappingsNode = presetMgr.getMappingsListForLayer(layerId);
   if (!mappingsNode.isValid())
     return;
@@ -466,7 +484,7 @@ void compileMappingsForLayer(VisualGrid &vGrid, AudioGrid &aGrid,
         aliasName.isNotEmpty() ? ("Mapping: " + aliasName) : "Mapping";
 
     applyVisualWithModifiers(vGrid, inputKey, color, label, sourceName,
-                             &touchedKeys);
+                             &touchedKeys, targetState);
 
     if (vGrid[(size_t)inputKey].state != VisualState::Conflict)
       writeAudioSlot(aGrid, inputKey, action);
@@ -482,17 +500,18 @@ GridCompiler::compile(PresetManager &presetMgr, DeviceManager &deviceMgr,
   auto context = std::make_shared<CompiledMapContext>();
 
   // 2. Define Helper Lambda "applyLayerToGrid"
-  // Encapsulates adding Zones + Mappings to a specific grid instance for one
-  // layer. Zones first, then Mappings (higher priority in same layer).
+  // Phase 53.5: targetState = Active for current layer, Inherited for lower
+  // layer (device Pass 2).
   auto applyLayerToGrid = [&](VisualGrid &vGrid, AudioGrid &aGrid, int layerId,
-                              uintptr_t aliasHash) {
+                              uintptr_t aliasHash,
+                              VisualState targetState = VisualState::Active) {
     std::vector<bool> touchedKeys(256, false);
 
     compileZonesForLayer(vGrid, aGrid, zoneMgr, deviceMgr, aliasHash, layerId,
-                         touchedKeys, context->chordPool);
+                         touchedKeys, context->chordPool, targetState);
 
     compileMappingsForLayer(vGrid, aGrid, presetMgr, deviceMgr, settingsMgr,
-                            aliasHash, layerId, touchedKeys);
+                            aliasHash, layerId, touchedKeys, targetState);
   };
 
   // 3. PASS 1: Compile Global Stack (Vertical) – Hash 0 only
@@ -511,14 +530,26 @@ GridCompiler::compile(PresetManager &presetMgr, DeviceManager &deviceMgr,
       for (auto &slot : *vGrid) {
         if (slot.state != VisualState::Empty) {
           slot.state = VisualState::Inherited;
-          // Dim inherited slots (~0.3f alpha)
           slot.displayColor =
               slot.displayColor.withAlpha(static_cast<juce::uint8>(76));
         }
       }
+
+      // Phase 53.5: Filter out Layer Commands – they must not be inherited.
+      for (size_t keyCode = 0; keyCode < 256; ++keyCode) {
+        const auto &aSlot = (*aGrid)[keyCode];
+        if (aSlot.isActive && isLayerCommand(aSlot.action)) {
+          (*vGrid)[keyCode].state = VisualState::Empty;
+          (*vGrid)[keyCode].displayColor = juce::Colours::transparentBlack;
+          (*vGrid)[keyCode].label.clear();
+          (*vGrid)[keyCode].sourceName.clear();
+          (*aGrid)[keyCode].isActive = false;
+          (*aGrid)[keyCode].chordIndex = -1;
+        }
+      }
     }
 
-    applyLayerToGrid(*vGrid, *aGrid, L, globalHash);
+    applyLayerToGrid(*vGrid, *aGrid, L, globalHash, VisualState::Active);
 
     context->visualLookup[globalHash][(size_t)L] = vGrid;
     context->globalGrids[(size_t)L] = aGrid;
@@ -554,11 +585,25 @@ GridCompiler::compile(PresetManager &presetMgr, DeviceManager &deviceMgr,
       }
 
       // STEP B: APPLY DEVICE SPECIFIC STACK (0 to L)
-      for (int k = 0; k <= L; ++k)
-        applyLayerToGrid(*vGrid, *aGrid, k, devHash);
+      // Phase 53.5: k < L = lower layer content -> Inherited (dim); k == L =
+      // current layer -> Active.
+      for (int k = 0; k <= L; ++k) {
+        VisualState stateForPass =
+            (k < L) ? VisualState::Inherited : VisualState::Active;
+        applyLayerToGrid(*vGrid, *aGrid, k, devHash, stateForPass);
+      }
 
       context->visualLookup[devHash][(size_t)L] = vGrid;
       context->deviceGrids[devHash][(size_t)L] = aGrid;
+    }
+
+    // Phase 53.9: InputProcessor looks up by hardware ID; store grids under
+    // each hardware ID for this alias so processEvent finds device-specific
+    // mappings.
+    auto hardwareIds = deviceMgr.getHardwareForAlias(aliasName);
+    for (auto hwId : hardwareIds) {
+      if (hwId != 0)
+        context->deviceGrids[hwId] = context->deviceGrids[devHash];
     }
   }
 

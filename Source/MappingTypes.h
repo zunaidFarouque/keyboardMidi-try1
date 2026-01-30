@@ -186,6 +186,7 @@ struct KeyVisualSlot {
   juce::Colour displayColor = juce::Colours::transparentBlack;
   juce::String label;      // Pre-calculated text (e.g., "C# Maj7")
   juce::String sourceName; // e.g., "Zone: Main", "Mapping: Base"
+  bool isGhost = false;    // Phase 54.1: Ghost note (quieter, dimmed in UI)
 };
 
 // 256 slots covering all Virtual Key Codes (0x00 - 0xFF)
@@ -196,8 +197,7 @@ using VisualGrid = std::array<KeyVisualSlot, 256>;
 struct CompiledContext {
   // 1. Audio Data (Read by InputProcessor/AudioThread)
   // Map HardwareHash -> Array of 9 AudioGrids (one per layer 0..8)
-  std::unordered_map<uintptr_t,
-                     std::array<std::shared_ptr<const AudioGrid>, 9>>
+  std::unordered_map<uintptr_t, std::array<std::shared_ptr<const AudioGrid>, 9>>
       deviceGrids;
 
   // Global fallback: 9 AudioGrids (one per layer 0..8)

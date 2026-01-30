@@ -5,6 +5,8 @@
 #include "MidiEngine.h"
 #include "ScaleLibrary.h"
 #include "SettingsManager.h"
+#include <algorithm>
+#include <array>
 
 // Phase 39.9: Modifier key aliasing (Left/Right -> Generic).
 // Visualizer/layout uses VK_LSHIFT/VK_RSHIFT etc, while older mappings may
@@ -32,17 +34,23 @@ InputProcessor::InputProcessor(VoiceManager &voiceMgr, PresetManager &presetMgr,
     : voiceManager(voiceMgr), presetManager(presetMgr),
       deviceManager(deviceMgr), zoneManager(scaleLib), scaleLibrary(scaleLib),
       expressionEngine(midiEng), settingsManager(settingsMgr) {
-  // Phase 52.1: 9 layers (0=Base, 1-8=Overlays); empty context until first
-  // compile
+  // Phase 53.2: 9 layers; momentary = ref count, latched = persistent
   layerLatchedState.resize(9);
-  layerMomentaryState.resize(9);
-  layerActiveState.resize(9);
+  layerMomentaryCounts.resize(9);
   for (int i = 0; i < 9; ++i) {
-    layerLatchedState[(size_t)i] = (i == 0);
-    layerMomentaryState[(size_t)i] = false;
-    layerActiveState[(size_t)i] = (i == 0);
+    layerLatchedState[(size_t)i] = false;
+    layerMomentaryCounts[(size_t)i] = 0;
   }
   activeContext = std::make_shared<CompiledMapContext>();
+}
+
+bool InputProcessor::isLayerActive(int layerIdx) const {
+  if (layerIdx == 0)
+    return true; // Base always active
+  if (layerIdx < 0 || layerIdx >= 9)
+    return false;
+  return layerLatchedState[(size_t)layerIdx] ||
+         (layerMomentaryCounts[(size_t)layerIdx] > 0);
 }
 
 void InputProcessor::initialize() {
@@ -79,9 +87,10 @@ void InputProcessor::rebuildGrid() {
   {
     juce::ScopedWriteLock sl(mapLock);
     activeContext = std::move(newContext);
-
-    // Phase 52.1: Update layer active state from preset (Layer 0 always true)
-    auto layersList = presetManager.getLayersList();
+  }
+  // Phase 53.7: Layer state under stateLock only
+  {
+    juce::ScopedLock sl(stateLock);
     for (int i = 0; i < 9; ++i) {
       juce::ValueTree layerNode = presetManager.getLayerNode(i);
       if (layerNode.isValid())
@@ -89,17 +98,24 @@ void InputProcessor::rebuildGrid() {
             (bool)layerNode.getProperty("isActive", i == 0);
       else
         layerLatchedState[(size_t)i] = (i == 0);
-      layerActiveState[(size_t)i] = (i == 0) || layerLatchedState[(size_t)i] ||
-                                    layerMomentaryState[(size_t)i];
     }
   }
   sendChangeMessage();
 }
 
 // Phase 52.1: Grid lookup (replaces findMapping). Returns action if slot is
-// active.
+// active. Phase 53.7: Snapshot layer state under stateLock to avoid data race.
 std::optional<MidiAction>
 InputProcessor::lookupActionInGrid(InputID input) const {
+  std::array<bool, 9> activeLayersSnapshot{};
+  {
+    juce::ScopedLock sl(stateLock);
+    for (int i = 0; i < 9; ++i)
+      activeLayersSnapshot[(size_t)i] = (i == 0) ||
+                                        layerLatchedState[(size_t)i] ||
+                                        (layerMomentaryCounts[(size_t)i] > 0);
+  }
+
   juce::ScopedReadLock lock(mapLock);
   auto ctx = activeContext;
   if (!ctx)
@@ -116,7 +132,7 @@ InputProcessor::lookupActionInGrid(InputID input) const {
   const int genericKey = getGenericKey(keyCode);
 
   for (int i = 8; i >= 0; --i) {
-    if (!layerActiveState[(size_t)i])
+    if (!activeLayersSnapshot[(size_t)i])
       continue;
 
     std::shared_ptr<const AudioGrid> grid;
@@ -222,10 +238,6 @@ void InputProcessor::valueTreePropertyChanged(
         layerLatchedState[(size_t)layerId] =
             (bool)treeWhosePropertyHasChanged.getProperty("isActive",
                                                           layerId == 0);
-        for (int i = 0; i < 9; ++i)
-          layerActiveState[(size_t)i] = (i == 0) ||
-                                        layerLatchedState[(size_t)i] ||
-                                        layerMomentaryState[(size_t)i];
       }
       sendChangeMessage();
       return;
@@ -287,88 +299,8 @@ int InputProcessor::calculateVelocity(int base, int range) {
   return juce::jlimit(1, 127, base + delta);
 }
 
-// Phase 40.1 / 52.1: Recompute momentary layers using grid-based lookup.
-bool InputProcessor::updateLayerState() {
-  juce::ScopedWriteLock lock(mapLock);
-
-  std::vector<bool> prevMomentary = layerMomentaryState;
-
-  // 1) Reset momentary
-  for (size_t i = 0; i < 9; ++i)
-    layerMomentaryState[i] = false;
-
-  auto ctx = activeContext;
-  if (!ctx)
-    return false;
-
-  // 2) Iterative resolution (chains like A->B->C)
-  bool changed = true;
-  int pass = 0;
-  while (changed && pass < 5) {
-    changed = false;
-
-    for (const auto &held : currentlyHeldKeys) {
-      const int genericKey = getGenericKey(held.keyCode);
-      uintptr_t effectiveDevice = held.deviceHandle;
-      if (!settingsManager.isStudioMode())
-        effectiveDevice = 0;
-
-      for (int i = 8; i >= 0; --i) {
-        if (!layerActiveState[(size_t)i])
-          continue;
-
-        std::shared_ptr<const AudioGrid> grid;
-        if (effectiveDevice != 0) {
-          auto it = ctx->deviceGrids.find(effectiveDevice);
-          if (it != ctx->deviceGrids.end() && it->second[(size_t)i])
-            grid = it->second[(size_t)i];
-        }
-        if (!grid)
-          grid = ctx->globalGrids[(size_t)i];
-        if (!grid)
-          continue;
-
-        const auto &slot = (*grid)[(size_t)held.keyCode];
-        bool found = slot.isActive;
-        const MidiAction *actionPtr = &slot.action;
-
-        if (!found && genericKey != 0) {
-          const auto &genSlot = (*grid)[(size_t)genericKey];
-          if (genSlot.isActive) {
-            found = true;
-            actionPtr = &genSlot.action;
-          }
-        }
-
-        if (found && actionPtr->type == ActionType::Command &&
-            actionPtr->data1 ==
-                static_cast<int>(OmniKey::CommandID::LayerMomentary)) {
-          int targetLayer = juce::jlimit(0, 8, actionPtr->data2);
-          if (!layerMomentaryState[(size_t)targetLayer]) {
-            layerMomentaryState[(size_t)targetLayer] = true;
-            changed = true;
-          }
-          break;
-        }
-      }
-    }
-
-    ++pass;
-  }
-
-  for (int i = 0; i < 9; ++i)
-    layerActiveState[(size_t)i] = (i == 0) || layerLatchedState[(size_t)i] ||
-                                  layerMomentaryState[(size_t)i];
-
-  bool anyDiff = false;
-  for (size_t i = 0; i < 9; ++i) {
-    if (layerMomentaryState[i] != prevMomentary[i]) {
-      anyDiff = true;
-      break;
-    }
-  }
-  return anyDiff;
-}
+// Phase 53.2: Momentary is updated in processEvent via ref count; no recompute.
+bool InputProcessor::updateLayerState() { return false; }
 
 void InputProcessor::processEvent(InputID input, bool isDown) {
   // Gate: If MIDI mode is not active, don't generate MIDI
@@ -389,220 +321,251 @@ void InputProcessor::processEvent(InputID input, bool isDown) {
       currentlyHeldKeys.erase(held);
   }
 
-  if (updateLayerState())
-    sendChangeMessage();
+  // Phase 53.7: Snapshot active layers under state lock (no lock inside loop)
+  std::array<bool, 9> activeLayersSnapshot{};
+  {
+    juce::ScopedLock sl(stateLock);
+    for (int i = 0; i < 9; ++i)
+      activeLayersSnapshot[(size_t)i] = (i == 0) ||
+                                        layerLatchedState[(size_t)i] ||
+                                        (layerMomentaryCounts[(size_t)i] > 0);
+  }
 
-  juce::ScopedReadLock rl(mapLock);
-  auto ctx = activeContext;
-  if (!ctx)
-    return;
+  {
+    juce::ScopedReadLock rl(mapLock);
+    auto ctx = activeContext;
+    if (!ctx)
+      return;
 
-  uintptr_t effectiveDevice = input.deviceHandle;
-  if (!settingsManager.isStudioMode())
-    effectiveDevice = 0;
+    uintptr_t effectiveDevice = input.deviceHandle;
+    if (!settingsManager.isStudioMode())
+      effectiveDevice = 0;
 
-  const int keyCode = input.keyCode;
-  if (keyCode < 0 || keyCode > 0xFF)
-    return;
+    const int keyCode = input.keyCode;
+    if (keyCode < 0 || keyCode > 0xFF)
+      return;
 
-  for (int layerIdx = 8; layerIdx >= 0; --layerIdx) {
-    if (!layerActiveState[(size_t)layerIdx])
-      continue;
+    for (int layerIdx = 8; layerIdx >= 0; --layerIdx) {
+      if (!activeLayersSnapshot[(size_t)layerIdx])
+        continue;
 
-    // Lookup: Try device-specific grid first, then global fallback
-    std::shared_ptr<const AudioGrid> grid;
-    if (effectiveDevice != 0) {
-      auto it = ctx->deviceGrids.find(effectiveDevice);
-      if (it != ctx->deviceGrids.end() && it->second[(size_t)layerIdx]) {
-        grid = it->second[(size_t)layerIdx];
+      // Lookup: Try device-specific grid first, then global fallback
+      std::shared_ptr<const AudioGrid> grid;
+      if (effectiveDevice != 0) {
+        auto it = ctx->deviceGrids.find(effectiveDevice);
+        if (it != ctx->deviceGrids.end() && it->second[(size_t)layerIdx]) {
+          grid = it->second[(size_t)layerIdx];
+        }
       }
-    }
-    if (!grid) {
-      grid = ctx->globalGrids[(size_t)layerIdx];
-    }
-
-    if (!grid)
-      continue;
-
-    // Fetch slot
-    const auto &slot = (*grid)[(size_t)keyCode];
-    if (!slot.isActive)
-      continue;
-
-    // Hit! Process this action
-    const auto &midiAction = slot.action;
-
-    // Check if this is a zone (by checking ZoneManager - zones need special
-    // handling)
-    std::shared_ptr<Zone> zone;
-    if (midiAction.type == ActionType::Note) {
-      // Resolve alias for zone lookup
-      juce::String aliasName =
-          deviceManager.getAliasForHardware(effectiveDevice);
-      uintptr_t aliasHash = 0;
-      if (aliasName != "Unassigned" && !aliasName.isEmpty()) {
-        aliasHash = aliasNameToHash(aliasName);
+      if (!grid) {
+        grid = ctx->globalGrids[(size_t)layerIdx];
       }
-      zone = zoneManager.getZoneForInput(InputID{aliasHash, keyCode}, layerIdx);
-      if (!zone) {
-        zone = zoneManager.getZoneForInput(InputID{0, keyCode}, layerIdx);
-      }
-    }
 
-    if (!isDown) {
-      // Key-up handling
+      if (!grid)
+        continue;
+
+      // Fetch slot
+      const auto &slot = (*grid)[(size_t)keyCode];
+      if (!slot.isActive)
+        continue;
+
+      // Hit! Process this action
+      const auto &midiAction = slot.action;
+
+      // Check if this is a zone (by checking ZoneManager - zones need special
+      // handling)
+      std::shared_ptr<Zone> zone;
+      if (midiAction.type == ActionType::Note) {
+        // Resolve alias for zone lookup
+        juce::String aliasName =
+            deviceManager.getAliasForHardware(effectiveDevice);
+        uintptr_t aliasHash = 0;
+        if (aliasName != "Unassigned" && !aliasName.isEmpty()) {
+          aliasHash = aliasNameToHash(aliasName);
+        }
+        zone =
+            zoneManager.getZoneForInput(InputID{aliasHash, keyCode}, layerIdx);
+        if (!zone) {
+          zone = zoneManager.getZoneForInput(InputID{0, keyCode}, layerIdx);
+        }
+      }
+
+      if (!isDown) {
+        // Key-up handling
+        if (midiAction.type == ActionType::Command) {
+          int cmd = midiAction.data1;
+          if (cmd == static_cast<int>(OmniKey::CommandID::LayerMomentary)) {
+            int target = juce::jlimit(0, 8, midiAction.data2);
+            {
+              juce::ScopedLock sl(stateLock);
+              if (layerMomentaryCounts[(size_t)target] > 0)
+                layerMomentaryCounts[(size_t)target]--;
+              sendChangeMessage();
+            }
+            return;
+          }
+          if (cmd == static_cast<int>(OmniKey::CommandID::SustainMomentary))
+            voiceManager.setSustain(false);
+          else if (cmd == static_cast<int>(OmniKey::CommandID::SustainInverse))
+            voiceManager.setSustain(true);
+        }
+        if (midiAction.type == ActionType::Envelope) {
+          expressionEngine.releaseEnvelope(input);
+          return;
+        }
+        if (zone && zone->playMode == Zone::PlayMode::Strum) {
+          juce::ScopedWriteLock lock(bufferLock);
+          noteBuffer.clear();
+          bufferedStrumSpeedMs = 50;
+          bool shouldSustain =
+              (zone->releaseBehavior == Zone::ReleaseBehavior::Sustain);
+          voiceManager.handleKeyUp(input, zone->releaseDurationMs,
+                                   shouldSustain);
+        } else {
+          voiceManager.handleKeyUp(input);
+        }
+        return; // Stop searching lower layers
+      }
+
+      // Key-down handling
+      if (midiAction.type == ActionType::Envelope) {
+        int peakValue = midiAction.data2;
+        if (midiAction.adsrSettings.target == AdsrTarget::SmartScaleBend) {
+          if (!midiAction.smartBendLookup.empty() && lastTriggeredNote >= 0 &&
+              lastTriggeredNote < 128) {
+            peakValue = midiAction.smartBendLookup[lastTriggeredNote];
+          } else {
+            peakValue = 8192;
+          }
+        }
+        expressionEngine.triggerEnvelope(input, midiAction.channel,
+                                         midiAction.adsrSettings, peakValue);
+        return;
+      }
+
       if (midiAction.type == ActionType::Command) {
         int cmd = midiAction.data1;
-        if (cmd == static_cast<int>(OmniKey::CommandID::SustainMomentary))
-          voiceManager.setSustain(false);
-        else if (cmd == static_cast<int>(OmniKey::CommandID::SustainInverse))
-          voiceManager.setSustain(true);
-      }
-      if (midiAction.type == ActionType::Envelope) {
-        expressionEngine.releaseEnvelope(input);
-        return;
-      }
-      if (zone && zone->playMode == Zone::PlayMode::Strum) {
-        juce::ScopedWriteLock lock(bufferLock);
-        noteBuffer.clear();
-        bufferedStrumSpeedMs = 50;
-        bool shouldSustain =
-            (zone->releaseBehavior == Zone::ReleaseBehavior::Sustain);
-        voiceManager.handleKeyUp(input, zone->releaseDurationMs, shouldSustain);
-      } else {
-        voiceManager.handleKeyUp(input);
-      }
-      return; // Stop searching lower layers
-    }
-
-    // Key-down handling
-    if (midiAction.type == ActionType::Envelope) {
-      int peakValue = midiAction.data2;
-      if (midiAction.adsrSettings.target == AdsrTarget::SmartScaleBend) {
-        if (!midiAction.smartBendLookup.empty() && lastTriggeredNote >= 0 &&
-            lastTriggeredNote < 128) {
-          peakValue = midiAction.smartBendLookup[lastTriggeredNote];
-        } else {
-          peakValue = 8192;
-        }
-      }
-      expressionEngine.triggerEnvelope(input, midiAction.channel,
-                                       midiAction.adsrSettings, peakValue);
-      return;
-    }
-
-    if (midiAction.type == ActionType::Command) {
-      int cmd = midiAction.data1;
-      int layerId = midiAction.data2;
-      if (cmd == static_cast<int>(OmniKey::CommandID::LayerMomentary)) {
-        return; // Handled by updateLayerState()
-      }
-      if (cmd == static_cast<int>(OmniKey::CommandID::LayerToggle)) {
-        layerId = juce::jlimit(0, 8, layerId);
-        if (layerId >= 0 && layerId < 9) {
-          juce::ScopedWriteLock wl(mapLock);
-          layerLatchedState[(size_t)layerId] =
-              !layerLatchedState[(size_t)layerId];
-          for (int i = 0; i < 9; ++i)
-            layerActiveState[(size_t)i] = (i == 0) ||
-                                          layerLatchedState[(size_t)i] ||
-                                          layerMomentaryState[(size_t)i];
-        }
-        sendChangeMessage();
-        return;
-      }
-      if (cmd == static_cast<int>(OmniKey::CommandID::LayerSolo)) {
-        layerId = juce::jlimit(0, 8, layerId);
-        if (layerId >= 0 && layerId < 9) {
-          juce::ScopedWriteLock wl(mapLock);
-          for (int i = 0; i < 9; ++i)
-            layerLatchedState[(size_t)i] = ((int)i == layerId);
-          for (int i = 0; i < 9; ++i)
-            layerActiveState[(size_t)i] = (i == 0) ||
-                                          layerLatchedState[(size_t)i] ||
-                                          layerMomentaryState[(size_t)i];
-        }
-        sendChangeMessage();
-        return;
-      }
-      if (cmd == static_cast<int>(OmniKey::CommandID::SustainMomentary))
-        voiceManager.setSustain(true);
-      else if (cmd == static_cast<int>(OmniKey::CommandID::SustainToggle))
-        voiceManager.setSustain(!voiceManager.isSustainActive());
-      else if (cmd == static_cast<int>(OmniKey::CommandID::SustainInverse))
-        voiceManager.setSustain(false);
-      else if (cmd == static_cast<int>(OmniKey::CommandID::LatchToggle))
-        voiceManager.setLatch(!voiceManager.isLatchActive());
-      else if (cmd == static_cast<int>(OmniKey::CommandID::Panic))
-        voiceManager.panic();
-      else if (cmd == static_cast<int>(OmniKey::CommandID::PanicLatch))
-        voiceManager.panicLatch();
-      else if (cmd == static_cast<int>(OmniKey::CommandID::GlobalPitchUp)) {
-        int chrom = zoneManager.getGlobalChromaticTranspose();
-        int deg = zoneManager.getGlobalDegreeTranspose();
-        zoneManager.setGlobalTranspose(chrom + 1, deg);
-      } else if (cmd == static_cast<int>(OmniKey::CommandID::GlobalPitchDown)) {
-        int chrom = zoneManager.getGlobalChromaticTranspose();
-        int deg = zoneManager.getGlobalDegreeTranspose();
-        zoneManager.setGlobalTranspose(chrom - 1, deg);
-      } else if (cmd == static_cast<int>(OmniKey::CommandID::GlobalModeUp)) {
-        int chrom = zoneManager.getGlobalChromaticTranspose();
-        int deg = zoneManager.getGlobalDegreeTranspose();
-        zoneManager.setGlobalTranspose(chrom, deg + 1);
-      } else if (cmd == static_cast<int>(OmniKey::CommandID::GlobalModeDown)) {
-        int chrom = zoneManager.getGlobalChromaticTranspose();
-        int deg = zoneManager.getGlobalDegreeTranspose();
-        zoneManager.setGlobalTranspose(chrom, deg - 1);
-      }
-      return;
-    }
-
-    if (midiAction.type == ActionType::CC) {
-      int vel = calculateVelocity(midiAction.data2, midiAction.velocityRandom);
-      voiceManager.sendCC(midiAction.channel, midiAction.data1, vel);
-      return;
-    }
-
-    if (midiAction.type == ActionType::Note) {
-      // Handle chords from chordPool if present
-      if (slot.chordIndex >= 0 &&
-          slot.chordIndex < (int)ctx->chordPool.size()) {
-        const auto &chordActions = ctx->chordPool[(size_t)slot.chordIndex];
-        if (zone) {
-          // Zone with chord: use zone's special behavior
-          processZoneChord(input, zone, chordActions, midiAction);
-        } else {
-          // Manual mapping chord: simple playback
-          std::vector<int> notes;
-          std::vector<int> velocities;
-          notes.reserve(chordActions.size());
-          velocities.reserve(chordActions.size());
-          for (const auto &a : chordActions) {
-            notes.push_back(a.data1);
-            velocities.push_back(calculateVelocity(a.data2, a.velocityRandom));
+        int layerId = midiAction.data2;
+        if (cmd == static_cast<int>(OmniKey::CommandID::LayerMomentary)) {
+          int target = juce::jlimit(0, 8, midiAction.data2);
+          {
+            juce::ScopedLock sl(stateLock);
+            layerMomentaryCounts[(size_t)target]++;
+            sendChangeMessage();
           }
-          voiceManager.noteOn(input, notes, velocities, midiAction.channel, 0,
-                              true, 0, PolyphonyMode::Poly, 50);
-          if (!notes.empty())
-            lastTriggeredNote = notes.front();
+          return;
         }
-      } else {
-        // Single note
-        if (zone) {
-          // Zone single note: use zone's special behavior
-          processZoneNote(input, zone, midiAction);
-        } else {
-          // Manual mapping: simple playback
-          int vel =
-              calculateVelocity(midiAction.data2, midiAction.velocityRandom);
-          voiceManager.noteOn(input, midiAction.data1, vel, midiAction.channel,
-                              true, 0, PolyphonyMode::Poly, 50);
-          lastTriggeredNote = midiAction.data1;
+        if (cmd == static_cast<int>(OmniKey::CommandID::LayerToggle)) {
+          if (isDown) {
+            int target = juce::jlimit(0, 8, layerId);
+            {
+              juce::ScopedLock sl(stateLock);
+              layerLatchedState[(size_t)target] =
+                  !layerLatchedState[(size_t)target];
+              sendChangeMessage();
+            }
+            return;
+          }
+          return;
         }
+        if (cmd == static_cast<int>(OmniKey::CommandID::LayerSolo)) {
+          if (isDown) {
+            int target = juce::jlimit(0, 8, layerId);
+            {
+              juce::ScopedLock sl(stateLock);
+              std::fill(layerLatchedState.begin(), layerLatchedState.end(),
+                        false);
+              layerLatchedState[(size_t)target] = true;
+              sendChangeMessage();
+            }
+            return;
+          }
+          return;
+        }
+        if (cmd == static_cast<int>(OmniKey::CommandID::SustainMomentary))
+          voiceManager.setSustain(true);
+        else if (cmd == static_cast<int>(OmniKey::CommandID::SustainToggle))
+          voiceManager.setSustain(!voiceManager.isSustainActive());
+        else if (cmd == static_cast<int>(OmniKey::CommandID::SustainInverse))
+          voiceManager.setSustain(false);
+        else if (cmd == static_cast<int>(OmniKey::CommandID::LatchToggle))
+          voiceManager.setLatch(!voiceManager.isLatchActive());
+        else if (cmd == static_cast<int>(OmniKey::CommandID::Panic))
+          voiceManager.panic();
+        else if (cmd == static_cast<int>(OmniKey::CommandID::PanicLatch))
+          voiceManager.panicLatch();
+        else if (cmd == static_cast<int>(OmniKey::CommandID::GlobalPitchUp)) {
+          int chrom = zoneManager.getGlobalChromaticTranspose();
+          int deg = zoneManager.getGlobalDegreeTranspose();
+          zoneManager.setGlobalTranspose(chrom + 1, deg);
+        } else if (cmd ==
+                   static_cast<int>(OmniKey::CommandID::GlobalPitchDown)) {
+          int chrom = zoneManager.getGlobalChromaticTranspose();
+          int deg = zoneManager.getGlobalDegreeTranspose();
+          zoneManager.setGlobalTranspose(chrom - 1, deg);
+        } else if (cmd == static_cast<int>(OmniKey::CommandID::GlobalModeUp)) {
+          int chrom = zoneManager.getGlobalChromaticTranspose();
+          int deg = zoneManager.getGlobalDegreeTranspose();
+          zoneManager.setGlobalTranspose(chrom, deg + 1);
+        } else if (cmd ==
+                   static_cast<int>(OmniKey::CommandID::GlobalModeDown)) {
+          int chrom = zoneManager.getGlobalChromaticTranspose();
+          int deg = zoneManager.getGlobalDegreeTranspose();
+          zoneManager.setGlobalTranspose(chrom, deg - 1);
+        }
+        return;
       }
-      return; // Stop searching lower layers
+
+      if (midiAction.type == ActionType::CC) {
+        int vel =
+            calculateVelocity(midiAction.data2, midiAction.velocityRandom);
+        voiceManager.sendCC(midiAction.channel, midiAction.data1, vel);
+        return;
+      }
+
+      if (midiAction.type == ActionType::Note) {
+        // Handle chords from chordPool if present
+        if (slot.chordIndex >= 0 &&
+            slot.chordIndex < (int)ctx->chordPool.size()) {
+          const auto &chordActions = ctx->chordPool[(size_t)slot.chordIndex];
+          if (zone) {
+            // Zone with chord: use zone's special behavior
+            processZoneChord(input, zone, chordActions, midiAction);
+          } else {
+            // Manual mapping chord: simple playback
+            std::vector<int> notes;
+            std::vector<int> velocities;
+            notes.reserve(chordActions.size());
+            velocities.reserve(chordActions.size());
+            for (const auto &a : chordActions) {
+              notes.push_back(a.data1);
+              velocities.push_back(
+                  calculateVelocity(a.data2, a.velocityRandom));
+            }
+            voiceManager.noteOn(input, notes, velocities, midiAction.channel, 0,
+                                true, 0, PolyphonyMode::Poly, 50);
+            if (!notes.empty())
+              lastTriggeredNote = notes.front();
+          }
+        } else {
+          // Single note
+          if (zone) {
+            // Zone single note: use zone's special behavior
+            processZoneNote(input, zone, midiAction);
+          } else {
+            // Manual mapping: simple playback
+            int vel =
+                calculateVelocity(midiAction.data2, midiAction.velocityRandom);
+            voiceManager.noteOn(input, midiAction.data1, vel,
+                                midiAction.channel, true, 0,
+                                PolyphonyMode::Poly, 50);
+            lastTriggeredNote = midiAction.data1;
+          }
+        }
+        return; // Stop searching lower layers
+      }
     }
-  }
+  } // release read lock
   // No match found in any active layer
 }
 
@@ -788,9 +751,11 @@ void InputProcessor::processZoneChord(
 
 juce::StringArray InputProcessor::getActiveLayerNames() {
   juce::StringArray result;
-  juce::ScopedReadLock lock(mapLock);
+  juce::ScopedLock lock(stateLock);
   for (int i = 0; i < 9; ++i) {
-    if (!layerActiveState[(size_t)i])
+    bool active = (i == 0) || layerLatchedState[(size_t)i] ||
+                  (layerMomentaryCounts[(size_t)i] > 0);
+    if (!active)
       continue;
     juce::ValueTree layerNode = presetManager.getLayerNode(i);
     juce::String name =
@@ -798,28 +763,41 @@ juce::StringArray InputProcessor::getActiveLayerNames() {
             ? layerNode.getProperty("name", "Layer " + juce::String(i))
                   .toString()
             : ("Layer " + juce::String(i));
+    if (layerMomentaryCounts[(size_t)i] > 0)
+      name += " (Hold)";
+    else if (i > 0)
+      name += " (On)";
     result.add(name);
   }
   return result;
 }
 
 int InputProcessor::getHighestActiveLayerIndex() const {
-  juce::ScopedReadLock lock(mapLock);
+  juce::ScopedLock lock(stateLock);
   for (int i = 8; i >= 0; --i) {
-    if (layerActiveState[(size_t)i])
+    if (i == 0 || layerLatchedState[(size_t)i] ||
+        (layerMomentaryCounts[(size_t)i] > 0))
       return i;
   }
   return 0;
 }
 
 bool InputProcessor::hasManualMappingForKey(int keyCode) {
+  std::array<bool, 9> activeLayersSnapshot{};
+  {
+    juce::ScopedLock sl(stateLock);
+    for (int i = 0; i < 9; ++i)
+      activeLayersSnapshot[(size_t)i] = (i == 0) ||
+                                        layerLatchedState[(size_t)i] ||
+                                        (layerMomentaryCounts[(size_t)i] > 0);
+  }
   juce::ScopedReadLock lock(mapLock);
   auto ctx = activeContext;
   if (!ctx)
     return false;
 
   for (int i = 8; i >= 0; --i) {
-    if (!layerActiveState[(size_t)i])
+    if (!activeLayersSnapshot[(size_t)i])
       continue;
 
     auto grid = ctx->globalGrids[(size_t)i];
@@ -844,13 +822,21 @@ bool InputProcessor::hasManualMappingForKey(int keyCode) {
 
 std::optional<ActionType> InputProcessor::getMappingType(int keyCode,
                                                          uintptr_t aliasHash) {
+  std::array<bool, 9> activeLayersSnapshot{};
+  {
+    juce::ScopedLock sl(stateLock);
+    for (int i = 0; i < 9; ++i)
+      activeLayersSnapshot[(size_t)i] = (i == 0) ||
+                                        layerLatchedState[(size_t)i] ||
+                                        (layerMomentaryCounts[(size_t)i] > 0);
+  }
   juce::ScopedReadLock lock(mapLock);
   auto ctx = activeContext;
   if (!ctx)
     return std::nullopt;
 
   for (int i = 8; i >= 0; --i) {
-    if (!layerActiveState[(size_t)i])
+    if (!activeLayersSnapshot[(size_t)i])
       continue;
 
     // Check visual grid for this alias/layer to find manual mappings
@@ -912,6 +898,14 @@ void InputProcessor::forceRebuildMappings() { rebuildGrid(); }
 SimulationResult InputProcessor::simulateInput(uintptr_t viewDeviceHash,
                                                int keyCode) {
   SimulationResult result;
+  std::array<bool, 9> activeLayersSnapshot{};
+  {
+    juce::ScopedLock sl(stateLock);
+    for (int i = 0; i < 9; ++i)
+      activeLayersSnapshot[(size_t)i] = (i == 0) ||
+                                        layerLatchedState[(size_t)i] ||
+                                        (layerMomentaryCounts[(size_t)i] > 0);
+  }
   juce::ScopedReadLock lock(mapLock);
   auto ctx = activeContext;
   if (!ctx)
@@ -933,7 +927,7 @@ SimulationResult InputProcessor::simulateInput(uintptr_t viewDeviceHash,
   const auto &layerVec = visIt->second;
 
   for (int i = 8; i >= 0; --i) {
-    if (!layerActiveState[(size_t)i])
+    if (!activeLayersSnapshot[(size_t)i])
       continue;
 
     if (i >= (int)layerVec.size() || !layerVec[(size_t)i])
@@ -1100,13 +1094,21 @@ void InputProcessor::handleAxisEvent(uintptr_t deviceHandle, int inputCode,
 }
 
 bool InputProcessor::hasPointerMappings() {
+  std::array<bool, 9> activeLayersSnapshot{};
+  {
+    juce::ScopedLock sl(stateLock);
+    for (int i = 0; i < 9; ++i)
+      activeLayersSnapshot[(size_t)i] = (i == 0) ||
+                                        layerLatchedState[(size_t)i] ||
+                                        (layerMomentaryCounts[(size_t)i] > 0);
+  }
   juce::ScopedReadLock lock(mapLock);
   auto ctx = activeContext;
   if (!ctx)
     return false;
 
   for (int i = 8; i >= 0; --i) {
-    if (!layerActiveState[(size_t)i])
+    if (!activeLayersSnapshot[(size_t)i])
       continue;
 
     auto grid = ctx->globalGrids[(size_t)i];
