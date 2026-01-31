@@ -1,5 +1,6 @@
 #include "VoiceManager.h"
 #include <algorithm>
+#include <set>
 
 VoiceManager::VoiceManager(MidiEngine &engine, SettingsManager &settingsMgr)
     : midiEngine(engine), settingsManager(settingsMgr),
@@ -790,9 +791,15 @@ void VoiceManager::setSustain(bool active) {
   globalSustainActive = active;
 
   if (wasActive && !active) {
+    // Only send one NoteOff per unique (channel, note) - multiple presses
+    // of the same key create multiple Sustained voices, but MIDI needs
+    // exactly one NoteOff per note
+    std::set<std::pair<int, int>> sentNoteOffs;
     for (auto it = voices.begin(); it != voices.end();) {
       if (it->state == VoiceState::Sustained) {
-        midiEngine.sendNoteOff(it->midiChannel, it->noteNumber);
+        auto key = std::make_pair(it->midiChannel, it->noteNumber);
+        if (sentNoteOffs.insert(key).second)
+          midiEngine.sendNoteOff(it->midiChannel, it->noteNumber);
         it = voices.erase(it);
       } else
         ++it;

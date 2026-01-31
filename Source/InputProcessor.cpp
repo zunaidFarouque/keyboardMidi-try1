@@ -61,6 +61,7 @@ void InputProcessor::initialize() {
   settingsManager.addChangeListener(this);
   zoneManager.addChangeListener(this);
   rebuildGrid();
+  applySustainDefaultFromPreset();
 }
 
 InputProcessor::~InputProcessor() {
@@ -78,7 +79,35 @@ void InputProcessor::changeListenerCallback(juce::ChangeBroadcaster *source) {
   if (source == &presetManager || source == &deviceManager ||
       source == &settingsManager || source == &zoneManager) {
     rebuildGrid();
+    if (source == &presetManager)
+      applySustainDefaultFromPreset(); // Preset load: apply sustain default
   }
+}
+
+// Sustain: if any Sustain Inverse (data1=2) is mapped, default sustain = ON;
+// otherwise default = OFF and clear sustain state
+static bool hasSustainInverseMapped(PresetManager &presetMgr) {
+  const int sustainInverse =
+      static_cast<int>(OmniKey::CommandID::SustainInverse);
+  for (int layer = 0; layer < 9; ++layer) {
+    auto mappings = presetMgr.getMappingsListForLayer(layer);
+    for (int i = 0; i < mappings.getNumChildren(); ++i) {
+      auto m = mappings.getChild(i);
+      if (m.isValid() &&
+          m.getProperty("type", juce::String()).toString().equalsIgnoreCase(
+              "Command") &&
+          static_cast<int>(m.getProperty("data1", -1)) == sustainInverse)
+        return true;
+    }
+  }
+  return false;
+}
+
+void InputProcessor::applySustainDefaultFromPreset() {
+  if (hasSustainInverseMapped(presetManager))
+    voiceManager.setSustain(true); // Default ON when Sustain Inverse exists
+  else
+    voiceManager.setSustain(false); // OFF and clear when no Inverse
 }
 
 void InputProcessor::rebuildGrid() {
@@ -256,6 +285,16 @@ void InputProcessor::valueTreePropertyChanged(
     }
   }
 
+  // Sustain cleanup: when a Command mapping's type or data1 changes, apply default
+  if (treeWhosePropertyHasChanged.hasType("Mapping") &&
+      (property == juce::Identifier("type") ||
+       (property == juce::Identifier("data1") &&
+        treeWhosePropertyHasChanged.getProperty("type", juce::String())
+            .toString()
+            .equalsIgnoreCase("Command")))) {
+    applySustainDefaultFromPreset();
+  }
+
   // Optimization: Only rebuild if relevant properties changed
   if (property == juce::Identifier("inputKey") ||
       property == juce::Identifier("layerID") ||
@@ -275,7 +314,8 @@ void InputProcessor::valueTreePropertyChanged(
       property == juce::Identifier("adsrRelease") ||
       property == juce::Identifier("useCustomEnvelope") ||
       property == juce::Identifier("sendReleaseValue") ||
-      property == juce::Identifier("releaseValue")) {
+      property == juce::Identifier("releaseValue") ||
+      property == juce::Identifier("releaseLatchedOnToggleOff")) {
     if (isLayerMapping || parent.isEquivalentTo(mappingsNode) ||
         treeWhosePropertyHasChanged.isEquivalentTo(mappingsNode)) {
       // SAFER: Rebuild everything.
@@ -506,12 +546,21 @@ void InputProcessor::processEvent(InputID input, bool isDown) {
           voiceManager.setSustain(!voiceManager.isSustainActive());
         else if (cmd == static_cast<int>(OmniKey::CommandID::SustainInverse))
           voiceManager.setSustain(false);
-        else if (cmd == static_cast<int>(OmniKey::CommandID::LatchToggle))
-          voiceManager.setLatch(!voiceManager.isLatchActive());
-        else if (cmd == static_cast<int>(OmniKey::CommandID::Panic))
-          voiceManager.panic();
-        else if (cmd == static_cast<int>(OmniKey::CommandID::PanicLatch))
-          voiceManager.panicLatch();
+        else if (cmd == static_cast<int>(OmniKey::CommandID::LatchToggle)) {
+          bool wasActive = voiceManager.isLatchActive();
+          voiceManager.setLatch(!wasActive);
+          if (wasActive && !voiceManager.isLatchActive() &&
+              midiAction.releaseLatchedOnLatchToggleOff)
+            voiceManager.panicLatch();
+        }
+        else if (cmd == static_cast<int>(OmniKey::CommandID::Panic)) {
+          if (midiAction.data2 == 1)
+            voiceManager.panicLatch();
+          else
+            voiceManager.panic();
+        } else if (cmd == static_cast<int>(OmniKey::CommandID::PanicLatch)) {
+          voiceManager.panicLatch();  // Backward compat: old Panic Latch mapping
+        }
         else if (cmd == static_cast<int>(OmniKey::CommandID::GlobalPitchUp)) {
           int chrom = zoneManager.getGlobalChromaticTranspose();
           int deg = zoneManager.getGlobalDegreeTranspose();
@@ -906,7 +955,10 @@ int InputProcessor::getManualMappingCountForKey(int keyCode,
   return count;
 }
 
-void InputProcessor::forceRebuildMappings() { rebuildGrid(); }
+void InputProcessor::forceRebuildMappings() {
+  rebuildGrid();
+  applySustainDefaultFromPreset();
+}
 
 SimulationResult InputProcessor::simulateInput(uintptr_t viewDeviceHash,
                                                int keyCode) {

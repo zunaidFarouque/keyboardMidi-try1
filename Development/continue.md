@@ -62,3 +62,6 @@ then we will start the same thing with zones.
 we go slow, but we go accurate.
 
 so, no prompt, give me detailed understanding of you about the mappings. every type, what the parameters are, what it does etc
+
+
+

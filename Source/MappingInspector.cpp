@@ -292,6 +292,30 @@ void MappingInspector::createControl(const InspectorControl &def,
           break;
         }
       }
+    } else if (def.propertyId == "sustainStyle") {
+      // Virtual: data1 0,1,2 -> combo ids 1,2,3
+      int data1 = static_cast<int>(getCommonValue("data1"));
+      int id = (data1 >= 0 && data1 <= 2) ? (data1 + 1) : 1;
+      cb->setSelectedId(id, juce::dontSendNotification);
+    } else if (def.propertyId == "panicMode") {
+      // Virtual: data1==5 or data2==1 -> Panic latched only (2), else Panic all (1)
+      int data1 = static_cast<int>(getCommonValue("data1"));
+      int data2 = static_cast<int>(getCommonValue("data2"));
+      int id = (data1 == 5 || data2 == 1) ? 2 : 1;
+      cb->setSelectedId(id, juce::dontSendNotification);
+    } else if (def.propertyId == "commandCategory") {
+      // Virtual: data1 0,1,2 -> Sustain (100); 5 -> Panic (4); else data1
+      int data1 = static_cast<int>(getCommonValue("data1"));
+      if (data1 >= 0 && data1 <= 2)
+        cb->setSelectedId(100, juce::dontSendNotification);
+      else if (data1 == 5)
+        cb->setSelectedId(4, juce::dontSendNotification);  // Panic Latch -> Panic
+      else if (data1 >= 3 && data1 <= 12)
+        cb->setSelectedId(data1, juce::dontSendNotification);
+    } else if (def.propertyId == "data1" && !def.options.count(5)) {
+      // Panic Latch (5) removed: show Panic (4) when data1 is 5
+      int data1 = static_cast<int>(currentVal);
+      cb->setSelectedId((data1 == 5) ? 4 : data1, juce::dontSendNotification);
     } else if (sameVal && !currentVal.isVoid()) {
       int id = static_cast<int>(currentVal);
       cb->setSelectedId(id, juce::dontSendNotification);
@@ -302,6 +326,11 @@ void MappingInspector::createControl(const InspectorControl &def,
       if (selectedTrees.empty())
         return;
       undoManager.beginNewTransaction("Change " + def.label);
+      juce::Identifier actualProp =
+          (def.propertyId == "commandCategory" || def.propertyId == "sustainStyle" ||
+           def.propertyId == "panicMode")
+              ? "data1"
+              : propId;
       juce::var valueToSet;
       if (def.propertyId == "type" || def.propertyId == "adsrTarget" ||
           def.propertyId == "releaseBehavior") {
@@ -309,14 +338,39 @@ void MappingInspector::createControl(const InspectorControl &def,
         auto it = def.options.find(id);
         valueToSet = (it != def.options.end()) ? juce::var(it->second)
                                                 : juce::var();
+      } else if (def.propertyId == "commandCategory") {
+        int id = cbPtr->getSelectedId();
+        valueToSet = (id == 100) ? juce::var(0) : juce::var(id);
+      } else if (def.propertyId == "panicMode") {
+        // Virtual: 1=Panic all (data2=0), 2=Panic latched only (data2=1)
+        int id = cbPtr->getSelectedId();
+        int mode = (id == 2) ? 1 : 0;
+        for (auto &tree : selectedTrees) {
+          if (tree.isValid()) {
+            tree.setProperty("data1", 4, &undoManager);   // Panic (migrate from 5)
+            tree.setProperty("data2", mode, &undoManager);
+          }
+        }
+        juce::MessageManager::callAsync([this]() { rebuildUI(); });
+        return;  // Already set properties
+      } else if (def.propertyId == "sustainStyle") {
+        // Virtual: combo ids 1,2,3 -> data1 0,1,2
+        int id = cbPtr->getSelectedId();
+        valueToSet = juce::var((id >= 1 && id <= 3) ? (id - 1) : 0);
+      } else if (def.propertyId == "data1" && def.options.count(100) > 0) {
+        // Command dropdown with Sustain (100): map 100 -> 0
+        int id = cbPtr->getSelectedId();
+        valueToSet = juce::var((id == 100) ? 0 : id);
       } else {
         valueToSet = cbPtr->getSelectedId();
       }
       for (auto &tree : selectedTrees) {
         if (tree.isValid())
-          tree.setProperty(propId, valueToSet, &undoManager);
+          tree.setProperty(actualProp, valueToSet, &undoManager);
       }
-      if (def.propertyId == "type" || def.propertyId == "data1")
+      if (def.propertyId == "type" || def.propertyId == "data1" ||
+          def.propertyId == "commandCategory" || def.propertyId == "sustainStyle" ||
+          def.propertyId == "panicMode")
         juce::MessageManager::callAsync([this]() { rebuildUI(); });
     };
 
@@ -332,11 +386,12 @@ void MappingInspector::createControl(const InspectorControl &def,
   case InspectorControl::Type::Toggle: {
     auto tb = std::make_unique<juce::ToggleButton>();
     // Phase 55.8: No button text; label is separate on the left
+    bool defaultForToggle = (def.propertyId == "releaseLatchedOnToggleOff");
     if (sameVal && !currentVal.isVoid())
       tb->setToggleState(static_cast<bool>(currentVal),
                          juce::dontSendNotification);
     else
-      tb->setToggleState(false, juce::dontSendNotification);
+      tb->setToggleState(defaultForToggle, juce::dontSendNotification);
 
     tb->onClick = [this, propId, def, tb = tb.get()]() {
       if (selectedTrees.empty())

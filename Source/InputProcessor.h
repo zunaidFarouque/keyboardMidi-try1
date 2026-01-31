@@ -149,6 +149,9 @@ private:
   // Helpers
   void rebuildGrid();
 
+  // Sustain default/cleanup: called on init and when sustain-related mappings change
+  void applySustainDefaultFromPreset();
+
   // Phase 52.1: Grid lookup for getMappingForInput / handleAxisEvent (replaces
   // findMapping)
   std::optional<MidiAction> lookupActionInGrid(InputID input) const;

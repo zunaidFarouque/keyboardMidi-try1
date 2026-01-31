@@ -16,12 +16,11 @@ juce::String MappingDefinition::getTypeName(ActionType type) {
 std::map<int, juce::String> MappingDefinition::getCommandOptions() {
   using Cmd = OmniKey::CommandID;
   return {
-      {static_cast<int>(Cmd::SustainMomentary), "Sustain Momentary"},
-      {static_cast<int>(Cmd::SustainToggle), "Sustain Toggle"},
-      {static_cast<int>(Cmd::SustainInverse), "Sustain Inverse"},
+      {static_cast<int>(Cmd::SustainMomentary), "Hold to sustain"},
+      {static_cast<int>(Cmd::SustainToggle), "Toggle sustain"},
+      {static_cast<int>(Cmd::SustainInverse), "Default is on. Hold to not sustain"},
       {static_cast<int>(Cmd::LatchToggle), "Latch Toggle"},
       {static_cast<int>(Cmd::Panic), "Panic"},
-      {static_cast<int>(Cmd::PanicLatch), "Panic Latch"},
       {static_cast<int>(Cmd::GlobalPitchUp), "Global Pitch Up"},
       {static_cast<int>(Cmd::GlobalPitchDown), "Global Pitch Down"},
       {static_cast<int>(Cmd::GlobalModeUp), "Global Mode Up"},
@@ -246,14 +245,40 @@ InspectorSchema MappingDefinition::getSchema(const juce::ValueTree &mapping) {
       schema.push_back(relVal);
     }
   } else if (typeStr.equalsIgnoreCase("Command")) {
-    InspectorControl data1;
-    data1.propertyId = "data1";
-    data1.label = "Command";
-    data1.controlType = InspectorControl::Type::ComboBox;
-    data1.options = getCommandOptions();
-    schema.push_back(data1);
-
+    // Sustain: one control with Style dropdown when Sustain; else Command dropdown
+    static constexpr int kSustainCategoryId = 100;
     int cmdId = (int)mapping.getProperty("data1", 0);
+    const bool isSustain = (cmdId >= 0 && cmdId <= 2);
+
+    InspectorControl cmdCtrl;
+    cmdCtrl.propertyId = isSustain ? "commandCategory" : "data1";
+    cmdCtrl.label = isSustain ? "Sustain" : "Command";
+    cmdCtrl.controlType = InspectorControl::Type::ComboBox;
+    cmdCtrl.options[kSustainCategoryId] = "Sustain";
+    cmdCtrl.options[3] = "Latch Toggle";
+    cmdCtrl.options[4] = "Panic";
+    cmdCtrl.options[6] = "Global Pitch Up";
+    cmdCtrl.options[7] = "Global Pitch Down";
+    cmdCtrl.options[8] = "Global Mode Up";
+    cmdCtrl.options[9] = "Global Mode Down";
+    cmdCtrl.options[10] = "Layer Momentary";
+    cmdCtrl.options[11] = "Layer Toggle";
+    cmdCtrl.options[12] = "Layer Solo";
+    schema.push_back(cmdCtrl);
+
+    if (isSustain) {
+      InspectorControl styleCtrl;
+      styleCtrl.propertyId = "sustainStyle"; // Virtual: maps to data1 (0,1,2)
+      styleCtrl.label = "Style";
+      styleCtrl.controlType = InspectorControl::Type::ComboBox;
+      // Use 1-based IDs: JUCE ComboBox treats 0 as "no selection"
+      styleCtrl.options[1] = "Hold to sustain";
+      styleCtrl.options[2] = "Toggle sustain";
+      styleCtrl.options[3] = "Default is on. Hold to not sustain";
+      schema.push_back(styleCtrl);
+    }
+
+    cmdId = (int)mapping.getProperty("data1", 0);
     const int layerMomentary =
         static_cast<int>(OmniKey::CommandID::LayerMomentary);
     const int layerToggle = static_cast<int>(OmniKey::CommandID::LayerToggle);
@@ -266,6 +291,25 @@ InspectorSchema MappingDefinition::getSchema(const juce::ValueTree &mapping) {
       data2.controlType = InspectorControl::Type::ComboBox;
       data2.options = getLayerOptions();
       schema.push_back(data2);
+    }
+    const int latchToggle = static_cast<int>(OmniKey::CommandID::LatchToggle);
+    if (cmdId == latchToggle) {
+      InspectorControl releaseLatched;
+      releaseLatched.propertyId = "releaseLatchedOnToggleOff";
+      releaseLatched.label = "Release latched when toggling off";
+      releaseLatched.controlType = InspectorControl::Type::Toggle;
+      schema.push_back(releaseLatched);
+    }
+    const int panic = static_cast<int>(OmniKey::CommandID::Panic);
+    const int panicLatch = static_cast<int>(OmniKey::CommandID::PanicLatch);
+    if (cmdId == panic || cmdId == panicLatch) {
+      InspectorControl panicMode;
+      panicMode.propertyId = "panicMode";  // Virtual: maps to data1=4, data2
+      panicMode.label = "Mode";
+      panicMode.controlType = InspectorControl::Type::ComboBox;
+      panicMode.options[1] = "Panic all";
+      panicMode.options[2] = "Panic latched only";
+      schema.push_back(panicMode);
     }
   }
 

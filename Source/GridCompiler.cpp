@@ -122,7 +122,7 @@ juce::String getCommandLabel(int cmdId) {
   case CommandID::Panic:
     return "Panic";
   case CommandID::PanicLatch:
-    return "Panic (Latch)";
+    return "Panic (Latch)";  // Backward compat
   case CommandID::GlobalPitchUp:
     return "Global +1";
   case CommandID::GlobalPitchDown:
@@ -157,8 +157,12 @@ juce::String makeLabelForAction(const MidiAction &action) {
       target = "Smart";
     return "Expr: " + target;
   }
-  case ActionType::Command:
-    return getCommandLabel(action.data1);
+  case ActionType::Command: {
+    juce::String base = getCommandLabel(action.data1);
+    if (action.data1 == static_cast<int>(OmniKey::CommandID::Panic) && action.data2 == 1)
+      return "Panic (Latch)";
+    return base;
+  }
   case ActionType::Macro:
     return "Macro " + juce::String(action.data1);
   default:
@@ -535,6 +539,13 @@ void compileMappingsForLayer(VisualGrid &vGrid, AudioGrid &aGrid,
       action.sendReleaseValue =
           (bool)mapping.getProperty("sendReleaseValue", false);
       action.releaseValue = (int)mapping.getProperty("releaseValue", 0);
+    }
+
+    // Latch Toggle: release latched notes when toggling off
+    if (action.type == ActionType::Command &&
+        action.data1 == static_cast<int>(OmniKey::CommandID::LatchToggle)) {
+      action.releaseLatchedOnLatchToggleOff =
+          (bool)mapping.getProperty("releaseLatchedOnToggleOff", true);
     }
 
     juce::Colour color = getColorForType(action.type, settingsMgr);

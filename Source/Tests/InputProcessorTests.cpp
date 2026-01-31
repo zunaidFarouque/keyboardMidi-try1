@@ -7,6 +7,7 @@
 #include "../SettingsManager.h"
 #include "../VoiceManager.h"
 #include <gtest/gtest.h>
+#include <set>
 
 // Records MIDI note on/off for release behaviour and Note type tests
 class MockMidiEngine : public MidiEngine {
@@ -676,4 +677,226 @@ TEST_F(NoteTypeTest, AllParamsWorkTogether) {
   EXPECT_FALSE(mockMidi.events[1].isNoteOn);
   EXPECT_EQ(mockMidi.events[1].channel, 8);
   EXPECT_EQ(mockMidi.events[1].note, 84);
+}
+
+// Sustain Toggle: when turned off, send one NoteOff per unique note, not per voice
+TEST_F(NoteTypeTest, SustainToggleOffSendsOneNoteOffPerUniqueNote) {
+  // Sustain Toggle on key 40, Note C4 (60) on key 20, Note D4 (62) on key 21
+  {
+    auto mappings = presetMgr.getMappingsListForLayer(0);
+    auto addMapping = [&mappings](int key, juce::String type, int d1, int d2) {
+      juce::ValueTree m("Mapping");
+      m.setProperty("inputKey", key, nullptr);
+      m.setProperty("deviceHash",
+                    juce::String::toHexString((juce::int64)0).toUpperCase(),
+                    nullptr);
+      m.setProperty("type", type, nullptr);
+      m.setProperty("data1", d1, nullptr);
+      m.setProperty("data2", d2, nullptr);
+      m.setProperty("layerID", 0, nullptr);
+      mappings.addChild(m, -1, nullptr);
+    };
+    addMapping(40, "Command", 1, 0);  // SustainToggle
+    addMapping(20, "Note", 60, 127);  // C4
+    addMapping(21, "Note", 62, 127);  // D4
+  }
+  proc.forceRebuildMappings();
+
+  InputID sustainKey{0, 40}, keyQ{0, 20}, keyW{0, 21};
+
+  proc.processEvent(sustainKey, true);  // Sustain ON
+  proc.processEvent(sustainKey, false);
+
+  // Q => C4 x4, W => D4 x2 (press+release each time; sustain holds notes)
+  for (int i = 0; i < 4; ++i) {
+    proc.processEvent(keyQ, true);
+    proc.processEvent(keyQ, false);
+  }
+  for (int i = 0; i < 2; ++i) {
+    proc.processEvent(keyW, true);
+    proc.processEvent(keyW, false);
+  }
+
+  // 6 note-ons, 0 note-offs (sustain holds)
+  int noteOnCount = 0;
+  for (const auto &e : mockMidi.events)
+    if (e.isNoteOn) ++noteOnCount;
+  EXPECT_EQ(noteOnCount, 6);
+
+  proc.processEvent(sustainKey, true);  // Sustain OFF
+  proc.processEvent(sustainKey, false);
+
+  // Must send exactly 2 note-offs: one for C4, one for D4
+  int noteOffCount = 0;
+  std::set<int> noteOffs;
+  for (const auto &e : mockMidi.events) {
+    if (!e.isNoteOn) {
+      ++noteOffCount;
+      noteOffs.insert(e.note);
+    }
+  }
+  EXPECT_EQ(noteOffCount, 2) << "Expected one NoteOff per unique note (C4, D4)";
+  EXPECT_EQ(noteOffs.size(), 2u);
+  EXPECT_TRUE(noteOffs.count(60));
+  EXPECT_TRUE(noteOffs.count(62));
+}
+
+// Sustain Inverse: default sustain ON; switching to non-Inverse sets sustain OFF
+TEST_F(NoteTypeTest, SustainInverseDefaultAndConfigChangeCleanup) {
+  // Map key 40 to Sustain Inverse (data1=2)
+  {
+    auto mappings = presetMgr.getMappingsListForLayer(0);
+    juce::ValueTree m("Mapping");
+    m.setProperty("inputKey", 40, nullptr);
+    m.setProperty("deviceHash",
+                  juce::String::toHexString((juce::int64)0).toUpperCase(),
+                  nullptr);
+    m.setProperty("type", "Command", nullptr);
+    m.setProperty("data1", 2, nullptr); // SustainInverse
+    m.setProperty("layerID", 0, nullptr);
+    mappings.addChild(m, -1, nullptr);
+  }
+  proc.forceRebuildMappings(); // calls applySustainDefaultFromPreset
+  EXPECT_TRUE(voiceMgr.isSustainActive())
+      << "With Sustain Inverse mapped, default sustain should be ON";
+
+  // Change to Sustain Toggle (data1=1) - simulates configurator change
+  presetMgr.getMappingsListForLayer(0)
+      .getChild(0)
+      .setProperty("data1", 1, nullptr);
+  // valueTreePropertyChanged fires and calls applySustainDefaultFromPreset
+  proc.forceRebuildMappings();
+  EXPECT_FALSE(voiceMgr.isSustainActive())
+      << "With no Sustain Inverse, sustain should be OFF after cleanup";
+}
+
+// Latch Toggle with releaseLatchedOnToggleOff: when toggling off, sends NoteOff for latched notes
+TEST_F(NoteTypeTest, LatchToggleReleaseLatchedOnToggleOff_SendsNoteOff) {
+  {
+    auto mappings = presetMgr.getMappingsListForLayer(0);
+    juce::ValueTree latch("Mapping");
+    latch.setProperty("inputKey", 40, nullptr);
+    latch.setProperty("deviceHash",
+                      juce::String::toHexString((juce::int64)0).toUpperCase(),
+                      nullptr);
+    latch.setProperty("type", "Command", nullptr);
+    latch.setProperty("data1", 3, nullptr);  // LatchToggle
+    latch.setProperty("releaseLatchedOnToggleOff", true, nullptr);
+    latch.setProperty("layerID", 0, nullptr);
+    mappings.addChild(latch, -1, nullptr);
+
+    juce::ValueTree note("Mapping");
+    note.setProperty("inputKey", 20, nullptr);
+    note.setProperty("deviceHash",
+                     juce::String::toHexString((juce::int64)0).toUpperCase(),
+                     nullptr);
+    note.setProperty("type", "Note", nullptr);
+    note.setProperty("channel", 1, nullptr);
+    note.setProperty("data1", 60, nullptr);
+    note.setProperty("data2", 127, nullptr);
+    note.setProperty("layerID", 0, nullptr);
+    mappings.addChild(note, -1, nullptr);
+  }
+  proc.forceRebuildMappings();
+
+  InputID latchKey{0, 40}, noteKey{0, 20};
+
+  proc.processEvent(latchKey, true);   // Latch ON
+  proc.processEvent(latchKey, false);
+
+  proc.processEvent(noteKey, true);    // Note on C4
+  proc.processEvent(noteKey, false);   // Release - note latched (no NoteOff)
+  ASSERT_EQ(mockMidi.events.size(), 1u) << "Only note-on so far";
+
+  proc.processEvent(latchKey, true);   // Latch OFF (with releaseLatchedOnToggleOff)
+  proc.processEvent(latchKey, false);
+
+  ASSERT_EQ(mockMidi.events.size(), 2u)
+      << "NoteOff should be sent when latch toggled off";
+  EXPECT_FALSE(mockMidi.events[1].isNoteOn);
+  EXPECT_EQ(mockMidi.events[1].note, 60);
+  EXPECT_EQ(mockMidi.events[1].channel, 1);
+}
+
+// Panic with dropdown: "Panic all" vs "Panic latched only"
+TEST_F(NoteTypeTest, PanicAll_SendsNoteOffForAllNotes) {
+  {
+    auto mappings = presetMgr.getMappingsListForLayer(0);
+    juce::ValueTree panic("Mapping");
+    panic.setProperty("inputKey", 40, nullptr);
+    panic.setProperty("deviceHash",
+                      juce::String::toHexString((juce::int64)0).toUpperCase(),
+                      nullptr);
+    panic.setProperty("type", "Command", nullptr);
+    panic.setProperty("data1", 4, nullptr);  // Panic
+    panic.setProperty("data2", 0, nullptr);  // Panic all
+    panic.setProperty("layerID", 0, nullptr);
+    mappings.addChild(panic, -1, nullptr);
+
+    juce::ValueTree note("Mapping");
+    note.setProperty("inputKey", 20, nullptr);
+    note.setProperty("deviceHash",
+                     juce::String::toHexString((juce::int64)0).toUpperCase(),
+                     nullptr);
+    note.setProperty("type", "Note", nullptr);
+    note.setProperty("channel", 1, nullptr);
+    note.setProperty("data1", 60, nullptr);
+    note.setProperty("data2", 127, nullptr);
+    note.setProperty("layerID", 0, nullptr);
+    mappings.addChild(note, -1, nullptr);
+  }
+  proc.forceRebuildMappings();
+
+  proc.processEvent(InputID{0, 20}, true);   // Note on
+  proc.processEvent(InputID{0, 20}, false);  // Release - note off (Send Note Off)
+  ASSERT_GE(mockMidi.events.size(), 2u);  // NoteOn + NoteOff
+  mockMidi.clear();
+
+  proc.processEvent(InputID{0, 20}, true);   // Note on (playing)
+  proc.processEvent(InputID{0, 40}, true);   // Panic all
+  proc.processEvent(InputID{0, 40}, false);
+  ASSERT_EQ(mockMidi.events.size(), 2u) << "NoteOn + NoteOff from panic";
+  EXPECT_TRUE(mockMidi.events[0].isNoteOn);
+  EXPECT_FALSE(mockMidi.events[1].isNoteOn);
+  EXPECT_EQ(mockMidi.events[1].note, 60);
+}
+
+TEST_F(NoteTypeTest, PanicLatchedOnly_SendsNoteOffOnlyForLatched) {
+  voiceMgr.setLatch(true);
+  {
+    auto mappings = presetMgr.getMappingsListForLayer(0);
+    juce::ValueTree panic("Mapping");
+    panic.setProperty("inputKey", 40, nullptr);
+    panic.setProperty("deviceHash",
+                      juce::String::toHexString((juce::int64)0).toUpperCase(),
+                      nullptr);
+    panic.setProperty("type", "Command", nullptr);
+    panic.setProperty("data1", 4, nullptr);  // Panic
+    panic.setProperty("data2", 1, nullptr);  // Panic latched only
+    panic.setProperty("layerID", 0, nullptr);
+    mappings.addChild(panic, -1, nullptr);
+
+    juce::ValueTree note("Mapping");
+    note.setProperty("inputKey", 20, nullptr);
+    note.setProperty("deviceHash",
+                     juce::String::toHexString((juce::int64)0).toUpperCase(),
+                     nullptr);
+    note.setProperty("type", "Note", nullptr);
+    note.setProperty("channel", 1, nullptr);
+    note.setProperty("data1", 60, nullptr);
+    note.setProperty("data2", 127, nullptr);
+    note.setProperty("layerID", 0, nullptr);
+    mappings.addChild(note, -1, nullptr);
+  }
+  proc.forceRebuildMappings();
+
+  proc.processEvent(InputID{0, 20}, true);   // Note on
+  proc.processEvent(InputID{0, 20}, false);  // Release - latched (no NoteOff)
+  ASSERT_EQ(mockMidi.events.size(), 1u) << "NoteOn only, note is latched";
+
+  proc.processEvent(InputID{0, 40}, true);   // Panic latched only
+  proc.processEvent(InputID{0, 40}, false);
+  ASSERT_EQ(mockMidi.events.size(), 2u) << "NoteOff from panic latched";
+  EXPECT_FALSE(mockMidi.events[1].isNoteOn);
+  EXPECT_EQ(mockMidi.events[1].note, 60);
 }
