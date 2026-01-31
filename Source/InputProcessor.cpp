@@ -426,9 +426,10 @@ void InputProcessor::processEvent(InputID input, bool isDown) {
           }
           return;
         }
-        // Phase 55.4: Note one-shot – do not send NoteOff on release
-        if (midiAction.type == ActionType::Note && midiAction.isOneShot) {
-          return;
+        // Phase 55.4: Note release behavior
+        if (midiAction.type == ActionType::Note &&
+            midiAction.releaseBehavior == NoteReleaseBehavior::Nothing) {
+          return; // Do nothing on release
         }
         if (zone && zone->playMode == Zone::PlayMode::Strum) {
           juce::ScopedWriteLock lock(bufferLock);
@@ -566,9 +567,11 @@ void InputProcessor::processEvent(InputID input, bool isDown) {
             // Manual mapping: simple playback
             int vel =
                 calculateVelocity(midiAction.data2, midiAction.velocityRandom);
+            bool alwaysLatch =
+                (midiAction.releaseBehavior == NoteReleaseBehavior::AlwaysLatch);
             voiceManager.noteOn(input, midiAction.data1, vel,
                                 midiAction.channel, true, 0,
-                                PolyphonyMode::Poly, 50);
+                                PolyphonyMode::Poly, 50, alwaysLatch);
             lastTriggeredNote = midiAction.data1;
           }
         }

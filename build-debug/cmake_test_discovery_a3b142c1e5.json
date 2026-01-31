@@ -1,7 +1,100 @@
 {
-  "tests": 22,
+  "tests": 40,
   "name": "AllTests",
   "testsuites": [
+    {
+      "name": "InputProcessorTest",
+      "tests": 7,
+      "testsuite": [
+        {
+          "name": "LayerMomentarySwitching",
+          "file": "D:\\_installed\\VScode repos\\AI\\Cursor\\keyboardMidi-try1\\Source\\Tests\\InputProcessorTests.cpp",
+          "line": 50
+        },
+        {
+          "name": "HoldLayerAndPlayNote",
+          "file": "D:\\_installed\\VScode repos\\AI\\Cursor\\keyboardMidi-try1\\Source\\Tests\\InputProcessorTests.cpp",
+          "line": 104
+        },
+        {
+          "name": "DeviceSpecificLayerSwitching",
+          "file": "D:\\_installed\\VScode repos\\AI\\Cursor\\keyboardMidi-try1\\Source\\Tests\\InputProcessorTests.cpp",
+          "line": 163
+        },
+        {
+          "name": "LayerToggleSwitching",
+          "file": "D:\\_installed\\VScode repos\\AI\\Cursor\\keyboardMidi-try1\\Source\\Tests\\InputProcessorTests.cpp",
+          "line": 255
+        },
+        {
+          "name": "LayerSoloClearsOtherLayers",
+          "file": "D:\\_installed\\VScode repos\\AI\\Cursor\\keyboardMidi-try1\\Source\\Tests\\InputProcessorTests.cpp",
+          "line": 312
+        },
+        {
+          "name": "MomentaryRefCountMultipleKeys",
+          "file": "D:\\_installed\\VScode repos\\AI\\Cursor\\keyboardMidi-try1\\Source\\Tests\\InputProcessorTests.cpp",
+          "line": 368
+        },
+        {
+          "name": "StudioModeOffIgnoresDeviceMappings",
+          "file": "D:\\_installed\\VScode repos\\AI\\Cursor\\keyboardMidi-try1\\Source\\Tests\\InputProcessorTests.cpp",
+          "line": 426
+        }
+      ]
+    },
+    {
+      "name": "ReleaseBehaviorTest",
+      "tests": 3,
+      "testsuite": [
+        {
+          "name": "SendNoteOff_PressRelease_SendsNoteOnThenNoteOff",
+          "file": "D:\\_installed\\VScode repos\\AI\\Cursor\\keyboardMidi-try1\\Source\\Tests\\InputProcessorTests.cpp",
+          "line": 526
+        },
+        {
+          "name": "Nothing_PressRelease_NoNoteOffOnRelease",
+          "file": "D:\\_installed\\VScode repos\\AI\\Cursor\\keyboardMidi-try1\\Source\\Tests\\InputProcessorTests.cpp",
+          "line": 545
+        },
+        {
+          "name": "AlwaysLatch_PressReleasePressRelease_UnlatchesOnSecondPress",
+          "file": "D:\\_installed\\VScode repos\\AI\\Cursor\\keyboardMidi-try1\\Source\\Tests\\InputProcessorTests.cpp",
+          "line": 559
+        }
+      ]
+    },
+    {
+      "name": "NoteTypeTest",
+      "tests": 5,
+      "testsuite": [
+        {
+          "name": "ChannelAndNoteNumberSentCorrectly",
+          "file": "D:\\_installed\\VScode repos\\AI\\Cursor\\keyboardMidi-try1\\Source\\Tests\\InputProcessorTests.cpp",
+          "line": 622
+        },
+        {
+          "name": "VelocitySentCorrectly",
+          "file": "D:\\_installed\\VScode repos\\AI\\Cursor\\keyboardMidi-try1\\Source\\Tests\\InputProcessorTests.cpp",
+          "line": 633
+        },
+        {
+          "name": "FollowTransposeAddsToNoteWhenEnabled",
+          "file": "D:\\_installed\\VScode repos\\AI\\Cursor\\keyboardMidi-try1\\Source\\Tests\\InputProcessorTests.cpp",
+          "line": 642
+        },
+        {
+          "name": "FollowTransposeIgnoredWhenDisabled",
+          "file": "D:\\_installed\\VScode repos\\AI\\Cursor\\keyboardMidi-try1\\Source\\Tests\\InputProcessorTests.cpp",
+          "line": 652
+        },
+        {
+          "name": "AllParamsWorkTogether",
+          "file": "D:\\_installed\\VScode repos\\AI\\Cursor\\keyboardMidi-try1\\Source\\Tests\\InputProcessorTests.cpp",
+          "line": 662
+        }
+      ]
+    },
     {
       "name": "SanityCheck",
       "tests": 3,
@@ -25,7 +118,7 @@
     },
     {
       "name": "GridCompilerTest",
-      "tests": 12,
+      "tests": 18,
       "testsuite": [
         {
           "name": "VerticalInheritance",
@@ -78,35 +171,44 @@
           "line": 242
         },
         {
+          "name": "LayerToggleNotInherited",
+          "file": "D:\\_installed\\VScode repos\\AI\\Cursor\\keyboardMidi-try1\\Source\\Tests\\GridCompilerTests.cpp",
+          "line": 257
+        },
+        {
+          "name": "LayerSoloNotInherited",
+          "file": "D:\\_installed\\VScode repos\\AI\\Cursor\\keyboardMidi-try1\\Source\\Tests\\GridCompilerTests.cpp",
+          "line": 272
+        },
+        {
           "name": "DeviceVerticalInheritanceIsDimmed",
           "file": "D:\\_installed\\VScode repos\\AI\\Cursor\\keyboardMidi-try1\\Source\\Tests\\GridCompilerTests.cpp",
-          "line": 258
+          "line": 288
         },
         {
           "name": "DeviceBaseOverridesGlobalLayer",
           "file": "D:\\_installed\\VScode repos\\AI\\Cursor\\keyboardMidi-try1\\Source\\Tests\\GridCompilerTests.cpp",
-          "line": 273
-        }
-      ]
-    },
-    {
-      "name": "InputProcessorTest",
-      "tests": 3,
-      "testsuite": [
-        {
-          "name": "LayerMomentarySwitching",
-          "file": "D:\\_installed\\VScode repos\\AI\\Cursor\\keyboardMidi-try1\\Source\\Tests\\InputProcessorTests.cpp",
-          "line": 30
+          "line": 303
         },
         {
-          "name": "HoldLayerAndPlayNote",
-          "file": "D:\\_installed\\VScode repos\\AI\\Cursor\\keyboardMidi-try1\\Source\\Tests\\InputProcessorTests.cpp",
-          "line": 84
+          "name": "ExpressionSimpleCcProducesFastPathAdsr",
+          "file": "D:\\_installed\\VScode repos\\AI\\Cursor\\keyboardMidi-try1\\Source\\Tests\\GridCompilerTests.cpp",
+          "line": 316
         },
         {
-          "name": "DeviceSpecificLayerSwitching",
-          "file": "D:\\_installed\\VScode repos\\AI\\Cursor\\keyboardMidi-try1\\Source\\Tests\\InputProcessorTests.cpp",
-          "line": 143
+          "name": "ExpressionCustomEnvelopeReadsAdsr",
+          "file": "D:\\_installed\\VScode repos\\AI\\Cursor\\keyboardMidi-try1\\Source\\Tests\\GridCompilerTests.cpp",
+          "line": 347
+        },
+        {
+          "name": "ExpressionPitchBendCompilesCorrectly",
+          "file": "D:\\_installed\\VScode repos\\AI\\Cursor\\keyboardMidi-try1\\Source\\Tests\\GridCompilerTests.cpp",
+          "line": 380
+        },
+        {
+          "name": "NoteReleaseBehaviorCompiles",
+          "file": "D:\\_installed\\VScode repos\\AI\\Cursor\\keyboardMidi-try1\\Source\\Tests\\GridCompilerTests.cpp",
+          "line": 404
         }
       ]
     },

@@ -103,6 +103,9 @@ void MappingInspector::rebuildUI() {
   if (selectedTrees.empty())
     return;
 
+  // Device row at top, above Type
+  createAliasRow();
+
   InspectorSchema schema =
       MappingDefinition::getSchema(selectedTrees[0]);
   for (const auto &def : schema) {
@@ -124,7 +127,6 @@ void MappingInspector::rebuildUI() {
     }
     createControl(def, uiRows.back());
   }
-  createAliasRow();
 
   resized();
 }
@@ -280,6 +282,16 @@ void MappingInspector::createControl(const InspectorControl &def,
           break;
         }
       }
+    } else if (def.propertyId == "releaseBehavior") {
+      juce::String rbStr = currentVal.toString();
+      if (rbStr.isEmpty())
+        rbStr = "Send Note Off";
+      for (const auto &p : def.options) {
+        if (p.second == rbStr) {
+          cb->setSelectedId(p.first, juce::dontSendNotification);
+          break;
+        }
+      }
     } else if (sameVal && !currentVal.isVoid()) {
       int id = static_cast<int>(currentVal);
       cb->setSelectedId(id, juce::dontSendNotification);
@@ -291,7 +303,8 @@ void MappingInspector::createControl(const InspectorControl &def,
         return;
       undoManager.beginNewTransaction("Change " + def.label);
       juce::var valueToSet;
-      if (def.propertyId == "type" || def.propertyId == "adsrTarget") {
+      if (def.propertyId == "type" || def.propertyId == "adsrTarget" ||
+          def.propertyId == "releaseBehavior") {
         int id = cbPtr->getSelectedId();
         auto it = def.options.find(id);
         valueToSet = (it != def.options.end()) ? juce::var(it->second)
@@ -363,7 +376,7 @@ void MappingInspector::createAliasRow() {
 
   auto rowComp = std::make_unique<LabelEditorRow>();
   rowComp->label = std::make_unique<juce::Label>();
-  rowComp->label->setText("Alias:", juce::dontSendNotification);
+  rowComp->label->setText("Device:", juce::dontSendNotification);
 
   auto aliasCombo = std::make_unique<juce::ComboBox>();
   aliasCombo->addItem("Global (All Devices)", 1);
@@ -406,7 +419,7 @@ void MappingInspector::createAliasRow() {
       newHash =
           static_cast<uintptr_t>(std::hash<juce::String>{}(aliasName));
     }
-    undoManager.beginNewTransaction("Change Alias");
+    undoManager.beginNewTransaction("Change Device");
     for (auto &tree : selectedTrees) {
       if (!tree.isValid())
         continue;

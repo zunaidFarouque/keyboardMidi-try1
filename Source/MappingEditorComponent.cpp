@@ -323,11 +323,15 @@ void MappingEditorComponent::finishInputCapture(uintptr_t deviceHandle,
     newMapping.setProperty("channel", 1, nullptr);
     newMapping.setProperty("data1", 60, nullptr);
     newMapping.setProperty("data2", 127, nullptr);
+    newMapping.setProperty("releaseBehavior", "Send Note Off", nullptr);
+    newMapping.setProperty("followTranspose", true, nullptr);
   } else {
     newMapping.setProperty("type", "Note", nullptr);
     newMapping.setProperty("channel", 1, nullptr);
     newMapping.setProperty("data1", 60, nullptr);
     newMapping.setProperty("data2", 127, nullptr);
+    newMapping.setProperty("releaseBehavior", "Send Note Off", nullptr);
+    newMapping.setProperty("followTranspose", true, nullptr);
   }
 
   auto mappingsNode = getCurrentLayerMappings();

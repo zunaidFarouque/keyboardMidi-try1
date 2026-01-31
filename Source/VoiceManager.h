@@ -22,7 +22,7 @@ public:
   void noteOn(InputID source, int note, int vel, int channel,
               bool allowSustain = true, int releaseMs = 0,
               PolyphonyMode polyMode = PolyphonyMode::Poly,
-              int glideTimeMs = 50);
+              int glideTimeMs = 50, bool alwaysLatch = false);
   void noteOn(InputID source, const std::vector<int> &notes,
               const std::vector<int> &velocities, int channel, int strumSpeedMs,
               bool allowSustain = true, int releaseMs = 0,
@@ -77,6 +77,7 @@ private:
     int midiChannel;
     InputID source;
     bool allowSustain;
+    bool alwaysLatch = false; // If true, latch on release (ignores global latch)
     VoiceState state;
     int releaseMs = 0; // Zone release envelope; 0 = instant NoteOff
     PolyphonyMode polyphonyMode = PolyphonyMode::Poly; // Polyphony mode for this voice (Phase 26.3)

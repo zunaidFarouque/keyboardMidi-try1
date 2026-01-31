@@ -3,9 +3,9 @@
 #include <windows.h>
 
 namespace {
-const std::array<ActionType, 5> kMappingTypeOrder = {
-    ActionType::Note, ActionType::Expression, ActionType::Command, ActionType::Macro};
-const char* kMappingTypeNames[] = {"Note", "Expression", "Command", "Macro"};
+const std::array<ActionType, 3> kMappingTypeOrder = {
+    ActionType::Note, ActionType::Expression, ActionType::Command};
+const char* kMappingTypeNames[] = {"Note", "Expression", "Command"};
 } // namespace
 
 void SettingsPanel::initialize() {

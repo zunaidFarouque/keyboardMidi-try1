@@ -478,16 +478,22 @@ void compileMappingsForLayer(VisualGrid &vGrid, AudioGrid &aGrid,
 
     MidiAction action = buildMidiActionFromMapping(mapping);
 
-    // Phase 55.4: Note options (followTranspose, sendNoteOff)
+    // Phase 55.4: Note options (followTranspose, releaseBehavior)
     if (action.type == ActionType::Note) {
       bool followTranspose =
-          (bool)mapping.getProperty("followTranspose", false);
+          (bool)mapping.getProperty("followTranspose", true);
       if (followTranspose) {
         int chrom = zoneMgr.getGlobalChromaticTranspose();
         action.data1 = juce::jlimit(0, 127, action.data1 + chrom);
       }
-      bool sendNoteOff = (bool)mapping.getProperty("sendNoteOff", true);
-      action.isOneShot = !sendNoteOff;
+      juce::String rbStr =
+          mapping.getProperty("releaseBehavior", "Send Note Off").toString().trim();
+      if (rbStr.equalsIgnoreCase("Nothing"))
+        action.releaseBehavior = NoteReleaseBehavior::Nothing;
+      else if (rbStr.equalsIgnoreCase("Always Latch"))
+        action.releaseBehavior = NoteReleaseBehavior::AlwaysLatch;
+      else
+        action.releaseBehavior = NoteReleaseBehavior::SendNoteOff;
     }
 
     // Phase 56.1: Expression (unified CC + Envelope)
@@ -511,7 +517,6 @@ void compileMappingsForLayer(VisualGrid &vGrid, AudioGrid &aGrid,
         action.adsrSettings.decayMs = 0;
         action.adsrSettings.sustainLevel = 1.0f;
         action.adsrSettings.releaseMs = 0;
-        action.isOneShot = false;
       } else {
         action.adsrSettings.attackMs =
             (int)mapping.getProperty("adsrAttack", 10);

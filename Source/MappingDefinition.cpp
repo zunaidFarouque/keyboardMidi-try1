@@ -8,8 +8,6 @@ juce::String MappingDefinition::getTypeName(ActionType type) {
     return "Expression";
   case ActionType::Command:
     return "Command";
-  case ActionType::Macro:
-    return "Macro";
   default:
     return "Unknown";
   }
@@ -63,8 +61,9 @@ InspectorSchema MappingDefinition::getSchema(const juce::ValueTree &mapping) {
   typeCtrl.options[1] = "Note";
   typeCtrl.options[2] = "Expression";
   typeCtrl.options[3] = "Command";
-  typeCtrl.options[4] = "Macro";
   schema.push_back(typeCtrl);
+
+  schema.push_back(createSeparator("", juce::Justification::centred));
 
   // Step 2: Branch on current type
   juce::String typeStr =
@@ -119,22 +118,23 @@ InspectorSchema MappingDefinition::getSchema(const juce::ValueTree &mapping) {
     schema.push_back(createSeparator("Note Settings",
                                     juce::Justification::centredLeft));
 
-    // Follow Global Transpose (default false = do not follow)
+    // Release Behavior: Send Note Off | Nothing | Always Latch
+    InspectorControl releaseBehavior;
+    releaseBehavior.propertyId = "releaseBehavior";
+    releaseBehavior.label = "Release Behaviour";
+    releaseBehavior.controlType = InspectorControl::Type::ComboBox;
+    releaseBehavior.options[1] = "Send Note Off";
+    releaseBehavior.options[2] = "Nothing";
+    releaseBehavior.options[3] = "Always Latch";
+    schema.push_back(releaseBehavior);
+
+    // Follow Global Transpose (default on)
     InspectorControl followTranspose;
     followTranspose.propertyId = "followTranspose";
     followTranspose.label = "Follow Global Transpose";
     followTranspose.controlType = InspectorControl::Type::Toggle;
     followTranspose.widthWeight = 0.5f;
     schema.push_back(followTranspose);
-
-    // Send Note Off on Release (default true) – same line as above
-    InspectorControl sendNoteOff;
-    sendNoteOff.propertyId = "sendNoteOff";
-    sendNoteOff.label = "Send Note Off on Release";
-    sendNoteOff.controlType = InspectorControl::Type::Toggle;
-    sendNoteOff.sameLine = true;
-    sendNoteOff.widthWeight = 0.5f;
-    schema.push_back(sendNoteOff);
   } else if (typeStr.equalsIgnoreCase("Expression")) {
     juce::String adsrTargetStr =
         mapping.getProperty("adsrTarget", "CC").toString().trim();
@@ -254,15 +254,10 @@ InspectorSchema MappingDefinition::getSchema(const juce::ValueTree &mapping) {
     schema.push_back(data1);
 
     int cmdId = (int)mapping.getProperty("data1", 0);
-    const int layerMomentary = static_cast<int>(OmniKey::CommandID::LayerMomentary);
+    const int layerMomentary =
+        static_cast<int>(OmniKey::CommandID::LayerMomentary);
     const int layerToggle = static_cast<int>(OmniKey::CommandID::LayerToggle);
     const int layerSolo = static_cast<int>(OmniKey::CommandID::LayerSolo);
-    const int globalPitchUp = static_cast<int>(OmniKey::CommandID::GlobalPitchUp);
-    const int globalPitchDown = static_cast<int>(OmniKey::CommandID::GlobalPitchDown);
-    const int globalModeUp = static_cast<int>(OmniKey::CommandID::GlobalModeUp);
-    const int globalModeDown = static_cast<int>(OmniKey::CommandID::GlobalModeDown);
-    const int panic = static_cast<int>(OmniKey::CommandID::Panic);
-    const int panicLatch = static_cast<int>(OmniKey::CommandID::PanicLatch);
 
     if (cmdId == layerMomentary || cmdId == layerToggle || cmdId == layerSolo) {
       InspectorControl data2;
@@ -270,17 +265,6 @@ InspectorSchema MappingDefinition::getSchema(const juce::ValueTree &mapping) {
       data2.label = "Target Layer";
       data2.controlType = InspectorControl::Type::ComboBox;
       data2.options = getLayerOptions();
-      schema.push_back(data2);
-    } else if (cmdId != globalPitchUp && cmdId != globalPitchDown &&
-               cmdId != globalModeUp && cmdId != globalModeDown &&
-               cmdId != panic && cmdId != panicLatch) {
-      InspectorControl data2;
-      data2.propertyId = "data2";
-      data2.label = "Data2";
-      data2.controlType = InspectorControl::Type::Slider;
-      data2.min = 0.0;
-      data2.max = 127.0;
-      data2.step = 1.0;
       schema.push_back(data2);
     }
   }

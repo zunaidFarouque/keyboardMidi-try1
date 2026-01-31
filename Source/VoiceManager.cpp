@@ -40,7 +40,8 @@ void VoiceManager::addVoiceFromStrum(InputID source, int note, int channel,
                                      bool allowSustain) {
   juce::ScopedLock lock(voicesLock);
   voices.push_back(
-      {note, channel, source, allowSustain, VoiceState::Playing, 0, PolyphonyMode::Poly});
+      {note, channel, source, allowSustain, false, VoiceState::Playing, 0,
+       PolyphonyMode::Poly});
 }
 
 void VoiceManager::rebuildPbLookup() {
@@ -131,7 +132,8 @@ void VoiceManager::changeListenerCallback(juce::ChangeBroadcaster *source) {
 
 void VoiceManager::noteOn(InputID source, int note, int vel, int channel,
                           bool allowSustain, int releaseMs,
-                          PolyphonyMode polyMode, int glideSpeed) {
+                          PolyphonyMode polyMode, int glideSpeed,
+                          bool alwaysLatch) {
   {
     juce::ScopedLock rl(releasesLock);
     releaseQueue.erase(std::remove_if(releaseQueue.begin(), releaseQueue.end(),
@@ -219,28 +221,29 @@ void VoiceManager::noteOn(InputID source, int note, int vel, int channel,
 
   juce::ScopedLock lock(voicesLock);
 
-  if (globalLatchActive) {
-    auto it =
-        std::find_if(voices.begin(), voices.end(), [&](const ActiveVoice &v) {
-          return v.source == source && (v.state == VoiceState::Playing ||
-                                        v.state == VoiceState::Latched);
-        });
-    if (it != voices.end()) {
-      for (auto i = voices.begin(); i != voices.end();) {
-        if (i->source.deviceHandle == source.deviceHandle &&
-            i->source.keyCode == source.keyCode) {
-          midiEngine.sendNoteOff(i->midiChannel, i->noteNumber);
-          i = voices.erase(i);
-        } else
-          ++i;
-      }
-      return;
+  // Second press of same key: unlatch (send note off) if we have a latched
+  // voice from this source (global latch or always-latch)
+  auto it =
+      std::find_if(voices.begin(), voices.end(), [&](const ActiveVoice &v) {
+        return v.source == source && (v.state == VoiceState::Playing ||
+                                      v.state == VoiceState::Latched);
+      });
+  if (it != voices.end()) {
+    for (auto i = voices.begin(); i != voices.end();) {
+      if (i->source.deviceHandle == source.deviceHandle &&
+          i->source.keyCode == source.keyCode) {
+        midiEngine.sendNoteOff(i->midiChannel, i->noteNumber);
+        i = voices.erase(i);
+      } else
+        ++i;
     }
+    return;
   }
 
   midiEngine.sendNoteOn(channel, note, static_cast<float>(vel) / 127.0f);
   voices.push_back(
-      {note, channel, source, allowSustain, VoiceState::Playing, releaseMs, PolyphonyMode::Poly});
+      {note, channel, source, allowSustain, alwaysLatch, VoiceState::Playing,
+       releaseMs, PolyphonyMode::Poly});
 }
 
 void VoiceManager::noteOn(InputID source, const std::vector<int> &notes,
@@ -294,7 +297,7 @@ void VoiceManager::noteOn(InputID source, const std::vector<int> &notes,
       int vel = (i < finalVelocities.size()) ? finalVelocities[i] : 100;
       int note = notes[i];
       midiEngine.sendNoteOn(channel, note, static_cast<float>(vel) / 127.0f);
-      voices.push_back({note, channel, source, allowSustain,
+      voices.push_back({note, channel, source, allowSustain, false,
                         VoiceState::Playing, releaseMs, polyMode});
     }
   } else {
@@ -351,7 +354,10 @@ void VoiceManager::handleKeyUp(InputID source) {
       releasedNote = it->noteNumber;
       releasedPolyMode = it->polyphonyMode; // Store polyphony mode (Phase 26.3)
 
-      if (globalLatchActive) {
+      if (it->alwaysLatch) {
+        it->state = VoiceState::Latched;
+        ++it;
+      } else if (globalLatchActive) {
         it->state = VoiceState::Latched;
         ++it;
       } else if (globalSustainActive && it->allowSustain) {
@@ -597,7 +603,7 @@ void VoiceManager::handleKeyUp(InputID source) {
             midiEngine.sendNoteOn(releasedChannel, targetNote, 100.0f / 127.0f);
             juce::ScopedLock lock(voicesLock);
             voices.push_back({targetNote, releasedChannel, targetSource,
-                              true, VoiceState::Playing, 0, polyMode});
+                              true, false, VoiceState::Playing, 0, polyMode});
             // Reset PB to center for the new note
             portamentoEngine.stop();
             midiEngine.sendPitchBend(releasedChannel, 8192);
@@ -633,7 +639,7 @@ void VoiceManager::handleKeyUp(InputID source) {
               // Trigger target note
               midiEngine.sendNoteOn(releasedChannel, targetNote, 100.0f / 127.0f);
               voices.push_back({targetNote, releasedChannel, targetSource,
-                                true, VoiceState::Playing, 0, polyMode});
+                                true, false, VoiceState::Playing, 0, polyMode});
               // Reset PB to center
               portamentoEngine.stop();
               midiEngine.sendPitchBend(releasedChannel, 8192);

@@ -12,9 +12,9 @@ public:
   // Opens the device selected by the user (by index from the list above)
   void setOutputDevice(int deviceIndex);
 
-  // MIDI Action methods
-  void sendNoteOn(int channel, int note, float velocity);
-  void sendNoteOff(int channel, int note);
+  // MIDI Action methods (virtual for test overrides)
+  virtual void sendNoteOn(int channel, int note, float velocity);
+  virtual void sendNoteOff(int channel, int note);
   void sendCC(int channel, int controller, int value);
   void sendPitchBend(int channel, int value); // Value: 0-16383 (center = 8192)
 

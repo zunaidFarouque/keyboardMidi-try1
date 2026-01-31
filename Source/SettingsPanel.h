@@ -39,7 +39,7 @@ private:
   juce::ToggleButton studioModeToggle; // Studio Mode (Multi-Device Support)
 
   juce::GroupComponent mappingColorsGroup;
-  std::array<juce::TextButton, 5> typeColorButtons;
+  std::array<juce::TextButton, 3> typeColorButtons;
   
   void updateToggleKeyButtonText();
   void refreshTypeColorButtons();

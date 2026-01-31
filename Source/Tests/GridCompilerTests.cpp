@@ -253,6 +253,36 @@ TEST_F(GridCompilerTest, LayerCommandsAreNotInherited) {
   EXPECT_EQ((*l1)[10].state, VisualState::Empty);
 }
 
+// Phase 53.5: LayerToggle must not be inherited (same filter as LayerMomentary)
+TEST_F(GridCompilerTest, LayerToggleNotInherited) {
+  addCommandMapping(0, 11, 0,
+                    static_cast<int>(OmniKey::CommandID::LayerToggle), 1);
+
+  auto context =
+      GridCompiler::compile(presetMgr, deviceMgr, zoneMgr, settingsMgr);
+
+  auto l0 = context->visualLookup[0][0];
+  EXPECT_EQ((*l0)[11].state, VisualState::Active);
+
+  auto l1 = context->visualLookup[0][1];
+  EXPECT_EQ((*l1)[11].state, VisualState::Empty);
+}
+
+// Phase 53.5: LayerSolo must not be inherited (same filter as LayerMomentary)
+TEST_F(GridCompilerTest, LayerSoloNotInherited) {
+  addCommandMapping(0, 12, 0,
+                    static_cast<int>(OmniKey::CommandID::LayerSolo), 2);
+
+  auto context =
+      GridCompiler::compile(presetMgr, deviceMgr, zoneMgr, settingsMgr);
+
+  auto l0 = context->visualLookup[0][0];
+  EXPECT_EQ((*l0)[12].state, VisualState::Active);
+
+  auto l1 = context->visualLookup[0][1];
+  EXPECT_EQ((*l1)[12].state, VisualState::Empty);
+}
+
 // Phase 53.4: Device view vertical inheritance – Layer 0 mapping on device
 // should appear as Inherited on Layer 1 of the same device view.
 TEST_F(GridCompilerTest, DeviceVerticalInheritanceIsDimmed) {
@@ -280,4 +310,120 @@ TEST_F(GridCompilerTest, DeviceBaseOverridesGlobalLayer) {
 
   // Device Layer 0 wins over Global Layer 1; from Layer 0 -> Inherited
   EXPECT_EQ((*deviceGrid)[81].state, VisualState::Inherited);
+}
+
+// Phase 56.1: Expression with useCustomEnvelope=false -> Fast Path (0,0,1,0)
+TEST_F(GridCompilerTest, ExpressionSimpleCcProducesFastPathAdsr) {
+  auto mappings = presetMgr.getMappingsListForLayer(0);
+  juce::ValueTree m("Mapping");
+  m.setProperty("inputKey", 50, nullptr);
+  m.setProperty("deviceHash",
+                juce::String::toHexString((juce::int64)0).toUpperCase(),
+                nullptr);
+  m.setProperty("type", "Expression", nullptr);
+  m.setProperty("useCustomEnvelope", false, nullptr);
+  m.setProperty("adsrTarget", "CC", nullptr);
+  m.setProperty("data1", 7, nullptr);  // CC number
+  m.setProperty("data2", 64, nullptr); // Peak value
+  m.setProperty("layerID", 0, nullptr);
+  mappings.addChild(m, -1, nullptr);
+
+  auto context =
+      GridCompiler::compile(presetMgr, deviceMgr, zoneMgr, settingsMgr);
+  auto audioGrid = context->globalGrids[0];
+  const auto &slot = (*audioGrid)[50];
+
+  ASSERT_TRUE(slot.isActive);
+  EXPECT_EQ(slot.action.type, ActionType::Expression);
+  EXPECT_EQ(slot.action.adsrSettings.ccNumber, 7);
+  EXPECT_EQ(slot.action.data2, 64);
+  EXPECT_EQ(slot.action.adsrSettings.attackMs, 0);
+  EXPECT_EQ(slot.action.adsrSettings.decayMs, 0);
+  EXPECT_EQ(slot.action.adsrSettings.releaseMs, 0);
+  EXPECT_FLOAT_EQ(slot.action.adsrSettings.sustainLevel, 1.0f);
+}
+
+// Phase 56.1: Expression with useCustomEnvelope=true -> reads ADSR from ValueTree
+TEST_F(GridCompilerTest, ExpressionCustomEnvelopeReadsAdsr) {
+  auto mappings = presetMgr.getMappingsListForLayer(0);
+  juce::ValueTree m("Mapping");
+  m.setProperty("inputKey", 51, nullptr);
+  m.setProperty("deviceHash",
+                juce::String::toHexString((juce::int64)0).toUpperCase(),
+                nullptr);
+  m.setProperty("type", "Expression", nullptr);
+  m.setProperty("useCustomEnvelope", true, nullptr);
+  m.setProperty("adsrTarget", "CC", nullptr);
+  m.setProperty("adsrAttack", 100, nullptr);
+  m.setProperty("adsrDecay", 50, nullptr);
+  m.setProperty("adsrSustain", 0.6f, nullptr);
+  m.setProperty("adsrRelease", 200, nullptr);
+  m.setProperty("data1", 1, nullptr);
+  m.setProperty("data2", 127, nullptr);
+  m.setProperty("layerID", 0, nullptr);
+  mappings.addChild(m, -1, nullptr);
+
+  auto context =
+      GridCompiler::compile(presetMgr, deviceMgr, zoneMgr, settingsMgr);
+  auto audioGrid = context->globalGrids[0];
+  const auto &slot = (*audioGrid)[51];
+
+  ASSERT_TRUE(slot.isActive);
+  EXPECT_EQ(slot.action.type, ActionType::Expression);
+  EXPECT_EQ(slot.action.adsrSettings.attackMs, 100);
+  EXPECT_EQ(slot.action.adsrSettings.decayMs, 50);
+  EXPECT_FLOAT_EQ(slot.action.adsrSettings.sustainLevel, 0.6f);
+  EXPECT_EQ(slot.action.adsrSettings.releaseMs, 200);
+}
+
+// Phase 56.1: Expression with adsrTarget=PitchBend -> label "Expr: PB"
+TEST_F(GridCompilerTest, ExpressionPitchBendCompilesCorrectly) {
+  auto mappings = presetMgr.getMappingsListForLayer(0);
+  juce::ValueTree m("Mapping");
+  m.setProperty("inputKey", 52, nullptr);
+  m.setProperty("deviceHash",
+                juce::String::toHexString((juce::int64)0).toUpperCase(),
+                nullptr);
+  m.setProperty("type", "Expression", nullptr);
+  m.setProperty("useCustomEnvelope", false, nullptr);
+  m.setProperty("adsrTarget", "PitchBend", nullptr);
+  m.setProperty("data2", 16383, nullptr);
+  m.setProperty("layerID", 0, nullptr);
+  mappings.addChild(m, -1, nullptr);
+
+  auto context =
+      GridCompiler::compile(presetMgr, deviceMgr, zoneMgr, settingsMgr);
+  auto l0 = context->visualLookup[0][0];
+  EXPECT_EQ((*l0)[52].label, "Expr: PB");
+
+  auto audioGrid = context->globalGrids[0];
+  const auto &slot = (*audioGrid)[52];
+  EXPECT_EQ(slot.action.adsrSettings.target, AdsrTarget::PitchBend);
+}
+
+TEST_F(GridCompilerTest, NoteReleaseBehaviorCompiles) {
+  auto addAndCheck = [this](const char *rbStr, NoteReleaseBehavior expected) {
+    presetMgr.getMappingsListForLayer(0).removeAllChildren(nullptr);
+    auto mappings = presetMgr.getMappingsListForLayer(0);
+    juce::ValueTree m("Mapping");
+    m.setProperty("inputKey", 50, nullptr);
+    m.setProperty("deviceHash",
+                  juce::String::toHexString((juce::int64)0).toUpperCase(),
+                  nullptr);
+    m.setProperty("type", "Note", nullptr);
+    m.setProperty("data1", 60, nullptr);
+    m.setProperty("data2", 127, nullptr);
+    m.setProperty("releaseBehavior", juce::String(rbStr), nullptr);
+    m.setProperty("layerID", 0, nullptr);
+    mappings.addChild(m, -1, nullptr);
+
+    auto ctx =
+        GridCompiler::compile(presetMgr, deviceMgr, zoneMgr, settingsMgr);
+    auto grid = ctx->globalGrids[0];
+    EXPECT_EQ((*grid)[50].action.releaseBehavior, expected)
+        << "releaseBehavior \"" << rbStr << "\"";
+  };
+  addAndCheck("Send Note Off", NoteReleaseBehavior::SendNoteOff);
+  addAndCheck("Nothing", NoteReleaseBehavior::Nothing);
+  addAndCheck("Always Latch", NoteReleaseBehavior::AlwaysLatch);
 }

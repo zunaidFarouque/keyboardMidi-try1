@@ -16,6 +16,13 @@ enum class ActionType {
   Macro       // Future: Custom macro actions
 };
 
+// Note release behavior for manual Note mappings
+enum class NoteReleaseBehavior {
+  SendNoteOff,  // Send Note Off on key release (default)
+  Nothing,      // Do nothing on release (note keeps playing)
+  AlwaysLatch   // Always latch on release (ignores global latch mode)
+};
+
 // Polyphony modes (Phase 26)
 enum class PolyphonyMode {
   Poly,  // Polyphonic (multiple notes simultaneously)
@@ -95,8 +102,8 @@ struct MidiAction {
   std::vector<int> smartBendLookup; // Pre-compiled PB lookup table (128
                                     // entries) for SmartScaleBend
 
-  // Phase 55.4: Note options
-  bool isOneShot = false; // If true, do not send NoteOff on key release
+  // Phase 55.4: Note options (releaseBehavior replaces legacy isOneShot)
+  NoteReleaseBehavior releaseBehavior = NoteReleaseBehavior::SendNoteOff;
 
   // Phase 55.4: CC options
   bool sendReleaseValue = false; // If true, send a specific value on key release
