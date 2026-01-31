@@ -2,7 +2,6 @@
 #include "ScaleLibrary.h"
 #include "Zone.h"
 
-
 ZoneManager::ZoneManager(ScaleLibrary &scaleLib) : scaleLibrary(scaleLib) {
   layerLookupTables.resize(9);
 }

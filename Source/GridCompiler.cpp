@@ -122,11 +122,11 @@ juce::String getCommandLabel(int cmdId) {
   case CommandID::Panic:
     return "Panic";
   case CommandID::PanicLatch:
-    return "Panic (Latch)";  // Backward compat
-  case CommandID::GlobalPitchUp:
-    return "Global +1";
+    return "Panic (Latch)"; // Backward compat
+  case CommandID::Transpose:
+    return "Transpose";
   case CommandID::GlobalPitchDown:
-    return "Global -1";
+    return "Transpose (legacy)";
   case CommandID::GlobalModeUp:
     return "Mode +1";
   case CommandID::GlobalModeDown:
@@ -159,7 +159,8 @@ juce::String makeLabelForAction(const MidiAction &action) {
   }
   case ActionType::Command: {
     juce::String base = getCommandLabel(action.data1);
-    if (action.data1 == static_cast<int>(OmniKey::CommandID::Panic) && action.data2 == 1)
+    if (action.data1 == static_cast<int>(OmniKey::CommandID::Panic) &&
+        action.data2 == 1)
       return "Panic (Latch)";
     return base;
   }
@@ -484,14 +485,15 @@ void compileMappingsForLayer(VisualGrid &vGrid, AudioGrid &aGrid,
 
     // Phase 55.4: Note options (followTranspose, releaseBehavior)
     if (action.type == ActionType::Note) {
-      bool followTranspose =
-          (bool)mapping.getProperty("followTranspose", true);
+      bool followTranspose = (bool)mapping.getProperty("followTranspose", true);
       if (followTranspose) {
         int chrom = zoneMgr.getGlobalChromaticTranspose();
         action.data1 = juce::jlimit(0, 127, action.data1 + chrom);
       }
       juce::String rbStr =
-          mapping.getProperty("releaseBehavior", "Send Note Off").toString().trim();
+          mapping.getProperty("releaseBehavior", "Send Note Off")
+              .toString()
+              .trim();
       if (rbStr.equalsIgnoreCase("Nothing"))
         action.releaseBehavior = NoteReleaseBehavior::Nothing;
       else if (rbStr.equalsIgnoreCase("Always Latch"))
@@ -524,8 +526,7 @@ void compileMappingsForLayer(VisualGrid &vGrid, AudioGrid &aGrid,
       } else {
         action.adsrSettings.attackMs =
             (int)mapping.getProperty("adsrAttack", 10);
-        action.adsrSettings.decayMs =
-            (int)mapping.getProperty("adsrDecay", 10);
+        action.adsrSettings.decayMs = (int)mapping.getProperty("adsrDecay", 10);
         action.adsrSettings.sustainLevel =
             (float)mapping.getProperty("adsrSustain", 0.7);
         action.adsrSettings.releaseMs =
@@ -546,6 +547,24 @@ void compileMappingsForLayer(VisualGrid &vGrid, AudioGrid &aGrid,
         action.data1 == static_cast<int>(OmniKey::CommandID::LatchToggle)) {
       action.releaseLatchedOnLatchToggleOff =
           (bool)mapping.getProperty("releaseLatchedOnToggleOff", true);
+    }
+
+    // Transpose command: mode, modify, semitones (for set)
+    if (action.type == ActionType::Command &&
+        (action.data1 == static_cast<int>(OmniKey::CommandID::Transpose) ||
+         action.data1 == static_cast<int>(OmniKey::CommandID::GlobalPitchDown))) {
+      juce::String modeStr =
+          mapping.getProperty("transposeMode", "Global").toString();
+      action.transposeLocal = modeStr.equalsIgnoreCase("Local");
+      int modify = (int)mapping.getProperty("transposeModify", 0);
+      if (action.data1 == static_cast<int>(OmniKey::CommandID::GlobalPitchDown)) {
+        modify = 1; // Legacy: down 1 semitone
+      }
+      action.transposeModify = juce::jlimit(0, 4, modify);
+      action.transposeSemitones =
+          (int)mapping.getProperty("transposeSemitones", 0);
+      action.transposeSemitones =
+          juce::jlimit(-48, 48, action.transposeSemitones);
     }
 
     juce::Colour color = getColorForType(action.type, settingsMgr);

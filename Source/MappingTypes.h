@@ -40,8 +40,8 @@ enum class CommandID : int {
   LatchToggle = 3,      // Global Latch Mode
   Panic = 4,            // All Notes Off
   PanicLatch = 5,       // Kill only Latched notes
-  GlobalPitchUp = 6,    // Chromatic +1
-  GlobalPitchDown = 7,  // Chromatic -1
+  Transpose = 6,        // Chromatic transpose (mode, modify, semitones)
+  GlobalPitchDown = 7,  // Legacy: Chromatic -1 (backward compat)
   GlobalModeUp = 8,     // Degree +1
   GlobalModeDown = 9,   // Degree -1
   LayerMomentary = 10,  // Press=layer on, Release=layer off (data2 = layer ID)
@@ -111,6 +111,11 @@ struct MidiAction {
 
   // Latch Toggle: when true, call panicLatch() when toggling latch off
   bool releaseLatchedOnLatchToggleOff = true;
+
+  // Transpose command: mode (false=global, true=local), modify type, semitones for "set"
+  bool transposeLocal = false;   // true = local (affected zones; placeholder)
+  int transposeModify = 0;       // 0=up1, 1=down1, 2=up12, 3=down12, 4=set
+  int transposeSemitones = 0;    // for set: -12..+12 (or wider)
 };
 
 // Represents a unique input source (device + key)

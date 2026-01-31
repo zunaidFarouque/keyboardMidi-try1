@@ -94,8 +94,9 @@ static bool hasSustainInverseMapped(PresetManager &presetMgr) {
     for (int i = 0; i < mappings.getNumChildren(); ++i) {
       auto m = mappings.getChild(i);
       if (m.isValid() &&
-          m.getProperty("type", juce::String()).toString().equalsIgnoreCase(
-              "Command") &&
+          m.getProperty("type", juce::String())
+              .toString()
+              .equalsIgnoreCase("Command") &&
           static_cast<int>(m.getProperty("data1", -1)) == sustainInverse)
         return true;
     }
@@ -285,7 +286,8 @@ void InputProcessor::valueTreePropertyChanged(
     }
   }
 
-  // Sustain cleanup: when a Command mapping's type or data1 changes, apply default
+  // Sustain cleanup: when a Command mapping's type or data1 changes, apply
+  // default
   if (treeWhosePropertyHasChanged.hasType("Mapping") &&
       (property == juce::Identifier("type") ||
        (property == juce::Identifier("data1") &&
@@ -458,10 +460,11 @@ void InputProcessor::processEvent(InputID input, bool isDown) {
           if (midiAction.sendReleaseValue) {
             if (midiAction.adsrSettings.target == AdsrTarget::CC)
               voiceManager.sendCC(midiAction.channel,
-                                 midiAction.adsrSettings.ccNumber,
-                                 midiAction.releaseValue);
+                                  midiAction.adsrSettings.ccNumber,
+                                  midiAction.releaseValue);
             else if (midiAction.adsrSettings.target == AdsrTarget::PitchBend ||
-                     midiAction.adsrSettings.target == AdsrTarget::SmartScaleBend)
+                     midiAction.adsrSettings.target ==
+                         AdsrTarget::SmartScaleBend)
               voiceManager.sendPitchBend(midiAction.channel, 8192);
           }
           return;
@@ -552,24 +555,31 @@ void InputProcessor::processEvent(InputID input, bool isDown) {
           if (wasActive && !voiceManager.isLatchActive() &&
               midiAction.releaseLatchedOnLatchToggleOff)
             voiceManager.panicLatch();
-        }
-        else if (cmd == static_cast<int>(OmniKey::CommandID::Panic)) {
+        } else if (cmd == static_cast<int>(OmniKey::CommandID::Panic)) {
           if (midiAction.data2 == 1)
             voiceManager.panicLatch();
           else
             voiceManager.panic();
         } else if (cmd == static_cast<int>(OmniKey::CommandID::PanicLatch)) {
-          voiceManager.panicLatch();  // Backward compat: old Panic Latch mapping
-        }
-        else if (cmd == static_cast<int>(OmniKey::CommandID::GlobalPitchUp)) {
+          voiceManager.panicLatch(); // Backward compat: old Panic Latch mapping
+        } else if (cmd == static_cast<int>(OmniKey::CommandID::Transpose) ||
+                   cmd == static_cast<int>(OmniKey::CommandID::GlobalPitchDown)) {
           int chrom = zoneManager.getGlobalChromaticTranspose();
           int deg = zoneManager.getGlobalDegreeTranspose();
-          zoneManager.setGlobalTranspose(chrom + 1, deg);
-        } else if (cmd ==
-                   static_cast<int>(OmniKey::CommandID::GlobalPitchDown)) {
-          int chrom = zoneManager.getGlobalChromaticTranspose();
-          int deg = zoneManager.getGlobalDegreeTranspose();
-          zoneManager.setGlobalTranspose(chrom - 1, deg);
+          int modify = midiAction.transposeModify;
+          if (cmd == static_cast<int>(OmniKey::CommandID::GlobalPitchDown))
+            modify = 1; // Legacy
+          switch (modify) {
+          case 0: chrom += 1; break;   // Up 1 semitone
+          case 1: chrom -= 1; break;   // Down 1 semitone
+          case 2: chrom += 12; break; // Up 1 octave
+          case 3: chrom -= 12; break;  // Down 1 octave
+          case 4: chrom = midiAction.transposeSemitones; break; // Set
+          default: break;
+          }
+          chrom = juce::jlimit(-48, 48, chrom);
+          zoneManager.setGlobalTranspose(chrom, deg);
+          // transposeLocal: placeholder – local/zone selector not implemented yet
         } else if (cmd == static_cast<int>(OmniKey::CommandID::GlobalModeUp)) {
           int chrom = zoneManager.getGlobalChromaticTranspose();
           int deg = zoneManager.getGlobalDegreeTranspose();
@@ -616,8 +626,8 @@ void InputProcessor::processEvent(InputID input, bool isDown) {
             // Manual mapping: simple playback
             int vel =
                 calculateVelocity(midiAction.data2, midiAction.velocityRandom);
-            bool alwaysLatch =
-                (midiAction.releaseBehavior == NoteReleaseBehavior::AlwaysLatch);
+            bool alwaysLatch = (midiAction.releaseBehavior ==
+                                NoteReleaseBehavior::AlwaysLatch);
             voiceManager.noteOn(input, midiAction.data1, vel,
                                 midiAction.channel, true, 0,
                                 PolyphonyMode::Poly, 50, alwaysLatch);

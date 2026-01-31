@@ -315,7 +315,8 @@ TEST_F(InputProcessorTest, LayerSoloClearsOtherLayers) {
   int keyToggle2 = 11;
   int keySolo3 = 12;
 
-  // Layer 0: Key 10 -> Layer Toggle 1, Key 11 -> Layer Toggle 2, Key 12 -> Layer Solo 3
+  // Layer 0: Key 10 -> Layer Toggle 1, Key 11 -> Layer Toggle 2, Key 12 ->
+  // Layer Solo 3
   {
     auto mappings = presetMgr.getMappingsListForLayer(0);
     juce::ValueTree m1("Mapping");
@@ -497,7 +498,7 @@ protected:
   MockMidiEngine mockMidi;
   VoiceManager voiceMgr{mockMidi, settingsMgr};
   InputProcessor proc{voiceMgr, presetMgr, deviceMgr,
-                      scaleLib, mockMidi, settingsMgr};
+                      scaleLib, mockMidi,  settingsMgr};
 
   void SetUp() override {
     presetMgr.getLayersList().removeAllChildren(nullptr);
@@ -530,7 +531,7 @@ TEST_F(ReleaseBehaviorTest, SendNoteOff_PressRelease_SendsNoteOnThenNoteOff) {
 
   InputID id{0, 20};
 
-  proc.processEvent(id, true);  // Press
+  proc.processEvent(id, true); // Press
   ASSERT_EQ(mockMidi.events.size(), 1u);
   EXPECT_TRUE(mockMidi.events[0].isNoteOn);
   EXPECT_EQ(mockMidi.events[0].channel, 1);
@@ -549,7 +550,7 @@ TEST_F(ReleaseBehaviorTest, Nothing_PressRelease_NoNoteOffOnRelease) {
 
   InputID id{0, 20};
 
-  proc.processEvent(id, true);  // Press
+  proc.processEvent(id, true); // Press
   ASSERT_EQ(mockMidi.events.size(), 1u);
   EXPECT_TRUE(mockMidi.events[0].isNoteOn);
 
@@ -557,20 +558,22 @@ TEST_F(ReleaseBehaviorTest, Nothing_PressRelease_NoNoteOffOnRelease) {
   EXPECT_EQ(mockMidi.events.size(), 1u) << "No note off should be sent";
 }
 
-TEST_F(ReleaseBehaviorTest, AlwaysLatch_PressReleasePressRelease_UnlatchesOnSecondPress) {
+TEST_F(ReleaseBehaviorTest,
+       AlwaysLatch_PressReleasePressRelease_UnlatchesOnSecondPress) {
   addNoteMapping(20, 60, "Always Latch");
   proc.forceRebuildMappings();
 
   InputID id{0, 20};
 
-  proc.processEvent(id, true);  // First press = note on
+  proc.processEvent(id, true); // First press = note on
   ASSERT_EQ(mockMidi.events.size(), 1u);
   EXPECT_TRUE(mockMidi.events[0].isNoteOn);
 
-  proc.processEvent(id, false); // First release = nothing (voice becomes Latched)
+  proc.processEvent(id,
+                    false); // First release = nothing (voice becomes Latched)
   EXPECT_EQ(mockMidi.events.size(), 1u) << "No note off on first release";
 
-  proc.processEvent(id, true);  // Second press = note off (unlatch)
+  proc.processEvent(id, true); // Second press = note off (unlatch)
   ASSERT_EQ(mockMidi.events.size(), 2u);
   EXPECT_FALSE(mockMidi.events[1].isNoteOn);
   EXPECT_EQ(mockMidi.events[1].note, 60);
@@ -579,7 +582,8 @@ TEST_F(ReleaseBehaviorTest, AlwaysLatch_PressReleasePressRelease_UnlatchesOnSeco
   EXPECT_EQ(mockMidi.events.size(), 2u) << "No extra events on second release";
 }
 
-// Fixture for full Note type tests (channel, note, velocity, followTranspose, etc.)
+// Fixture for full Note type tests (channel, note, velocity, followTranspose,
+// etc.)
 class NoteTypeTest : public ::testing::Test {
 protected:
   PresetManager presetMgr;
@@ -589,7 +593,7 @@ protected:
   MockMidiEngine mockMidi;
   VoiceManager voiceMgr{mockMidi, settingsMgr};
   InputProcessor proc{voiceMgr, presetMgr, deviceMgr,
-                      scaleLib, mockMidi, settingsMgr};
+                      scaleLib, mockMidi,  settingsMgr};
 
   void SetUp() override {
     presetMgr.getLayersList().removeAllChildren(nullptr);
@@ -641,7 +645,7 @@ TEST_F(NoteTypeTest, VelocitySentCorrectly) {
 }
 
 TEST_F(NoteTypeTest, FollowTransposeAddsToNoteWhenEnabled) {
-  proc.getZoneManager().setGlobalTranspose(2, 0); // +2 semitones
+  proc.getZoneManager().setGlobalTranspose(2, 0);        // +2 semitones
   addNoteMapping(32, 1, 60, 127, "Send Note Off", true); // C4 + 2 = D4 (62)
   proc.forceRebuildMappings();
 
@@ -651,7 +655,7 @@ TEST_F(NoteTypeTest, FollowTransposeAddsToNoteWhenEnabled) {
 }
 
 TEST_F(NoteTypeTest, FollowTransposeIgnoredWhenDisabled) {
-  proc.getZoneManager().setGlobalTranspose(2, 0); // +2 semitones
+  proc.getZoneManager().setGlobalTranspose(2, 0);         // +2 semitones
   addNoteMapping(33, 1, 60, 127, "Send Note Off", false); // C4, no transpose
   proc.forceRebuildMappings();
 
@@ -661,7 +665,7 @@ TEST_F(NoteTypeTest, FollowTransposeIgnoredWhenDisabled) {
 }
 
 TEST_F(NoteTypeTest, AllParamsWorkTogether) {
-  proc.getZoneManager().setGlobalTranspose(1, 0); // +1 semitone
+  proc.getZoneManager().setGlobalTranspose(1, 0);          // +1 semitone
   addNoteMapping(34, 8, 83, 90, "Send Note Off", true, 0); // B4 + 1 = C5 (84)
   proc.forceRebuildMappings();
 
@@ -679,7 +683,8 @@ TEST_F(NoteTypeTest, AllParamsWorkTogether) {
   EXPECT_EQ(mockMidi.events[1].note, 84);
 }
 
-// Sustain Toggle: when turned off, send one NoteOff per unique note, not per voice
+// Sustain Toggle: when turned off, send one NoteOff per unique note, not per
+// voice
 TEST_F(NoteTypeTest, SustainToggleOffSendsOneNoteOffPerUniqueNote) {
   // Sustain Toggle on key 40, Note C4 (60) on key 20, Note D4 (62) on key 21
   {
@@ -696,15 +701,15 @@ TEST_F(NoteTypeTest, SustainToggleOffSendsOneNoteOffPerUniqueNote) {
       m.setProperty("layerID", 0, nullptr);
       mappings.addChild(m, -1, nullptr);
     };
-    addMapping(40, "Command", 1, 0);  // SustainToggle
-    addMapping(20, "Note", 60, 127);  // C4
-    addMapping(21, "Note", 62, 127);  // D4
+    addMapping(40, "Command", 1, 0); // SustainToggle
+    addMapping(20, "Note", 60, 127); // C4
+    addMapping(21, "Note", 62, 127); // D4
   }
   proc.forceRebuildMappings();
 
   InputID sustainKey{0, 40}, keyQ{0, 20}, keyW{0, 21};
 
-  proc.processEvent(sustainKey, true);  // Sustain ON
+  proc.processEvent(sustainKey, true); // Sustain ON
   proc.processEvent(sustainKey, false);
 
   // Q => C4 x4, W => D4 x2 (press+release each time; sustain holds notes)
@@ -720,10 +725,11 @@ TEST_F(NoteTypeTest, SustainToggleOffSendsOneNoteOffPerUniqueNote) {
   // 6 note-ons, 0 note-offs (sustain holds)
   int noteOnCount = 0;
   for (const auto &e : mockMidi.events)
-    if (e.isNoteOn) ++noteOnCount;
+    if (e.isNoteOn)
+      ++noteOnCount;
   EXPECT_EQ(noteOnCount, 6);
 
-  proc.processEvent(sustainKey, true);  // Sustain OFF
+  proc.processEvent(sustainKey, true); // Sustain OFF
   proc.processEvent(sustainKey, false);
 
   // Must send exactly 2 note-offs: one for C4, one for D4
@@ -741,7 +747,8 @@ TEST_F(NoteTypeTest, SustainToggleOffSendsOneNoteOffPerUniqueNote) {
   EXPECT_TRUE(noteOffs.count(62));
 }
 
-// Sustain Inverse: default sustain ON; switching to non-Inverse sets sustain OFF
+// Sustain Inverse: default sustain ON; switching to non-Inverse sets sustain
+// OFF
 TEST_F(NoteTypeTest, SustainInverseDefaultAndConfigChangeCleanup) {
   // Map key 40 to Sustain Inverse (data1=2)
   {
@@ -761,16 +768,16 @@ TEST_F(NoteTypeTest, SustainInverseDefaultAndConfigChangeCleanup) {
       << "With Sustain Inverse mapped, default sustain should be ON";
 
   // Change to Sustain Toggle (data1=1) - simulates configurator change
-  presetMgr.getMappingsListForLayer(0)
-      .getChild(0)
-      .setProperty("data1", 1, nullptr);
+  presetMgr.getMappingsListForLayer(0).getChild(0).setProperty("data1", 1,
+                                                               nullptr);
   // valueTreePropertyChanged fires and calls applySustainDefaultFromPreset
   proc.forceRebuildMappings();
   EXPECT_FALSE(voiceMgr.isSustainActive())
       << "With no Sustain Inverse, sustain should be OFF after cleanup";
 }
 
-// Latch Toggle with releaseLatchedOnToggleOff: when toggling off, sends NoteOff for latched notes
+// Latch Toggle with releaseLatchedOnToggleOff: when toggling off, sends NoteOff
+// for latched notes
 TEST_F(NoteTypeTest, LatchToggleReleaseLatchedOnToggleOff_SendsNoteOff) {
   {
     auto mappings = presetMgr.getMappingsListForLayer(0);
@@ -780,7 +787,7 @@ TEST_F(NoteTypeTest, LatchToggleReleaseLatchedOnToggleOff_SendsNoteOff) {
                       juce::String::toHexString((juce::int64)0).toUpperCase(),
                       nullptr);
     latch.setProperty("type", "Command", nullptr);
-    latch.setProperty("data1", 3, nullptr);  // LatchToggle
+    latch.setProperty("data1", 3, nullptr); // LatchToggle
     latch.setProperty("releaseLatchedOnToggleOff", true, nullptr);
     latch.setProperty("layerID", 0, nullptr);
     mappings.addChild(latch, -1, nullptr);
@@ -801,14 +808,15 @@ TEST_F(NoteTypeTest, LatchToggleReleaseLatchedOnToggleOff_SendsNoteOff) {
 
   InputID latchKey{0, 40}, noteKey{0, 20};
 
-  proc.processEvent(latchKey, true);   // Latch ON
+  proc.processEvent(latchKey, true); // Latch ON
   proc.processEvent(latchKey, false);
 
-  proc.processEvent(noteKey, true);    // Note on C4
-  proc.processEvent(noteKey, false);   // Release - note latched (no NoteOff)
+  proc.processEvent(noteKey, true);  // Note on C4
+  proc.processEvent(noteKey, false); // Release - note latched (no NoteOff)
   ASSERT_EQ(mockMidi.events.size(), 1u) << "Only note-on so far";
 
-  proc.processEvent(latchKey, true);   // Latch OFF (with releaseLatchedOnToggleOff)
+  proc.processEvent(latchKey,
+                    true); // Latch OFF (with releaseLatchedOnToggleOff)
   proc.processEvent(latchKey, false);
 
   ASSERT_EQ(mockMidi.events.size(), 2u)
@@ -828,8 +836,8 @@ TEST_F(NoteTypeTest, PanicAll_SendsNoteOffForAllNotes) {
                       juce::String::toHexString((juce::int64)0).toUpperCase(),
                       nullptr);
     panic.setProperty("type", "Command", nullptr);
-    panic.setProperty("data1", 4, nullptr);  // Panic
-    panic.setProperty("data2", 0, nullptr);  // Panic all
+    panic.setProperty("data1", 4, nullptr); // Panic
+    panic.setProperty("data2", 0, nullptr); // Panic all
     panic.setProperty("layerID", 0, nullptr);
     mappings.addChild(panic, -1, nullptr);
 
@@ -847,13 +855,14 @@ TEST_F(NoteTypeTest, PanicAll_SendsNoteOffForAllNotes) {
   }
   proc.forceRebuildMappings();
 
-  proc.processEvent(InputID{0, 20}, true);   // Note on
-  proc.processEvent(InputID{0, 20}, false);  // Release - note off (Send Note Off)
-  ASSERT_GE(mockMidi.events.size(), 2u);  // NoteOn + NoteOff
+  proc.processEvent(InputID{0, 20}, true); // Note on
+  proc.processEvent(InputID{0, 20},
+                    false);              // Release - note off (Send Note Off)
+  ASSERT_GE(mockMidi.events.size(), 2u); // NoteOn + NoteOff
   mockMidi.clear();
 
-  proc.processEvent(InputID{0, 20}, true);   // Note on (playing)
-  proc.processEvent(InputID{0, 40}, true);   // Panic all
+  proc.processEvent(InputID{0, 20}, true); // Note on (playing)
+  proc.processEvent(InputID{0, 40}, true); // Panic all
   proc.processEvent(InputID{0, 40}, false);
   ASSERT_EQ(mockMidi.events.size(), 2u) << "NoteOn + NoteOff from panic";
   EXPECT_TRUE(mockMidi.events[0].isNoteOn);
@@ -871,8 +880,8 @@ TEST_F(NoteTypeTest, PanicLatchedOnly_SendsNoteOffOnlyForLatched) {
                       juce::String::toHexString((juce::int64)0).toUpperCase(),
                       nullptr);
     panic.setProperty("type", "Command", nullptr);
-    panic.setProperty("data1", 4, nullptr);  // Panic
-    panic.setProperty("data2", 1, nullptr);  // Panic latched only
+    panic.setProperty("data1", 4, nullptr); // Panic
+    panic.setProperty("data2", 1, nullptr); // Panic latched only
     panic.setProperty("layerID", 0, nullptr);
     mappings.addChild(panic, -1, nullptr);
 
@@ -890,13 +899,136 @@ TEST_F(NoteTypeTest, PanicLatchedOnly_SendsNoteOffOnlyForLatched) {
   }
   proc.forceRebuildMappings();
 
-  proc.processEvent(InputID{0, 20}, true);   // Note on
-  proc.processEvent(InputID{0, 20}, false);  // Release - latched (no NoteOff)
+  proc.processEvent(InputID{0, 20}, true);  // Note on
+  proc.processEvent(InputID{0, 20}, false); // Release - latched (no NoteOff)
   ASSERT_EQ(mockMidi.events.size(), 1u) << "NoteOn only, note is latched";
 
-  proc.processEvent(InputID{0, 40}, true);   // Panic latched only
+  proc.processEvent(InputID{0, 40}, true); // Panic latched only
   proc.processEvent(InputID{0, 40}, false);
   ASSERT_EQ(mockMidi.events.size(), 2u) << "NoteOff from panic latched";
   EXPECT_FALSE(mockMidi.events[1].isNoteOn);
   EXPECT_EQ(mockMidi.events[1].note, 60);
+}
+
+// Transpose command: up1, down1, up12, down12, set; zone selector is placeholder
+void addTransposeMapping(juce::ValueTree &mappings, int inputKey, int transposeModify,
+                         int transposeSemitones = 0) {
+  juce::ValueTree m("Mapping");
+  m.setProperty("inputKey", inputKey, nullptr);
+  m.setProperty("deviceHash",
+                juce::String::toHexString((juce::int64)0).toUpperCase(),
+                nullptr);
+  m.setProperty("type", "Command", nullptr);
+  m.setProperty("data1", static_cast<int>(OmniKey::CommandID::Transpose), nullptr);
+  m.setProperty("transposeModify", transposeModify, nullptr);
+  m.setProperty("transposeSemitones", transposeSemitones, nullptr);
+  m.setProperty("layerID", 0, nullptr);
+  mappings.addChild(m, -1, nullptr);
+}
+
+TEST_F(NoteTypeTest, TransposeUp1Semitone_IncreasesChromatic) {
+  proc.getZoneManager().setGlobalTranspose(0, 0);
+  auto mappings = presetMgr.getMappingsListForLayer(0);
+  addTransposeMapping(mappings, 40, 0); // modify 0 = up 1 semitone
+  proc.forceRebuildMappings();
+
+  proc.processEvent(InputID{0, 40}, true);
+  proc.processEvent(InputID{0, 40}, false);
+  EXPECT_EQ(proc.getZoneManager().getGlobalChromaticTranspose(), 1);
+  EXPECT_EQ(proc.getZoneManager().getGlobalDegreeTranspose(), 0);
+}
+
+TEST_F(NoteTypeTest, TransposeDown1Semitone_DecreasesChromatic) {
+  proc.getZoneManager().setGlobalTranspose(2, 0);
+  auto mappings = presetMgr.getMappingsListForLayer(0);
+  addTransposeMapping(mappings, 40, 1); // modify 1 = down 1 semitone
+  proc.forceRebuildMappings();
+
+  proc.processEvent(InputID{0, 40}, true);
+  proc.processEvent(InputID{0, 40}, false);
+  EXPECT_EQ(proc.getZoneManager().getGlobalChromaticTranspose(), 1);
+  EXPECT_EQ(proc.getZoneManager().getGlobalDegreeTranspose(), 0);
+}
+
+TEST_F(NoteTypeTest, TransposeUp1Octave_IncreasesBy12) {
+  proc.getZoneManager().setGlobalTranspose(0, 0);
+  auto mappings = presetMgr.getMappingsListForLayer(0);
+  addTransposeMapping(mappings, 40, 2); // modify 2 = up 1 octave
+  proc.forceRebuildMappings();
+
+  proc.processEvent(InputID{0, 40}, true);
+  proc.processEvent(InputID{0, 40}, false);
+  EXPECT_EQ(proc.getZoneManager().getGlobalChromaticTranspose(), 12);
+  EXPECT_EQ(proc.getZoneManager().getGlobalDegreeTranspose(), 0);
+}
+
+TEST_F(NoteTypeTest, TransposeDown1Octave_DecreasesBy12) {
+  proc.getZoneManager().setGlobalTranspose(12, 0);
+  auto mappings = presetMgr.getMappingsListForLayer(0);
+  addTransposeMapping(mappings, 40, 3); // modify 3 = down 1 octave
+  proc.forceRebuildMappings();
+
+  proc.processEvent(InputID{0, 40}, true);
+  proc.processEvent(InputID{0, 40}, false);
+  EXPECT_EQ(proc.getZoneManager().getGlobalChromaticTranspose(), 0);
+  EXPECT_EQ(proc.getZoneManager().getGlobalDegreeTranspose(), 0);
+}
+
+TEST_F(NoteTypeTest, TransposeSet_AppliesSemitonesValue) {
+  proc.getZoneManager().setGlobalTranspose(0, 0);
+  auto mappings = presetMgr.getMappingsListForLayer(0);
+  addTransposeMapping(mappings, 40, 4, 5); // modify 4 = set, semitones 5
+  proc.forceRebuildMappings();
+
+  proc.processEvent(InputID{0, 40}, true);
+  proc.processEvent(InputID{0, 40}, false);
+  EXPECT_EQ(proc.getZoneManager().getGlobalChromaticTranspose(), 5);
+  EXPECT_EQ(proc.getZoneManager().getGlobalDegreeTranspose(), 0);
+}
+
+TEST_F(NoteTypeTest, TransposeSet_NegativeSemitones) {
+  proc.getZoneManager().setGlobalTranspose(0, 0);
+  auto mappings = presetMgr.getMappingsListForLayer(0);
+  addTransposeMapping(mappings, 40, 4, -7); // set to -7 semitones
+  proc.forceRebuildMappings();
+
+  proc.processEvent(InputID{0, 40}, true);
+  proc.processEvent(InputID{0, 40}, false);
+  EXPECT_EQ(proc.getZoneManager().getGlobalChromaticTranspose(), -7);
+  EXPECT_EQ(proc.getZoneManager().getGlobalDegreeTranspose(), 0);
+}
+
+TEST_F(NoteTypeTest, TransposeClampedTo48) {
+  proc.getZoneManager().setGlobalTranspose(45, 0);
+  auto mappings = presetMgr.getMappingsListForLayer(0);
+  addTransposeMapping(mappings, 40, 0); // up 1
+  proc.forceRebuildMappings();
+
+  for (int i = 0; i < 10; ++i) {
+    proc.processEvent(InputID{0, 40}, true);
+    proc.processEvent(InputID{0, 40}, false);
+  }
+  EXPECT_EQ(proc.getZoneManager().getGlobalChromaticTranspose(), 48)
+      << "Chromatic transpose should be clamped to 48";
+}
+
+TEST_F(NoteTypeTest, LegacyGlobalPitchDown_DecreasesChromaticByOne) {
+  proc.getZoneManager().setGlobalTranspose(3, 0);
+  auto mappings = presetMgr.getMappingsListForLayer(0);
+  juce::ValueTree m("Mapping");
+  m.setProperty("inputKey", 40, nullptr);
+  m.setProperty("deviceHash",
+                juce::String::toHexString((juce::int64)0).toUpperCase(),
+                nullptr);
+  m.setProperty("type", "Command", nullptr);
+  m.setProperty("data1", static_cast<int>(OmniKey::CommandID::GlobalPitchDown), nullptr);
+  m.setProperty("layerID", 0, nullptr);
+  mappings.addChild(m, -1, nullptr);
+  proc.forceRebuildMappings();
+
+  proc.processEvent(InputID{0, 40}, true);
+  proc.processEvent(InputID{0, 40}, false);
+  EXPECT_EQ(proc.getZoneManager().getGlobalChromaticTranspose(), 2)
+      << "Legacy GlobalPitchDown should act as down 1 semitone";
+  EXPECT_EQ(proc.getZoneManager().getGlobalDegreeTranspose(), 0);
 }

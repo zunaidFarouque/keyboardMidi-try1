@@ -18,11 +18,11 @@ std::map<int, juce::String> MappingDefinition::getCommandOptions() {
   return {
       {static_cast<int>(Cmd::SustainMomentary), "Hold to sustain"},
       {static_cast<int>(Cmd::SustainToggle), "Toggle sustain"},
-      {static_cast<int>(Cmd::SustainInverse), "Default is on. Hold to not sustain"},
+      {static_cast<int>(Cmd::SustainInverse),
+       "Default is on. Hold to not sustain"},
       {static_cast<int>(Cmd::LatchToggle), "Latch Toggle"},
       {static_cast<int>(Cmd::Panic), "Panic"},
-      {static_cast<int>(Cmd::GlobalPitchUp), "Global Pitch Up"},
-      {static_cast<int>(Cmd::GlobalPitchDown), "Global Pitch Down"},
+      {static_cast<int>(Cmd::Transpose), "Transpose"},
       {static_cast<int>(Cmd::GlobalModeUp), "Global Mode Up"},
       {static_cast<int>(Cmd::GlobalModeDown), "Global Mode Down"},
       {static_cast<int>(Cmd::LayerMomentary), "Layer Momentary"},
@@ -39,9 +39,8 @@ std::map<int, juce::String> MappingDefinition::getLayerOptions() {
   return m;
 }
 
-InspectorControl MappingDefinition::createSeparator(
-    const juce::String &label,
-    juce::Justification align) {
+InspectorControl MappingDefinition::createSeparator(const juce::String &label,
+                                                    juce::Justification align) {
   InspectorControl c;
   c.controlType = InspectorControl::Type::Separator;
   c.label = label;
@@ -65,8 +64,7 @@ InspectorSchema MappingDefinition::getSchema(const juce::ValueTree &mapping) {
   schema.push_back(createSeparator("", juce::Justification::centred));
 
   // Step 2: Branch on current type
-  juce::String typeStr =
-      mapping.getProperty("type", "Note").toString().trim();
+  juce::String typeStr = mapping.getProperty("type", "Note").toString().trim();
 
   if (typeStr.equalsIgnoreCase("Note")) {
     // Channel: Slider 1–16
@@ -114,8 +112,8 @@ InspectorSchema MappingDefinition::getSchema(const juce::ValueTree &mapping) {
     schema.push_back(velRand);
 
     // Phase 55.9: Explicit separator before Note Settings
-    schema.push_back(createSeparator("Note Settings",
-                                    juce::Justification::centredLeft));
+    schema.push_back(
+        createSeparator("Note Settings", juce::Justification::centredLeft));
 
     // Release Behavior: Send Note Off | Nothing | Always Latch
     InspectorControl releaseBehavior;
@@ -139,13 +137,12 @@ InspectorSchema MappingDefinition::getSchema(const juce::ValueTree &mapping) {
         mapping.getProperty("adsrTarget", "CC").toString().trim();
     bool useCustomEnvelope =
         (bool)mapping.getProperty("useCustomEnvelope", false);
-    bool isPitchOrSmart =
-        adsrTargetStr.equalsIgnoreCase("PitchBend") ||
-        adsrTargetStr.equalsIgnoreCase("SmartScaleBend");
+    bool isPitchOrSmart = adsrTargetStr.equalsIgnoreCase("PitchBend") ||
+                          adsrTargetStr.equalsIgnoreCase("SmartScaleBend");
 
     // 1. Basic Controls
-    schema.push_back(createSeparator("Expression",
-                                    juce::Justification::centredLeft));
+    schema.push_back(
+        createSeparator("Expression", juce::Justification::centredLeft));
 
     InspectorControl ch;
     ch.propertyId = "channel";
@@ -197,8 +194,8 @@ InspectorSchema MappingDefinition::getSchema(const juce::ValueTree &mapping) {
     schema.push_back(peak);
 
     // 2. Mode Selection
-    schema.push_back(createSeparator("Dynamics",
-                                    juce::Justification::centredLeft));
+    schema.push_back(
+        createSeparator("Dynamics", juce::Justification::centredLeft));
     InspectorControl useEnv;
     useEnv.propertyId = "useCustomEnvelope";
     useEnv.label = "Use Custom ADSR Curve";
@@ -245,7 +242,8 @@ InspectorSchema MappingDefinition::getSchema(const juce::ValueTree &mapping) {
       schema.push_back(relVal);
     }
   } else if (typeStr.equalsIgnoreCase("Command")) {
-    // Sustain: one control with Style dropdown when Sustain; else Command dropdown
+    // Sustain: one control with Style dropdown when Sustain; else Command
+    // dropdown
     static constexpr int kSustainCategoryId = 100;
     int cmdId = (int)mapping.getProperty("data1", 0);
     const bool isSustain = (cmdId >= 0 && cmdId <= 2);
@@ -257,8 +255,7 @@ InspectorSchema MappingDefinition::getSchema(const juce::ValueTree &mapping) {
     cmdCtrl.options[kSustainCategoryId] = "Sustain";
     cmdCtrl.options[3] = "Latch Toggle";
     cmdCtrl.options[4] = "Panic";
-    cmdCtrl.options[6] = "Global Pitch Up";
-    cmdCtrl.options[7] = "Global Pitch Down";
+    cmdCtrl.options[6] = "Transpose";
     cmdCtrl.options[8] = "Global Mode Up";
     cmdCtrl.options[9] = "Global Mode Down";
     cmdCtrl.options[10] = "Layer Momentary";
@@ -304,12 +301,64 @@ InspectorSchema MappingDefinition::getSchema(const juce::ValueTree &mapping) {
     const int panicLatch = static_cast<int>(OmniKey::CommandID::PanicLatch);
     if (cmdId == panic || cmdId == panicLatch) {
       InspectorControl panicMode;
-      panicMode.propertyId = "panicMode";  // Virtual: maps to data1=4, data2
+      panicMode.propertyId = "panicMode"; // Virtual: maps to data1=4, data2
       panicMode.label = "Mode";
       panicMode.controlType = InspectorControl::Type::ComboBox;
       panicMode.options[1] = "Panic all";
       panicMode.options[2] = "Panic latched only";
       schema.push_back(panicMode);
+    }
+    const int transpose = static_cast<int>(OmniKey::CommandID::Transpose);
+    const int globalPitchDown = static_cast<int>(OmniKey::CommandID::GlobalPitchDown);
+    if (cmdId == transpose || cmdId == globalPitchDown) {
+      schema.push_back(createSeparator("Transpose",
+                                       juce::Justification::centredLeft));
+      InspectorControl modeCtrl;
+      modeCtrl.propertyId = "transposeMode"; // "global" / "local"
+      modeCtrl.label = "Mode";
+      modeCtrl.controlType = InspectorControl::Type::ComboBox;
+      modeCtrl.options[1] = "Global";
+      modeCtrl.options[2] = "Local";
+      schema.push_back(modeCtrl);
+
+      InspectorControl modifyCtrl;
+      modifyCtrl.propertyId = "transposeModify"; // 0-4, use 1-based for combo
+      modifyCtrl.label = "Modify";
+      modifyCtrl.controlType = InspectorControl::Type::ComboBox;
+      modifyCtrl.options[1] = "Up (1 semitone)";
+      modifyCtrl.options[2] = "Down (1 semitone)";
+      modifyCtrl.options[3] = "Up (1 octave)";
+      modifyCtrl.options[4] = "Down (1 octave)";
+      modifyCtrl.options[5] = "Set (specific semitones)";
+      schema.push_back(modifyCtrl);
+
+      int modifyVal = (int)mapping.getProperty("transposeModify", 0);
+      if (modifyVal == 4) { // Set
+        InspectorControl semitonesCtrl;
+        semitonesCtrl.propertyId = "transposeSemitones";
+        semitonesCtrl.label = "Semitones";
+        semitonesCtrl.controlType = InspectorControl::Type::Slider;
+        semitonesCtrl.min = -48.0;
+        semitonesCtrl.max = 48.0;
+        semitonesCtrl.step = 1.0;
+        semitonesCtrl.valueFormat = InspectorControl::Format::Integer;
+        schema.push_back(semitonesCtrl);
+      }
+
+      juce::String modeStr =
+          mapping.getProperty("transposeMode", "Global").toString();
+      if (modeStr.equalsIgnoreCase("Local")) {
+        InspectorControl zonePlaceholder;
+        zonePlaceholder.propertyId = "transposeZonesPlaceholder";
+        zonePlaceholder.label = "Affected zones";
+        zonePlaceholder.controlType = InspectorControl::Type::LabelOnly;
+        schema.push_back(zonePlaceholder);
+        InspectorControl zoneNote;
+        zoneNote.propertyId = "";
+        zoneNote.label = "(Zone selector – coming soon)";
+        zoneNote.controlType = InspectorControl::Type::LabelOnly;
+        schema.push_back(zoneNote);
+      }
     }
   }
 

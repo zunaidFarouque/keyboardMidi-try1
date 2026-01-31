@@ -7,7 +7,6 @@
 #include <unordered_map>
 #include <vector>
 
-
 class ScaleLibrary;
 
 class ZoneManager : public juce::ChangeBroadcaster {

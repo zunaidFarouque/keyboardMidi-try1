@@ -30,8 +30,7 @@ public:
   void resized() override {
     auto area = getLocalBounds();
     if (label) {
-      int textWidth =
-          label->getFont().getStringWidth(label->getText()) + 10;
+      int textWidth = label->getFont().getStringWidth(label->getText()) + 10;
       label->setBounds(area.removeFromLeft(textWidth));
     }
     editor->setBounds(area);
@@ -70,8 +69,8 @@ void MappingInspector::paint(juce::Graphics &g) {
   if (selectedTrees.empty()) {
     g.setColour(juce::Colours::grey);
     g.setFont(14.0f);
-    g.drawText("No selection", getLocalBounds(),
-               juce::Justification::centred, true);
+    g.drawText("No selection", getLocalBounds(), juce::Justification::centred,
+               true);
   }
 }
 
@@ -106,8 +105,7 @@ void MappingInspector::rebuildUI() {
   // Device row at top, above Type
   createAliasRow();
 
-  InspectorSchema schema =
-      MappingDefinition::getSchema(selectedTrees[0]);
+  InspectorSchema schema = MappingDefinition::getSchema(selectedTrees[0]);
   for (const auto &def : schema) {
     // Phase 55.9: Handle explicit Separator items
     if (def.controlType == InspectorControl::Type::Separator) {
@@ -177,8 +175,8 @@ void MappingInspector::SeparatorComponent::paint(juce::Graphics &g) {
   }
   if (textRight + pad < bounds.getRight()) {
     g.setColour(juce::Colours::grey);
-    g.fillRect(textRight + pad, lineY,
-               bounds.getRight() - (textRight + pad), lineHeight);
+    g.fillRect(textRight + pad, lineY, bounds.getRight() - (textRight + pad),
+               lineHeight);
   }
 }
 
@@ -236,9 +234,9 @@ void MappingInspector::createControl(const InspectorControl &def,
         return;
       undoManager.beginNewTransaction("Change " + def.label);
       double v = slPtr->getValue();
-      juce::var valueToSet =
-          (def.step >= 1.0) ? juce::var(static_cast<int>(std::round(v)))
-                            : juce::var(v);
+      juce::var valueToSet = (def.step >= 1.0)
+                                 ? juce::var(static_cast<int>(std::round(v)))
+                                 : juce::var(v);
       for (auto &tree : selectedTrees) {
         if (tree.isValid())
           tree.setProperty(propId, valueToSet, &undoManager);
@@ -298,24 +296,43 @@ void MappingInspector::createControl(const InspectorControl &def,
       int id = (data1 >= 0 && data1 <= 2) ? (data1 + 1) : 1;
       cb->setSelectedId(id, juce::dontSendNotification);
     } else if (def.propertyId == "panicMode") {
-      // Virtual: data1==5 or data2==1 -> Panic latched only (2), else Panic all (1)
+      // Virtual: data1==5 or data2==1 -> Panic latched only (2), else Panic all
+      // (1)
       int data1 = static_cast<int>(getCommonValue("data1"));
       int data2 = static_cast<int>(getCommonValue("data2"));
       int id = (data1 == 5 || data2 == 1) ? 2 : 1;
       cb->setSelectedId(id, juce::dontSendNotification);
+    } else if (def.propertyId == "transposeMode") {
+      juce::String modeStr = currentVal.toString();
+      if (modeStr.isEmpty())
+        modeStr = "Global";
+      int id = modeStr.equalsIgnoreCase("Local") ? 2 : 1;
+      cb->setSelectedId(id, juce::dontSendNotification);
+    } else if (def.propertyId == "transposeModify") {
+      int modify = static_cast<int>(currentVal);
+      int id = (modify >= 0 && modify <= 4) ? (modify + 1) : 1;
+      cb->setSelectedId(id, juce::dontSendNotification);
     } else if (def.propertyId == "commandCategory") {
-      // Virtual: data1 0,1,2 -> Sustain (100); 5 -> Panic (4); else data1
+      // Virtual: data1 0,1,2 -> Sustain (100); 5 -> Panic (4); 7 -> Transpose (6)
       int data1 = static_cast<int>(getCommonValue("data1"));
       if (data1 >= 0 && data1 <= 2)
         cb->setSelectedId(100, juce::dontSendNotification);
       else if (data1 == 5)
-        cb->setSelectedId(4, juce::dontSendNotification);  // Panic Latch -> Panic
+        cb->setSelectedId(4,
+                          juce::dontSendNotification); // Panic Latch -> Panic
+      else if (data1 == 7)
+        cb->setSelectedId(6, juce::dontSendNotification); // Legacy -> Transpose
       else if (data1 >= 3 && data1 <= 12)
         cb->setSelectedId(data1, juce::dontSendNotification);
     } else if (def.propertyId == "data1" && !def.options.count(5)) {
-      // Panic Latch (5) removed: show Panic (4) when data1 is 5
+      // Panic Latch (5) -> 4; GlobalPitchDown (7) -> 6
       int data1 = static_cast<int>(currentVal);
-      cb->setSelectedId((data1 == 5) ? 4 : data1, juce::dontSendNotification);
+      int display = data1;
+      if (data1 == 5)
+        display = 4;
+      else if (data1 == 7)
+        display = 6;
+      cb->setSelectedId(display, juce::dontSendNotification);
     } else if (sameVal && !currentVal.isVoid()) {
       int id = static_cast<int>(currentVal);
       cb->setSelectedId(id, juce::dontSendNotification);
@@ -326,18 +343,19 @@ void MappingInspector::createControl(const InspectorControl &def,
       if (selectedTrees.empty())
         return;
       undoManager.beginNewTransaction("Change " + def.label);
+      // Only command-type virtual props write to data1; transpose writes to its own props
       juce::Identifier actualProp =
-          (def.propertyId == "commandCategory" || def.propertyId == "sustainStyle" ||
-           def.propertyId == "panicMode")
-              ? "data1"
+          (def.propertyId == "commandCategory" ||
+           def.propertyId == "sustainStyle" || def.propertyId == "panicMode")
+              ? juce::Identifier("data1")
               : propId;
       juce::var valueToSet;
       if (def.propertyId == "type" || def.propertyId == "adsrTarget" ||
           def.propertyId == "releaseBehavior") {
         int id = cbPtr->getSelectedId();
         auto it = def.options.find(id);
-        valueToSet = (it != def.options.end()) ? juce::var(it->second)
-                                                : juce::var();
+        valueToSet =
+            (it != def.options.end()) ? juce::var(it->second) : juce::var();
       } else if (def.propertyId == "commandCategory") {
         int id = cbPtr->getSelectedId();
         valueToSet = (id == 100) ? juce::var(0) : juce::var(id);
@@ -347,16 +365,23 @@ void MappingInspector::createControl(const InspectorControl &def,
         int mode = (id == 2) ? 1 : 0;
         for (auto &tree : selectedTrees) {
           if (tree.isValid()) {
-            tree.setProperty("data1", 4, &undoManager);   // Panic (migrate from 5)
+            tree.setProperty("data1", 4,
+                             &undoManager); // Panic (migrate from 5)
             tree.setProperty("data2", mode, &undoManager);
           }
         }
         juce::MessageManager::callAsync([this]() { rebuildUI(); });
-        return;  // Already set properties
+        return; // Already set properties
       } else if (def.propertyId == "sustainStyle") {
         // Virtual: combo ids 1,2,3 -> data1 0,1,2
         int id = cbPtr->getSelectedId();
         valueToSet = juce::var((id >= 1 && id <= 3) ? (id - 1) : 0);
+      } else if (def.propertyId == "transposeMode") {
+        int id = cbPtr->getSelectedId();
+        valueToSet = juce::var(id == 2 ? "Local" : "Global");
+      } else if (def.propertyId == "transposeModify") {
+        int id = cbPtr->getSelectedId();
+        valueToSet = juce::var((id >= 1 && id <= 5) ? (id - 1) : 0);
       } else if (def.propertyId == "data1" && def.options.count(100) > 0) {
         // Command dropdown with Sustain (100): map 100 -> 0
         int id = cbPtr->getSelectedId();
@@ -369,8 +394,9 @@ void MappingInspector::createControl(const InspectorControl &def,
           tree.setProperty(actualProp, valueToSet, &undoManager);
       }
       if (def.propertyId == "type" || def.propertyId == "data1" ||
-          def.propertyId == "commandCategory" || def.propertyId == "sustainStyle" ||
-          def.propertyId == "panicMode")
+          def.propertyId == "commandCategory" ||
+          def.propertyId == "sustainStyle" || def.propertyId == "panicMode" ||
+          def.propertyId == "transposeMode" || def.propertyId == "transposeModify")
         juce::MessageManager::callAsync([this]() { rebuildUI(); });
     };
 
@@ -406,8 +432,8 @@ void MappingInspector::createControl(const InspectorControl &def,
 
     auto lbl = std::make_unique<juce::Label>("", def.label + ":");
     lbl->setJustificationType(juce::Justification::centredLeft);
-    auto container = std::make_unique<LabeledControl>(std::move(lbl),
-                                                      std::move(tb));
+    auto container =
+        std::make_unique<LabeledControl>(std::move(lbl), std::move(tb));
     addItem(std::move(container), def.widthWeight, def.autoWidth);
     break;
   }
@@ -471,8 +497,7 @@ void MappingInspector::createAliasRow() {
     uintptr_t newHash = 0;
     if (aliasName != "Global (All Devices)" && aliasName != "Any / Master" &&
         aliasName != "Unassigned" && !aliasName.isEmpty()) {
-      newHash =
-          static_cast<uintptr_t>(std::hash<juce::String>{}(aliasName));
+      newHash = static_cast<uintptr_t>(std::hash<juce::String>{}(aliasName));
     }
     undoManager.beginNewTransaction("Change Device");
     for (auto &tree : selectedTrees) {
@@ -500,7 +525,7 @@ void MappingInspector::createAliasRow() {
 void MappingInspector::resized() {
   const int rowHeight = 25;
   const int separatorRowHeight = 15; // Phase 55.9: smaller for separator rows
-  const int spacing = 4;  // Phase 55.10: tighter layout
+  const int spacing = 4;             // Phase 55.10: tighter layout
   const int topPadding = 4;
   auto bounds = getLocalBounds().reduced(4);
   int y = bounds.getY() + topPadding;
@@ -563,8 +588,9 @@ void MappingInspector::resized() {
 int MappingInspector::getRequiredHeight() const {
   const int controlHeight = 25;
   const int separatorHeight = 15; // Phase 55.9
-  const int separatorTopMargin = 12; // Phase 55.11: extra space before separator
-  const int spacing = 4;  // Phase 55.10: matches resized()
+  const int separatorTopMargin =
+      12;                // Phase 55.11: extra space before separator
+  const int spacing = 4; // Phase 55.10: matches resized()
   const int topPadding = 4;
   const int bottomPadding = 4;
   int total = topPadding + bottomPadding;
@@ -611,7 +637,8 @@ void MappingInspector::valueTreePropertyChanged(
   }
   if (!isRelevant)
     return;
-  // Phase 55.6: Rebuild only when schema structure changes (avoids rebuild during slider drag)
+  // Phase 55.6: Rebuild only when schema structure changes (avoids rebuild
+  // during slider drag)
   bool needsRebuild = false;
   if (property == juce::Identifier("type") ||
       property == juce::Identifier("adsrTarget") ||
