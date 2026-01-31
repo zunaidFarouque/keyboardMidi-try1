@@ -1,36 +1,60 @@
-### 📋 Cursor Prompt: Phase 55.11 - UI Padding & Polish
+### 📋 Cursor Prompt: Phase 56.1 - Core Refactor (Expression Consolidation)
 
-**Target File:** `Source/MappingInspector.cpp`
+**Target Files:**
+1.  `Source/MappingTypes.h`
+2.  `Source/PresetManager.cpp`
+3.  `Source/GridCompiler.cpp`
+4.  `Source/ExpressionEngine.h`
+5.  `Source/ExpressionEngine.cpp`
+6.  `Source/MappingDefinition.cpp` (Basic fix to allow compilation)
 
 **Task:**
-Increase the vertical spacing around Labelled Separators to improve readability and reduce density.
+Consolidate `CC` and `Envelope` types into a single `ActionType::Expression`. Implement backward compatibility (migration) and the "Fast Path" optimization for simple CCs.
 
 **Specific Instructions:**
 
-1.  **Update `SeparatorComponent`:**
-    *   Currently, it likely fills its bounds.
-    *   We can't change the drawing much without affecting the lines, but we can change **how much height** the separator requests in the layout logic.
+1.  **Update `Source/MappingTypes.h`:**
+    *   **Update Enum:** Remove `ActionType::CC` and `ActionType::Envelope`. Add `ActionType::Expression`.
+    *   **Update Struct:** Add `bool useCustomEnvelope = false;` to `AdsrSettings` (or `MidiAction` if easier, but `AdsrSettings` is cleaner). Let's put it in `AdsrSettings`.
 
-2.  **Update `resized` (Layout Logic):**
-    *   Locate the loop where `rowHeight` and `spacing` are used.
-    *   **Logic Change:**
-        *   If a row contains *only* a `Separator` (which is our standard usage for labelled separators), give it more height or add extra padding before it.
-        *   Standard `rowHeight` is 25.
-        *   Let's check if the row has a separator: `if (row.items.size() == 1 && ... check type or cast ...)`.
-        *   *Alternative:* Just increase the `spacing` variable generally? No, that affects everything.
-        *   **Better Approach:** When iterating `uiRows`, check if the *current* row is a Separator. If so, add extra `spacing` to `y` *before* laying it out.
+2.  **Update `Source/PresetManager.cpp`:**
+    *   **Implement Migration:** inside `loadFromFile` (after XML parsing, before `rootNode.copyPropertiesFrom`):
+    *   Iterate all children recursively. If a node is "Mapping":
+        *   Get `type`.
+        *   **If "CC" (or int 1):** Change `type` to "Expression". Set `useCustomEnvelope` to `false`. Set `adsrTarget` to "CC".
+        *   **If "Envelope" (or int 4):** Change `type` to "Expression". Set `useCustomEnvelope` to `true`.
+        *   *Note:* Ensure you handle legacy `data1` (CC Num) mapping to the new structure correctly (GridCompiler handles the mapping, but PresetManager just renames the type).
 
-3.  **Refactor `resized` implementation:**
-    *   Iterate `uiRows`.
-    *   Check if the row is a separator row (we added `bool isSeparator` to `UiRow` struct in Phase 55.6, right? If not, we should have).
-    *   If `row.isSeparator`:
-        *   Add extra padding before: `y += 10;`
-        *   Set height for separator: `25` (standard).
-        *   Add extra padding after? Maybe standard spacing is fine.
-    *   If normal row:
-        *   `y` increment logic remains standard.
+3.  **Update `Source/GridCompiler.cpp`:**
+    *   **Update `compileMappingsForLayer`:**
+        *   Remove `case CC` and `case Envelope`.
+        *   Add `case Expression`:
+            *   Read `adsrTarget` (default "CC").
+            *   Read `useCustomEnvelope` (default `false`).
+            *   **Logic:**
+                *   If `!useCustomEnvelope`: Force ADSR to `0, 0, 1.0f, 0`. Force `isOneShot = false`.
+                *   Else: Read ADSR sliders from ValueTree.
+            *   **Target Logic:**
+                *   If `adsrTarget == "CC"`: `ccNumber` comes from `data1`. `peak` comes from `data2`.
+                *   If `adsrTarget == "PitchBend"`: `peak` comes from `data2` (or calculated 16383).
+    *   **Update Visuals:**
+        *   If `ActionType::Expression`: Label should be "Expr: [Target]".
 
-**Note:** If `UiRow` doesn't have an `isSeparator` flag, we can infer it by checking if `items[0].component` is dynamic_castable to `SeparatorComponent`.
+4.  **Update `Source/ExpressionEngine.cpp`:**
+    *   **Implement Fast Path:** In `triggerEnvelope`:
+        *   Check `settings`: If `attackMs == 0` and `decayMs == 0` and `releaseMs == 0`:
+            *   **Direct Send:**
+                *   If CC: `midiEngine.sendCC(channel, ccNumber, peakValue);`
+                *   If PB: `midiEngine.sendPitchBend(channel, peakValue);`
+            *   **Return immediately** (Do not add to active envelopes list).
+    *   **Update `releaseEnvelope`:**
+        *   If it was a Fast Path CC (not in active list), verify if we need to send a release value.
+        *   *Correction:* `ExpressionEngine` handles *curves*. Simple Note-Off handling for CC buttons is currently handled in `InputProcessor` (Phase 55.4).
+        *   *Task:* Ensure `InputProcessor` calls `releaseEnvelope` for `Expression` type.
+        *   *Optimization:* If `ExpressionEngine` doesn't find the envelope (because it was Fast Path), we still might need to send the "Release Value" (0 or specific). `InputProcessor` should handle the "Release Value" logic for Expressions just like it did for CCs in Phase 55.4.
 
-**Action:**
-Update `MappingInspector::resized` to add `12px` of extra top margin whenever it encounters a Separator row.
+5.  **Update `Source/MappingDefinition.cpp` & `MappingInspector.cpp`:**
+    *   Replace `ActionType::CC` and `Envelope` references with `Expression` to fix compilation errors. (We will redesign the UI schema in the next Phase).
+
+**Goal:**
+The code compiles. Loading an old preset converts CCs to "Simple Expressions". Pressing a "Simple Expression" key triggers the Fast Path (no latency).

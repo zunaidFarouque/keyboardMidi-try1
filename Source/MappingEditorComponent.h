@@ -7,6 +7,9 @@
 #include "SettingsManager.h"
 #include <JuceHeader.h>
 #include <map>
+#include <memory>
+
+class InputCaptureOverlay;
 
 class MappingEditorComponent : public juce::Component,
                                public juce::TableListBoxModel,
@@ -76,6 +79,12 @@ private:
   juce::ToggleButton learnButton;
   juce::UndoManager undoManager;
   MappingInspector inspector;
+
+  // Phase 56.3: Smart Input Capture
+  std::unique_ptr<InputCaptureOverlay> captureOverlay;
+  bool wasMidiModeEnabledBeforeCapture = false;
+  void startInputCapture();
+  void finishInputCapture(uintptr_t deviceHandle, int keyCode, bool skipped);
 
   // 3. Containers (Must die first)
   juce::Viewport inspectorViewport;

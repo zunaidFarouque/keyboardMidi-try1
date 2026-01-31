@@ -547,7 +547,8 @@ void MappingInspector::valueTreePropertyChanged(
   bool needsRebuild = false;
   if (property == juce::Identifier("type") ||
       property == juce::Identifier("adsrTarget") ||
-      property == juce::Identifier("sendReleaseValue")) {
+      property == juce::Identifier("sendReleaseValue") ||
+      property == juce::Identifier("useCustomEnvelope")) {
     needsRebuild = true;
   } else if (property == juce::Identifier("data1")) {
     if (allTreesHaveSameValue("type") &&

@@ -1,6 +1,54 @@
 #include "MappingEditorComponent.h"
 #include "KeyNameUtilities.h"
 #include <algorithm>
+#include <functional>
+
+// Phase 56.3: Overlay for "Press any key..." capture
+class InputCaptureOverlay : public juce::Component {
+public:
+  std::function<void(bool skipped)> onDismiss;
+
+  InputCaptureOverlay() {
+    label.setText("Press any key to add mapping...",
+                  juce::dontSendNotification);
+    label.setFont(juce::Font(20.0f, juce::Font::bold));
+    label.setJustificationType(juce::Justification::centred);
+    label.setColour(juce::Label::textColourId, juce::Colours::white);
+    addAndMakeVisible(label);
+
+    skipButton.setButtonText("Skip (Add Default)");
+    skipButton.onClick = [this] {
+      if (onDismiss)
+        onDismiss(true);
+    };
+    addAndMakeVisible(skipButton);
+
+    cancelButton.setButtonText("Cancel");
+    cancelButton.onClick = [this] {
+      if (onDismiss)
+        onDismiss(false);
+    };
+    addAndMakeVisible(cancelButton);
+  }
+
+  void paint(juce::Graphics &g) override {
+    g.fillAll(juce::Colour(0xcc000000)); // Semi-transparent black
+  }
+
+  void resized() override {
+    auto r = getLocalBounds().reduced(40);
+    label.setBounds(r.removeFromTop(60));
+    auto btnArea = r.removeFromBottom(40);
+    cancelButton.setBounds(btnArea.removeFromRight(80));
+    btnArea.removeFromRight(10);
+    skipButton.setBounds(btnArea.removeFromRight(140));
+  }
+
+private:
+  juce::Label label;
+  juce::TextButton skipButton;
+  juce::TextButton cancelButton;
+};
 
 // Helper to parse Hex strings from XML correctly
 static uintptr_t parseDeviceHash(const juce::var &var) {
@@ -78,67 +126,9 @@ MappingEditorComponent::MappingEditorComponent(PresetManager &pm,
       2, -0.3, -0.7,
       -0.5); // Item 2 (Inspector): Min 30%, Max 70%, Preferred 50%
 
-  // Setup Add Button with Popup Menu
+  // Setup Add Button – Phase 56.3: Smart Input Capture
   addButton.setButtonText("+");
-  addButton.onClick = [this] {
-    juce::PopupMenu menu;
-    menu.addItem(1, "Add Key Mapping");
-    menu.addItem(2, "Add Scroll Mapping");
-    menu.addItem(3, "Add Trackpad X");
-    menu.addItem(4, "Add Trackpad Y");
-
-    menu.showMenuAsync(
-        juce::PopupMenu::Options().withTargetComponent(&addButton),
-        [this](int result) {
-          juce::ValueTree newMapping("Mapping");
-
-          switch (result) {
-          case 1:                                            // Key Mapping
-            newMapping.setProperty("inputKey", 81, nullptr); // Default Q
-            newMapping.setProperty("deviceHash", "0", nullptr);
-            newMapping.setProperty("type", "Note", nullptr);
-            newMapping.setProperty("channel", 1, nullptr);
-            newMapping.setProperty("data1", 60, nullptr); // Middle C
-            newMapping.setProperty("data2", 127, nullptr);
-            break;
-          case 2: // Scroll Mapping (Scroll Up)
-            newMapping.setProperty("inputKey", 0x1001, nullptr);
-            newMapping.setProperty("deviceHash", "0", nullptr);
-            newMapping.setProperty("type", "CC", nullptr);
-            newMapping.setProperty("channel", 1, nullptr);
-            newMapping.setProperty("data1", 1, nullptr);
-            newMapping.setProperty("data2", 64, nullptr);
-            break;
-          case 3: // Trackpad X
-            newMapping.setProperty("inputKey", 0x2000, nullptr);
-            newMapping.setProperty("deviceHash", "0", nullptr);
-            newMapping.setProperty("type", "CC", nullptr);
-            newMapping.setProperty("channel", 1, nullptr);
-            newMapping.setProperty("data1", 10, nullptr);
-            newMapping.setProperty("data2", 64, nullptr);
-            break;
-          case 4: // Trackpad Y
-            newMapping.setProperty("inputKey", 0x2001, nullptr);
-            newMapping.setProperty("deviceHash", "0", nullptr);
-            newMapping.setProperty("type", "CC", nullptr);
-            newMapping.setProperty("channel", 1, nullptr);
-            newMapping.setProperty("data1", 11, nullptr);
-            newMapping.setProperty("data2", 64, nullptr);
-            break;
-          default:
-            return; // User cancelled
-          }
-
-          // Phase 41: Set layerID and add to current layer's mappings
-          newMapping.setProperty("layerID", selectedLayerId, nullptr);
-          auto mappingsNode = getCurrentLayerMappings();
-          if (mappingsNode.isValid()) {
-            mappingsNode.addChild(newMapping, -1, &undoManager);
-          }
-          table.updateContent();
-          table.repaint();
-        });
-  };
+  addButton.onClick = [this] { startInputCapture(); };
   addAndMakeVisible(addButton);
 
   // Setup Duplicate Button
@@ -269,8 +259,94 @@ void MappingEditorComponent::paint(juce::Graphics &g) {
   }
 }
 
+void MappingEditorComponent::startInputCapture() {
+  wasMidiModeEnabledBeforeCapture = settingsManager.isMidiModeActive();
+  if (!wasMidiModeEnabledBeforeCapture)
+    settingsManager.setMidiModeActive(true);
+
+  captureOverlay = std::make_unique<InputCaptureOverlay>();
+  captureOverlay->onDismiss = [this](bool skipped) {
+    if (skipped) {
+      finishInputCapture(0, 0, true);
+    } else {
+      // Cancelled: restore MIDI mode, remove overlay
+      if (!wasMidiModeEnabledBeforeCapture)
+        settingsManager.setMidiModeActive(false);
+      captureOverlay.reset();
+      resized();
+    }
+  };
+  addAndMakeVisible(captureOverlay.get());
+  resized();
+}
+
+void MappingEditorComponent::finishInputCapture(uintptr_t deviceHandle,
+                                                int keyCode, bool skipped) {
+  // 1. Cleanup: remove overlay, restore MIDI mode
+  if (!wasMidiModeEnabledBeforeCapture)
+    settingsManager.setMidiModeActive(false);
+  captureOverlay.reset();
+  resized();
+
+  // 2. Create mapping
+  int inputKey = 0;
+  juce::String deviceHashStr = "0";
+  juce::String inputAlias;
+
+  if (!skipped) {
+    inputKey = keyCode;
+    juce::String aliasName = deviceManager.getAliasForHardware(deviceHandle);
+    if (aliasName.isEmpty() || aliasName == "Unassigned" ||
+        aliasName == "Unknown") {
+      deviceHashStr = "0";
+      inputAlias = "";
+    } else {
+      uintptr_t hash =
+          static_cast<uintptr_t>(std::hash<juce::String>{}(aliasName.trim()));
+      deviceHashStr = juce::String::toHexString((juce::int64)hash).toUpperCase();
+      inputAlias = aliasName;
+    }
+  } else {
+    inputKey = 81;
+    deviceHashStr = "0";
+    inputAlias = "";
+  }
+
+  juce::ValueTree newMapping("Mapping");
+  newMapping.setProperty("inputKey", inputKey, nullptr);
+  newMapping.setProperty("deviceHash", deviceHashStr, nullptr);
+  newMapping.setProperty("inputAlias", inputAlias, nullptr);
+  newMapping.setProperty("layerID", selectedLayerId, nullptr);
+
+  if (skipped) {
+    newMapping.setProperty("type", "Note", nullptr);
+    newMapping.setProperty("channel", 1, nullptr);
+    newMapping.setProperty("data1", 60, nullptr);
+    newMapping.setProperty("data2", 127, nullptr);
+  } else {
+    newMapping.setProperty("type", "Note", nullptr);
+    newMapping.setProperty("channel", 1, nullptr);
+    newMapping.setProperty("data1", 60, nullptr);
+    newMapping.setProperty("data2", 127, nullptr);
+  }
+
+  auto mappingsNode = getCurrentLayerMappings();
+  if (mappingsNode.isValid()) {
+    mappingsNode.addChild(newMapping, -1, &undoManager);
+  }
+
+  table.updateContent();
+  table.repaint();
+
+  int newRow = getNumRows() - 1;
+  if (newRow >= 0)
+    table.selectRow(newRow);
+}
+
 void MappingEditorComponent::resized() {
   auto area = getLocalBounds();
+  if (captureOverlay)
+    captureOverlay->setBounds(area);
   auto header = area.removeFromTop(24);
   addButton.setBounds(header.removeFromRight(30));
   header.removeFromRight(4);
@@ -457,6 +533,15 @@ void MappingEditorComponent::updateInspectorFromSelection() {
 
 void MappingEditorComponent::handleRawKeyEvent(uintptr_t deviceHandle,
                                                int keyCode, bool isDown) {
+  // Phase 56.3: Smart Input Capture – capture key when overlay is active
+  if (captureOverlay != nullptr) {
+    if (isDown) {
+      juce::MessageManager::callAsync(
+          [this, deviceHandle, keyCode] { finishInputCapture(deviceHandle, keyCode, false); });
+    }
+    return;
+  }
+
   // Check if learn mode is active
   if (!learnButton.getToggleState())
     return;
@@ -648,7 +733,7 @@ void MappingEditorComponent::handleAxisEvent(uintptr_t deviceHandle,
         "deviceHash",
         juce::String::toHexString((juce::int64)deviceToUse).toUpperCase(),
         nullptr);
-    mappingNode.setProperty("type", "CC", nullptr); // Ensure type is CC
+    mappingNode.setProperty("type", "Expression", nullptr);
 
     // Create display name using KeyNameUtilities
     juce::String deviceName =

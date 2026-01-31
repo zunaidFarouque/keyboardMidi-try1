@@ -550,8 +550,9 @@ void MainComponent::handleAxisEvent(uintptr_t deviceHandle, int inputCode,
   auto actionOpt = inputProcessor.getMappingForInput(id);
   if (actionOpt.has_value()) {
     const auto &action = *actionOpt;
-    if (action.type == ActionType::CC) {
-      logLine += " -> [MIDI] CC " + juce::String(action.data1) +
+    if (action.type == ActionType::Expression &&
+        action.adsrSettings.target == AdsrTarget::CC) {
+      logLine += " -> [MIDI] CC " + juce::String(action.adsrSettings.ccNumber) +
                  " | ch: " + juce::String(action.channel);
     }
   }

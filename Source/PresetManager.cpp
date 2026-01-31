@@ -52,6 +52,30 @@ void PresetManager::saveToFile(juce::File file) {
   }
 }
 
+namespace {
+// Phase 56.1: Migrate CC/Envelope to Expression
+void migrateMappingTypes(juce::ValueTree tree) {
+  if (tree.hasType("Mapping")) {
+    juce::var typeVar = tree.getProperty("type");
+    juce::String typeStr =
+        typeVar.isString() ? typeVar.toString().trim() : juce::String();
+    int typeInt = typeVar.isInt() ? static_cast<int>(typeVar) : -1;
+
+    if (typeStr.equalsIgnoreCase("CC") || typeInt == 1) {
+      tree.setProperty("type", "Expression", nullptr);
+      tree.setProperty("useCustomEnvelope", false, nullptr);
+      if (!tree.hasProperty("adsrTarget"))
+        tree.setProperty("adsrTarget", "CC", nullptr);
+    } else if (typeStr.equalsIgnoreCase("Envelope") || typeInt == 4) {
+      tree.setProperty("type", "Expression", nullptr);
+      tree.setProperty("useCustomEnvelope", true, nullptr);
+    }
+  }
+  for (int i = 0; i < tree.getNumChildren(); ++i)
+    migrateMappingTypes(tree.getChild(i));
+}
+} // namespace
+
 void PresetManager::loadFromFile(juce::File file) {
   isLoading = true; // Phase 41.1: suspend listener reactions during load
 
@@ -59,6 +83,7 @@ void PresetManager::loadFromFile(juce::File file) {
   if (xml != nullptr) {
     auto newTree = juce::ValueTree::fromXml(*xml);
     if (newTree.isValid() && newTree.hasType(rootNode.getType())) {
+      migrateMappingTypes(newTree);
       rootNode.copyPropertiesFrom(newTree, nullptr);
       rootNode.removeAllChildren(nullptr);
       for (int i = 0; i < newTree.getNumChildren(); ++i) {

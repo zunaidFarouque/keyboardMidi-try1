@@ -4,8 +4,8 @@
 
 namespace {
 const std::array<ActionType, 5> kMappingTypeOrder = {
-    ActionType::Note, ActionType::CC, ActionType::Command, ActionType::Macro, ActionType::Envelope};
-const char* kMappingTypeNames[] = {"Note", "CC", "Command", "Macro", "Envelope"};
+    ActionType::Note, ActionType::Expression, ActionType::Command, ActionType::Macro};
+const char* kMappingTypeNames[] = {"Note", "Expression", "Command", "Macro"};
 } // namespace
 
 void SettingsPanel::initialize() {

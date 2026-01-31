@@ -10,12 +10,10 @@
 
 // Action types for MIDI mapping
 enum class ActionType {
-  Note,    // MIDI Note
-  CC,      // MIDI Control Change
-  Command, // Sustain/Latch/Panic (data1 = CommandID)
-  Macro,   // Future: Custom macro actions
-  Envelope // ADSR envelope (data1 = CC number or 0 for Pitch Bend, data2 = peak
-           // value)
+  Note,       // MIDI Note
+  Expression, // Phase 56.1: Unified CC + Envelope (key/button → CC or PB)
+  Command,    // Sustain/Latch/Panic (data1 = CommandID)
+  Macro       // Future: Custom macro actions
 };
 
 // Polyphony modes (Phase 26)
@@ -77,6 +75,7 @@ struct AdsrSettings {
   int releaseMs = 100;                // Release time in milliseconds
   AdsrTarget target = AdsrTarget::CC; // Target type
   int ccNumber = 1;                   // CC number (if target is CC)
+  bool useCustomEnvelope = false;     // Phase 56.1: false = fast path (simple CC/PB)
 
   // Legacy compatibility: isPitchBend maps to target
   bool isPitchBend() const {
@@ -92,7 +91,7 @@ struct MidiAction {
   int data1;              // Note number or CC number
   int data2;              // Velocity or CC value
   int velocityRandom = 0; // Velocity randomization range (0 = no randomization)
-  AdsrSettings adsrSettings;        // ADSR settings (for ActionType::Envelope)
+  AdsrSettings adsrSettings;        // ADSR settings (for ActionType::Expression)
   std::vector<int> smartBendLookup; // Pre-compiled PB lookup table (128
                                     // entries) for SmartScaleBend
 

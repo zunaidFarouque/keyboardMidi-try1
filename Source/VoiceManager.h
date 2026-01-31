@@ -35,6 +35,7 @@ public:
   void handleKeyUp(InputID source, int releaseDurationMs, bool shouldSustain);
 
   void sendCC(int channel, int controller, int value);
+  void sendPitchBend(int channel, int value); // Phase 56.1: for Expression release
 
   // --- Sustain (pedal) ---
   void setSustain(bool active);

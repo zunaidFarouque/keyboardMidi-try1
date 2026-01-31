@@ -272,7 +272,10 @@ void InputProcessor::valueTreePropertyChanged(
       property == juce::Identifier("adsrAttack") ||
       property == juce::Identifier("adsrDecay") ||
       property == juce::Identifier("adsrSustain") ||
-      property == juce::Identifier("adsrRelease")) {
+      property == juce::Identifier("adsrRelease") ||
+      property == juce::Identifier("useCustomEnvelope") ||
+      property == juce::Identifier("sendReleaseValue") ||
+      property == juce::Identifier("releaseValue")) {
     if (isLayerMapping || parent.isEquivalentTo(mappingsNode) ||
         treeWhosePropertyHasChanged.isEquivalentTo(mappingsNode)) {
       // SAFER: Rebuild everything.
@@ -409,18 +412,22 @@ void InputProcessor::processEvent(InputID input, bool isDown) {
           else if (cmd == static_cast<int>(OmniKey::CommandID::SustainInverse))
             voiceManager.setSustain(true);
         }
-        if (midiAction.type == ActionType::Envelope) {
+        if (midiAction.type == ActionType::Expression) {
           expressionEngine.releaseEnvelope(input);
+          // Phase 56.1: Release value for Fast Path (or simple CC-style)
+          if (midiAction.sendReleaseValue) {
+            if (midiAction.adsrSettings.target == AdsrTarget::CC)
+              voiceManager.sendCC(midiAction.channel,
+                                 midiAction.adsrSettings.ccNumber,
+                                 midiAction.releaseValue);
+            else if (midiAction.adsrSettings.target == AdsrTarget::PitchBend ||
+                     midiAction.adsrSettings.target == AdsrTarget::SmartScaleBend)
+              voiceManager.sendPitchBend(midiAction.channel, 8192);
+          }
           return;
         }
         // Phase 55.4: Note one-shot – do not send NoteOff on release
         if (midiAction.type == ActionType::Note && midiAction.isOneShot) {
-          return;
-        }
-        // Phase 55.4: CC release value – send specific value on key release
-        if (midiAction.type == ActionType::CC && midiAction.sendReleaseValue) {
-          voiceManager.sendCC(midiAction.channel, midiAction.data1,
-                              midiAction.releaseValue);
           return;
         }
         if (zone && zone->playMode == Zone::PlayMode::Strum) {
@@ -438,7 +445,7 @@ void InputProcessor::processEvent(InputID input, bool isDown) {
       }
 
       // Key-down handling
-      if (midiAction.type == ActionType::Envelope) {
+      if (midiAction.type == ActionType::Expression) {
         int peakValue = midiAction.data2;
         if (midiAction.adsrSettings.target == AdsrTarget::SmartScaleBend) {
           if (!midiAction.smartBendLookup.empty() && lastTriggeredNote >= 0 &&
@@ -523,13 +530,6 @@ void InputProcessor::processEvent(InputID input, bool isDown) {
           int deg = zoneManager.getGlobalDegreeTranspose();
           zoneManager.setGlobalTranspose(chrom, deg - 1);
         }
-        return;
-      }
-
-      if (midiAction.type == ActionType::CC) {
-        int vel =
-            calculateVelocity(midiAction.data2, midiAction.velocityRandom);
-        voiceManager.sendCC(midiAction.channel, midiAction.data1, vel);
         return;
       }
 
@@ -1075,7 +1075,8 @@ void InputProcessor::handleAxisEvent(uintptr_t deviceHandle, int inputCode,
                                      float value) {
   InputID input = {deviceHandle, inputCode};
   auto opt = lookupActionInGrid(input);
-  if (!opt || opt->type != ActionType::CC)
+  if (!opt || opt->type != ActionType::Expression ||
+      opt->adsrSettings.target != AdsrTarget::CC)
     return;
   const MidiAction &action = *opt;
 
@@ -1100,7 +1101,7 @@ void InputProcessor::handleAxisEvent(uintptr_t deviceHandle, int inputCode,
   int ccValue =
       static_cast<int>(std::round(std::clamp(currentVal, 0.0f, 127.0f)));
 
-  voiceManager.sendCC(action.channel, action.data1, ccValue);
+  voiceManager.sendCC(action.channel, action.adsrSettings.ccNumber, ccValue);
 }
 
 bool InputProcessor::hasPointerMappings() {

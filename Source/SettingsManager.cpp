@@ -63,14 +63,12 @@ juce::String SettingsManager::getTypePropertyName(ActionType type) const {
   switch (type) {
     case ActionType::Note:
       return "color_Note";
-    case ActionType::CC:
-      return "color_CC";
+    case ActionType::Expression:
+      return "color_Expression";
     case ActionType::Command:
       return "color_Command";
     case ActionType::Macro:
       return "color_Macro";
-    case ActionType::Envelope:
-      return "color_Envelope";
     default:
       return "color_Note";
   }
@@ -81,14 +79,12 @@ juce::Colour getTypeColorDefault(ActionType type) {
   switch (type) {
     case ActionType::Note:
       return juce::Colours::skyblue;
-    case ActionType::CC:
+    case ActionType::Expression:
       return juce::Colours::orange;
     case ActionType::Command:
       return juce::Colours::red;
     case ActionType::Macro:
       return juce::Colours::yellow;
-    case ActionType::Envelope:
-      return juce::Colours::purple;
     default:
       return juce::Colours::grey;
   }

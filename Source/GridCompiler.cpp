@@ -96,14 +96,12 @@ juce::Colour getColorForType(ActionType type,
   switch (type) {
   case ActionType::Note:
     return juce::Colours::orange;
-  case ActionType::CC:
+  case ActionType::Expression:
     return juce::Colours::dodgerblue;
   case ActionType::Command:
     return juce::Colours::yellow;
   case ActionType::Macro:
     return juce::Colours::mediumvioletred;
-  case ActionType::Envelope:
-    return juce::Colours::darkcyan;
   default:
     return juce::Colours::lightgrey;
   }
@@ -151,14 +149,18 @@ juce::String makeLabelForAction(const MidiAction &action) {
   case ActionType::Note: {
     return MidiNoteUtilities::getMidiNoteName(action.data1);
   }
-  case ActionType::CC:
-    return "CC " + juce::String(action.data1);
+  case ActionType::Expression: {
+    juce::String target = "CC";
+    if (action.adsrSettings.target == AdsrTarget::PitchBend)
+      target = "PB";
+    else if (action.adsrSettings.target == AdsrTarget::SmartScaleBend)
+      target = "Smart";
+    return "Expr: " + target;
+  }
   case ActionType::Command:
     return getCommandLabel(action.data1);
   case ActionType::Macro:
     return "Macro " + juce::String(action.data1);
-  case ActionType::Envelope:
-    return "Env " + juce::String(action.data1);
   default:
     return {};
   }
@@ -292,24 +294,20 @@ MidiAction buildMidiActionFromMapping(juce::ValueTree mappingNode) {
   ActionType actionType = ActionType::Note;
   if (typeVar.isString()) {
     juce::String t = typeVar.toString();
-    if (t == "CC")
-      actionType = ActionType::CC;
+    if (t == "Expression")
+      actionType = ActionType::Expression;
     else if (t == "Command")
       actionType = ActionType::Command;
     else if (t == "Macro")
       actionType = ActionType::Macro;
-    else if (t == "Envelope")
-      actionType = ActionType::Envelope;
   } else if (typeVar.isInt()) {
     int t = static_cast<int>(typeVar);
     if (t == 1)
-      actionType = ActionType::CC;
+      actionType = ActionType::Expression;
     else if (t == 2)
       actionType = ActionType::Macro;
     else if (t == 3)
       actionType = ActionType::Command;
-    else if (t == 4)
-      actionType = ActionType::Envelope;
   }
 
   action.type = actionType;
@@ -492,8 +490,43 @@ void compileMappingsForLayer(VisualGrid &vGrid, AudioGrid &aGrid,
       action.isOneShot = !sendNoteOff;
     }
 
-    // Phase 55.4: CC options (sendReleaseValue, releaseValue)
-    if (action.type == ActionType::CC) {
+    // Phase 56.1: Expression (unified CC + Envelope)
+    if (action.type == ActionType::Expression) {
+      juce::String adsrTargetStr =
+          mapping.getProperty("adsrTarget", "CC").toString().trim();
+      bool useCustomEnvelope =
+          (bool)mapping.getProperty("useCustomEnvelope", false);
+
+      if (adsrTargetStr.equalsIgnoreCase("PitchBend"))
+        action.adsrSettings.target = AdsrTarget::PitchBend;
+      else if (adsrTargetStr.equalsIgnoreCase("SmartScaleBend"))
+        action.adsrSettings.target = AdsrTarget::SmartScaleBend;
+      else
+        action.adsrSettings.target = AdsrTarget::CC;
+
+      action.adsrSettings.useCustomEnvelope = useCustomEnvelope;
+
+      if (!useCustomEnvelope) {
+        action.adsrSettings.attackMs = 0;
+        action.adsrSettings.decayMs = 0;
+        action.adsrSettings.sustainLevel = 1.0f;
+        action.adsrSettings.releaseMs = 0;
+        action.isOneShot = false;
+      } else {
+        action.adsrSettings.attackMs =
+            (int)mapping.getProperty("adsrAttack", 10);
+        action.adsrSettings.decayMs =
+            (int)mapping.getProperty("adsrDecay", 10);
+        action.adsrSettings.sustainLevel =
+            (float)mapping.getProperty("adsrSustain", 0.7);
+        action.adsrSettings.releaseMs =
+            (int)mapping.getProperty("adsrRelease", 100);
+      }
+
+      if (action.adsrSettings.target == AdsrTarget::CC) {
+        action.adsrSettings.ccNumber = (int)mapping.getProperty("data1", 1);
+      }
+      action.data2 = (int)mapping.getProperty("data2", 127);
       action.sendReleaseValue =
           (bool)mapping.getProperty("sendReleaseValue", false);
       action.releaseValue = (int)mapping.getProperty("releaseValue", 0);

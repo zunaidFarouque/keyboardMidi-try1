@@ -42,8 +42,8 @@ protected:
                   juce::String::toHexString((juce::int64)deviceH).toUpperCase(),
                   nullptr);
     juce::String typeStr = "Note";
-    if (type == ActionType::CC)
-      typeStr = "CC";
+    if (type == ActionType::Expression)
+      typeStr = "Expression";
     else if (type == ActionType::Command)
       typeStr = "Command";
     m.setProperty("type", typeStr, nullptr);
@@ -170,7 +170,7 @@ TEST_F(GridCompilerTest, DeviceInheritsFromGlobal) {
 TEST_F(GridCompilerTest, DeviceOverridesGlobalWithCC) {
   // Arrange
   addMapping(0, 81, 0);                         // Global maps Q to Note
-  addMapping(0, 81, aliasHash, ActionType::CC); // Device maps Q to CC
+  addMapping(0, 81, aliasHash, ActionType::Expression); // Device maps Q to Expression
 
   // Act
   auto context =
@@ -199,7 +199,7 @@ TEST_F(GridCompilerTest, GenericShiftExpandsToSides) {
 // If I map "Shift" (Generic) to CC, but then specifically map "LShift" to Note,
 // LShift uses the specific mapping.
 TEST_F(GridCompilerTest, SpecificModifierOverridesGeneric) {
-  addMapping(0, 0x10, 0, ActionType::CC);   // Generic -> CC
+  addMapping(0, 0x10, 0, ActionType::Expression);   // Generic -> Expression
   addMapping(0, 0xA0, 0, ActionType::Note); // LShift -> Note
 
   auto context =
@@ -209,7 +209,7 @@ TEST_F(GridCompilerTest, SpecificModifierOverridesGeneric) {
   // LShift: specific Note (default data1=60 -> "C4")
   EXPECT_EQ((*grid)[0xA0].label, "C4");
   // RShift: inherited generic CC (default data1=60)
-  EXPECT_EQ((*grid)[0xA1].label, "CC 60");
+  EXPECT_EQ((*grid)[0xA1].label, "Expr: CC");
 }
 
 // TEST H: Chord Compilation (Audio Data)

@@ -25,6 +25,16 @@ ExpressionEngine::~ExpressionEngine() {
 void ExpressionEngine::triggerEnvelope(InputID source, int channel, const AdsrSettings& settings, int peakValue) {
   juce::ScopedLock scopedLock(lock);
 
+  // Phase 56.1: Fast path for simple CC/PB (no envelope curve)
+  if (settings.attackMs == 0 && settings.decayMs == 0 && settings.releaseMs == 0) {
+    if (isPitchBendTarget(settings.target)) {
+      midiEngine.sendPitchBend(channel, peakValue);
+    } else {
+      midiEngine.sendCC(channel, settings.ccNumber, peakValue);
+    }
+    return;
+  }
+
   // If this source exists in the PB stack for this channel, remove it (re-press moves to top)
   if (isPitchBendTarget(settings.target)) {
     auto& stack = pitchBendStacks[channel];

@@ -55,10 +55,11 @@ TEST(MappingDefinitionTest, CommandContext) {
       << "data2 for Layer command should be ComboBox (Layer Selector)";
 }
 
-// Phase 55.2: Envelope with PitchBend -> data2 (Peak) has max 16383
+// Phase 55.2 / 56.1: Expression with custom envelope, PitchBend -> data2 (Peak) has max 16383
 TEST(MappingDefinitionTest, EnvelopeContext) {
   juce::ValueTree mapping("Mapping");
-  mapping.setProperty("type", "Envelope", nullptr);
+  mapping.setProperty("type", "Expression", nullptr);
+  mapping.setProperty("useCustomEnvelope", true, nullptr);
   mapping.setProperty("adsrTarget", "PitchBend", nullptr);
 
   InspectorSchema schema = MappingDefinition::getSchema(mapping);
@@ -75,10 +76,11 @@ TEST(MappingDefinitionTest, EnvelopeContext) {
       << "Envelope PitchBend data2 (Peak) should have max 16383";
 }
 
-// Phase 55.7: CC with compact dependent layout - checkbox + slider
+// Phase 55.7 / 56.1: Expression (simple) with compact dependent layout - checkbox + slider
 TEST(MappingDefinitionTest, CCCompactDependentLayout) {
   juce::ValueTree mapping("Mapping");
-  mapping.setProperty("type", "CC", nullptr);
+  mapping.setProperty("type", "Expression", nullptr);
+  mapping.setProperty("useCustomEnvelope", false, nullptr);
 
   InspectorSchema schema = MappingDefinition::getSchema(mapping);
 
@@ -92,7 +94,8 @@ TEST(MappingDefinitionTest, CCCompactDependentLayout) {
   }
   ASSERT_NE(sendRelControl, nullptr) << "Schema should have 'sendReleaseValue' control";
   EXPECT_EQ(sendRelControl->controlType, InspectorControl::Type::Toggle);
-  EXPECT_TRUE(sendRelControl->autoWidth) << "Toggle should use auto-width (Phase 55.10)";
+  EXPECT_FLOAT_EQ(sendRelControl->widthWeight, 0.45f)
+      << "Toggle should have 0.45 width weight (Phase 56.2)";
   EXPECT_FALSE(sendRelControl->sameLine) << "Toggle should start a new row";
 
   // Find releaseValue slider
@@ -107,9 +110,8 @@ TEST(MappingDefinitionTest, CCCompactDependentLayout) {
   EXPECT_EQ(releaseValControl->controlType, InspectorControl::Type::Slider);
   EXPECT_TRUE(releaseValControl->label.isEmpty()) << "Slider should have empty label for compact layout";
   EXPECT_TRUE(releaseValControl->sameLine) << "Slider should be on same line as toggle";
-  EXPECT_FALSE(releaseValControl->autoWidth) << "Slider should not use auto-width";
-  EXPECT_FLOAT_EQ(releaseValControl->widthWeight, 1.0f)
-      << "Slider should take remaining space (Phase 55.10)";
+  EXPECT_FLOAT_EQ(releaseValControl->widthWeight, 0.55f)
+      << "Slider should have 0.55 width weight (Phase 56.2)";
   EXPECT_EQ(releaseValControl->enabledConditionProperty, "sendReleaseValue") 
       << "Slider should be dependent on sendReleaseValue property";
 }

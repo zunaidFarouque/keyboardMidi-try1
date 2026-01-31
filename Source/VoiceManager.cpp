@@ -871,3 +871,7 @@ bool VoiceManager::isKeyLatched(int keyCode) const {
 void VoiceManager::sendCC(int channel, int controller, int value) {
   midiEngine.sendCC(channel, controller, value);
 }
+
+void VoiceManager::sendPitchBend(int channel, int value) {
+  midiEngine.sendPitchBend(channel, value);
+}
