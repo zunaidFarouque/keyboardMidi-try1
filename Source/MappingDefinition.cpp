@@ -27,7 +27,6 @@ std::map<int, juce::String> MappingDefinition::getCommandOptions() {
       {static_cast<int>(Cmd::GlobalModeDown), "Global Mode Down"},
       {static_cast<int>(Cmd::LayerMomentary), "Layer Momentary"},
       {static_cast<int>(Cmd::LayerToggle), "Layer Toggle"},
-      {static_cast<int>(Cmd::LayerSolo), "Layer Solo"},
   };
 }
 
@@ -242,15 +241,16 @@ InspectorSchema MappingDefinition::getSchema(const juce::ValueTree &mapping) {
       schema.push_back(relVal);
     }
   } else if (typeStr.equalsIgnoreCase("Command")) {
-    // Sustain: one control with Style dropdown when Sustain; else Command
-    // dropdown
+    // Sustain: one control with Style dropdown when Sustain; Layer: same
     static constexpr int kSustainCategoryId = 100;
+    static constexpr int kLayerCategoryId = 110;
     int cmdId = (int)mapping.getProperty("data1", 0);
     const bool isSustain = (cmdId >= 0 && cmdId <= 2);
+    const bool isLayer = (cmdId == 10 || cmdId == 11);
 
     InspectorControl cmdCtrl;
-    cmdCtrl.propertyId = isSustain ? "commandCategory" : "data1";
-    cmdCtrl.label = isSustain ? "Sustain" : "Command";
+    cmdCtrl.propertyId = (isSustain || isLayer) ? "commandCategory" : "data1";
+    cmdCtrl.label = isSustain ? "Sustain" : (isLayer ? "Layer" : "Command");
     cmdCtrl.controlType = InspectorControl::Type::ComboBox;
     cmdCtrl.options[kSustainCategoryId] = "Sustain";
     cmdCtrl.options[3] = "Latch Toggle";
@@ -258,9 +258,7 @@ InspectorSchema MappingDefinition::getSchema(const juce::ValueTree &mapping) {
     cmdCtrl.options[6] = "Transpose";
     cmdCtrl.options[8] = "Global Mode Up";
     cmdCtrl.options[9] = "Global Mode Down";
-    cmdCtrl.options[10] = "Layer Momentary";
-    cmdCtrl.options[11] = "Layer Toggle";
-    cmdCtrl.options[12] = "Layer Solo";
+    cmdCtrl.options[kLayerCategoryId] = "Layer";
     schema.push_back(cmdCtrl);
 
     if (isSustain) {
@@ -268,10 +266,19 @@ InspectorSchema MappingDefinition::getSchema(const juce::ValueTree &mapping) {
       styleCtrl.propertyId = "sustainStyle"; // Virtual: maps to data1 (0,1,2)
       styleCtrl.label = "Style";
       styleCtrl.controlType = InspectorControl::Type::ComboBox;
-      // Use 1-based IDs: JUCE ComboBox treats 0 as "no selection"
       styleCtrl.options[1] = "Hold to sustain";
       styleCtrl.options[2] = "Toggle sustain";
       styleCtrl.options[3] = "Default is on. Hold to not sustain";
+      schema.push_back(styleCtrl);
+    }
+
+    if (isLayer) {
+      InspectorControl styleCtrl;
+      styleCtrl.propertyId = "layerStyle"; // Virtual: maps to data1 (10,11)
+      styleCtrl.label = "Style";
+      styleCtrl.controlType = InspectorControl::Type::ComboBox;
+      styleCtrl.options[1] = "Hold to switch";
+      styleCtrl.options[2] = "Toggle layer";
       schema.push_back(styleCtrl);
     }
 
@@ -279,9 +286,8 @@ InspectorSchema MappingDefinition::getSchema(const juce::ValueTree &mapping) {
     const int layerMomentary =
         static_cast<int>(OmniKey::CommandID::LayerMomentary);
     const int layerToggle = static_cast<int>(OmniKey::CommandID::LayerToggle);
-    const int layerSolo = static_cast<int>(OmniKey::CommandID::LayerSolo);
 
-    if (cmdId == layerMomentary || cmdId == layerToggle || cmdId == layerSolo) {
+    if (isLayer || cmdId == layerMomentary || cmdId == layerToggle) {
       InspectorControl data2;
       data2.propertyId = "data2";
       data2.label = "Target Layer";
@@ -309,10 +315,11 @@ InspectorSchema MappingDefinition::getSchema(const juce::ValueTree &mapping) {
       schema.push_back(panicMode);
     }
     const int transpose = static_cast<int>(OmniKey::CommandID::Transpose);
-    const int globalPitchDown = static_cast<int>(OmniKey::CommandID::GlobalPitchDown);
+    const int globalPitchDown =
+        static_cast<int>(OmniKey::CommandID::GlobalPitchDown);
     if (cmdId == transpose || cmdId == globalPitchDown) {
-      schema.push_back(createSeparator("Transpose",
-                                       juce::Justification::centredLeft));
+      schema.push_back(
+          createSeparator("Transpose", juce::Justification::centredLeft));
       InspectorControl modeCtrl;
       modeCtrl.propertyId = "transposeMode"; // "global" / "local"
       modeCtrl.label = "Mode";

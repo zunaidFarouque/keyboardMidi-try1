@@ -309,62 +309,6 @@ TEST_F(InputProcessorTest, LayerToggleSwitching) {
   EXPECT_EQ(proc.getHighestActiveLayerIndex(), 1);
 }
 
-// Phase 53.2: Layer Solo - clears all latched layers, activates only target
-TEST_F(InputProcessorTest, LayerSoloClearsOtherLayers) {
-  int keyToggle1 = 10;
-  int keyToggle2 = 11;
-  int keySolo3 = 12;
-
-  // Layer 0: Key 10 -> Layer Toggle 1, Key 11 -> Layer Toggle 2, Key 12 ->
-  // Layer Solo 3
-  {
-    auto mappings = presetMgr.getMappingsListForLayer(0);
-    juce::ValueTree m1("Mapping");
-    m1.setProperty("inputKey", keyToggle1, nullptr);
-    m1.setProperty("deviceHash",
-                   juce::String::toHexString((juce::int64)0).toUpperCase(),
-                   nullptr);
-    m1.setProperty("type", "Command", nullptr);
-    m1.setProperty("data1", (int)OmniKey::CommandID::LayerToggle, nullptr);
-    m1.setProperty("data2", 1, nullptr);
-    m1.setProperty("layerID", 0, nullptr);
-    mappings.addChild(m1, -1, nullptr);
-
-    juce::ValueTree m2("Mapping");
-    m2.setProperty("inputKey", keyToggle2, nullptr);
-    m2.setProperty("deviceHash",
-                   juce::String::toHexString((juce::int64)0).toUpperCase(),
-                   nullptr);
-    m2.setProperty("type", "Command", nullptr);
-    m2.setProperty("data1", (int)OmniKey::CommandID::LayerToggle, nullptr);
-    m2.setProperty("data2", 2, nullptr);
-    m2.setProperty("layerID", 0, nullptr);
-    mappings.addChild(m2, -1, nullptr);
-
-    juce::ValueTree m3("Mapping");
-    m3.setProperty("inputKey", keySolo3, nullptr);
-    m3.setProperty("deviceHash",
-                   juce::String::toHexString((juce::int64)0).toUpperCase(),
-                   nullptr);
-    m3.setProperty("type", "Command", nullptr);
-    m3.setProperty("data1", (int)OmniKey::CommandID::LayerSolo, nullptr);
-    m3.setProperty("data2", 3, nullptr);
-    m3.setProperty("layerID", 0, nullptr);
-    mappings.addChild(m3, -1, nullptr);
-  }
-
-  proc.forceRebuildMappings();
-
-  // Activate Layer 1 and Layer 2
-  proc.processEvent(InputID{0, keyToggle1}, true);
-  proc.processEvent(InputID{0, keyToggle2}, true);
-  EXPECT_EQ(proc.getHighestActiveLayerIndex(), 2);
-
-  // Press Layer Solo 3 -> only Layer 3 active
-  proc.processEvent(InputID{0, keySolo3}, true);
-  EXPECT_EQ(proc.getHighestActiveLayerIndex(), 3);
-}
-
 // Phase 53.2: Momentary ref-count - two keys holding same layer, release one
 // keeps layer active
 TEST_F(InputProcessorTest, MomentaryRefCountMultipleKeys) {
@@ -421,6 +365,88 @@ TEST_F(InputProcessorTest, MomentaryRefCountMultipleKeys) {
   // Release Key2 -> Layer 1 off
   proc.processEvent(InputID{0, key2}, false);
   EXPECT_EQ(proc.getHighestActiveLayerIndex(), 0);
+}
+
+// Momentary layer chain: Handover – release A while holding B keeps Layer 2
+TEST_F(InputProcessorTest, MomentaryChain_Handover_StaysInLayer2) {
+  int keyA = 10; // Layer 0 -> Momentary Layer 1
+  int keyB = 11; // Layer 1 -> Momentary Layer 2
+
+  {
+    auto mappings = presetMgr.getMappingsListForLayer(0);
+    juce::ValueTree m("Mapping");
+    m.setProperty("inputKey", keyA, nullptr);
+    m.setProperty("deviceHash",
+                  juce::String::toHexString((juce::int64)0).toUpperCase(),
+                  nullptr);
+    m.setProperty("type", "Command", nullptr);
+    m.setProperty("data1", (int)OmniKey::CommandID::LayerMomentary, nullptr);
+    m.setProperty("data2", 1, nullptr);
+    m.setProperty("layerID", 0, nullptr);
+    mappings.addChild(m, -1, nullptr);
+  }
+  {
+    auto mappings = presetMgr.getMappingsListForLayer(1);
+    juce::ValueTree m("Mapping");
+    m.setProperty("inputKey", keyB, nullptr);
+    m.setProperty("deviceHash",
+                  juce::String::toHexString((juce::int64)0).toUpperCase(),
+                  nullptr);
+    m.setProperty("type", "Command", nullptr);
+    m.setProperty("data1", (int)OmniKey::CommandID::LayerMomentary, nullptr);
+    m.setProperty("data2", 2, nullptr);
+    m.setProperty("layerID", 1, nullptr);
+    mappings.addChild(m, -1, nullptr);
+  }
+  proc.forceRebuildMappings();
+
+  proc.processEvent(InputID{0, keyA}, true);  // Hold A -> Layer 1
+  proc.processEvent(InputID{0, keyB}, true);  // Hold B -> Layer 2
+  proc.processEvent(InputID{0, keyA}, false); // Release A while B held
+
+  EXPECT_EQ(proc.getHighestActiveLayerIndex(), 2)
+      << "Handover: Layer 2 should stay active when A is released (B held)";
+}
+
+// Momentary layer chain: Free Fall – release B after A drops to Layer 0
+TEST_F(InputProcessorTest, MomentaryChain_FreeFall_DropsToLayer0) {
+  int keyA = 10;
+  int keyB = 11;
+  {
+    auto mappings = presetMgr.getMappingsListForLayer(0);
+    juce::ValueTree m("Mapping");
+    m.setProperty("inputKey", keyA, nullptr);
+    m.setProperty("deviceHash",
+                  juce::String::toHexString((juce::int64)0).toUpperCase(),
+                  nullptr);
+    m.setProperty("type", "Command", nullptr);
+    m.setProperty("data1", (int)OmniKey::CommandID::LayerMomentary, nullptr);
+    m.setProperty("data2", 1, nullptr);
+    m.setProperty("layerID", 0, nullptr);
+    mappings.addChild(m, -1, nullptr);
+  }
+  {
+    auto mappings = presetMgr.getMappingsListForLayer(1);
+    juce::ValueTree m("Mapping");
+    m.setProperty("inputKey", keyB, nullptr);
+    m.setProperty("deviceHash",
+                  juce::String::toHexString((juce::int64)0).toUpperCase(),
+                  nullptr);
+    m.setProperty("type", "Command", nullptr);
+    m.setProperty("data1", (int)OmniKey::CommandID::LayerMomentary, nullptr);
+    m.setProperty("data2", 2, nullptr);
+    m.setProperty("layerID", 1, nullptr);
+    mappings.addChild(m, -1, nullptr);
+  }
+  proc.forceRebuildMappings();
+
+  proc.processEvent(InputID{0, keyA}, true);  // Hold A -> Layer 1
+  proc.processEvent(InputID{0, keyB}, true);  // Hold B -> Layer 2
+  proc.processEvent(InputID{0, keyA}, false); // Release A
+  proc.processEvent(InputID{0, keyB}, false); // Release B
+
+  EXPECT_EQ(proc.getHighestActiveLayerIndex(), 0)
+      << "Free Fall: Releasing B should drop to Layer 0 (not Layer 1)";
 }
 
 // Phase 54.2 / 53.9: Studio Mode OFF - device-specific mappings ignored
@@ -683,6 +709,66 @@ TEST_F(NoteTypeTest, AllParamsWorkTogether) {
   EXPECT_EQ(mockMidi.events[1].note, 84);
 }
 
+// Momentary layer chain: Phantom Key – B release must not trigger Note(C3)
+TEST_F(NoteTypeTest, MomentaryChain_PhantomKey_ReleaseDoesNotTriggerNote) {
+  // Layer 0: Key 10 = Momentary(L1), Key 11 = Note(C3)
+  // Layer 1: Key 11 = Momentary(L2)
+  const int keyA = 10;
+  const int keyB = 11;
+  const int noteC3 = 48; // MIDI note 48 = C3
+
+  {
+    auto mappings = presetMgr.getMappingsListForLayer(0);
+    juce::ValueTree m1("Mapping");
+    m1.setProperty("inputKey", keyA, nullptr);
+    m1.setProperty("deviceHash",
+                   juce::String::toHexString((juce::int64)0).toUpperCase(),
+                   nullptr);
+    m1.setProperty("type", "Command", nullptr);
+    m1.setProperty("data1", (int)OmniKey::CommandID::LayerMomentary, nullptr);
+    m1.setProperty("data2", 1, nullptr);
+    m1.setProperty("layerID", 0, nullptr);
+    mappings.addChild(m1, -1, nullptr);
+
+    juce::ValueTree m2("Mapping");
+    m2.setProperty("inputKey", keyB, nullptr);
+    m2.setProperty("deviceHash",
+                   juce::String::toHexString((juce::int64)0).toUpperCase(),
+                   nullptr);
+    m2.setProperty("type", "Note", nullptr);
+    m2.setProperty("channel", 1, nullptr);
+    m2.setProperty("data1", noteC3, nullptr);
+    m2.setProperty("data2", 127, nullptr);
+    m2.setProperty("layerID", 0, nullptr);
+    mappings.addChild(m2, -1, nullptr);
+  }
+  {
+    auto mappings = presetMgr.getMappingsListForLayer(1);
+    juce::ValueTree m("Mapping");
+    m.setProperty("inputKey", keyB, nullptr);
+    m.setProperty("deviceHash",
+                  juce::String::toHexString((juce::int64)0).toUpperCase(),
+                  nullptr);
+    m.setProperty("type", "Command", nullptr);
+    m.setProperty("data1", (int)OmniKey::CommandID::LayerMomentary, nullptr);
+    m.setProperty("data2", 2, nullptr);
+    m.setProperty("layerID", 1, nullptr);
+    mappings.addChild(m, -1, nullptr);
+  }
+  proc.forceRebuildMappings();
+  mockMidi.clear();
+
+  proc.processEvent(InputID{0, keyA}, true); // Hold A -> Layer 1
+  proc.processEvent(InputID{0, keyB},
+                    true); // Hold B -> Layer 2 (B = Momentary on L1)
+  proc.processEvent(InputID{0, keyA}, false); // Release A (handover)
+  proc.processEvent(InputID{0, keyB},
+                    false); // Release B – must NOT trigger Note C3
+
+  EXPECT_EQ(mockMidi.events.size(), 0u)
+      << "Phantom Key: B release must not trigger Note C3 on Layer 0";
+}
+
 // Sustain Toggle: when turned off, send one NoteOff per unique note, not per
 // voice
 TEST_F(NoteTypeTest, SustainToggleOffSendsOneNoteOffPerUniqueNote) {
@@ -910,16 +996,18 @@ TEST_F(NoteTypeTest, PanicLatchedOnly_SendsNoteOffOnlyForLatched) {
   EXPECT_EQ(mockMidi.events[1].note, 60);
 }
 
-// Transpose command: up1, down1, up12, down12, set; zone selector is placeholder
-void addTransposeMapping(juce::ValueTree &mappings, int inputKey, int transposeModify,
-                         int transposeSemitones = 0) {
+// Transpose command: up1, down1, up12, down12, set; zone selector is
+// placeholder
+void addTransposeMapping(juce::ValueTree &mappings, int inputKey,
+                         int transposeModify, int transposeSemitones = 0) {
   juce::ValueTree m("Mapping");
   m.setProperty("inputKey", inputKey, nullptr);
   m.setProperty("deviceHash",
                 juce::String::toHexString((juce::int64)0).toUpperCase(),
                 nullptr);
   m.setProperty("type", "Command", nullptr);
-  m.setProperty("data1", static_cast<int>(OmniKey::CommandID::Transpose), nullptr);
+  m.setProperty("data1", static_cast<int>(OmniKey::CommandID::Transpose),
+                nullptr);
   m.setProperty("transposeModify", transposeModify, nullptr);
   m.setProperty("transposeSemitones", transposeSemitones, nullptr);
   m.setProperty("layerID", 0, nullptr);
@@ -1021,7 +1109,8 @@ TEST_F(NoteTypeTest, LegacyGlobalPitchDown_DecreasesChromaticByOne) {
                 juce::String::toHexString((juce::int64)0).toUpperCase(),
                 nullptr);
   m.setProperty("type", "Command", nullptr);
-  m.setProperty("data1", static_cast<int>(OmniKey::CommandID::GlobalPitchDown), nullptr);
+  m.setProperty("data1", static_cast<int>(OmniKey::CommandID::GlobalPitchDown),
+                nullptr);
   m.setProperty("layerID", 0, nullptr);
   mappings.addChild(m, -1, nullptr);
   proc.forceRebuildMappings();

@@ -312,8 +312,14 @@ void MappingInspector::createControl(const InspectorControl &def,
       int modify = static_cast<int>(currentVal);
       int id = (modify >= 0 && modify <= 4) ? (modify + 1) : 1;
       cb->setSelectedId(id, juce::dontSendNotification);
+    } else if (def.propertyId == "layerStyle") {
+      // Virtual: data1 10,11 -> combo ids 1,2 (Hold to switch, Toggle layer)
+      int data1 = static_cast<int>(getCommonValue("data1"));
+      int id = (data1 == 10) ? 1 : (data1 == 11) ? 2 : 1;
+      cb->setSelectedId(id, juce::dontSendNotification);
     } else if (def.propertyId == "commandCategory") {
-      // Virtual: data1 0,1,2 -> Sustain (100); 5 -> Panic (4); 7 -> Transpose (6)
+      // Virtual: data1 0,1,2 -> Sustain (100); 5 -> Panic (4); 7 -> Transpose
+      // (6); 10,11 -> Layer (110)
       int data1 = static_cast<int>(getCommonValue("data1"));
       if (data1 >= 0 && data1 <= 2)
         cb->setSelectedId(100, juce::dontSendNotification);
@@ -322,7 +328,10 @@ void MappingInspector::createControl(const InspectorControl &def,
                           juce::dontSendNotification); // Panic Latch -> Panic
       else if (data1 == 7)
         cb->setSelectedId(6, juce::dontSendNotification); // Legacy -> Transpose
-      else if (data1 >= 3 && data1 <= 12)
+      else if (data1 == 10 || data1 == 11)
+        cb->setSelectedId(110,
+                          juce::dontSendNotification); // Layer (Hold/Toggle)
+      else if (data1 >= 3 && data1 <= 9)
         cb->setSelectedId(data1, juce::dontSendNotification);
     } else if (def.propertyId == "data1" && !def.options.count(5)) {
       // Panic Latch (5) -> 4; GlobalPitchDown (7) -> 6
@@ -343,10 +352,12 @@ void MappingInspector::createControl(const InspectorControl &def,
       if (selectedTrees.empty())
         return;
       undoManager.beginNewTransaction("Change " + def.label);
-      // Only command-type virtual props write to data1; transpose writes to its own props
+      // Only command-type virtual props write to data1; transpose writes to its
+      // own props
       juce::Identifier actualProp =
           (def.propertyId == "commandCategory" ||
-           def.propertyId == "sustainStyle" || def.propertyId == "panicMode")
+           def.propertyId == "sustainStyle" || def.propertyId == "panicMode" ||
+           def.propertyId == "layerStyle")
               ? juce::Identifier("data1")
               : propId;
       juce::var valueToSet;
@@ -358,7 +369,9 @@ void MappingInspector::createControl(const InspectorControl &def,
             (it != def.options.end()) ? juce::var(it->second) : juce::var();
       } else if (def.propertyId == "commandCategory") {
         int id = cbPtr->getSelectedId();
-        valueToSet = (id == 100) ? juce::var(0) : juce::var(id);
+        valueToSet = (id == 100)   ? juce::var(0)
+                     : (id == 110) ? juce::var(10) // Layer -> data1=10 (Hold)
+                                   : juce::var(id);
       } else if (def.propertyId == "panicMode") {
         // Virtual: 1=Panic all (data2=0), 2=Panic latched only (data2=1)
         int id = cbPtr->getSelectedId();
@@ -376,16 +389,21 @@ void MappingInspector::createControl(const InspectorControl &def,
         // Virtual: combo ids 1,2,3 -> data1 0,1,2
         int id = cbPtr->getSelectedId();
         valueToSet = juce::var((id >= 1 && id <= 3) ? (id - 1) : 0);
+      } else if (def.propertyId == "layerStyle") {
+        // Virtual: combo ids 1,2 -> data1 10,11 (Hold to switch, Toggle layer)
+        int id = cbPtr->getSelectedId();
+        valueToSet = juce::var((id == 2) ? 11 : 10);
       } else if (def.propertyId == "transposeMode") {
         int id = cbPtr->getSelectedId();
         valueToSet = juce::var(id == 2 ? "Local" : "Global");
       } else if (def.propertyId == "transposeModify") {
         int id = cbPtr->getSelectedId();
         valueToSet = juce::var((id >= 1 && id <= 5) ? (id - 1) : 0);
-      } else if (def.propertyId == "data1" && def.options.count(100) > 0) {
-        // Command dropdown with Sustain (100): map 100 -> 0
+      } else if (def.propertyId == "data1" &&
+                 (def.options.count(100) > 0 || def.options.count(110) > 0)) {
+        // Command dropdown with Sustain (100) or Layer (110)
         int id = cbPtr->getSelectedId();
-        valueToSet = juce::var((id == 100) ? 0 : id);
+        valueToSet = juce::var((id == 100) ? 0 : (id == 110) ? 10 : id);
       } else {
         valueToSet = cbPtr->getSelectedId();
       }
@@ -396,7 +414,8 @@ void MappingInspector::createControl(const InspectorControl &def,
       if (def.propertyId == "type" || def.propertyId == "data1" ||
           def.propertyId == "commandCategory" ||
           def.propertyId == "sustainStyle" || def.propertyId == "panicMode" ||
-          def.propertyId == "transposeMode" || def.propertyId == "transposeModify")
+          def.propertyId == "layerStyle" || def.propertyId == "transposeMode" ||
+          def.propertyId == "transposeModify")
         juce::MessageManager::callAsync([this]() { rebuildUI(); });
     };
 

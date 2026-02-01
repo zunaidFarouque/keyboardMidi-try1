@@ -121,6 +121,7 @@ void InputProcessor::rebuildGrid() {
   // Phase 53.7: Layer state under stateLock only
   {
     juce::ScopedLock sl(stateLock);
+    momentaryLayerHolds.clear(); // Momentary chain: stale after grid rebuild
     for (int i = 0; i < 9; ++i) {
       juce::ValueTree layerNode = presetManager.getLayerNode(i);
       if (layerNode.isValid())
@@ -376,6 +377,20 @@ void InputProcessor::processEvent(InputID input, bool isDown) {
                                         (layerMomentaryCounts[(size_t)i] > 0);
   }
 
+  // Momentary layer chain: key-up of a key holding a layer (Phantom Key fix)
+  if (!isDown) {
+    juce::ScopedLock sl(stateLock);
+    auto it = momentaryLayerHolds.find(held);
+    if (it != momentaryLayerHolds.end()) {
+      int target = juce::jlimit(0, 8, it->second);
+      if (layerMomentaryCounts[(size_t)target] > 0)
+        layerMomentaryCounts[(size_t)target]--;
+      momentaryLayerHolds.erase(it);
+      sendChangeMessage();
+      return;
+    }
+  }
+
   {
     juce::ScopedReadLock rl(mapLock);
     auto ctx = activeContext;
@@ -512,6 +527,7 @@ void InputProcessor::processEvent(InputID input, bool isDown) {
           {
             juce::ScopedLock sl(stateLock);
             layerMomentaryCounts[(size_t)target]++;
+            momentaryLayerHolds[held] = target;
             sendChangeMessage();
           }
           return;
@@ -523,20 +539,6 @@ void InputProcessor::processEvent(InputID input, bool isDown) {
               juce::ScopedLock sl(stateLock);
               layerLatchedState[(size_t)target] =
                   !layerLatchedState[(size_t)target];
-              sendChangeMessage();
-            }
-            return;
-          }
-          return;
-        }
-        if (cmd == static_cast<int>(OmniKey::CommandID::LayerSolo)) {
-          if (isDown) {
-            int target = juce::jlimit(0, 8, layerId);
-            {
-              juce::ScopedLock sl(stateLock);
-              std::fill(layerLatchedState.begin(), layerLatchedState.end(),
-                        false);
-              layerLatchedState[(size_t)target] = true;
               sendChangeMessage();
             }
             return;
@@ -563,23 +565,36 @@ void InputProcessor::processEvent(InputID input, bool isDown) {
         } else if (cmd == static_cast<int>(OmniKey::CommandID::PanicLatch)) {
           voiceManager.panicLatch(); // Backward compat: old Panic Latch mapping
         } else if (cmd == static_cast<int>(OmniKey::CommandID::Transpose) ||
-                   cmd == static_cast<int>(OmniKey::CommandID::GlobalPitchDown)) {
+                   cmd ==
+                       static_cast<int>(OmniKey::CommandID::GlobalPitchDown)) {
           int chrom = zoneManager.getGlobalChromaticTranspose();
           int deg = zoneManager.getGlobalDegreeTranspose();
           int modify = midiAction.transposeModify;
           if (cmd == static_cast<int>(OmniKey::CommandID::GlobalPitchDown))
             modify = 1; // Legacy
           switch (modify) {
-          case 0: chrom += 1; break;   // Up 1 semitone
-          case 1: chrom -= 1; break;   // Down 1 semitone
-          case 2: chrom += 12; break; // Up 1 octave
-          case 3: chrom -= 12; break;  // Down 1 octave
-          case 4: chrom = midiAction.transposeSemitones; break; // Set
-          default: break;
+          case 0:
+            chrom += 1;
+            break; // Up 1 semitone
+          case 1:
+            chrom -= 1;
+            break; // Down 1 semitone
+          case 2:
+            chrom += 12;
+            break; // Up 1 octave
+          case 3:
+            chrom -= 12;
+            break; // Down 1 octave
+          case 4:
+            chrom = midiAction.transposeSemitones;
+            break; // Set
+          default:
+            break;
           }
           chrom = juce::jlimit(-48, 48, chrom);
           zoneManager.setGlobalTranspose(chrom, deg);
-          // transposeLocal: placeholder – local/zone selector not implemented yet
+          // transposeLocal: placeholder – local/zone selector not implemented
+          // yet
         } else if (cmd == static_cast<int>(OmniKey::CommandID::GlobalModeUp)) {
           int chrom = zoneManager.getGlobalChromaticTranspose();
           int deg = zoneManager.getGlobalDegreeTranspose();

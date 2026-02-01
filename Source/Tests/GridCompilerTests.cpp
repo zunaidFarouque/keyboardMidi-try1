@@ -268,21 +268,6 @@ TEST_F(GridCompilerTest, LayerToggleNotInherited) {
   EXPECT_EQ((*l1)[11].state, VisualState::Empty);
 }
 
-// Phase 53.5: LayerSolo must not be inherited (same filter as LayerMomentary)
-TEST_F(GridCompilerTest, LayerSoloNotInherited) {
-  addCommandMapping(0, 12, 0,
-                    static_cast<int>(OmniKey::CommandID::LayerSolo), 2);
-
-  auto context =
-      GridCompiler::compile(presetMgr, deviceMgr, zoneMgr, settingsMgr);
-
-  auto l0 = context->visualLookup[0][0];
-  EXPECT_EQ((*l0)[12].state, VisualState::Active);
-
-  auto l1 = context->visualLookup[0][1];
-  EXPECT_EQ((*l1)[12].state, VisualState::Empty);
-}
-
 // Phase 53.4: Device view vertical inheritance – Layer 0 mapping on device
 // should appear as Inherited on Layer 1 of the same device view.
 TEST_F(GridCompilerTest, DeviceVerticalInheritanceIsDimmed) {

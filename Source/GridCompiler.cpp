@@ -135,8 +135,6 @@ juce::String getCommandLabel(int cmdId) {
     return "Layer (Hold)";
   case CommandID::LayerToggle:
     return "Layer (Toggle)";
-  case CommandID::LayerSolo:
-    return "Layer Solo";
   default:
     break;
   }
@@ -419,8 +417,7 @@ static bool isLayerCommand(const MidiAction &action) {
     return false;
   const int cmd = action.data1;
   return (cmd == static_cast<int>(OmniKey::CommandID::LayerMomentary) ||
-          cmd == static_cast<int>(OmniKey::CommandID::LayerToggle) ||
-          cmd == static_cast<int>(OmniKey::CommandID::LayerSolo));
+          cmd == static_cast<int>(OmniKey::CommandID::LayerToggle));
 }
 
 // Phase 51.4 / 53.5: Apply manual mappings for a single layer. targetState for
@@ -552,12 +549,14 @@ void compileMappingsForLayer(VisualGrid &vGrid, AudioGrid &aGrid,
     // Transpose command: mode, modify, semitones (for set)
     if (action.type == ActionType::Command &&
         (action.data1 == static_cast<int>(OmniKey::CommandID::Transpose) ||
-         action.data1 == static_cast<int>(OmniKey::CommandID::GlobalPitchDown))) {
+         action.data1 ==
+             static_cast<int>(OmniKey::CommandID::GlobalPitchDown))) {
       juce::String modeStr =
           mapping.getProperty("transposeMode", "Global").toString();
       action.transposeLocal = modeStr.equalsIgnoreCase("Local");
       int modify = (int)mapping.getProperty("transposeModify", 0);
-      if (action.data1 == static_cast<int>(OmniKey::CommandID::GlobalPitchDown)) {
+      if (action.data1 ==
+          static_cast<int>(OmniKey::CommandID::GlobalPitchDown)) {
         modify = 1; // Legacy: down 1 semitone
       }
       action.transposeModify = juce::jlimit(0, 4, modify);

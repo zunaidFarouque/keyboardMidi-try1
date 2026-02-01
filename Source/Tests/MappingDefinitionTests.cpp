@@ -55,6 +55,37 @@ TEST(MappingDefinitionTest, CommandContext) {
       << "data2 for Layer command should be ComboBox (Layer Selector)";
 }
 
+// Layer unified UI: data1 10 or 11 -> commandCategory, layerStyle, data2
+TEST(MappingDefinitionTest, LayerUnifiedUI) {
+  for (int data1 : {10, 11}) {
+    juce::ValueTree mapping("Mapping");
+    mapping.setProperty("type", "Command", nullptr);
+    mapping.setProperty("data1", data1, nullptr);
+    mapping.setProperty("data2", 1, nullptr);
+
+    InspectorSchema schema = MappingDefinition::getSchema(mapping);
+
+    const InspectorControl *cmdCtrl = nullptr;
+    const InspectorControl *layerStyleCtrl = nullptr;
+    const InspectorControl *data2Ctrl = nullptr;
+    for (const auto &c : schema) {
+      if (c.propertyId == "commandCategory")
+        cmdCtrl = &c;
+      else if (c.propertyId == "layerStyle")
+        layerStyleCtrl = &c;
+      else if (c.propertyId == "data2")
+        data2Ctrl = &c;
+    }
+    ASSERT_NE(cmdCtrl, nullptr) << "Layer command should use commandCategory";
+    EXPECT_EQ(cmdCtrl->label, "Layer");
+    ASSERT_NE(layerStyleCtrl, nullptr)
+        << "Layer command should have layerStyle (Style dropdown)";
+    EXPECT_EQ(layerStyleCtrl->options.size(), 2u)
+        << "layerStyle should have Hold to switch, Toggle layer";
+    ASSERT_NE(data2Ctrl, nullptr) << "Layer command should have Target Layer";
+  }
+}
+
 // Phase 55.2 / 56.1: Expression with custom envelope, PitchBend -> data2 (Peak) has max 16383
 TEST(MappingDefinitionTest, EnvelopeContext) {
   juce::ValueTree mapping("Mapping");

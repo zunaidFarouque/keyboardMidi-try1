@@ -113,6 +113,10 @@ private:
   std::vector<bool> layerLatchedState; // 9 elements, from preset / Toggle/Solo
   std::vector<int> layerMomentaryCounts; // 9 elements, ref count for held keys
 
+  // Momentary layer chain: track which keys hold which layer (for Phantom Key)
+  std::unordered_map<InputID, int>
+      momentaryLayerHolds; // InputID -> target layer 0-8
+
   // Helper: Layer 0 always active; else active if latched or momentary count >
   // 0
   bool isLayerActive(int layerIdx) const;
@@ -149,7 +153,8 @@ private:
   // Helpers
   void rebuildGrid();
 
-  // Sustain default/cleanup: called on init and when sustain-related mappings change
+  // Sustain default/cleanup: called on init and when sustain-related mappings
+  // change
   void applySustainDefaultFromPreset();
 
   // Phase 52.1: Grid lookup for getMappingForInput / handleAxisEvent (replaces
