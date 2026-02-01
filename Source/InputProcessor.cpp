@@ -697,6 +697,22 @@ void InputProcessor::processZoneNote(InputID input, std::shared_ptr<Zone> zone,
         finalVelocities.push_back(mainVelocity);
       }
     }
+    if (zone->strumGhostNotes && finalVelocities.size() > 2) {
+      for (size_t i = 1; i < finalVelocities.size() - 1; ++i)
+        finalVelocities[i] = juce::jlimit(
+            1, 127,
+            static_cast<int>(finalVelocities[i] * 0.85f));
+    }
+    if (zone->humanize) {
+      juce::Random& rng = juce::Random::getSystemRandom();
+      for (size_t i = 0; i < finalVelocities.size(); ++i) {
+        float factor = 1.0f + (rng.nextFloat() * 0.1f - 0.05f);
+        finalVelocities[i] =
+            juce::jlimit(1, 127,
+                         static_cast<int>(finalVelocities[i] * factor));
+      }
+    }
+    int humanizeMs = (zone->humanize && zone->strumSpeedMs > 0) ? 15 : 0;
 
     if (zone->playMode == Zone::PlayMode::Direct) {
       int releaseMs = zone->releaseDurationMs;
@@ -711,7 +727,8 @@ void InputProcessor::processZoneNote(InputID input, std::shared_ptr<Zone> zone,
       if (finalNotes.size() > 1) {
         voiceManager.noteOn(input, finalNotes, finalVelocities, action.channel,
                             zone->strumSpeedMs, allowSustain, releaseMs,
-                            zone->polyphonyMode, glideSpeed);
+                            zone->polyphonyMode, glideSpeed,
+                            static_cast<int>(zone->strumPattern), humanizeMs);
         if (!finalNotes.empty())
           lastTriggeredNote = finalNotes.front();
       } else {
@@ -733,7 +750,8 @@ void InputProcessor::processZoneNote(InputID input, std::shared_ptr<Zone> zone,
       voiceManager.handleKeyUp(lastStrumSource);
       voiceManager.noteOn(input, finalNotes, finalVelocities, action.channel,
                           strumMs, allowSustain, 0, zone->polyphonyMode,
-                          glideSpeed);
+                          glideSpeed, static_cast<int>(zone->strumPattern),
+                          humanizeMs);
       lastStrumSource = input;
       if (!finalNotes.empty())
         lastTriggeredNote = finalNotes.front();
@@ -799,6 +817,22 @@ void InputProcessor::processZoneChord(
       finalVelocities.push_back(mainVelocity);
     }
   }
+  if (zone->strumGhostNotes && finalVelocities.size() > 2) {
+    for (size_t i = 1; i < finalVelocities.size() - 1; ++i)
+      finalVelocities[i] =
+          juce::jlimit(1, 127,
+                       static_cast<int>(finalVelocities[i] * 0.85f));
+  }
+  if (zone->humanize) {
+    juce::Random& rng = juce::Random::getSystemRandom();
+    for (size_t i = 0; i < finalVelocities.size(); ++i) {
+      float factor = 1.0f + (rng.nextFloat() * 0.1f - 0.05f);
+      finalVelocities[i] =
+          juce::jlimit(1, 127,
+                       static_cast<int>(finalVelocities[i] * factor));
+    }
+  }
+  int humanizeMs = (zone->humanize && zone->strumSpeedMs > 0) ? 15 : 0;
 
   if (zone->playMode == Zone::PlayMode::Direct) {
     int releaseMs = zone->releaseDurationMs;
@@ -810,7 +844,8 @@ void InputProcessor::processZoneChord(
     }
     voiceManager.noteOn(input, finalNotes, finalVelocities, rootAction.channel,
                         zone->strumSpeedMs, allowSustain, releaseMs,
-                        zone->polyphonyMode, glideSpeed);
+                        zone->polyphonyMode, glideSpeed,
+                        static_cast<int>(zone->strumPattern), humanizeMs);
     if (!finalNotes.empty())
       lastTriggeredNote = finalNotes.front();
   } else if (zone->playMode == Zone::PlayMode::Strum) {
@@ -824,7 +859,8 @@ void InputProcessor::processZoneChord(
     voiceManager.handleKeyUp(lastStrumSource);
     voiceManager.noteOn(input, finalNotes, finalVelocities, rootAction.channel,
                         strumMs, allowSustain, 0, zone->polyphonyMode,
-                        glideSpeed);
+                        glideSpeed, static_cast<int>(zone->strumPattern),
+                        humanizeMs);
     lastStrumSource = input;
     if (!finalNotes.empty())
       lastTriggeredNote = finalNotes.front();

@@ -29,6 +29,7 @@ private:
 
   // 3. Containers (Must die first)
   juce::Viewport propertiesViewport;
+  int savedPropertiesScrollY = 0;
 
   // Resizable layout for list and properties
   juce::StretchableLayoutManager horizontalLayout;

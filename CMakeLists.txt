@@ -110,6 +110,7 @@ target_sources(OmniKey PRIVATE
     Source/LogComponent.cpp
     Source/DeviceSetupComponent.cpp
     Source/MappingInspector.cpp
+    Source/ZoneDefinition.cpp
     Source/DetachableContainer.cpp
     Source/KeyChipList.cpp
     Source/MiniStatusWindow.cpp
@@ -151,6 +152,7 @@ enable_testing()
 # 11. Define the Test Runner Exe
 add_executable(OmniKey_Tests
     Source/Tests/SanityTest.cpp
+    Source/Tests/ChordUtilitiesTests.cpp
     Source/Tests/GridCompilerTests.cpp
     Source/Tests/InputProcessorTests.cpp
     Source/Tests/MappingDefinitionTests.cpp

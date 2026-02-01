@@ -4,7 +4,6 @@
 #include "ZoneManager.h"
 #include <algorithm>
 
-// Helper to convert alias name to hash (same as in InputProcessor)
 static uintptr_t aliasNameToHash(const juce::String &aliasName) {
   if (aliasName.isEmpty() || aliasName == "Any / Master" ||
       aliasName == "Global (All Devices)" || aliasName == "Global" ||
@@ -13,16 +12,88 @@ static uintptr_t aliasNameToHash(const juce::String &aliasName) {
   return static_cast<uintptr_t>(std::hash<juce::String>{}(aliasName));
 }
 
-// Helper to convert alias hash to name (for display)
-static juce::String aliasHashToName(uintptr_t hash, DeviceManager *deviceMgr) {
-  if (hash == 0)
-    return "Global (All Devices)";
+namespace {
+struct LabelEditorRow : juce::Component {
+  std::unique_ptr<juce::Label> label;
+  std::unique_ptr<juce::Component> editor;
+  static constexpr int labelWidth = 120;
+  void resized() override {
+    auto r = getLocalBounds();
+    if (label)
+      label->setBounds(r.removeFromLeft(labelWidth));
+    if (editor)
+      editor->setBounds(r);
+  }
+};
 
-  // We can't easily reverse the hash, so we'll need to check all aliases
-  // For now, just return "Unknown" - in practice, we should store the alias
-  // name For Phase 11, we'll use a simple approach: store the alias name in the
-  // zone
-  return "Unknown";
+class LabeledControl : public juce::Component {
+public:
+  LabeledControl(std::unique_ptr<juce::Label> l,
+                 std::unique_ptr<juce::Component> c)
+      : label(std::move(l)), editor(std::move(c)) {
+    if (label)
+      addAndMakeVisible(*label);
+    addAndMakeVisible(*editor);
+  }
+  void resized() override {
+    auto area = getLocalBounds();
+    if (label) {
+      int textWidth = label->getFont().getStringWidth(label->getText()) + 10;
+      label->setBounds(area.removeFromLeft(textWidth));
+    }
+    editor->setBounds(area);
+  }
+  int getIdealWidth() const {
+    int w = 0;
+    if (label)
+      w += label->getFont().getStringWidth(label->getText()) + 10;
+    w += 30;
+    return w;
+  }
+
+private:
+  std::unique_ptr<juce::Label> label;
+  std::unique_ptr<juce::Component> editor;
+};
+} // namespace
+
+ZonePropertiesPanel::SeparatorComponent::SeparatorComponent(
+    const juce::String &label, juce::Justification justification)
+    : labelText(label), textAlign(justification) {}
+
+void ZonePropertiesPanel::SeparatorComponent::paint(juce::Graphics &g) {
+  auto bounds = getLocalBounds();
+  const float centreY = bounds.getCentreY();
+  const int lineY = static_cast<int>(centreY - 0.5f);
+  const int lineHeight = 1;
+  const int pad = 5;
+  g.setColour(juce::Colours::grey);
+  if (labelText.isEmpty()) {
+    g.fillRect(bounds.getX(), lineY, bounds.getWidth(), lineHeight);
+    return;
+  }
+  juce::Font font(14.0f, juce::Font::bold);
+  const int textBlockWidth = font.getStringWidth(labelText) + pad * 2;
+  int textLeft, textRight;
+  if ((textAlign.getFlags() & juce::Justification::centredLeft) != 0) {
+    textLeft = bounds.getX();
+    textRight = textLeft + textBlockWidth;
+  } else if ((textAlign.getFlags() & juce::Justification::centredRight) != 0) {
+    textRight = bounds.getRight();
+    textLeft = textRight - textBlockWidth;
+  } else {
+    textLeft = bounds.getCentreX() - textBlockWidth / 2;
+    textRight = textLeft + textBlockWidth;
+  }
+  g.setColour(juce::Colours::lightgrey);
+  g.setFont(font);
+  g.drawText(labelText, textLeft, bounds.getY(), textBlockWidth,
+             bounds.getHeight(), textAlign, true);
+  if (textLeft - pad > bounds.getX())
+    g.fillRect(bounds.getX(), lineY, textLeft - pad - bounds.getX(), lineHeight);
+  if (textRight + pad < bounds.getRight())
+    g.fillRect(textRight + pad, lineY, bounds.getRight() - (textRight + pad),
+               lineHeight);
 }
 
 ZonePropertiesPanel::ZonePropertiesPanel(ZoneManager *zoneMgr,
@@ -31,1366 +102,906 @@ ZonePropertiesPanel::ZonePropertiesPanel(ZoneManager *zoneMgr,
                                          ScaleLibrary *scaleLib)
     : zoneManager(zoneMgr), deviceManager(deviceMgr),
       rawInputManager(rawInputMgr), scaleLibrary(scaleLib) {
-
-  // Labels
-  addAndMakeVisible(aliasLabel);
-  aliasLabel.setText("Device Alias:", juce::dontSendNotification);
-  aliasLabel.attachToComponent(&aliasSelector, true);
-
-  addAndMakeVisible(aliasSelector);
-  refreshAliasSelector();
-  aliasSelector.onChange = [this] {
-    if (currentZone && deviceManager) {
-      int selected = aliasSelector.getSelectedItemIndex();
-      if (selected >= 0) {
-        juce::String aliasName = aliasSelector.getItemText(selected);
-        currentZone->targetAliasHash = aliasNameToHash(aliasName);
-        // Rebuild lookup table when alias changes
-        if (zoneManager) {
-          zoneManager->rebuildLookupTable();
-          zoneManager->sendChangeMessage(); // Notify listeners (e.g.,
-                                            // Visualizer) to invalidate cache
-        }
-      }
-    }
-  };
-
-  // Phase 49: Layer selector (Zone belongs to a layer 0..8)
-  addAndMakeVisible(layerLabel);
-  layerLabel.setText("Layer:", juce::dontSendNotification);
-  layerLabel.attachToComponent(&layerSelector, true);
-
-  addAndMakeVisible(layerSelector);
-  for (int i = 0; i <= 8; ++i) {
-    layerSelector.addItem(
-        i == 0 ? "0: Base" : (juce::String(i) + ": Layer " + juce::String(i)),
-        i + 1);
-  }
-  layerSelector.onChange = [this] {
-    if (!currentZone || !zoneManager)
-      return;
-    int layerId = layerSelector.getSelectedId() - 1;
-    if (layerId < 0 || layerId > 8)
-      return;
-    currentZone->layerID = layerId;
-    zoneManager->rebuildLookupTable();
-    zoneManager->sendChangeMessage();
-  };
-
-  addAndMakeVisible(nameLabel);
-  nameLabel.setText("Zone Name:", juce::dontSendNotification);
-  nameLabel.attachToComponent(&nameEditor, true);
-
-  addAndMakeVisible(nameEditor);
-  nameEditor.onTextChange = [this] {
-    if (currentZone) {
-      currentZone->name = nameEditor.getText();
-    }
-  };
-
-  addAndMakeVisible(scaleLabel);
-  scaleLabel.setText("Scale:", juce::dontSendNotification);
-  scaleLabel.attachToComponent(&scaleSelector, true);
-
-  addAndMakeVisible(scaleSelector);
-  refreshScaleSelector();
-  scaleSelector.onChange = [this] {
-    if (currentZone && scaleLibrary) {
-      int selected = scaleSelector.getSelectedItemIndex();
-      if (selected >= 0) {
-        juce::String scaleName = scaleSelector.getItemText(selected);
-        currentZone->scaleName = scaleName;
-        if (zoneManager)
-          rebuildZoneCache();
-      }
-    }
-  };
-
-  addAndMakeVisible(globalScaleToggle);
-  globalScaleToggle.setButtonText("Global");
-  globalScaleToggle.onClick = [this] {
-    if (currentZone && zoneManager) {
-      currentZone->useGlobalScale = globalScaleToggle.getToggleState();
-      updateVisibility();
-      rebuildZoneCache();
-    }
-  };
-
-  addAndMakeVisible(editScaleButton);
-  editScaleButton.setButtonText("Edit...");
-  editScaleButton.onClick = [this] {
-    if (!scaleLibrary)
-      return;
-
-    // Create editor component
-    auto *editor = new ScaleEditorComponent(scaleLibrary);
-
-    // CRITICAL: Set size BEFORE adding to dialog
-    editor->setSize(600, 400);
-
-    // Setup dialog options
-    juce::DialogWindow::LaunchOptions options;
-    options.content.setOwned(editor);
-    options.dialogTitle = "Scale Editor";
-    options.dialogBackgroundColour = juce::Colour(0xff222222);
-    options.escapeKeyTriggersCloseButton = true;
-    options.useNativeTitleBar = false;
-    options.resizable = true;
-    options.useBottomRightCornerResizer = true;
-    options.componentToCentreAround = this;
-
-    // Launch dialog - this returns a DialogWindow* that manages its own
-    // lifetime
-    options.launchAsync();
-  };
-
-  addAndMakeVisible(rootLabel);
-  rootLabel.setText("Root Note:", juce::dontSendNotification);
-  rootLabel.attachToComponent(&rootSlider, true);
-
-  addAndMakeVisible(rootSlider);
-  rootSlider.setRange(0, 127, 1);
-  rootSlider.setTextValueSuffix(" (" + MidiNoteUtilities::getMidiNoteName(60) +
-                                ")");
-  rootSlider.setValue(60);
-  rootSlider.textFromValueFunction = [](double value) {
-    return MidiNoteUtilities::getMidiNoteName(static_cast<int>(value));
-  };
-  rootSlider.valueFromTextFunction = [](const juce::String &text) {
-    return static_cast<double>(MidiNoteUtilities::getMidiNoteFromText(text));
-  };
-  rootSlider.onValueChange = [this] {
-    if (currentZone && scaleLibrary && zoneManager) {
-      currentZone->rootNote = static_cast<int>(rootSlider.getValue());
-      rebuildZoneCache();
-    }
-  };
-
-  addAndMakeVisible(globalRootToggle);
-  globalRootToggle.setButtonText("Global");
-  globalRootToggle.onClick = [this] {
-    if (currentZone && zoneManager) {
-      currentZone->useGlobalRoot = globalRootToggle.getToggleState();
-      updateVisibility();
-      rebuildZoneCache();
-    }
-  };
-
-  addAndMakeVisible(chromaticOffsetLabel);
-  chromaticOffsetLabel.setText("Chromatic Offset:", juce::dontSendNotification);
-  chromaticOffsetLabel.attachToComponent(&chromaticOffsetSlider, true);
-
-  addAndMakeVisible(chromaticOffsetSlider);
-  chromaticOffsetSlider.setRange(-12, 12, 1);
-  chromaticOffsetSlider.setValue(0);
-  chromaticOffsetSlider.textFromValueFunction = [](double value) {
-    int v = static_cast<int>(value);
-    if (v == 0)
-      return juce::String("0");
-    if (v > 0)
-      return juce::String("+") + juce::String(v) + "st";
-    return juce::String(v) + "st";
-  };
-  chromaticOffsetSlider.onValueChange = [this] {
-    if (currentZone) {
-      currentZone->chromaticOffset =
-          static_cast<int>(chromaticOffsetSlider.getValue());
-      // Note: chromaticOffset is applied in processKey, no need to rebuild
-      // cache
-    }
-  };
-
-  addAndMakeVisible(degreeOffsetLabel);
-  degreeOffsetLabel.setText("Degree Offset:", juce::dontSendNotification);
-  degreeOffsetLabel.attachToComponent(&degreeOffsetSlider, true);
-
-  addAndMakeVisible(degreeOffsetSlider);
-  degreeOffsetSlider.setRange(-7, 7, 1);
-  degreeOffsetSlider.setValue(0);
-  degreeOffsetSlider.textFromValueFunction = [](double value) {
-    int v = static_cast<int>(value);
-    if (v == 0)
-      return juce::String("0");
-    if (v > 0)
-      return juce::String("+") + juce::String(v);
-    return juce::String(v);
-  };
-  degreeOffsetSlider.onValueChange = [this] {
-    if (currentZone && scaleLibrary && zoneManager) {
-      currentZone->degreeOffset =
-          static_cast<int>(degreeOffsetSlider.getValue());
-      rebuildZoneCache();
-    }
-  };
-
-  addAndMakeVisible(transposeLockButton);
-  transposeLockButton.setButtonText("Lock Transpose");
-  transposeLockButton.onClick = [this] {
-    if (currentZone) {
-      currentZone->isTransposeLocked = transposeLockButton.getToggleState();
-    }
-  };
-
-  addAndMakeVisible(captureKeysButton);
-  captureKeysButton.setButtonText("Assign Keys");
-  captureKeysButton.setClickingTogglesState(true);
-  captureKeysButton.onClick = [this] {
-    if (captureKeysButton.getToggleState()) {
-      // If Assign Keys is checked, uncheck Remove Keys
-      removeKeysButton.setToggleState(false, juce::dontSendNotification);
-    }
-  };
-
-  addAndMakeVisible(removeKeysButton);
-  removeKeysButton.setButtonText("Remove Keys");
-  removeKeysButton.setClickingTogglesState(true);
-  removeKeysButton.onClick = [this] {
-    if (removeKeysButton.getToggleState()) {
-      // If Remove Keys is checked, uncheck Assign Keys
-      captureKeysButton.setToggleState(false, juce::dontSendNotification);
-    }
-  };
-
-  addAndMakeVisible(strategyLabel);
-  strategyLabel.setText("Layout Strategy:", juce::dontSendNotification);
-  strategyLabel.attachToComponent(&strategySelector, true);
-
-  addAndMakeVisible(strategySelector);
-  strategySelector.addItem("Linear", 1);
-  strategySelector.addItem("Grid", 2);
-  strategySelector.addItem("Piano", 3);
-  strategySelector.onChange = [this] {
-    if (currentZone) {
-      int selected = strategySelector.getSelectedItemIndex();
-      if (selected == 0) {
-        currentZone->layoutStrategy = Zone::LayoutStrategy::Linear;
-      } else if (selected == 1) {
-        currentZone->layoutStrategy = Zone::LayoutStrategy::Grid;
-      } else if (selected == 2) {
-        currentZone->layoutStrategy = Zone::LayoutStrategy::Piano;
-      }
-      gridIntervalSlider.setEnabled(currentZone->layoutStrategy ==
-                                    Zone::LayoutStrategy::Grid);
-      pianoHelpLabel.setVisible(currentZone->layoutStrategy ==
-                                Zone::LayoutStrategy::Piano);
-      updateVisibility();
-      if (zoneManager && scaleLibrary) {
-        rebuildZoneCache();
-        zoneManager->rebuildLookupTable();
-        zoneManager->sendChangeMessage();
-      }
-
-      // Notify parent that resize might be needed (label visibility changed)
-      if (onResizeRequested) {
-        onResizeRequested();
-      }
-    }
-  };
-
-  addAndMakeVisible(gridIntervalLabel);
-  gridIntervalLabel.setText("Grid Interval:", juce::dontSendNotification);
-  gridIntervalLabel.attachToComponent(&gridIntervalSlider, true);
-
-  addAndMakeVisible(gridIntervalSlider);
-  gridIntervalSlider.setRange(-12, 12, 1);
-  gridIntervalSlider.setValue(5);
-  gridIntervalSlider.textFromValueFunction = [](double value) {
-    int v = static_cast<int>(value);
-    if (v == 0)
-      return juce::String("0");
-    if (v > 0)
-      return juce::String("+") + juce::String(v) + "st";
-    return juce::String(v) + "st";
-  };
-  gridIntervalSlider.onValueChange = [this] {
-    if (currentZone) {
-      currentZone->gridInterval =
-          static_cast<int>(gridIntervalSlider.getValue());
-    }
-  };
-  gridIntervalSlider.setEnabled(
-      false); // Initially disabled (defaults to Linear)
-
-  addAndMakeVisible(pianoHelpLabel);
-  pianoHelpLabel.setText("Requires 2 rows of keys", juce::dontSendNotification);
-  pianoHelpLabel.setColour(juce::Label::textColourId, juce::Colours::grey);
-  pianoHelpLabel.setVisible(false); // Initially hidden
-
-  addAndMakeVisible(chordTypeLabel);
-  chordTypeLabel.setText("Chord Type:", juce::dontSendNotification);
-  chordTypeLabel.attachToComponent(&chordTypeSelector, true);
-
-  addAndMakeVisible(chordTypeSelector);
-  chordTypeSelector.addItem("Off", 1);
-  chordTypeSelector.addItem("Triad", 2);
-  chordTypeSelector.addItem("Seventh", 3);
-  chordTypeSelector.addItem("Ninth", 4);
-  chordTypeSelector.addItem("Power5", 5);
-  chordTypeSelector.onChange = [this] {
-    if (currentZone) {
-      int selected = chordTypeSelector.getSelectedItemIndex();
-      if (selected >= 0) {
-        // Map combo box index to enum (0 = Off/None, 1 = Triad, etc.)
-        if (selected == 0) {
-          currentZone->chordType = ChordUtilities::ChordType::None;
-        } else if (selected == 1) {
-          currentZone->chordType = ChordUtilities::ChordType::Triad;
-        } else if (selected == 2) {
-          currentZone->chordType = ChordUtilities::ChordType::Seventh;
-        } else if (selected == 3) {
-          currentZone->chordType = ChordUtilities::ChordType::Ninth;
-        } else if (selected == 4) {
-          currentZone->chordType = ChordUtilities::ChordType::Power5;
-        }
-        if (zoneManager && scaleLibrary) {
-          rebuildZoneCache();
-          zoneManager->sendChangeMessage();
-        }
-      }
-    }
-  };
-
-  addAndMakeVisible(voicingLabel);
-  voicingLabel.setText("Voicing:", juce::dontSendNotification);
-  voicingLabel.attachToComponent(&voicingSelector, true);
-
-  addAndMakeVisible(voicingSelector);
-  voicingSelector.addItem("Root Position (Bass)", 1);
-  voicingSelector.addItem("Smooth / Inversions (Pads)", 2);
-  voicingSelector.addItem("Guitar / Spread (Strum)", 3);
-  voicingSelector.addItem("Smooth (Filled)", 4);
-  voicingSelector.addItem("Guitar (Filled)", 5);
-  voicingSelector.onChange = [this] {
-    if (currentZone) {
-      int selected = voicingSelector.getSelectedItemIndex();
-      if (selected >= 0) {
-        if (selected == 0) {
-          currentZone->voicing = ChordUtilities::Voicing::RootPosition;
-        } else if (selected == 1) {
-          currentZone->voicing = ChordUtilities::Voicing::Smooth;
-        } else if (selected == 2) {
-          currentZone->voicing = ChordUtilities::Voicing::GuitarSpread;
-        } else if (selected == 3) {
-          currentZone->voicing = ChordUtilities::Voicing::SmoothFilled;
-        } else if (selected == 4) {
-          currentZone->voicing = ChordUtilities::Voicing::GuitarFilled;
-        }
-        if (zoneManager && scaleLibrary) {
-          rebuildZoneCache();
-          zoneManager->sendChangeMessage();
-        }
-      }
-    }
-  };
-
-  addAndMakeVisible(playModeLabel);
-  playModeLabel.setText("Play Mode:", juce::dontSendNotification);
-  playModeLabel.attachToComponent(&playModeSelector, true);
-
-  addAndMakeVisible(playModeSelector);
-  playModeSelector.addItem("Direct", 1);
-  playModeSelector.addItem("Strum Buffer", 2);
-  playModeSelector.onChange = [this] {
-    if (currentZone) {
-      int selected = playModeSelector.getSelectedItemIndex();
-      if (selected >= 0) {
-        if (selected == 0) {
-          currentZone->playMode = Zone::PlayMode::Direct;
-        } else if (selected == 1) {
-          currentZone->playMode = Zone::PlayMode::Strum;
-        }
-        if (zoneManager) {
-          zoneManager->sendChangeMessage();
-        }
-      }
-    }
-  };
-
-  addAndMakeVisible(strumSpeedLabel);
-  strumSpeedLabel.setText("Strum Speed:", juce::dontSendNotification);
-  strumSpeedLabel.attachToComponent(&strumSpeedSlider, true);
-
-  addAndMakeVisible(strumSpeedSlider);
-  strumSpeedSlider.setRange(0, 500, 1);
-  strumSpeedSlider.setValue(0);
-  strumSpeedSlider.setTextValueSuffix(" ms");
-  strumSpeedSlider.onValueChange = [this] {
-    if (currentZone) {
-      currentZone->strumSpeedMs = static_cast<int>(strumSpeedSlider.getValue());
-      if (zoneManager) {
-        zoneManager->sendChangeMessage();
-      }
-    }
-  };
-
-  addAndMakeVisible(releaseBehaviorLabel);
-  releaseBehaviorLabel.setText("Release Behavior:", juce::dontSendNotification);
-  releaseBehaviorLabel.attachToComponent(&releaseBehaviorSelector, true);
-
-  addAndMakeVisible(releaseBehaviorSelector);
-  releaseBehaviorSelector.addItem("Normal", 1);
-  releaseBehaviorSelector.addItem("Sustain", 2);
-  releaseBehaviorSelector.onChange = [this] {
-    if (currentZone) {
-      int selected = releaseBehaviorSelector.getSelectedItemIndex();
-      if (selected >= 0) {
-        if (selected == 0) {
-          currentZone->releaseBehavior = Zone::ReleaseBehavior::Normal;
-        } else if (selected == 1) {
-          currentZone->releaseBehavior = Zone::ReleaseBehavior::Sustain;
-        }
-        if (zoneManager) {
-          zoneManager->sendChangeMessage();
-        }
-      }
-    }
-  };
-
-  addAndMakeVisible(releaseDurationLabel);
-  releaseDurationLabel.setText("Release Duration:", juce::dontSendNotification);
-  releaseDurationLabel.attachToComponent(&releaseDurationSlider, true);
-
-  addAndMakeVisible(releaseDurationSlider);
-  releaseDurationSlider.setRange(0, 5000, 1);
-  releaseDurationSlider.setValue(0);
-  releaseDurationSlider.setTextValueSuffix(" ms");
-  releaseDurationSlider.onValueChange = [this] {
-    if (currentZone) {
-      currentZone->releaseDurationMs =
-          static_cast<int>(releaseDurationSlider.getValue());
-      if (zoneManager) {
-        zoneManager->sendChangeMessage();
-      }
-    }
-  };
-
-  addAndMakeVisible(allowSustainToggle);
-  allowSustainToggle.setButtonText("Allow Sustain");
-  allowSustainToggle.onClick = [this] {
-    if (currentZone) {
-      currentZone->allowSustain = allowSustainToggle.getToggleState();
-      if (zoneManager)
-        zoneManager->sendChangeMessage();
-    }
-  };
-
-  addAndMakeVisible(baseVelLabel);
-  baseVelLabel.setText("Base Velocity:", juce::dontSendNotification);
-  baseVelLabel.attachToComponent(&baseVelSlider, true);
-
-  addAndMakeVisible(baseVelSlider);
-  baseVelSlider.setRange(1, 127, 1);
-  baseVelSlider.setValue(100);
-  baseVelSlider.textFromValueFunction = [](double value) {
-    return juce::String(static_cast<int>(value));
-  };
-  baseVelSlider.onValueChange = [this] {
-    if (currentZone) {
-      currentZone->baseVelocity = static_cast<int>(baseVelSlider.getValue());
-      if (zoneManager) {
-        zoneManager->sendChangeMessage();
-      }
-    }
-  };
-
-  addAndMakeVisible(randVelLabel);
-  randVelLabel.setText("Velocity Random:", juce::dontSendNotification);
-  randVelLabel.attachToComponent(&randVelSlider, true);
-
-  addAndMakeVisible(randVelSlider);
-  randVelSlider.setRange(0, 64, 1);
-  randVelSlider.setValue(0);
-  randVelSlider.textFromValueFunction = [](double value) {
-    return juce::String(static_cast<int>(value));
-  };
-  randVelSlider.onValueChange = [this] {
-    if (currentZone) {
-      currentZone->velocityRandom = static_cast<int>(randVelSlider.getValue());
-      if (zoneManager) {
-        zoneManager->sendChangeMessage();
-      }
-    }
-  };
-
-  addAndMakeVisible(strictGhostToggle);
-  strictGhostToggle.setButtonText("Strict Ghost Harmony");
-  strictGhostToggle.onClick = [this] {
-    if (currentZone) {
-      currentZone->strictGhostHarmony = strictGhostToggle.getToggleState();
-      if (zoneManager && scaleLibrary) {
-        rebuildZoneCache();
-        zoneManager->sendChangeMessage();
-      }
-    }
-  };
-
-  addAndMakeVisible(ghostVelLabel);
-  ghostVelLabel.setText("Ghost Velocity %:", juce::dontSendNotification);
-  ghostVelLabel.attachToComponent(&ghostVelSlider, true);
-
-  addAndMakeVisible(ghostVelSlider);
-  ghostVelSlider.setRange(0.0, 100.0, 1.0);
-  ghostVelSlider.setValue(60.0);
-  ghostVelSlider.textFromValueFunction = [](double value) {
-    return juce::String(static_cast<int>(value));
-  };
-  ghostVelSlider.onValueChange = [this] {
-    if (currentZone) {
-      currentZone->ghostVelocityScale =
-          static_cast<float>(ghostVelSlider.getValue()) / 100.0f;
-      if (zoneManager) {
-        zoneManager->sendChangeMessage();
-      }
-    }
-  };
-
-  // Bass Note Controls
-  addAndMakeVisible(bassToggle);
-  bassToggle.setButtonText("Add Bass");
-  bassToggle.onClick = [this] {
-    if (currentZone) {
-      currentZone->addBassNote = bassToggle.getToggleState();
-      bassOctaveSlider.setEnabled(bassToggle.getToggleState());
-      if (zoneManager && scaleLibrary) {
-        rebuildZoneCache();
-        zoneManager->sendChangeMessage();
-      }
-    }
-  };
-
-  addAndMakeVisible(bassOctaveLabel);
-  bassOctaveLabel.setText("Bass Octave:", juce::dontSendNotification);
-  bassOctaveLabel.attachToComponent(&bassOctaveSlider, true);
-
-  addAndMakeVisible(bassOctaveSlider);
-  bassOctaveSlider.setRange(-3, -1, 1);
-  bassOctaveSlider.setValue(-1);
-  bassOctaveSlider.textFromValueFunction = [](double value) {
-    return juce::String(static_cast<int>(value));
-  };
-  bassOctaveSlider.onValueChange = [this] {
-    if (currentZone) {
-      currentZone->bassOctaveOffset =
-          static_cast<int>(bassOctaveSlider.getValue());
-      if (zoneManager && scaleLibrary) {
-        rebuildZoneCache();
-        zoneManager->sendChangeMessage();
-      }
-    }
-  };
-  bassOctaveSlider.setEnabled(false); // Disabled until bass toggle is on
-
-  // Display Mode Controls
-  addAndMakeVisible(displayModeLabel);
-  displayModeLabel.setText("Display Mode:", juce::dontSendNotification);
-  displayModeLabel.attachToComponent(&displayModeSelector, true);
-
-  addAndMakeVisible(displayModeSelector);
-  displayModeSelector.addItem("Note Name", 1);
-  displayModeSelector.addItem("Roman Numeral", 2);
-  displayModeSelector.onChange = [this] {
-    if (currentZone) {
-      currentZone->showRomanNumerals =
-          (displayModeSelector.getSelectedId() == 2);
-      if (zoneManager && scaleLibrary) {
-        rebuildZoneCache();
-        zoneManager->sendChangeMessage();
-      }
-    }
-  };
-
-  // Polyphony Mode Controls (Phase 26)
-  addAndMakeVisible(polyphonyModeLabel);
-  polyphonyModeLabel.setText("Polyphony Mode:", juce::dontSendNotification);
-  polyphonyModeLabel.attachToComponent(&polyphonyModeSelector, true);
-
-  addAndMakeVisible(polyphonyModeSelector);
-  polyphonyModeSelector.addItem("Poly", 1);
-  polyphonyModeSelector.addItem("Mono (Retrigger)", 2);
-  polyphonyModeSelector.addItem("Legato (Glide)", 3);
-  polyphonyModeSelector.onChange = [this] {
-    if (currentZone) {
-      int selected = polyphonyModeSelector.getSelectedId();
-      if (selected == 1)
-        currentZone->polyphonyMode = PolyphonyMode::Poly;
-      else if (selected == 2)
-        currentZone->polyphonyMode = PolyphonyMode::Mono;
-      else if (selected == 3)
-        currentZone->polyphonyMode = PolyphonyMode::Legato;
-      updateVisibility();
-      if (zoneManager) {
-        zoneManager->sendChangeMessage();
-      }
-    }
-  };
-
-  addAndMakeVisible(glideTimeLabel);
-  glideTimeLabel.setText("Glide Time:", juce::dontSendNotification);
-  glideTimeLabel.attachToComponent(&glideTimeSlider, true);
-
-  addAndMakeVisible(glideTimeSlider);
-  glideTimeSlider.setRange(0, 500, 1);
-  glideTimeSlider.setTextValueSuffix(" ms");
-  glideTimeSlider.setValue(50);
-  glideTimeSlider.onValueChange = [this] {
-    if (currentZone) {
-      currentZone->glideTimeMs = static_cast<int>(glideTimeSlider.getValue());
-      if (zoneManager) {
-        zoneManager->sendChangeMessage();
-      }
-    }
-  };
-  glideTimeSlider.setVisible(
-      false); // Initially hidden (only visible for Legato)
-  glideTimeLabel.setVisible(false);
-
-  addAndMakeVisible(channelLabel);
-  channelLabel.setText("MIDI Channel:", juce::dontSendNotification);
-  channelLabel.attachToComponent(&channelSlider, true);
-
-  addAndMakeVisible(channelSlider);
-  channelSlider.setRange(1, 16, 1);
-  channelSlider.setValue(1);
-  channelSlider.textFromValueFunction = [](double value) {
-    return juce::String(static_cast<int>(value));
-  };
-  channelSlider.onValueChange = [this] {
-    if (currentZone) {
-      currentZone->midiChannel = static_cast<int>(channelSlider.getValue());
-    }
-  };
-
-  addAndMakeVisible(colorLabel);
-  colorLabel.setText("Zone Color:", juce::dontSendNotification);
-  colorLabel.attachToComponent(&colorButton, true);
-
-  addAndMakeVisible(colorButton);
-  colorButton.setButtonText("Color");
-  colorButton.onClick = [this] {
-    if (!currentZone)
-      return;
-
-    // Create ColourSelector with options
-    int flags = juce::ColourSelector::showColourspace |
-                juce::ColourSelector::showSliders |
-                juce::ColourSelector::showColourAtTop;
-    auto *colourSelector = new juce::ColourSelector(flags);
-    colourSelector->setName("Zone Color");
-    colourSelector->setCurrentColour(currentZone->zoneColor);
-    colourSelector->setSize(400, 300);
-
-    // Create a listener to update color when it changes
-    class ColourChangeListener : public juce::ChangeListener {
-    public:
-      ColourChangeListener(ZonePropertiesPanel *panel,
-                           juce::ColourSelector *selector,
-                           std::shared_ptr<Zone> zone, ZoneManager *zm)
-          : panel_(panel), selector_(selector), zone_(zone), zoneManager_(zm) {}
-
-      void changeListenerCallback(juce::ChangeBroadcaster *source) override {
-        if (source == selector_ && zone_) {
-          zone_->zoneColor = selector_->getCurrentColour();
-          panel_->colorButton.setColour(juce::TextButton::buttonColourId,
-                                        zone_->zoneColor);
-          panel_->colorButton.repaint();
-
-          // Notify ZoneManager to refresh Visualizer
-          if (zoneManager_) {
-            zoneManager_->sendChangeMessage();
-          }
-        }
-      }
-
-    private:
-      ZonePropertiesPanel *panel_;
-      juce::ColourSelector *selector_;
-      std::shared_ptr<Zone> zone_;
-      ZoneManager *zoneManager_;
-    };
-
-    auto *listener = new ColourChangeListener(this, colourSelector, currentZone,
-                                              zoneManager);
-    colourSelector->addChangeListener(listener);
-
-    // Show in CallOutBox attached to the button
-    juce::CallOutBox::launchAsynchronously(
-        std::unique_ptr<juce::Component>(colourSelector),
-        colorButton.getScreenBounds(), this);
-  };
-
-  addAndMakeVisible(chipList);
-  chipList.onKeyRemoved = [this](int keyCode) {
-    if (currentZone && scaleLibrary && zoneManager) {
-      currentZone->removeKey(keyCode);
-      chipList.setKeys(currentZone->inputKeyCodes);
-      updateKeysAssignedLabel();
-      rebuildZoneCache();
-      zoneManager->rebuildLookupTable();
-      zoneManager->sendChangeMessage();
-      // Notify parent that resize is needed
-      if (onResizeRequested) {
-        onResizeRequested();
-      }
-    }
-  };
-
-  if (rawInputManager) {
-    rawInputManager->addListener(this);
-  }
-
-  if (deviceManager) {
+  if (deviceManager)
     deviceManager->addChangeListener(this);
-  }
-
-  if (scaleLibrary) {
+  if (scaleLibrary)
     scaleLibrary->addChangeListener(this);
-  }
+  if (rawInputManager)
+    rawInputManager->addListener(this);
 }
 
 ZonePropertiesPanel::~ZonePropertiesPanel() {
-  if (rawInputManager) {
+  captureKeysButtonRef = nullptr;
+  removeKeysButtonRef = nullptr;
+  chipListRef = nullptr;
+  if (rawInputManager)
     rawInputManager->removeListener(this);
-  }
-  if (deviceManager) {
+  if (deviceManager)
     deviceManager->removeChangeListener(this);
-  }
-
-  if (scaleLibrary) {
+  if (scaleLibrary)
     scaleLibrary->removeChangeListener(this);
-  }
 }
 
 void ZonePropertiesPanel::paint(juce::Graphics &g) {
   g.fillAll(juce::Colour(0xff2a2a2a));
-}
-
-void ZonePropertiesPanel::resized() {
-  auto area = getLocalBounds().reduced(8);
-  int labelWidth = 120;
-  int rowHeight = 28;
-  int spacing = 4;
-  int leftMargin = area.getX() + labelWidth;
-  int width = area.getWidth() - labelWidth;
-
-  int y = 8; // Start at top padding
-
-  // Alias
-  aliasSelector.setBounds(leftMargin, y, width, rowHeight);
-  y += rowHeight + spacing;
-
-  // Layer (Phase 49)
-  layerSelector.setBounds(leftMargin, y, width, rowHeight);
-  y += rowHeight + spacing;
-
-  // Name
-  nameEditor.setBounds(leftMargin, y, width, rowHeight);
-  y += rowHeight + spacing;
-
-  // Scale (selector + Global toggle + edit button)
-  auto scaleArea = juce::Rectangle<int>(leftMargin, y, width, rowHeight);
-  editScaleButton.setBounds(scaleArea.removeFromRight(60).reduced(2));
-  globalScaleToggle.setBounds(scaleArea.removeFromRight(52).reduced(2));
-  scaleSelector.setBounds(scaleArea);
-  y += rowHeight + spacing;
-
-  // Root Note (+ Global toggle)
-  auto rootArea = juce::Rectangle<int>(leftMargin, y, width, rowHeight);
-  globalRootToggle.setBounds(rootArea.removeFromRight(52).reduced(2));
-  rootSlider.setBounds(rootArea);
-  y += rowHeight + spacing;
-
-  // Chromatic Offset
-  chromaticOffsetSlider.setBounds(leftMargin, y, width, rowHeight);
-  y += rowHeight + spacing;
-
-  // Degree Offset
-  degreeOffsetSlider.setBounds(leftMargin, y, width, rowHeight);
-  y += rowHeight + spacing;
-
-  // Lock Transpose
-  transposeLockButton.setBounds(leftMargin, y, width, rowHeight);
-  y += rowHeight + spacing;
-
-  // Allow Sustain
-  allowSustainToggle.setBounds(leftMargin, y, width, rowHeight);
-  y += rowHeight + spacing;
-
-  // Base Velocity
-  baseVelLabel.setBounds(0, y, labelWidth, rowHeight);
-  baseVelSlider.setBounds(leftMargin, y, width, rowHeight);
-  y += rowHeight + spacing;
-
-  // Velocity Random
-  randVelLabel.setBounds(0, y, labelWidth, rowHeight);
-  randVelSlider.setBounds(leftMargin, y, width, rowHeight);
-  y += rowHeight + spacing;
-
-  // Strict Ghost Toggle
-  strictGhostToggle.setBounds(leftMargin, y, width, rowHeight);
-  y += rowHeight + spacing;
-
-  // Ghost Velocity
-  ghostVelLabel.setBounds(0, y, labelWidth, rowHeight);
-  ghostVelSlider.setBounds(leftMargin, y, width, rowHeight);
-  y += rowHeight + spacing;
-
-  // Bass Toggle
-  bassToggle.setBounds(leftMargin, y, width, rowHeight);
-  y += rowHeight + spacing;
-
-  // Bass Octave
-  bassOctaveLabel.setBounds(0, y, labelWidth, rowHeight);
-  bassOctaveSlider.setBounds(leftMargin, y, width, rowHeight);
-  y += rowHeight + spacing;
-
-  // Display Mode
-  displayModeLabel.setBounds(0, y, labelWidth, rowHeight);
-  displayModeSelector.setBounds(leftMargin, y, width, rowHeight);
-  y += rowHeight + spacing;
-
-  // Polyphony Mode (Phase 26)
-  polyphonyModeSelector.setBounds(leftMargin, y, width, rowHeight);
-  y += rowHeight + spacing;
-
-  // Glide Time (only visible for Legato)
-  if (glideTimeSlider.isVisible()) {
-    glideTimeSlider.setBounds(leftMargin, y, width, rowHeight);
-    y += rowHeight + spacing;
+  if (!currentZone && uiRows.empty()) {
+    g.setColour(juce::Colours::grey);
+    g.setFont(14.0f);
+    g.drawText("No zone selected", getLocalBounds(),
+               juce::Justification::centred, true);
   }
-
-  // Adaptive Glide Toggle (only visible for Legato)
-  if (adaptiveGlideToggle.isVisible()) {
-    adaptiveGlideToggle.setBounds(leftMargin, y, width, rowHeight);
-    y += rowHeight + spacing;
-  }
-
-  // Max Glide Time (only visible for Adaptive)
-  if (maxGlideTimeSlider.isVisible()) {
-    maxGlideTimeSlider.setBounds(leftMargin, y, width, rowHeight);
-    y += rowHeight + spacing;
-  }
-
-  // Mono Warning Label (only visible for Mono/Legato) (Phase 26.2)
-  if (monoWarningLabel.isVisible()) {
-    monoWarningLabel.setBounds(leftMargin, y, width,
-                               rowHeight * 2); // Allow 2 rows for text
-    y += (rowHeight * 2) + spacing;
-  }
-
-  // Chord Type
-  chordTypeSelector.setBounds(leftMargin, y, width, rowHeight);
-  y += rowHeight + spacing;
-
-  // Voicing
-  voicingSelector.setBounds(leftMargin, y, width, rowHeight);
-  y += rowHeight + spacing;
-
-  // Play Mode
-  playModeSelector.setBounds(leftMargin, y, width, rowHeight);
-  y += rowHeight + spacing;
-
-  // Strum Speed
-  strumSpeedSlider.setBounds(leftMargin, y, width, rowHeight);
-  y += rowHeight + spacing;
-
-  // Release Behavior
-  releaseBehaviorSelector.setBounds(leftMargin, y, width, rowHeight);
-  y += rowHeight + spacing;
-
-  // Release Duration
-  releaseDurationSlider.setBounds(leftMargin, y, width, rowHeight);
-  y += rowHeight + spacing;
-
-  // Capture Keys and Remove Keys (side by side)
-  auto keyButtonsArea = juce::Rectangle<int>(leftMargin, y, width, rowHeight);
-  removeKeysButton.setBounds(
-      keyButtonsArea.removeFromRight(width / 2).reduced(2, 0));
-  captureKeysButton.setBounds(keyButtonsArea.reduced(2, 0));
-  y += rowHeight + spacing;
-
-  // Strategy
-  strategySelector.setBounds(leftMargin, y, width, rowHeight);
-  y += rowHeight + spacing;
-
-  // Grid Interval
-  gridIntervalSlider.setBounds(leftMargin, y, width, rowHeight);
-  y += rowHeight + spacing;
-
-  // Piano Help Label (only visible when Piano strategy is selected)
-  pianoHelpLabel.setBounds(leftMargin, y, width, rowHeight);
-  if (currentZone &&
-      currentZone->layoutStrategy == Zone::LayoutStrategy::Piano) {
-    y += rowHeight + spacing;
-  }
-
-  // MIDI Channel
-  channelSlider.setBounds(leftMargin, y, width, rowHeight);
-  y += rowHeight + spacing;
-
-  // Zone Color
-  colorButton.setBounds(leftMargin, y, width, rowHeight);
-  y += rowHeight + spacing;
-
-  // Key Chip List (dynamic height based on number of chips)
-  int chipListHeight = juce::jmax(
-      120,
-      static_cast<int>(
-          (currentZone ? currentZone->inputKeyCodes.size() : 0) * 28 + 16));
-  chipList.setBounds(leftMargin + 4, y, width - 8, chipListHeight);
-  y += chipListHeight + spacing;
-
-  // Set component size based on calculated height
-  setSize(getWidth(), y + 8); // Bottom padding
-}
-
-int ZonePropertiesPanel::getRequiredHeight() const {
-  int rowHeight = 28;
-  int spacing = 4;
-  int topPadding = 8;
-  int bottomPadding = 8;
-
-  // Count number of rows
-  int numRows =
-      27; // Alias, Layer, Name, Scale, Root, Chromatic, Degree, Lock,
-          // ChordType, Voicing, PlayMode, StrumSpeed, ReleaseBehavior,
-          // ReleaseDuration, AllowSustain, BaseVel, RandVel, StrictGhost,
-          // GhostVel, BassToggle, BassOctave, DisplayMode, Capture/Remove,
-          // Strategy, Grid, Channel, Color
-  // Add one more row if Piano help label is visible
-  if (currentZone &&
-      currentZone->layoutStrategy == Zone::LayoutStrategy::Piano) {
-    numRows++;
-  }
-
-  // Calculate chip list height dynamically
-  int chipListHeight = juce::jmax(
-      120,
-      static_cast<int>(
-          (currentZone ? currentZone->inputKeyCodes.size() : 0) * 28 + 16));
-
-  return topPadding + (numRows * (rowHeight + spacing)) + chipListHeight +
-         bottomPadding;
 }
 
 void ZonePropertiesPanel::setZone(std::shared_ptr<Zone> zone) {
   currentZone = zone;
-  updateControlsFromZone();
+  rebuildUI();
 }
 
-void ZonePropertiesPanel::updateControlsFromZone() {
+void ZonePropertiesPanel::rebuildUI() {
+  if (onBeforeRebuild)
+    onBeforeRebuild();
+
+  captureKeysButtonRef = nullptr;
+  removeKeysButtonRef = nullptr;
+  chipListRef = nullptr;
+  chipListRowIndex = -1;
+
+  for (auto &row : uiRows) {
+    for (auto &item : row.items) {
+      if (item.component)
+        removeChildComponent(item.component.get());
+    }
+  }
+  uiRows.clear();
+
   if (!currentZone) {
-    // Disable all controls
-    aliasSelector.setEnabled(false);
-    layerSelector.setEnabled(false);
-    nameEditor.setEnabled(false);
-    scaleSelector.setEnabled(false);
-    globalScaleToggle.setEnabled(false);
-    rootSlider.setEnabled(false);
-    globalRootToggle.setEnabled(false);
-    chromaticOffsetSlider.setEnabled(false);
-    degreeOffsetSlider.setEnabled(false);
-    transposeLockButton.setEnabled(false);
-    captureKeysButton.setEnabled(false);
-    removeKeysButton.setEnabled(false);
-    strategySelector.setEnabled(false);
-    gridIntervalSlider.setEnabled(false);
-    chordTypeSelector.setEnabled(false);
-    voicingSelector.setEnabled(false);
-    playModeSelector.setEnabled(false);
-    strumSpeedSlider.setEnabled(false);
-    releaseBehaviorSelector.setEnabled(false);
-    releaseDurationSlider.setEnabled(false);
-    allowSustainToggle.setEnabled(false);
-    baseVelSlider.setEnabled(false);
-    randVelSlider.setEnabled(false);
-    strictGhostToggle.setEnabled(false);
-    ghostVelSlider.setEnabled(false);
-    bassToggle.setEnabled(false);
-    bassOctaveSlider.setEnabled(false);
-    displayModeSelector.setEnabled(false);
-    polyphonyModeSelector.setEnabled(false);
-    glideTimeSlider.setEnabled(false);
-    adaptiveGlideToggle.setEnabled(false);
-    maxGlideTimeSlider.setEnabled(false);
-    monoWarningLabel.setEnabled(false);
-    channelSlider.setEnabled(false);
-    colorButton.setEnabled(false);
-    chipList.setEnabled(false);
-    chipList.setKeys({});
+    resized();
+    if (onAfterRebuild)
+      onAfterRebuild();
     return;
   }
 
-  // Enable all controls
-  aliasSelector.setEnabled(true);
-  layerSelector.setEnabled(true);
-  nameEditor.setEnabled(true);
-  scaleSelector.setEnabled(true);
-  globalScaleToggle.setEnabled(true);
-  rootSlider.setEnabled(true);
-  globalRootToggle.setEnabled(true);
-  chromaticOffsetSlider.setEnabled(true);
-  degreeOffsetSlider.setEnabled(true);
-  transposeLockButton.setEnabled(true);
-  captureKeysButton.setEnabled(true);
-  removeKeysButton.setEnabled(true);
-  strategySelector.setEnabled(true);
-  gridIntervalSlider.setEnabled(currentZone->layoutStrategy ==
-                                Zone::LayoutStrategy::Grid);
-  chordTypeSelector.setEnabled(true);
-  voicingSelector.setEnabled(true);
-  playModeSelector.setEnabled(true);
-  strumSpeedSlider.setEnabled(true);
-  releaseBehaviorSelector.setEnabled(true);
-  releaseDurationSlider.setEnabled(true);
-  allowSustainToggle.setEnabled(true);
-  baseVelSlider.setEnabled(true);
-  randVelSlider.setEnabled(true);
-  strictGhostToggle.setEnabled(true);
-  ghostVelSlider.setEnabled(true);
-  bassToggle.setEnabled(true);
-  bassOctaveSlider.setEnabled(currentZone->addBassNote);
-  displayModeSelector.setEnabled(true);
-  polyphonyModeSelector.setEnabled(true);
-  glideTimeSlider.setEnabled(true);
-  adaptiveGlideToggle.setEnabled(true);
-  maxGlideTimeSlider.setEnabled(true);
-  monoWarningLabel.setEnabled(true);
-  channelSlider.setEnabled(true);
-  colorButton.setEnabled(true);
-
-  // Update values
-  nameEditor.setText(currentZone->name, juce::dontSendNotification);
-
-  // Set alias selector (find matching alias hash)
-  // For Phase 11, we'll match by hash - in a full implementation, we'd store
-  // the alias name
-  int aliasIndex = 0; // Default to "Global (All Devices)"
-  if (currentZone->targetAliasHash != 0 && deviceManager) {
-    // Try to find matching alias
-    auto aliases = deviceManager->getAllAliasNames();
-    for (int i = 0; i < aliases.size(); ++i) {
-      if (aliasNameToHash(aliases[i]) == currentZone->targetAliasHash) {
-        aliasIndex = i + 1; // +1 because index 0 is "Global (All Devices)"
-        break;
-      }
+  ZoneSchema schema = ZoneDefinition::getSchema(currentZone.get());
+  for (const auto &def : schema) {
+    if (def.controlType == ZoneControl::Type::Separator) {
+      UiRow row;
+      row.isSeparatorRow = true;
+      row.isChipListRow = false;
+      auto sep = std::make_unique<SeparatorComponent>(def.label,
+                                                       def.separatorAlign);
+      addAndMakeVisible(*sep);
+      row.items.push_back({std::move(sep), 1.0f, false});
+      uiRows.push_back(std::move(row));
+      continue;
     }
-  }
-  aliasSelector.setSelectedItemIndex(aliasIndex, juce::dontSendNotification);
-
-  // Layer selector
-  layerSelector.setSelectedId(currentZone->layerID + 1,
-                              juce::dontSendNotification);
-
-  // Set scale selector to match current zone's scale name
-  if (scaleLibrary) {
-    auto scaleNames = scaleLibrary->getScaleNames();
-    int scaleIndex = -1;
-    for (int i = 0; i < scaleNames.size(); ++i) {
-      if (scaleNames[i] == currentZone->scaleName) {
-        scaleIndex = i;
-        break;
-      }
+    if (def.controlType == ZoneControl::Type::CustomAlias) {
+      createAliasRow();
+      continue;
     }
-    scaleSelector.setSelectedItemIndex(scaleIndex >= 0 ? scaleIndex : 0,
-                                       juce::dontSendNotification);
+    if (def.controlType == ZoneControl::Type::CustomLayer) {
+      createLayerRow();
+      continue;
+    }
+    if (def.controlType == ZoneControl::Type::CustomName) {
+      createNameRow();
+      continue;
+    }
+    if (def.controlType == ZoneControl::Type::CustomScale) {
+      createScaleRow();
+      continue;
+    }
+    if (def.controlType == ZoneControl::Type::CustomKeyAssign) {
+      createKeyAssignRow();
+      continue;
+    }
+    if (def.controlType == ZoneControl::Type::CustomChipList) {
+      createChipListRow();
+      continue;
+    }
+    if (def.controlType == ZoneControl::Type::CustomColor) {
+      createColorRow();
+      continue;
+    }
+    if (!def.sameLine || uiRows.empty()) {
+      UiRow row;
+      row.isSeparatorRow = false;
+      row.isChipListRow = false;
+      uiRows.push_back(std::move(row));
+    }
+    createControl(def, uiRows.back());
   }
 
-  rootSlider.setValue(currentZone->rootNote, juce::dontSendNotification);
-  chromaticOffsetSlider.setValue(currentZone->chromaticOffset,
-                                 juce::dontSendNotification);
-  degreeOffsetSlider.setValue(currentZone->degreeOffset,
-                              juce::dontSendNotification);
-  transposeLockButton.setToggleState(currentZone->isTransposeLocked,
-                                     juce::dontSendNotification);
-
-  // Set strategy
-  int strategyIndex = 0;
-  if (currentZone->layoutStrategy == Zone::LayoutStrategy::Linear) {
-    strategyIndex = 0;
-  } else if (currentZone->layoutStrategy == Zone::LayoutStrategy::Grid) {
-    strategyIndex = 1;
-  } else if (currentZone->layoutStrategy == Zone::LayoutStrategy::Piano) {
-    strategyIndex = 2;
-  }
-  strategySelector.setSelectedItemIndex(strategyIndex,
-                                        juce::dontSendNotification);
-
-  // Set grid interval
-  gridIntervalSlider.setValue(currentZone->gridInterval,
-                              juce::dontSendNotification);
-  gridIntervalSlider.setEnabled(currentZone->layoutStrategy ==
-                                Zone::LayoutStrategy::Grid);
-
-  // Show/hide piano help label
-  pianoHelpLabel.setVisible(currentZone->layoutStrategy ==
-                            Zone::LayoutStrategy::Piano);
-
-  // Set MIDI channel
-  channelSlider.setValue(currentZone->midiChannel, juce::dontSendNotification);
-
-  // Set zone color button
-  colorButton.setColour(juce::TextButton::buttonColourId,
-                        currentZone->zoneColor);
-  colorButton.repaint();
-
-  // Set chord type
-  int chordTypeIndex = 0;
-  switch (currentZone->chordType) {
-  case ChordUtilities::ChordType::None:
-    chordTypeIndex = 0;
-    break;
-  case ChordUtilities::ChordType::Triad:
-    chordTypeIndex = 1;
-    break;
-  case ChordUtilities::ChordType::Seventh:
-    chordTypeIndex = 2;
-    break;
-  case ChordUtilities::ChordType::Ninth:
-    chordTypeIndex = 3;
-    break;
-  case ChordUtilities::ChordType::Power5:
-    chordTypeIndex = 4;
-    break;
-  }
-  chordTypeSelector.setSelectedItemIndex(chordTypeIndex,
-                                         juce::dontSendNotification);
-
-  // Set voicing
-  int voicingIndex = 0;
-  switch (currentZone->voicing) {
-  case ChordUtilities::Voicing::RootPosition:
-    voicingIndex = 0;
-    break;
-  case ChordUtilities::Voicing::Smooth:
-    voicingIndex = 1;
-    break;
-  case ChordUtilities::Voicing::GuitarSpread:
-    voicingIndex = 2;
-    break;
-  case ChordUtilities::Voicing::SmoothFilled:
-    voicingIndex = 3;
-    break;
-  case ChordUtilities::Voicing::GuitarFilled:
-    voicingIndex = 4;
-    break;
-  default:
-    voicingIndex = 0;
-    break;
-  }
-  voicingSelector.setSelectedItemIndex(voicingIndex,
-                                       juce::dontSendNotification);
-
-  // Set play mode
-  int playModeIndex = (currentZone->playMode == Zone::PlayMode::Direct) ? 0 : 1;
-  playModeSelector.setSelectedItemIndex(playModeIndex,
-                                        juce::dontSendNotification);
-
-  // Set strum speed
-  strumSpeedSlider.setValue(currentZone->strumSpeedMs,
-                            juce::dontSendNotification);
-
-  // Set release behavior
-  int releaseBehaviorIndex =
-      (currentZone->releaseBehavior == Zone::ReleaseBehavior::Normal) ? 0 : 1;
-  releaseBehaviorSelector.setSelectedItemIndex(releaseBehaviorIndex,
-                                               juce::dontSendNotification);
-
-  // Set release duration
-  releaseDurationSlider.setValue(currentZone->releaseDurationMs,
-                                 juce::dontSendNotification);
-
-  allowSustainToggle.setToggleState(currentZone->allowSustain,
-                                    juce::dontSendNotification);
-  baseVelSlider.setValue(currentZone->baseVelocity, juce::dontSendNotification);
-  randVelSlider.setValue(currentZone->velocityRandom,
-                         juce::dontSendNotification);
-  strictGhostToggle.setToggleState(currentZone->strictGhostHarmony,
-                                   juce::dontSendNotification);
-  ghostVelSlider.setValue(currentZone->ghostVelocityScale * 100.0,
-                          juce::dontSendNotification);
-  bassToggle.setToggleState(currentZone->addBassNote,
-                            juce::dontSendNotification);
-  bassOctaveSlider.setValue(currentZone->bassOctaveOffset,
-                            juce::dontSendNotification);
-  bassOctaveSlider.setEnabled(currentZone->addBassNote);
-  displayModeSelector.setSelectedId(currentZone->showRomanNumerals ? 2 : 1,
-                                    juce::dontSendNotification);
-
-  // Set polyphony mode
-  int polyModeId = 1; // Default to Poly
-  if (currentZone->polyphonyMode == PolyphonyMode::Poly)
-    polyModeId = 1;
-  else if (currentZone->polyphonyMode == PolyphonyMode::Mono)
-    polyModeId = 2;
-  else if (currentZone->polyphonyMode == PolyphonyMode::Legato)
-    polyModeId = 3;
-  polyphonyModeSelector.setSelectedId(polyModeId, juce::dontSendNotification);
-
-  // Set glide time
-  glideTimeSlider.setValue(currentZone->glideTimeMs,
-                           juce::dontSendNotification);
-
-  chipList.setKeys(currentZone->inputKeyCodes);
-
-  globalScaleToggle.setToggleState(currentZone->useGlobalScale,
-                                   juce::dontSendNotification);
-  globalRootToggle.setToggleState(currentZone->useGlobalRoot,
-                                  juce::dontSendNotification);
-  updateVisibility();
-
-  if (scaleLibrary && zoneManager)
-    rebuildZoneCache();
-
-  updateKeysAssignedLabel();
-
-  // Notify parent that resize might be needed
-  if (onResizeRequested) {
+  resized();
+  if (onResizeRequested)
     onResizeRequested();
+  if (onAfterRebuild)
+    onAfterRebuild();
+}
+
+void ZonePropertiesPanel::createControl(const ZoneControl &def,
+                                        UiRow &currentRow) {
+  Zone *zone = currentZone.get();
+  const bool affectsCache = def.affectsCache;
+  auto addItem = [this, &currentRow](std::unique_ptr<juce::Component> comp,
+                                    float weight, bool isAuto = false) {
+    if (!comp)
+      return;
+    addAndMakeVisible(*comp);
+    currentRow.items.push_back({std::move(comp), weight, isAuto});
+  };
+
+  auto rebuildIfNeeded = [this, affectsCache]() {
+    if (affectsCache && zoneManager && scaleLibrary)
+      rebuildZoneCache();
+    if (zoneManager)
+      zoneManager->sendChangeMessage();
+    if (onResizeRequested)
+      onResizeRequested();
+  };
+
+  switch (def.controlType) {
+  case ZoneControl::Type::Slider: {
+    auto sl = std::make_unique<juce::Slider>();
+    sl->setRange(def.min, def.max, def.step);
+    if (def.suffix.isNotEmpty())
+      sl->setTextValueSuffix(" " + def.suffix);
+
+    if (def.propertyKey == "rootNote") {
+      sl->textFromValueFunction = [](double v) {
+        return MidiNoteUtilities::getMidiNoteName(static_cast<int>(v));
+      };
+      sl->valueFromTextFunction = [](const juce::String &t) {
+        return static_cast<double>(MidiNoteUtilities::getMidiNoteFromText(t));
+      };
+    }
+    if (def.propertyKey == "chromaticOffset") {
+      sl->textFromValueFunction = [](double v) {
+        int i = static_cast<int>(v);
+        if (i == 0) return juce::String("0");
+        return i > 0 ? juce::String("+") + juce::String(i) + "st"
+                     : juce::String(i) + "st";
+      };
+    }
+    if (def.propertyKey == "degreeOffset" || def.propertyKey == "gridInterval" ||
+        def.propertyKey == "globalRootOctaveOffset") {
+      sl->textFromValueFunction = [](double v) {
+        int i = static_cast<int>(v);
+        if (i == 0) return juce::String("0");
+        return i > 0 ? juce::String("+") + juce::String(i)
+                     : juce::String(i);
+      };
+    }
+
+    if (def.propertyKey == "rootNote")
+      sl->setValue(zone->rootNote, juce::dontSendNotification);
+    else if (def.propertyKey == "chromaticOffset")
+      sl->setValue(zone->chromaticOffset, juce::dontSendNotification);
+    else if (def.propertyKey == "degreeOffset")
+      sl->setValue(zone->degreeOffset, juce::dontSendNotification);
+    else if (def.propertyKey == "globalRootOctaveOffset")
+      sl->setValue(zone->globalRootOctaveOffset, juce::dontSendNotification);
+    else if (def.propertyKey == "baseVelocity")
+      sl->setValue(zone->baseVelocity, juce::dontSendNotification);
+    else if (def.propertyKey == "velocityRandom")
+      sl->setValue(zone->velocityRandom, juce::dontSendNotification);
+    else if (def.propertyKey == "ghostVelocityScale")
+      sl->setValue(zone->ghostVelocityScale * 100.0, juce::dontSendNotification);
+    else if (def.propertyKey == "bassOctaveOffset")
+      sl->setValue(zone->bassOctaveOffset, juce::dontSendNotification);
+    else if (def.propertyKey == "glideTimeMs")
+      sl->setValue(zone->glideTimeMs, juce::dontSendNotification);
+    else if (def.propertyKey == "maxGlideTimeMs")
+      sl->setValue(zone->maxGlideTimeMs, juce::dontSendNotification);
+    else if (def.propertyKey == "midiChannel")
+      sl->setValue(zone->midiChannel, juce::dontSendNotification);
+    else if (def.propertyKey == "guitarFretAnchor")
+      sl->setValue(zone->guitarFretAnchor, juce::dontSendNotification);
+    else if (def.propertyKey == "strumSpeedMs")
+      sl->setValue(zone->strumSpeedMs, juce::dontSendNotification);
+    else if (def.propertyKey == "releaseDurationMs")
+      sl->setValue(zone->releaseDurationMs, juce::dontSendNotification);
+    else if (def.propertyKey == "gridInterval")
+      sl->setValue(zone->gridInterval, juce::dontSendNotification);
+
+    if (def.propertyKey == "rootNote")
+      sl->setEnabled(!zone->useGlobalRoot);
+    if (def.propertyKey == "bassOctaveOffset")
+      sl->setEnabled(zone->addBassNote);
+    if (def.propertyKey == "gridInterval")
+      sl->setEnabled(zone->layoutStrategy == Zone::LayoutStrategy::Grid);
+
+    juce::Slider *slPtr = sl.get();
+    sl->onValueChange = [this, zone, slPtr, def, rebuildIfNeeded]() {
+      if (!currentZone || currentZone.get() != zone) return;
+      double v = slPtr->getValue();
+      if (def.propertyKey == "rootNote")
+        zone->rootNote = static_cast<int>(v);
+      else if (def.propertyKey == "chromaticOffset")
+        zone->chromaticOffset = static_cast<int>(v);
+      else if (def.propertyKey == "degreeOffset")
+        zone->degreeOffset = static_cast<int>(v);
+      else if (def.propertyKey == "globalRootOctaveOffset")
+        zone->globalRootOctaveOffset = static_cast<int>(v);
+      else if (def.propertyKey == "baseVelocity")
+        zone->baseVelocity = static_cast<int>(v);
+      else if (def.propertyKey == "velocityRandom")
+        zone->velocityRandom = static_cast<int>(v);
+      else if (def.propertyKey == "ghostVelocityScale")
+        zone->ghostVelocityScale = static_cast<float>(v) / 100.0f;
+      else if (def.propertyKey == "bassOctaveOffset")
+        zone->bassOctaveOffset = static_cast<int>(v);
+      else if (def.propertyKey == "glideTimeMs")
+        zone->glideTimeMs = static_cast<int>(v);
+      else if (def.propertyKey == "maxGlideTimeMs")
+        zone->maxGlideTimeMs = static_cast<int>(v);
+      else if (def.propertyKey == "midiChannel")
+        zone->midiChannel = static_cast<int>(v);
+      else if (def.propertyKey == "guitarFretAnchor")
+        zone->guitarFretAnchor = static_cast<int>(v);
+      else if (def.propertyKey == "strumSpeedMs")
+        zone->strumSpeedMs = static_cast<int>(v);
+      else if (def.propertyKey == "releaseDurationMs")
+        zone->releaseDurationMs = static_cast<int>(v);
+      else if (def.propertyKey == "gridInterval")
+        zone->gridInterval = static_cast<int>(v);
+      rebuildIfNeeded();
+    };
+
+    auto rowComp = std::make_unique<LabelEditorRow>();
+    rowComp->label = std::make_unique<juce::Label>();
+    rowComp->label->setText(def.label + ":", juce::dontSendNotification);
+    rowComp->editor = std::move(sl);
+    rowComp->addAndMakeVisible(*rowComp->label);
+    rowComp->addAndMakeVisible(*rowComp->editor);
+    addItem(std::move(rowComp), def.widthWeight, def.autoWidth);
+    break;
+  }
+  case ZoneControl::Type::ComboBox: {
+    auto cb = std::make_unique<juce::ComboBox>();
+    for (const auto &p : def.options)
+      cb->addItem(p.second, p.first);
+
+    auto setComboFromZone = [cb = cb.get(), zone, &def]() {
+      if (def.propertyKey == "showRomanNumerals")
+        cb->setSelectedId(zone->showRomanNumerals ? 2 : 1,
+                          juce::dontSendNotification);
+      else if (def.propertyKey == "polyphonyMode") {
+        int id = (zone->polyphonyMode == PolyphonyMode::Poly) ? 1
+                 : (zone->polyphonyMode == PolyphonyMode::Mono) ? 2 : 3;
+        cb->setSelectedId(id, juce::dontSendNotification);
+      } else if (def.propertyKey == "instrumentMode")
+        cb->setSelectedId(zone->instrumentMode == Zone::InstrumentMode::Piano
+                              ? 1 : 2,
+                          juce::dontSendNotification);
+      else if (def.propertyKey == "pianoVoicingStyle") {
+        int id = (zone->pianoVoicingStyle == Zone::PianoVoicingStyle::Block) ? 1
+                 : (zone->pianoVoicingStyle == Zone::PianoVoicingStyle::Close)
+                     ? 2 : 3;
+        cb->setSelectedId(id, juce::dontSendNotification);
+      } else if (def.propertyKey == "guitarPlayerPosition")
+        cb->setSelectedId(zone->guitarPlayerPosition ==
+                                  Zone::GuitarPlayerPosition::Campfire
+                              ? 1 : 2,
+                          juce::dontSendNotification);
+      else if (def.propertyKey == "strumPattern") {
+        int id = (zone->strumPattern == Zone::StrumPattern::Down) ? 1
+                 : (zone->strumPattern == Zone::StrumPattern::Up) ? 2 : 3;
+        cb->setSelectedId(id, juce::dontSendNotification);
+      } else if (def.propertyKey == "chordType") {
+        int id = 1;
+        if (zone->chordType == ChordUtilities::ChordType::Triad) id = 2;
+        else if (zone->chordType == ChordUtilities::ChordType::Seventh) id = 3;
+        else if (zone->chordType == ChordUtilities::ChordType::Ninth) id = 4;
+        else if (zone->chordType == ChordUtilities::ChordType::Power5) id = 5;
+        cb->setSelectedId(id, juce::dontSendNotification);
+      } else if (def.propertyKey == "voicing") {
+        int id = 1;
+        if (zone->voicing == ChordUtilities::Voicing::Smooth) id = 2;
+        else if (zone->voicing == ChordUtilities::Voicing::GuitarSpread) id = 3;
+        else if (zone->voicing == ChordUtilities::Voicing::SmoothFilled) id = 4;
+        else if (zone->voicing == ChordUtilities::Voicing::GuitarFilled) id = 5;
+        cb->setSelectedId(id, juce::dontSendNotification);
+      } else if (def.propertyKey == "playMode")
+        cb->setSelectedId(zone->playMode == Zone::PlayMode::Direct ? 1 : 2,
+                         juce::dontSendNotification);
+      else if (def.propertyKey == "releaseBehavior")
+        cb->setSelectedId(zone->releaseBehavior == Zone::ReleaseBehavior::Normal
+                             ? 1 : 2,
+                         juce::dontSendNotification);
+      else if (def.propertyKey == "layoutStrategy") {
+        int id = (zone->layoutStrategy == Zone::LayoutStrategy::Linear) ? 1
+                 : (zone->layoutStrategy == Zone::LayoutStrategy::Grid) ? 2 : 3;
+        cb->setSelectedId(id, juce::dontSendNotification);
+      }
+    };
+    setComboFromZone();
+
+    juce::ComboBox *cbPtr = cb.get();
+    cb->onChange = [this, zone, cbPtr, def, rebuildIfNeeded, setComboFromZone]() {
+      if (!currentZone || currentZone.get() != zone) return;
+      int id = cbPtr->getSelectedId();
+      if (def.propertyKey == "showRomanNumerals") {
+        zone->showRomanNumerals = (id == 2);
+      } else if (def.propertyKey == "polyphonyMode") {
+        zone->polyphonyMode = (id == 1) ? PolyphonyMode::Poly
+                              : (id == 2) ? PolyphonyMode::Mono
+                                          : PolyphonyMode::Legato;
+        juce::MessageManager::callAsync([this]() { rebuildUI(); });
+      } else if (def.propertyKey == "instrumentMode") {
+        zone->instrumentMode = (id == 1) ? Zone::InstrumentMode::Piano
+                                         : Zone::InstrumentMode::Guitar;
+        juce::MessageManager::callAsync([this]() { rebuildUI(); });
+      } else if (def.propertyKey == "pianoVoicingStyle") {
+        zone->pianoVoicingStyle = (id == 1) ? Zone::PianoVoicingStyle::Block
+                                 : (id == 2) ? Zone::PianoVoicingStyle::Close
+                                             : Zone::PianoVoicingStyle::Open;
+      } else if (def.propertyKey == "guitarPlayerPosition") {
+        zone->guitarPlayerPosition =
+            (id == 1) ? Zone::GuitarPlayerPosition::Campfire
+                      : Zone::GuitarPlayerPosition::Rhythm;
+        juce::MessageManager::callAsync([this]() { rebuildUI(); });
+      } else if (def.propertyKey == "strumPattern") {
+        zone->strumPattern = (id == 1) ? Zone::StrumPattern::Down
+                            : (id == 2) ? Zone::StrumPattern::Up
+                                        : Zone::StrumPattern::AutoAlternating;
+      } else if (def.propertyKey == "chordType") {
+        zone->chordType = (id == 1) ? ChordUtilities::ChordType::None
+                         : (id == 2) ? ChordUtilities::ChordType::Triad
+                         : (id == 3) ? ChordUtilities::ChordType::Seventh
+                         : (id == 4) ? ChordUtilities::ChordType::Ninth
+                                    : ChordUtilities::ChordType::Power5;
+      } else if (def.propertyKey == "voicing") {
+        zone->voicing = (id == 1) ? ChordUtilities::Voicing::RootPosition
+                       : (id == 2) ? ChordUtilities::Voicing::Smooth
+                       : (id == 3) ? ChordUtilities::Voicing::GuitarSpread
+                       : (id == 4) ? ChordUtilities::Voicing::SmoothFilled
+                                  : ChordUtilities::Voicing::GuitarFilled;
+      } else if (def.propertyKey == "playMode") {
+        zone->playMode = (id == 1) ? Zone::PlayMode::Direct
+                                    : Zone::PlayMode::Strum;
+      } else if (def.propertyKey == "releaseBehavior") {
+        zone->releaseBehavior = (id == 1) ? Zone::ReleaseBehavior::Normal
+                                         : Zone::ReleaseBehavior::Sustain;
+      } else if (def.propertyKey == "layoutStrategy") {
+        zone->layoutStrategy = (id == 1) ? Zone::LayoutStrategy::Linear
+                               : (id == 2) ? Zone::LayoutStrategy::Grid
+                                           : Zone::LayoutStrategy::Piano;
+        juce::MessageManager::callAsync([this]() { rebuildUI(); });
+      }
+      rebuildIfNeeded();
+    };
+
+    auto rowComp = std::make_unique<LabelEditorRow>();
+    rowComp->label = std::make_unique<juce::Label>();
+    rowComp->label->setText(def.label + ":", juce::dontSendNotification);
+    rowComp->editor = std::move(cb);
+    rowComp->addAndMakeVisible(*rowComp->label);
+    rowComp->addAndMakeVisible(*rowComp->editor);
+    addItem(std::move(rowComp), def.widthWeight, def.autoWidth);
+    break;
+  }
+  case ZoneControl::Type::Toggle: {
+    auto tb = std::make_unique<juce::ToggleButton>();
+    if (def.propertyKey == "useGlobalRoot")
+      tb->setButtonText("Global");
+    else if (def.propertyKey == "useGlobalScale")
+      tb->setButtonText("Global");
+    else
+      tb->setButtonText(def.label);
+
+    if (def.propertyKey == "useGlobalRoot")
+      tb->setToggleState(zone->useGlobalRoot, juce::dontSendNotification);
+    else if (def.propertyKey == "useGlobalScale")
+      tb->setToggleState(zone->useGlobalScale, juce::dontSendNotification);
+    else if (def.propertyKey == "isTransposeLocked")
+      tb->setToggleState(zone->isTransposeLocked, juce::dontSendNotification);
+    else if (def.propertyKey == "allowSustain")
+      tb->setToggleState(zone->allowSustain, juce::dontSendNotification);
+    else if (def.propertyKey == "strictGhostHarmony")
+      tb->setToggleState(zone->strictGhostHarmony, juce::dontSendNotification);
+    else if (def.propertyKey == "addBassNote")
+      tb->setToggleState(zone->addBassNote, juce::dontSendNotification);
+    else if (def.propertyKey == "isAdaptiveGlide")
+      tb->setToggleState(zone->isAdaptiveGlide, juce::dontSendNotification);
+    else if (def.propertyKey == "humanize")
+      tb->setToggleState(zone->humanize, juce::dontSendNotification);
+    else if (def.propertyKey == "strumGhostNotes")
+      tb->setToggleState(zone->strumGhostNotes, juce::dontSendNotification);
+
+    juce::ToggleButton *tbPtr = tb.get();
+    tb->onClick = [this, zone, tbPtr, def, rebuildIfNeeded]() {
+      if (!currentZone || currentZone.get() != zone) return;
+      bool v = tbPtr->getToggleState();
+      if (def.propertyKey == "useGlobalRoot")
+        zone->useGlobalRoot = v;
+      else if (def.propertyKey == "useGlobalScale")
+        zone->useGlobalScale = v;
+      else if (def.propertyKey == "isTransposeLocked")
+        zone->isTransposeLocked = v;
+      else if (def.propertyKey == "allowSustain")
+        zone->allowSustain = v;
+      else if (def.propertyKey == "strictGhostHarmony")
+        zone->strictGhostHarmony = v;
+      else if (def.propertyKey == "addBassNote") {
+        zone->addBassNote = v;
+        juce::MessageManager::callAsync([this]() { rebuildUI(); });
+      }
+      else if (def.propertyKey == "isAdaptiveGlide")
+        zone->isAdaptiveGlide = v;
+      else if (def.propertyKey == "humanize")
+        zone->humanize = v;
+      else if (def.propertyKey == "strumGhostNotes")
+        zone->strumGhostNotes = v;
+      if (def.propertyKey == "useGlobalRoot" || def.propertyKey == "useGlobalScale")
+        juce::MessageManager::callAsync([this]() { rebuildUI(); });
+      rebuildIfNeeded();
+    };
+
+    if (def.label.isEmpty() || def.propertyKey == "useGlobalRoot" ||
+        def.propertyKey == "useGlobalScale") {
+      addItem(std::move(tb), def.widthWeight, def.autoWidth);
+    } else {
+      auto lbl = std::make_unique<juce::Label>("", def.label + ":");
+      lbl->setJustificationType(juce::Justification::centredLeft);
+      addItem(std::make_unique<LabeledControl>(std::move(lbl), std::move(tb)),
+              def.widthWeight, def.autoWidth);
+    }
+    break;
+  }
+  case ZoneControl::Type::LabelOnly: {
+    auto label = std::make_unique<juce::Label>();
+    label->setText(def.label, juce::dontSendNotification);
+    label->setColour(juce::Label::textColourId, juce::Colours::grey);
+    addItem(std::move(label), 1.0f, false);
+    break;
+  }
+  default:
+    break;
   }
 }
 
-void ZonePropertiesPanel::updateKeysAssignedLabel() {
-  // Label removed - chip list now shows keys visually
-}
+void ZonePropertiesPanel::createAliasRow() {
+  UiRow row;
+  row.isSeparatorRow = false;
+  row.isChipListRow = false;
+  auto rowComp = std::make_unique<LabelEditorRow>();
+  rowComp->label = std::make_unique<juce::Label>();
+  rowComp->label->setText("Device Alias:", juce::dontSendNotification);
 
-void ZonePropertiesPanel::updateVisibility() {
-  if (!currentZone)
-    return;
-  bool piano = (currentZone->layoutStrategy == Zone::LayoutStrategy::Piano);
-  bool useGlobalScale = globalScaleToggle.getToggleState();
-  bool useGlobalRoot = globalRootToggle.getToggleState();
-  scaleSelector.setEnabled((!piano) && (!useGlobalScale));
-  editScaleButton.setEnabled((!piano) && (!useGlobalScale));
-  rootSlider.setEnabled(!useGlobalRoot);
-
-  // Show glide controls only for Legato mode
-  bool isLegato = (currentZone->polyphonyMode == PolyphonyMode::Legato);
-  glideTimeSlider.setVisible(isLegato);
-  glideTimeLabel.setVisible(isLegato);
-  adaptiveGlideToggle.setVisible(isLegato);
-
-  // Show max glide time slider only for Adaptive mode
-  bool isAdaptive = isLegato && currentZone->isAdaptiveGlide;
-  maxGlideTimeSlider.setVisible(isAdaptive);
-  maxGlideTimeLabel.setVisible(isAdaptive);
-
-  // Update glide time label text based on adaptive mode
-  if (isLegato) {
-    if (currentZone->isAdaptiveGlide) {
-      glideTimeLabel.setText("Glide Time / Min:", juce::dontSendNotification);
-    } else {
-      glideTimeLabel.setText("Glide Time:", juce::dontSendNotification);
+  auto aliasCombo = std::make_unique<juce::ComboBox>();
+  aliasCombo->addItem("Global (All Devices)", 1);
+  if (deviceManager) {
+    auto aliases = deviceManager->getAllAliasNames();
+    for (int i = 0; i < aliases.size(); ++i)
+      aliasCombo->addItem(aliases[i], i + 2);
+  }
+  if (currentZone && currentZone->targetAliasHash == 0)
+    aliasCombo->setSelectedItemIndex(0, juce::dontSendNotification);
+  else if (currentZone && deviceManager) {
+    juce::String name = deviceManager->getAliasName(currentZone->targetAliasHash);
+    for (int i = 0; i < aliasCombo->getNumItems(); ++i) {
+      if (aliasCombo->getItemText(i) == name) {
+        aliasCombo->setSelectedItemIndex(i, juce::dontSendNotification);
+        break;
+      }
     }
   }
 
-  // Show warning label for Mono/Legato modes (Phase 26.2)
-  bool isMonoOrLegato = (currentZone->polyphonyMode == PolyphonyMode::Mono ||
-                         currentZone->polyphonyMode == PolyphonyMode::Legato);
-  monoWarningLabel.setVisible(isMonoOrLegato);
+  juce::ComboBox *cbPtr = aliasCombo.get();
+  aliasCombo->onChange = [this, cbPtr]() {
+    if (!currentZone || !deviceManager) return;
+    int idx = cbPtr->getSelectedItemIndex();
+    if (idx >= 0) {
+      juce::String name = cbPtr->getItemText(idx);
+      currentZone->targetAliasHash = aliasNameToHash(name);
+      if (zoneManager) {
+        zoneManager->rebuildLookupTable();
+        zoneManager->sendChangeMessage();
+      }
+    }
+  };
+
+  rowComp->editor = std::move(aliasCombo);
+  rowComp->addAndMakeVisible(*rowComp->label);
+  rowComp->addAndMakeVisible(*rowComp->editor);
+  addAndMakeVisible(*rowComp);
+  row.items.push_back({std::move(rowComp), 1.0f, false});
+  uiRows.push_back(std::move(row));
+}
+
+void ZonePropertiesPanel::createLayerRow() {
+  UiRow row;
+  row.isSeparatorRow = false;
+  row.isChipListRow = false;
+  auto rowComp = std::make_unique<LabelEditorRow>();
+  rowComp->label = std::make_unique<juce::Label>();
+  rowComp->label->setText("Layer:", juce::dontSendNotification);
+
+  auto layerCombo = std::make_unique<juce::ComboBox>();
+  for (int i = 0; i <= 8; ++i)
+    layerCombo->addItem(
+        i == 0 ? "0: Base" : (juce::String(i) + ": Layer " + juce::String(i)),
+        i + 1);
+  if (currentZone)
+    layerCombo->setSelectedId(currentZone->layerID + 1,
+                               juce::dontSendNotification);
+
+  juce::ComboBox *cbPtr = layerCombo.get();
+  layerCombo->onChange = [this, cbPtr]() {
+    if (!currentZone || !zoneManager) return;
+    int id = cbPtr->getSelectedId() - 1;
+    if (id >= 0 && id <= 8) {
+      currentZone->layerID = id;
+      zoneManager->rebuildLookupTable();
+      zoneManager->sendChangeMessage();
+    }
+  };
+
+  rowComp->editor = std::move(layerCombo);
+  rowComp->addAndMakeVisible(*rowComp->label);
+  rowComp->addAndMakeVisible(*rowComp->editor);
+  addAndMakeVisible(*rowComp);
+  row.items.push_back({std::move(rowComp), 1.0f, false});
+  uiRows.push_back(std::move(row));
+}
+
+void ZonePropertiesPanel::createNameRow() {
+  UiRow row;
+  row.isSeparatorRow = false;
+  row.isChipListRow = false;
+  auto rowComp = std::make_unique<LabelEditorRow>();
+  rowComp->label = std::make_unique<juce::Label>();
+  rowComp->label->setText("Zone Name:", juce::dontSendNotification);
+
+  auto nameEdit = std::make_unique<juce::TextEditor>();
+  if (currentZone)
+    nameEdit->setText(currentZone->name, false);
+  juce::TextEditor *tePtr = nameEdit.get();
+  nameEdit->onTextChange = [this, tePtr]() {
+    if (currentZone)
+      currentZone->name = tePtr->getText();
+  };
+
+  rowComp->editor = std::move(nameEdit);
+  rowComp->addAndMakeVisible(*rowComp->label);
+  rowComp->addAndMakeVisible(*rowComp->editor);
+  addAndMakeVisible(*rowComp);
+  row.items.push_back({std::move(rowComp), 1.0f, false});
+  uiRows.push_back(std::move(row));
+}
+
+void ZonePropertiesPanel::createScaleRow() {
+  UiRow row;
+  row.isSeparatorRow = false;
+  row.isChipListRow = false;
+
+  auto scaleCombo = std::make_unique<juce::ComboBox>();
+  scaleCombo->addItem("Major", 1);
+  if (scaleLibrary) {
+    auto names = scaleLibrary->getScaleNames();
+    for (int i = 0; i < names.size(); ++i)
+      scaleCombo->addItem(names[i], i + 2);
+  }
+  if (currentZone) {
+    for (int i = 0; i < scaleCombo->getNumItems(); ++i) {
+      if (scaleCombo->getItemText(i) == currentZone->scaleName) {
+        scaleCombo->setSelectedItemIndex(i, juce::dontSendNotification);
+        break;
+      }
+    }
+  }
+
+  auto globalToggle = std::make_unique<juce::ToggleButton>();
+  globalToggle->setButtonText("Global");
+  if (currentZone)
+    globalToggle->setToggleState(currentZone->useGlobalScale,
+                                 juce::dontSendNotification);
+
+  auto editBtn = std::make_unique<juce::TextButton>("Edit...");
+  editBtn->onClick = [this]() {
+    if (!scaleLibrary) return;
+    auto *editor = new ScaleEditorComponent(scaleLibrary);
+    editor->setSize(600, 400);
+    juce::DialogWindow::LaunchOptions opts;
+    opts.content.setOwned(editor);
+    opts.dialogTitle = "Scale Editor";
+    opts.dialogBackgroundColour = juce::Colour(0xff222222);
+    opts.escapeKeyTriggersCloseButton = true;
+    opts.useNativeTitleBar = false;
+    opts.resizable = true;
+    opts.useBottomRightCornerResizer = true;
+    opts.componentToCentreAround = this;
+    opts.launchAsync();
+  };
+
+  scaleCombo->setEnabled(currentZone && !currentZone->useGlobalScale);
+  juce::ComboBox *scalePtr = scaleCombo.get();
+  juce::ToggleButton *globalPtr = globalToggle.get();
+  scaleCombo->onChange = [this, scalePtr]() {
+    if (!currentZone || !scaleLibrary) return;
+    int idx = scalePtr->getSelectedItemIndex();
+    if (idx >= 0) {
+      currentZone->scaleName = scalePtr->getItemText(idx);
+      rebuildZoneCache();
+    }
+  };
+  globalToggle->onClick = [this, globalPtr, scalePtr]() {
+    if (!currentZone || !zoneManager) return;
+    currentZone->useGlobalScale = globalPtr->getToggleState();
+    scalePtr->setEnabled(!currentZone->useGlobalScale);
+    rebuildZoneCache();
+    juce::MessageManager::callAsync([this]() { rebuildUI(); });
+  };
+
+  auto rowComp = std::make_unique<LabelEditorRow>();
+  rowComp->label = std::make_unique<juce::Label>();
+  rowComp->label->setText("Scale:", juce::dontSendNotification);
+  rowComp->editor = std::move(scaleCombo);
+  rowComp->addAndMakeVisible(*rowComp->label);
+  rowComp->addAndMakeVisible(*rowComp->editor);
+  addAndMakeVisible(*rowComp);
+  addAndMakeVisible(*globalToggle);
+  addAndMakeVisible(*editBtn);
+  row.items.push_back({std::move(rowComp), 0.7f, false});
+  row.items.push_back({std::move(globalToggle), 0.15f, false});
+  row.items.push_back({std::move(editBtn), 0.15f, false});
+  uiRows.push_back(std::move(row));
+}
+
+void ZonePropertiesPanel::createKeyAssignRow() {
+  UiRow row;
+  row.isSeparatorRow = false;
+  row.isChipListRow = false;
+
+  auto captureBtn = std::make_unique<juce::ToggleButton>();
+  captureBtn->setButtonText("Assign Keys");
+  captureBtn->setClickingTogglesState(true);
+  auto removeBtn = std::make_unique<juce::ToggleButton>();
+  removeBtn->setButtonText("Remove Keys");
+  removeBtn->setClickingTogglesState(true);
+
+  juce::ToggleButton *removeBtnPtr = removeBtn.get();
+  juce::ToggleButton *captureBtnPtr = captureBtn.get();
+  captureBtn->onClick = [this, removeBtnPtr]() {
+    if (captureKeysButtonRef && captureKeysButtonRef->getToggleState())
+      removeBtnPtr->setToggleState(false, juce::dontSendNotification);
+  };
+  removeBtn->onClick = [this, captureBtnPtr]() {
+    if (removeKeysButtonRef && removeKeysButtonRef->getToggleState())
+      captureBtnPtr->setToggleState(false, juce::dontSendNotification);
+  };
+
+  captureKeysButtonRef = captureBtn.get();
+  removeKeysButtonRef = removeBtn.get();
+
+  addAndMakeVisible(*captureBtn);
+  addAndMakeVisible(*removeBtn);
+  row.items.push_back({std::move(captureBtn), 0.5f, false});
+  row.items.push_back({std::move(removeBtn), 0.5f, false});
+  uiRows.push_back(std::move(row));
+}
+
+void ZonePropertiesPanel::createChipListRow() {
+  UiRow row;
+  row.isSeparatorRow = false;
+  row.isChipListRow = true;
+  chipListRowIndex = static_cast<int>(uiRows.size());
+
+  auto chipList = std::make_unique<KeyChipList>();
+  if (currentZone)
+    chipList->setKeys(currentZone->inputKeyCodes);
+  chipList->onKeyRemoved = [this](int keyCode) {
+    if (!currentZone || !scaleLibrary || !zoneManager) return;
+    currentZone->removeKey(keyCode);
+    if (chipListRef)
+      chipListRef->setKeys(currentZone->inputKeyCodes);
+    rebuildZoneCache();
+    zoneManager->rebuildLookupTable();
+    zoneManager->sendChangeMessage();
+    if (onResizeRequested) onResizeRequested();
+  };
+  chipListRef = chipList.get();
+
+  addAndMakeVisible(*chipList);
+  row.items.push_back({std::move(chipList), 1.0f, false});
+  uiRows.push_back(std::move(row));
+}
+
+void ZonePropertiesPanel::createColorRow() {
+  UiRow row;
+  row.isSeparatorRow = false;
+  row.isChipListRow = false;
+
+  auto rowComp = std::make_unique<LabelEditorRow>();
+  rowComp->label = std::make_unique<juce::Label>();
+  rowComp->label->setText("Zone Color:", juce::dontSendNotification);
+
+  auto colorBtn = std::make_unique<juce::TextButton>("Color");
+  if (currentZone)
+    colorBtn->setColour(juce::TextButton::buttonColourId,
+                       currentZone->zoneColor);
+  juce::TextButton *btnPtr = colorBtn.get();
+  colorBtn->onClick = [this, btnPtr]() {
+    if (!currentZone) return;
+    int flags = juce::ColourSelector::showColourspace |
+                juce::ColourSelector::showSliders |
+                juce::ColourSelector::showColourAtTop;
+    auto *sel = new juce::ColourSelector(flags);
+    sel->setName("Zone Color");
+    sel->setCurrentColour(currentZone->zoneColor);
+    sel->setSize(400, 300);
+    class ColorListener : public juce::ChangeListener {
+    public:
+      ColorListener(Zone *z, ZoneManager *zm, juce::TextButton *b)
+          : zone(z), zoneMgr(zm), button(b) {}
+      void changeListenerCallback(juce::ChangeBroadcaster *source) override {
+        auto *selector = dynamic_cast<juce::ColourSelector *>(source);
+        if (zone && selector) {
+          zone->zoneColor = selector->getCurrentColour();
+          button->setColour(juce::TextButton::buttonColourId, zone->zoneColor);
+          button->repaint();
+          if (zoneMgr) zoneMgr->sendChangeMessage();
+        }
+      }
+      Zone *zone;
+      ZoneManager *zoneMgr;
+      juce::TextButton *button;
+    };
+    auto *listener = new ColorListener(currentZone.get(), zoneManager, btnPtr);
+    sel->addChangeListener(listener);
+    juce::CallOutBox::launchAsynchronously(
+        std::unique_ptr<juce::Component>(sel),
+        btnPtr->getScreenBounds(), this);
+  };
+
+  rowComp->editor = std::move(colorBtn);
+  rowComp->addAndMakeVisible(*rowComp->label);
+  rowComp->addAndMakeVisible(*rowComp->editor);
+  addAndMakeVisible(*rowComp);
+  row.items.push_back({std::move(rowComp), 1.0f, false});
+  uiRows.push_back(std::move(row));
+}
+
+void ZonePropertiesPanel::resized() {
+  const int rowHeight = 28;
+  const int separatorRowHeight = 15;
+  const int spacing = 4;
+  const int topPadding = 8;
+  const int extraSeparatorMargin = 12;
+  auto bounds = getLocalBounds().reduced(8);
+  int y = bounds.getY() + topPadding;
+
+  for (size_t rowIdx = 0; rowIdx < uiRows.size(); ++rowIdx) {
+    auto &row = uiRows[rowIdx];
+    if (row.items.empty()) continue;
+
+    if (row.isSeparatorRow)
+      y += extraSeparatorMargin;
+
+    int h = row.isSeparatorRow ? separatorRowHeight : rowHeight;
+    if (row.isChipListRow && chipListRef && currentZone) {
+      int n = static_cast<int>(currentZone->inputKeyCodes.size());
+      h = juce::jmax(120, n * 28 + 16);
+    }
+
+    int totalAvailable = bounds.getWidth();
+    int usedWidth = 0;
+    float totalWeight = 0.0f;
+    for (auto &item : row.items) {
+      if (item.isAutoWidth) {
+        if (auto *lc = dynamic_cast<LabeledControl *>(item.component.get()))
+          usedWidth += lc->getIdealWidth();
+        else
+          usedWidth += 80;
+      } else {
+        totalWeight += item.weight;
+      }
+    }
+    int remainingWidth = std::max(0, totalAvailable - usedWidth);
+    int x = bounds.getX();
+
+    for (auto &item : row.items) {
+      int w = 0;
+      if (item.isAutoWidth) {
+        if (auto *lc = dynamic_cast<LabeledControl *>(item.component.get()))
+          w = lc->getIdealWidth();
+        else
+          w = 80;
+      } else {
+        w = (totalWeight > 0.0f)
+                ? static_cast<int>((item.weight / totalWeight) * remainingWidth)
+                : remainingWidth;
+      }
+      if (item.component)
+        item.component->setBounds(x, y, w, h);
+      x += w;
+    }
+    y += h + spacing;
+  }
+  setSize(getWidth(), y + 8);
+}
+
+int ZonePropertiesPanel::getRequiredHeight() const {
+  const int controlHeight = 28;
+  const int separatorHeight = 15;
+  const int separatorTopMargin = 12;
+  const int spacing = 4;
+  const int topPadding = 8;
+  const int bottomPadding = 8;
+  int total = topPadding + bottomPadding;
+  for (size_t i = 0; i < uiRows.size(); ++i) {
+    const auto &row = uiRows[i];
+    if (row.isSeparatorRow)
+      total += separatorTopMargin;
+    int h = row.isSeparatorRow ? separatorHeight : controlHeight;
+    if (row.isChipListRow && chipListRef && currentZone) {
+      int n = static_cast<int>(currentZone->inputKeyCodes.size());
+      h = juce::jmax(120, n * 28 + 16);
+    }
+    total += h + spacing;
+  }
+  return total;
 }
 
 void ZonePropertiesPanel::rebuildZoneCache() {
-  if (!currentZone || !zoneManager || !scaleLibrary)
-    return;
+  if (!currentZone || !zoneManager || !scaleLibrary) return;
   std::vector<int> intervals;
   int root;
-  if (globalScaleToggle.getToggleState())
+  if (currentZone->useGlobalScale)
     intervals = scaleLibrary->getIntervals(zoneManager->getGlobalScaleName());
-  else {
-    int idx = scaleSelector.getSelectedItemIndex();
-    juce::String name =
-        (idx >= 0) ? scaleSelector.getItemText(idx) : currentZone->scaleName;
-    intervals = scaleLibrary->getIntervals(name);
-  }
-  if (globalRootToggle.getToggleState())
+  else
+    intervals = scaleLibrary->getIntervals(currentZone->scaleName);
+  if (currentZone->useGlobalRoot)
     root = zoneManager->getGlobalRootNote();
   else
-    root = static_cast<int>(rootSlider.getValue());
+    root = currentZone->rootNote;
   currentZone->rebuildCache(intervals, root);
   zoneManager->sendChangeMessage();
 }
 
-void ZonePropertiesPanel::refreshAliasSelector() {
-  aliasSelector.clear();
-  aliasSelector.addItem("Global (All Devices)", 1);
-
-  if (deviceManager) {
-    auto aliases = deviceManager->getAllAliasNames();
-    for (int i = 0; i < aliases.size(); ++i) {
-      aliasSelector.addItem(aliases[i], i + 2);
-    }
-  }
-
-  aliasSelector.setSelectedItemIndex(0, juce::dontSendNotification);
-}
-
-void ZonePropertiesPanel::refreshScaleSelector() {
-  scaleSelector.clear();
-
-  if (scaleLibrary) {
-    auto scaleNames = scaleLibrary->getScaleNames();
-    for (int i = 0; i < scaleNames.size(); ++i) {
-      scaleSelector.addItem(scaleNames[i], i + 1);
-    }
-  } else {
-    // Fallback if no ScaleLibrary
-    scaleSelector.addItem("Major", 1);
+void ZonePropertiesPanel::changeListenerCallback(
+    juce::ChangeBroadcaster *source) {
+  if (source == deviceManager || source == scaleLibrary) {
+    juce::MessageManager::callAsync([this]() { rebuildUI(); });
   }
 }
 
 void ZonePropertiesPanel::handleRawKeyEvent(uintptr_t deviceHandle, int keyCode,
                                             bool isDown) {
-  if (!currentZone)
-    return;
+  if (!currentZone || !isDown) return;
 
-  // Only process key down events
-  if (!isDown)
-    return;
-
-  // Assign Keys mode
-  if (captureKeysButton.getToggleState()) {
-    // Add key code if unique
+  if (captureKeysButtonRef && captureKeysButtonRef->getToggleState()) {
     auto &keys = currentZone->inputKeyCodes;
     if (std::find(keys.begin(), keys.end(), keyCode) == keys.end()) {
       keys.push_back(keyCode);
-      // Update chip list on message thread
-      juce::MessageManager::callAsync([this] {
-        chipList.setKeys(currentZone->inputKeyCodes);
-        updateKeysAssignedLabel();
-        if (scaleLibrary && zoneManager) {
-          rebuildZoneCache();
+      juce::MessageManager::callAsync([this]() {
+        if (chipListRef)
+          chipListRef->setKeys(currentZone->inputKeyCodes);
+        rebuildZoneCache();
+        if (zoneManager) {
           zoneManager->rebuildLookupTable();
           zoneManager->sendChangeMessage();
         }
-        // Notify parent that resize is needed
-        if (onResizeRequested) {
-          onResizeRequested();
-        }
+        if (onResizeRequested) onResizeRequested();
       });
     }
     return;
   }
 
-  // Remove Keys mode
-  if (removeKeysButton.getToggleState()) {
-    // Remove key code if it exists
-    auto &keys = currentZone->inputKeyCodes;
-    auto it = std::find(keys.begin(), keys.end(), keyCode);
-    if (it != keys.end()) {
+  if (removeKeysButtonRef && removeKeysButtonRef->getToggleState()) {
+    auto it = std::find(currentZone->inputKeyCodes.begin(),
+                       currentZone->inputKeyCodes.end(), keyCode);
+    if (it != currentZone->inputKeyCodes.end()) {
       currentZone->removeKey(keyCode);
-      // Update chip list on message thread
-      juce::MessageManager::callAsync([this] {
-        chipList.setKeys(currentZone->inputKeyCodes);
-        updateKeysAssignedLabel();
-        if (scaleLibrary && zoneManager) {
-          rebuildZoneCache();
+      juce::MessageManager::callAsync([this]() {
+        if (chipListRef)
+          chipListRef->setKeys(currentZone->inputKeyCodes);
+        rebuildZoneCache();
+        if (zoneManager) {
           zoneManager->rebuildLookupTable();
           zoneManager->sendChangeMessage();
         }
-        // Notify parent that resize is needed
-        if (onResizeRequested) {
-          onResizeRequested();
-        }
+        if (onResizeRequested) onResizeRequested();
       });
     }
     return;
@@ -1398,25 +1009,4 @@ void ZonePropertiesPanel::handleRawKeyEvent(uintptr_t deviceHandle, int keyCode,
 }
 
 void ZonePropertiesPanel::handleAxisEvent(uintptr_t deviceHandle, int inputCode,
-                                          float value) {
-  // Ignore axis events during key capture
-}
-
-void ZonePropertiesPanel::changeListenerCallback(
-    juce::ChangeBroadcaster *source) {
-  if (source == deviceManager) {
-    juce::MessageManager::callAsync([this] {
-      refreshAliasSelector();
-      if (currentZone) {
-        updateControlsFromZone();
-      }
-    });
-  } else if (source == scaleLibrary) {
-    juce::MessageManager::callAsync([this] {
-      refreshScaleSelector();
-      if (currentZone) {
-        updateControlsFromZone();
-      }
-    });
-  }
-}
+                                          float value) {}

@@ -12,7 +12,9 @@ void ZoneManager::rebuildZoneCache(Zone *zone) {
   std::vector<int> intervals = zone->usesGlobalScale()
                                    ? scaleLibrary.getIntervals(globalScaleName)
                                    : scaleLibrary.getIntervals(zone->scaleName);
-  int root = zone->usesGlobalRoot() ? globalRootNote : zone->rootNote;
+  int root = zone->usesGlobalRoot()
+                 ? (globalRootNote + 12 * zone->globalRootOctaveOffset)
+                 : zone->rootNote;
   zone->rebuildCache(intervals, root);
 }
 

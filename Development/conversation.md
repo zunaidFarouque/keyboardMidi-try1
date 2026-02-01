@@ -453,10 +453,7 @@ If I were coding the UI, this is exactly how I would present it. It feels flexib
 | Piano Mode | "Pop Style" (Close + Gravity Well) | "Cinematic Style" (Drop-2 + Bass Anchor) | Humanize (Timing/Vel) |
 | Guitar Mode | "Campfire" (Open Strings + Strum) | "Rhythm" (Barre Chords/Capo) | Strum Speed (Knob) |Export to Sheets
 
-**One Final "Pro" Feature Idea:**
-For the Guitar mode, add a **"Dynamic Muting"** toggle.
 
-- _Logic:_ If the user triggers a chord with **low velocity** (soft press), the software shortens the MIDI note length to 50ms (making it a "palm mute" or "chunk" sound). If they press hard, it rings out fully. This makes rhythmic playing incredibly fun.
 
 ___
 ###### [top](#table-of-contents)

@@ -5,8 +5,10 @@
 #include "RawInputManager.h"
 #include "ScaleUtilities.h"
 #include "Zone.h"
+#include "ZoneDefinition.h"
 #include <JuceHeader.h>
 #include <memory>
+#include <vector>
 
 class ZoneManager;
 class ScaleLibrary;
@@ -23,16 +25,15 @@ public:
   void paint(juce::Graphics &) override;
   void resized() override;
 
-  // Set the zone to edit
   void setZone(std::shared_ptr<Zone> zone);
-
-  // Get required height for self-sizing
   int getRequiredHeight() const;
 
-  // Callback when resize is requested (e.g., chip list changes)
   std::function<void()> onResizeRequested;
+  /// Called at start of rebuildUI(); parent can save viewport scroll position.
+  std::function<void()> onBeforeRebuild;
+  /// Called at end of rebuildUI(); parent can restore viewport scroll position.
+  std::function<void()> onAfterRebuild;
 
-  // RawInputManager::Listener implementation
   void handleRawKeyEvent(uintptr_t deviceHandle, int keyCode,
                          bool isDown) override;
   void handleAxisEvent(uintptr_t deviceHandle, int inputCode,
@@ -45,80 +46,46 @@ private:
   ScaleLibrary *scaleLibrary;
   std::shared_ptr<Zone> currentZone;
 
-  // UI Controls
-  juce::Label aliasLabel;
-  juce::ComboBox aliasSelector;
-  // Phase 49: Zone layer assignment
-  juce::Label layerLabel;
-  juce::ComboBox layerSelector;
-  juce::Label nameLabel;
-  juce::TextEditor nameEditor;
-  juce::Label scaleLabel;
-  juce::ComboBox scaleSelector;
-  juce::ToggleButton globalScaleToggle;
-  juce::TextButton editScaleButton;
-  juce::Label rootLabel;
-  juce::Slider rootSlider;
-  juce::ToggleButton globalRootToggle;
-  juce::Label chromaticOffsetLabel;
-  juce::Slider chromaticOffsetSlider;
-  juce::Label degreeOffsetLabel;
-  juce::Slider degreeOffsetSlider;
-  juce::ToggleButton transposeLockButton;
-  juce::ToggleButton captureKeysButton;
-  juce::ToggleButton removeKeysButton;
-  juce::Label strategyLabel;
-  juce::ComboBox strategySelector;
-  juce::Label gridIntervalLabel;
-  juce::Slider gridIntervalSlider;
-  juce::Label pianoHelpLabel;
-  juce::Label channelLabel;
-  juce::Slider channelSlider;
-  juce::Label colorLabel;
-  juce::TextButton colorButton;
-  juce::Label chordTypeLabel;
-  juce::ComboBox chordTypeSelector;
-  juce::Label voicingLabel;
-  juce::ComboBox voicingSelector;
-  juce::Label playModeLabel;
-  juce::ComboBox playModeSelector;
-  juce::Label strumSpeedLabel;
-  juce::Slider strumSpeedSlider;
-  juce::Label releaseBehaviorLabel;
-  juce::ComboBox releaseBehaviorSelector;
-  juce::Label releaseDurationLabel;
-  juce::Slider releaseDurationSlider;
-  juce::ToggleButton allowSustainToggle;
-  juce::Label baseVelLabel;
-  juce::Slider baseVelSlider;
-  juce::Label randVelLabel;
-  juce::Slider randVelSlider;
-  juce::ToggleButton strictGhostToggle;
-  juce::Label ghostVelLabel;
-  juce::Slider ghostVelSlider;
-  juce::ToggleButton bassToggle;
-  juce::Label bassOctaveLabel;
-  juce::Slider bassOctaveSlider;
-  juce::Label displayModeLabel;
-  juce::ComboBox displayModeSelector;
-  juce::Label polyphonyModeLabel;
-  juce::ComboBox polyphonyModeSelector;
-  juce::Label glideTimeLabel;
-  juce::Slider glideTimeSlider;
-  juce::ToggleButton adaptiveGlideToggle;
-  juce::Label maxGlideTimeLabel;
-  juce::Slider maxGlideTimeSlider;
-  juce::Label monoWarningLabel; // Warning about channel separation (Phase 26.2)
-  KeyChipList chipList;
+  struct UiItem {
+    std::unique_ptr<juce::Component> component;
+    float weight = 1.0f;
+    bool isAutoWidth = false;
+  };
+  struct UiRow {
+    std::vector<UiItem> items;
+    bool isSeparatorRow = false;
+    bool isChipListRow = false; // dynamic height
+  };
+  std::vector<UiRow> uiRows;
 
-  void refreshAliasSelector();
-  void refreshScaleSelector();
-  void updateControlsFromZone();
-  void updateKeysAssignedLabel();
-  void updateVisibility();
+  // Refs used by handleRawKeyEvent and layout (set in rebuildUI, cleared when rebuilding)
+  juce::ToggleButton *captureKeysButtonRef = nullptr;
+  juce::ToggleButton *removeKeysButtonRef = nullptr;
+  KeyChipList *chipListRef = nullptr;
+  int chipListRowIndex = -1;
+
+  class SeparatorComponent : public juce::Component {
+  public:
+    SeparatorComponent(const juce::String &label,
+                       juce::Justification justification);
+    void paint(juce::Graphics &g) override;
+
+  private:
+    juce::String labelText;
+    juce::Justification textAlign;
+  };
+
+  void rebuildUI();
+  void createControl(const ZoneControl &def, UiRow &currentRow);
+  void createAliasRow();
+  void createLayerRow();
+  void createNameRow();
+  void createScaleRow();
+  void createKeyAssignRow();
+  void createChipListRow();
+  void createColorRow();
   void rebuildZoneCache();
 
-  // ChangeListener implementation
   void changeListenerCallback(juce::ChangeBroadcaster *source) override;
 
   JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(ZonePropertiesPanel)

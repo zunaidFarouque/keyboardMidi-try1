@@ -27,7 +27,7 @@ public:
               const std::vector<int> &velocities, int channel, int strumSpeedMs,
               bool allowSustain = true, int releaseMs = 0,
               PolyphonyMode polyMode = PolyphonyMode::Poly,
-              int glideTimeMs = 50);
+              int glideTimeMs = 50, int strumPattern = 0, int humanizeTimeMs = 0);
 
   void strumNotes(const std::vector<int> &notes, int speedMs, bool downstroke);
 

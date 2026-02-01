@@ -36,9 +36,21 @@ void Zone::rebuildCache(const std::vector<int> &scaleIntervals,
     // Generate chord or single note (absolute pitches)
     std::vector<ChordUtilities::ChordNote> chordNotes;
     if (useChords) {
-      chordNotes =
-          ChordUtilities::generateChord(effectiveRoot, scaleIntervals, degree,
-                                        chordType, voicing, strictGhostHarmony);
+      if (instrumentMode == InstrumentMode::Piano) {
+        chordNotes = ChordUtilities::generateChordForPiano(
+            effectiveRoot, scaleIntervals, degree, chordType,
+            static_cast<ChordUtilities::PianoVoicingStyle>(pianoVoicingStyle),
+            strictGhostHarmony);
+      } else {
+        int fretMin = (guitarPlayerPosition == GuitarPlayerPosition::Campfire)
+                          ? 0
+                          : juce::jlimit(0, 12, guitarFretAnchor);
+        int fretMax = (guitarPlayerPosition == GuitarPlayerPosition::Campfire)
+                          ? 4
+                          : juce::jlimit(0, 24, guitarFretAnchor + 3);
+        chordNotes = ChordUtilities::generateChordForGuitar(
+            effectiveRoot, scaleIntervals, degree, chordType, fretMin, fretMax);
+      }
     } else {
       chordNotes = {ChordUtilities::ChordNote(baseNote, false)};
     }
@@ -318,9 +330,19 @@ juce::ValueTree Zone::toValueTree() const {
   vt.setProperty("ghostVelScale", ghostVelocityScale, nullptr);
   vt.setProperty("addBassNote", addBassNote, nullptr);
   vt.setProperty("bassOctaveOffset", bassOctaveOffset, nullptr);
+  vt.setProperty("instrumentMode", static_cast<int>(instrumentMode), nullptr);
+  vt.setProperty("pianoVoicingStyle", static_cast<int>(pianoVoicingStyle),
+                 nullptr);
+  vt.setProperty("humanize", humanize, nullptr);
+  vt.setProperty("guitarPlayerPosition",
+                 static_cast<int>(guitarPlayerPosition), nullptr);
+  vt.setProperty("guitarFretAnchor", guitarFretAnchor, nullptr);
+  vt.setProperty("strumPattern", static_cast<int>(strumPattern), nullptr);
+  vt.setProperty("strumGhostNotes", strumGhostNotes, nullptr);
   vt.setProperty("showRomanNumerals", showRomanNumerals, nullptr);
   vt.setProperty("useGlobalScale", useGlobalScale, nullptr);
   vt.setProperty("useGlobalRoot", useGlobalRoot, nullptr);
+  vt.setProperty("globalRootOctaveOffset", globalRootOctaveOffset, nullptr);
   vt.setProperty("polyphonyMode", static_cast<int>(polyphonyMode), nullptr);
   vt.setProperty("glideTimeMs", glideTimeMs, nullptr);
   vt.setProperty("isAdaptiveGlide", isAdaptiveGlide, nullptr);
@@ -434,9 +456,22 @@ std::shared_ptr<Zone> Zone::fromValueTree(const juce::ValueTree &vt) {
   // Load new properties (with defaults)
   zone->addBassNote = vt.getProperty("addBassNote", false);
   zone->bassOctaveOffset = vt.getProperty("bassOctaveOffset", -1);
+  zone->instrumentMode = static_cast<InstrumentMode>(
+      juce::jlimit(0, 1, (int)vt.getProperty("instrumentMode", 0)));
+  zone->pianoVoicingStyle = static_cast<PianoVoicingStyle>(
+      juce::jlimit(0, 2, (int)vt.getProperty("pianoVoicingStyle", 1)));
+  zone->humanize = vt.getProperty("humanize", false);
+  zone->guitarPlayerPosition = static_cast<GuitarPlayerPosition>(
+      juce::jlimit(0, 1, (int)vt.getProperty("guitarPlayerPosition", 0)));
+  zone->guitarFretAnchor = juce::jlimit(1, 12, (int)vt.getProperty("guitarFretAnchor", 5));
+  zone->strumPattern = static_cast<StrumPattern>(
+      juce::jlimit(0, 2, (int)vt.getProperty("strumPattern", 0)));
+  zone->strumGhostNotes = vt.getProperty("strumGhostNotes", false);
   zone->showRomanNumerals = vt.getProperty("showRomanNumerals", false);
   zone->useGlobalScale = vt.getProperty("useGlobalScale", false);
   zone->useGlobalRoot = vt.getProperty("useGlobalRoot", false);
+  zone->globalRootOctaveOffset =
+      juce::jlimit(-2, 2, (int)vt.getProperty("globalRootOctaveOffset", 0));
   zone->polyphonyMode = static_cast<PolyphonyMode>(
       vt.getProperty("polyphonyMode", static_cast<int>(PolyphonyMode::Poly))
           .operator int());

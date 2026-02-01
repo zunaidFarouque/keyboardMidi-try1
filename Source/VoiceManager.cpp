@@ -250,7 +250,8 @@ void VoiceManager::noteOn(InputID source, int note, int vel, int channel,
 void VoiceManager::noteOn(InputID source, const std::vector<int> &notes,
                           const std::vector<int> &velocities, int channel,
                           int strumSpeedMs, bool allowSustain, int releaseMs,
-                          PolyphonyMode polyMode, int glideSpeed) {
+                          PolyphonyMode polyMode, int glideSpeed, int strumPattern,
+                          int humanizeTimeMs) {
   if (notes.empty())
     return;
 
@@ -303,7 +304,7 @@ void VoiceManager::noteOn(InputID source, const std::vector<int> &notes,
     }
   } else {
     strumEngine.triggerStrum(notes, finalVelocities, channel, strumSpeedMs,
-                             source, allowSustain);
+                             source, allowSustain, strumPattern, humanizeTimeMs);
   }
 }
 

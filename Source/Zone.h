@@ -21,6 +21,14 @@ public:
     Sustain // Release to sustain for N ms (notes continue, then sustain)
   };
 
+  enum class InstrumentMode { Piano, Guitar };
+
+  enum class PianoVoicingStyle { Block, Close, Open };
+
+  enum class GuitarPlayerPosition { Campfire, Rhythm };
+
+  enum class StrumPattern { Down, Up, AutoAlternating };
+
   Zone();
 
   // Properties
@@ -62,10 +70,18 @@ public:
       0.6f;                  // Velocity multiplier for ghost notes (0.0-1.0)
   bool addBassNote = false;  // If true, add a bass note (root shifted down)
   int bassOctaveOffset = -1; // Octave offset for bass note (-3 to -1)
+  InstrumentMode instrumentMode = InstrumentMode::Piano;
+  PianoVoicingStyle pianoVoicingStyle = PianoVoicingStyle::Close;
+  bool humanize = false; // Velocity ±5%, timing ±15ms at play-time
+  GuitarPlayerPosition guitarPlayerPosition = GuitarPlayerPosition::Campfire;
+  int guitarFretAnchor = 5; // Fret anchor for Rhythm (Virtual Capo) mode
+  StrumPattern strumPattern = StrumPattern::Down;
+  bool strumGhostNotes = false; // Lower velocity on middle strings (guitar)
   bool showRomanNumerals =
       false; // If true, display Roman numerals instead of note names
   bool useGlobalScale = false; // If true, inherit ZoneManager::globalScaleName
   bool useGlobalRoot = false;  // If true, inherit ZoneManager::globalRootNote
+  int globalRootOctaveOffset = 0; // Octave offset when useGlobalRoot (-2 to +2)
   PolyphonyMode polyphonyMode =
       PolyphonyMode::Poly; // Polyphony mode (Phase 26)
   int glideTimeMs = 50;    // Portamento glide time in milliseconds (Phase 26) -

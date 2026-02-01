@@ -22,9 +22,12 @@ public:
   StrumEngine(MidiEngine& engine, OnNotePlayedCallback onPlayed);
   ~StrumEngine() override;
 
-  // Trigger a strum with multiple notes (with per-note velocities)
+  // Trigger a strum with multiple notes (with per-note velocities).
+  // strumPattern: 0 = Down, 1 = Up, 2 = Auto-alternating.
+  // humanizeTimeMs: if > 0, add ±humanizeTimeMs jitter to each note's delay.
   void triggerStrum(const std::vector<int>& notes, const std::vector<int>& velocities, int channel,
-                    int speedMs, InputID source, bool allowSustain = true);
+                    int speedMs, InputID source, bool allowSustain = true, int strumPattern = 0,
+                    int humanizeTimeMs = 0);
 
   // Cancel all pending notes for a given source
   void cancelPendingNotes(InputID source);
@@ -51,5 +54,6 @@ private:
   std::unordered_map<InputID, ReleaseInfo> releaseMap; // Track release state per source
   juce::CriticalSection queueLock;
   double currentTimeMs = 0.0;
+  bool autoStrumDownNext = true; // for AutoAlternating
   double getCurrentTimeMs() const;
 };

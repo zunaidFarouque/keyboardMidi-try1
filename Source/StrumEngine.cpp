@@ -12,16 +12,34 @@ StrumEngine::~StrumEngine() {
 }
 
 void StrumEngine::triggerStrum(const std::vector<int>& notes, const std::vector<int>& velocities, int channel,
-                               int speedMs, InputID source, bool allowSustain) {
+                               int speedMs, InputID source, bool allowSustain, int strumPattern,
+                               int humanizeTimeMs) {
   juce::ScopedLock lock(queueLock);
   double now = getCurrentTimeMs();
-  for (size_t i = 0; i < notes.size(); ++i) {
+  bool up = (strumPattern == 1) || (strumPattern == 2 && !autoStrumDownNext);
+  if (strumPattern == 2)
+    autoStrumDownNext = !autoStrumDownNext;
+
+  std::vector<int> n = notes;
+  std::vector<int> v = (velocities.size() >= notes.size()) ? velocities : std::vector<int>(notes.size(), velocities.empty() ? 100 : velocities[0]);
+  if (v.size() < n.size())
+    v.resize(n.size(), 100);
+  if (up) {
+    std::reverse(n.begin(), n.end());
+    std::reverse(v.begin(), v.end());
+  }
+
+  juce::Random& rng = juce::Random::getSystemRandom();
+  for (size_t i = 0; i < n.size(); ++i) {
     PendingNote p;
-    p.note = notes[i];
-    // Use per-note velocity if available, otherwise fall back to first velocity
-    p.velocity = (i < velocities.size()) ? velocities[i] : (velocities.empty() ? 100 : velocities[0]);
+    p.note = n[i];
+    p.velocity = (i < v.size()) ? v[i] : 100;
     p.channel = channel;
-    p.targetTimeMs = now + (static_cast<double>(i) * speedMs);
+    double baseTime = now + (static_cast<double>(i) * speedMs);
+    double jitter = (humanizeTimeMs > 0)
+                        ? (rng.nextDouble() * 2.0 - 1.0) * humanizeTimeMs
+                        : 0.0;
+    p.targetTimeMs = baseTime + jitter;
     p.source = source;
     p.allowSustain = allowSustain;
     noteQueue.push_back(p);

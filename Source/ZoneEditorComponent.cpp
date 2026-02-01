@@ -30,6 +30,15 @@ ZoneEditorComponent::ZoneEditorComponent(ZoneManager *zoneMgr, DeviceManager *de
     resized();
   };
 
+  // Preserve viewport scroll when panel rebuilds (e.g. instrument/polyphony change).
+  propertiesPanel.onBeforeRebuild = [this] {
+    savedPropertiesScrollY = propertiesViewport.getViewPosition().getY();
+  };
+  propertiesPanel.onAfterRebuild = [this] {
+    int maxY = juce::jmax(0, propertiesPanel.getHeight() - propertiesViewport.getViewHeight());
+    propertiesViewport.setViewPosition(0, juce::jmin(savedPropertiesScrollY, maxY));
+  };
+
   // Wire up selection callback
   listPanel.onSelectionChanged = [this](std::shared_ptr<Zone> zone) {
     propertiesPanel.setZone(zone);
@@ -57,8 +66,8 @@ void ZoneEditorComponent::resized() {
     horizontalComps, 3, area.getX(), area.getY(), area.getWidth(), area.getHeight(),
     false, true); // false = horizontal layout (left to right)
   
-  // Set content bounds (accounting for scrollbar width of 15px)
+  // Set content size only; do not set position (0,0) or we reset viewport scroll.
   int contentWidth = propertiesViewport.getWidth() - 15;
   int contentHeight = propertiesPanel.getRequiredHeight();
-  propertiesPanel.setBounds(0, 0, contentWidth, contentHeight);
+  propertiesPanel.setSize(contentWidth, contentHeight);
 }
