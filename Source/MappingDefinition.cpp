@@ -312,6 +312,7 @@ InspectorSchema MappingDefinition::getSchema(const juce::ValueTree &mapping) {
       panicMode.controlType = InspectorControl::Type::ComboBox;
       panicMode.options[1] = "Panic all";
       panicMode.options[2] = "Panic latched only";
+      panicMode.options[3] = "Panic chords";
       schema.push_back(panicMode);
     }
     const int transpose = static_cast<int>(OmniKey::CommandID::Transpose);

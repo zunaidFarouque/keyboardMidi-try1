@@ -43,6 +43,7 @@ add_library(OmniKey_Core STATIC
     Source/KeyNameUtilities.cpp
     Source/MidiNoteUtilities.cpp
     Source/KeyboardLayoutUtils.cpp
+    Source/ColourContrast.cpp
 )
 
 # 3a. Link Libraries to Core
@@ -153,9 +154,11 @@ enable_testing()
 add_executable(OmniKey_Tests
     Source/Tests/SanityTest.cpp
     Source/Tests/ChordUtilitiesTests.cpp
+    Source/Tests/ColourContrastTests.cpp
     Source/Tests/GridCompilerTests.cpp
     Source/Tests/InputProcessorTests.cpp
     Source/Tests/MappingDefinitionTests.cpp
+    Source/Tests/ZoneTests.cpp
 )
 
 # 12. Link Dependencies
@@ -171,6 +174,11 @@ target_link_libraries(OmniKey_Tests PRIVATE
 target_include_directories(OmniKey_Tests PRIVATE
     ${CMAKE_BINARY_DIR}/OmniKey_artefacts/JuceLibraryCode
 )
+
+# 12b. MSVC: allow parallel compilation of test .cpp files (avoid PDB lock)
+if(MSVC)
+  target_compile_options(OmniKey_Tests PRIVATE /FS)
+endif()
 
 # 13. Register with CTest
 include(GoogleTest)

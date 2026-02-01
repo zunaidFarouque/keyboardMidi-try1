@@ -489,15 +489,22 @@ void InputProcessor::processEvent(InputID input, bool isDown) {
             midiAction.releaseBehavior == NoteReleaseBehavior::Nothing) {
           return; // Do nothing on release
         }
+        // Sustain mode: one-shot latch – do not send note-off on release
+        if (zone && zone->releaseBehavior == Zone::ReleaseBehavior::Sustain) {
+          return; // Notes stay on until next chord
+        }
         if (zone && zone->playMode == Zone::PlayMode::Strum) {
           juce::ScopedWriteLock lock(bufferLock);
           noteBuffer.clear();
           bufferedStrumSpeedMs = 50;
-          bool shouldSustain =
-              (zone->releaseBehavior == Zone::ReleaseBehavior::Sustain);
-          voiceManager.handleKeyUp(input, zone->releaseDurationMs,
-                                   shouldSustain);
-        } else {
+        }
+        // Normal release: instant or delayed
+        if (zone && zone->releaseBehavior == Zone::ReleaseBehavior::Normal) {
+          if (zone->delayReleaseOn)
+            voiceManager.handleKeyUp(input, zone->releaseDurationMs, false);
+          else
+            voiceManager.handleKeyUp(input);
+        } else if (!zone) {
           voiceManager.handleKeyUp(input);
         }
         return; // Stop searching lower layers
@@ -560,7 +567,14 @@ void InputProcessor::processEvent(InputID input, bool isDown) {
         } else if (cmd == static_cast<int>(OmniKey::CommandID::Panic)) {
           if (midiAction.data2 == 1)
             voiceManager.panicLatch();
-          else
+          else if (midiAction.data2 == 2) {
+            // Panic chords: turn off sustain-held chord (Sustain release mode)
+            if (lastSustainChordSource.keyCode >= 0) {
+              voiceManager.handleKeyUp(lastSustainChordSource);
+              lastSustainChordSource = InputID{0, -1};
+              lastSustainZone = nullptr;
+            }
+          } else
             voiceManager.panic();
         } else if (cmd == static_cast<int>(OmniKey::CommandID::PanicLatch)) {
           voiceManager.panicLatch(); // Backward compat: old Panic Latch mapping
@@ -675,13 +689,11 @@ void InputProcessor::processZoneNote(InputID input, std::shared_ptr<Zone> zone,
   auto chordNotes = zone->getNotesForKey(
       input.keyCode, zoneManager.getGlobalChromaticTranspose(),
       zoneManager.getGlobalDegreeTranspose());
-  bool allowSustain = zone->allowSustain;
+  bool allowSustain = !zone->ignoreGlobalSustain;
 
   if (chordNotes.has_value() && !chordNotes->empty()) {
-    // Calculate per-note velocities with ghost note scaling
-    int mainVelocity =
-        calculateVelocity(zone->baseVelocity, zone->velocityRandom);
-
+    // Per-note velocities from base + velocity random (velocity random slider
+    // controls variation)
     std::vector<int> finalNotes;
     std::vector<int> finalVelocities;
     finalNotes.reserve(chordNotes->size());
@@ -689,33 +701,42 @@ void InputProcessor::processZoneNote(InputID input, std::shared_ptr<Zone> zone,
 
     for (const auto &cn : *chordNotes) {
       finalNotes.push_back(cn.pitch);
+      int vel = calculateVelocity(zone->baseVelocity, zone->velocityRandom);
       if (cn.isGhost) {
-        int ghostVel =
-            static_cast<int>(mainVelocity * zone->ghostVelocityScale);
+        int ghostVel = static_cast<int>(vel * zone->ghostVelocityScale);
         finalVelocities.push_back(juce::jlimit(1, 127, ghostVel));
       } else {
-        finalVelocities.push_back(mainVelocity);
+        finalVelocities.push_back(vel);
       }
     }
     if (zone->strumGhostNotes && finalVelocities.size() > 2) {
       for (size_t i = 1; i < finalVelocities.size() - 1; ++i)
-        finalVelocities[i] = juce::jlimit(
-            1, 127,
-            static_cast<int>(finalVelocities[i] * 0.85f));
-    }
-    if (zone->humanize) {
-      juce::Random& rng = juce::Random::getSystemRandom();
-      for (size_t i = 0; i < finalVelocities.size(); ++i) {
-        float factor = 1.0f + (rng.nextFloat() * 0.1f - 0.05f);
         finalVelocities[i] =
-            juce::jlimit(1, 127,
-                         static_cast<int>(finalVelocities[i] * factor));
-      }
+            juce::jlimit(1, 127, static_cast<int>(finalVelocities[i] * 0.85f));
     }
-    int humanizeMs = (zone->humanize && zone->strumSpeedMs > 0) ? 15 : 0;
+    // Direct: send instantly (strum 0, no timing variation). Strum: use slider
+    // values.
+    int strumMsForCall =
+        (zone->playMode == Zone::PlayMode::Direct)
+            ? 0
+            : ((zone->strumSpeedMs > 0) ? zone->strumSpeedMs : 50);
+    int humanizeMs = (zone->playMode == Zone::PlayMode::Strum &&
+                      zone->strumSpeedMs > 0 && zone->strumTimingVariationOn)
+                         ? zone->strumTimingVariationMs
+                         : 0;
+
+    // Sustain mode: one-shot latch – turn off previous chord before playing new
+    if (zone->releaseBehavior == Zone::ReleaseBehavior::Sustain) {
+      if (lastSustainZone == zone.get() && lastSustainChordSource.keyCode >= 0)
+        voiceManager.handleKeyUp(lastSustainChordSource);
+      lastSustainChordSource = input;
+      lastSustainZone = zone.get();
+    }
+    int releaseMs = (zone->releaseBehavior == Zone::ReleaseBehavior::Sustain)
+                        ? 0
+                        : (zone->delayReleaseOn ? zone->releaseDurationMs : 0);
 
     if (zone->playMode == Zone::PlayMode::Direct) {
-      int releaseMs = zone->releaseDurationMs;
       int glideSpeed = zone->glideTimeMs;
       if (zone->isAdaptiveGlide &&
           zone->polyphonyMode == PolyphonyMode::Legato) {
@@ -726,9 +747,9 @@ void InputProcessor::processZoneNote(InputID input, std::shared_ptr<Zone> zone,
 
       if (finalNotes.size() > 1) {
         voiceManager.noteOn(input, finalNotes, finalVelocities, action.channel,
-                            zone->strumSpeedMs, allowSustain, releaseMs,
-                            zone->polyphonyMode, glideSpeed,
-                            static_cast<int>(zone->strumPattern), humanizeMs);
+                            0, allowSustain, releaseMs, zone->polyphonyMode,
+                            glideSpeed, static_cast<int>(zone->strumPattern),
+                            0);
         if (!finalNotes.empty())
           lastTriggeredNote = finalNotes.front();
       } else {
@@ -738,7 +759,6 @@ void InputProcessor::processZoneNote(InputID input, std::shared_ptr<Zone> zone,
         lastTriggeredNote = finalNotes.front();
       }
     } else if (zone->playMode == Zone::PlayMode::Strum) {
-      int strumMs = (zone->strumSpeedMs > 0) ? zone->strumSpeedMs : 50;
       int glideSpeed = zone->glideTimeMs;
       if (zone->isAdaptiveGlide &&
           zone->polyphonyMode == PolyphonyMode::Legato) {
@@ -749,7 +769,7 @@ void InputProcessor::processZoneNote(InputID input, std::shared_ptr<Zone> zone,
 
       voiceManager.handleKeyUp(lastStrumSource);
       voiceManager.noteOn(input, finalNotes, finalVelocities, action.channel,
-                          strumMs, allowSustain, 0, zone->polyphonyMode,
+                          strumMsForCall, allowSustain, 0, zone->polyphonyMode,
                           glideSpeed, static_cast<int>(zone->strumPattern),
                           humanizeMs);
       lastStrumSource = input;
@@ -758,14 +778,20 @@ void InputProcessor::processZoneNote(InputID input, std::shared_ptr<Zone> zone,
       {
         juce::ScopedWriteLock bufferWriteLock(bufferLock);
         noteBuffer = finalNotes;
-        bufferedStrumSpeedMs = strumMs;
+        bufferedStrumSpeedMs = strumMsForCall;
       }
     }
   } else {
-    // Fallback: use action velocity
+    // Fallback: use action velocity (still respect zone polyphony mode)
     int vel = calculateVelocity(action.data2, action.velocityRandom);
+    int glideSpeed = zone->glideTimeMs;
+    if (zone->isAdaptiveGlide && zone->polyphonyMode == PolyphonyMode::Legato) {
+      rhythmAnalyzer.logTap();
+      glideSpeed = rhythmAnalyzer.getAdaptiveSpeed(zone->glideTimeMs,
+                                                   zone->maxGlideTimeMs);
+    }
     voiceManager.noteOn(input, action.data1, vel, action.channel, allowSustain,
-                        0, PolyphonyMode::Poly, 50);
+                        0, zone->polyphonyMode, glideSpeed);
     lastTriggeredNote = action.data1;
   }
 }
@@ -781,7 +807,7 @@ void InputProcessor::processZoneChord(
   auto chordNotes = zone->getNotesForKey(
       input.keyCode, zoneManager.getGlobalChromaticTranspose(),
       zoneManager.getGlobalDegreeTranspose());
-  bool allowSustain = zone->allowSustain;
+  bool allowSustain = !zone->ignoreGlobalSustain;
 
   if (!chordNotes.has_value() || chordNotes->empty()) {
     // Fallback: use chordActions directly
@@ -800,9 +826,7 @@ void InputProcessor::processZoneChord(
     return;
   }
 
-  // Use zone's chord notes with ghost note scaling
-  int mainVelocity =
-      calculateVelocity(zone->baseVelocity, zone->velocityRandom);
+  // Per-note velocities from base + velocity random
   std::vector<int> finalNotes;
   std::vector<int> finalVelocities;
   finalNotes.reserve(chordNotes->size());
@@ -810,32 +834,43 @@ void InputProcessor::processZoneChord(
 
   for (const auto &cn : *chordNotes) {
     finalNotes.push_back(cn.pitch);
+    int vel = calculateVelocity(zone->baseVelocity, zone->velocityRandom);
     if (cn.isGhost) {
-      int ghostVel = static_cast<int>(mainVelocity * zone->ghostVelocityScale);
+      int ghostVel = static_cast<int>(vel * zone->ghostVelocityScale);
       finalVelocities.push_back(juce::jlimit(1, 127, ghostVel));
     } else {
-      finalVelocities.push_back(mainVelocity);
+      finalVelocities.push_back(vel);
     }
   }
   if (zone->strumGhostNotes && finalVelocities.size() > 2) {
     for (size_t i = 1; i < finalVelocities.size() - 1; ++i)
       finalVelocities[i] =
-          juce::jlimit(1, 127,
-                       static_cast<int>(finalVelocities[i] * 0.85f));
+          juce::jlimit(1, 127, static_cast<int>(finalVelocities[i] * 0.85f));
   }
-  if (zone->humanize) {
-    juce::Random& rng = juce::Random::getSystemRandom();
-    for (size_t i = 0; i < finalVelocities.size(); ++i) {
-      float factor = 1.0f + (rng.nextFloat() * 0.1f - 0.05f);
-      finalVelocities[i] =
-          juce::jlimit(1, 127,
-                       static_cast<int>(finalVelocities[i] * factor));
-    }
+  // Direct: send instantly (strum 0, no timing variation). Strum: use slider
+  // values.
+  int strumMsForCall =
+      (zone->playMode == Zone::PlayMode::Direct)
+          ? 0
+          : ((zone->strumSpeedMs > 0) ? zone->strumSpeedMs : 50);
+  int humanizeMs = (zone->playMode == Zone::PlayMode::Strum &&
+                    zone->strumSpeedMs > 0 && zone->strumTimingVariationOn)
+                       ? zone->strumTimingVariationMs
+                       : 0;
+
+  // Sustain mode: one-shot latch – turn off previous chord before playing new
+  if (zone->releaseBehavior == Zone::ReleaseBehavior::Sustain) {
+    if (lastSustainZone == zone.get() && lastSustainChordSource.keyCode >= 0)
+      voiceManager.handleKeyUp(lastSustainChordSource);
+    lastSustainChordSource = input;
+    lastSustainZone = zone.get();
   }
-  int humanizeMs = (zone->humanize && zone->strumSpeedMs > 0) ? 15 : 0;
+  int releaseMsChord =
+      (zone->releaseBehavior == Zone::ReleaseBehavior::Sustain)
+          ? 0
+          : (zone->delayReleaseOn ? zone->releaseDurationMs : 0);
 
   if (zone->playMode == Zone::PlayMode::Direct) {
-    int releaseMs = zone->releaseDurationMs;
     int glideSpeed = zone->glideTimeMs;
     if (zone->isAdaptiveGlide && zone->polyphonyMode == PolyphonyMode::Legato) {
       rhythmAnalyzer.logTap();
@@ -843,13 +878,11 @@ void InputProcessor::processZoneChord(
                                                    zone->maxGlideTimeMs);
     }
     voiceManager.noteOn(input, finalNotes, finalVelocities, rootAction.channel,
-                        zone->strumSpeedMs, allowSustain, releaseMs,
-                        zone->polyphonyMode, glideSpeed,
-                        static_cast<int>(zone->strumPattern), humanizeMs);
+                        0, allowSustain, releaseMsChord, zone->polyphonyMode,
+                        glideSpeed, static_cast<int>(zone->strumPattern), 0);
     if (!finalNotes.empty())
       lastTriggeredNote = finalNotes.front();
   } else if (zone->playMode == Zone::PlayMode::Strum) {
-    int strumMs = (zone->strumSpeedMs > 0) ? zone->strumSpeedMs : 50;
     int glideSpeed = zone->glideTimeMs;
     if (zone->isAdaptiveGlide && zone->polyphonyMode == PolyphonyMode::Legato) {
       rhythmAnalyzer.logTap();
@@ -858,7 +891,7 @@ void InputProcessor::processZoneChord(
     }
     voiceManager.handleKeyUp(lastStrumSource);
     voiceManager.noteOn(input, finalNotes, finalVelocities, rootAction.channel,
-                        strumMs, allowSustain, 0, zone->polyphonyMode,
+                        strumMsForCall, allowSustain, 0, zone->polyphonyMode,
                         glideSpeed, static_cast<int>(zone->strumPattern),
                         humanizeMs);
     lastStrumSource = input;
@@ -867,7 +900,7 @@ void InputProcessor::processZoneChord(
     {
       juce::ScopedWriteLock bufferWriteLock(bufferLock);
       noteBuffer = finalNotes;
-      bufferedStrumSpeedMs = strumMs;
+      bufferedStrumSpeedMs = strumMsForCall;
     }
   }
 }

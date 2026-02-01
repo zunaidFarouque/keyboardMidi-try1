@@ -48,8 +48,22 @@ static bool polyAndChordOnGuitarRhythm(const Zone *z) {
   return polyAndChordOn(z) && guitarRhythmOnly(z);
 }
 static bool globalRootOnly(const Zone *z) { return z->useGlobalRoot; }
+static bool gridLayoutOnly(const Zone *z) {
+  return z->layoutStrategy == Zone::LayoutStrategy::Grid;
+}
 static bool pianoLayoutOnly(const Zone *z) {
   return z->layoutStrategy == Zone::LayoutStrategy::Piano;
+}
+static bool strumOnly(const Zone *z) {
+  return polyAndChordOn(z) && z->playMode == Zone::PlayMode::Strum;
+}
+static bool releaseNormalOnly(const Zone *z) {
+  return polyAndChordOn(z) &&
+         z->releaseBehavior == Zone::ReleaseBehavior::Normal;
+}
+static bool releaseSustainOnly(const Zone *z) {
+  return polyAndChordOn(z) &&
+         z->releaseBehavior == Zone::ReleaseBehavior::Sustain;
 }
 
 ZoneSchema ZoneDefinition::getSchema(const Zone *zone) {
@@ -154,8 +168,8 @@ ZoneSchema ZoneDefinition::getSchema(const Zone *zone) {
   {
     ZoneControl c;
     c.controlType = ZoneControl::Type::Toggle;
-    c.label = "Lock Transpose";
-    c.propertyKey = "isTransposeLocked";
+    c.label = "Ignore global transpose";
+    c.propertyKey = "ignoreGlobalTranspose";
     schema.push_back(c);
   }
   {
@@ -176,6 +190,13 @@ ZoneSchema ZoneDefinition::getSchema(const Zone *zone) {
     c.min = 0;
     c.max = 64;
     c.step = 1;
+    schema.push_back(c);
+  }
+  {
+    ZoneControl c;
+    c.controlType = ZoneControl::Type::Toggle;
+    c.label = "Ignore global sustain";
+    c.propertyKey = "ignoreGlobalSustain";
     schema.push_back(c);
   }
 
@@ -248,20 +269,6 @@ ZoneSchema ZoneDefinition::getSchema(const Zone *zone) {
   {
     ZoneControl c;
     c.controlType = ZoneControl::Type::ComboBox;
-    c.label = "Voicing";
-    c.propertyKey = "voicing";
-    c.options[1] = "Root Position (Bass)";
-    c.options[2] = "Smooth / Inversions (Pads)";
-    c.options[3] = "Guitar / Spread (Strum)";
-    c.options[4] = "Smooth (Filled)";
-    c.options[5] = "Guitar (Filled)";
-    c.affectsCache = true;
-    c.visible = polyAndChordOnGuitar;
-    schema.push_back(c);
-  }
-  {
-    ZoneControl c;
-    c.controlType = ZoneControl::Type::ComboBox;
     c.label = "Play Mode";
     c.propertyKey = "playMode";
     c.options[1] = "Direct";
@@ -278,7 +285,18 @@ ZoneSchema ZoneDefinition::getSchema(const Zone *zone) {
     c.max = 500;
     c.step = 1;
     c.suffix = " ms";
-    c.visible = polyAndChordOn;
+    c.visible = strumOnly;
+    schema.push_back(c);
+  }
+  {
+    ZoneControl c;
+    c.controlType = ZoneControl::Type::StrumTimingVariation;
+    c.label = "Strumming timing variation";
+    c.min = 0;
+    c.max = 100;
+    c.step = 1;
+    c.suffix = " ms";
+    c.visible = strumOnly;
     schema.push_back(c);
   }
   {
@@ -293,13 +311,29 @@ ZoneSchema ZoneDefinition::getSchema(const Zone *zone) {
   }
   {
     ZoneControl c;
-    c.controlType = ZoneControl::Type::Slider;
-    c.label = "Release Duration";
-    c.propertyKey = "releaseDurationMs";
+    c.controlType = ZoneControl::Type::LabelOnlyWrappable;
+    c.label =
+        "Sustain behaves like a latch: notes stay on until you play another "
+        "chord. To clear without playing, map a key to Command, Panic, Panic "
+        "chords.";
+    c.visible = releaseSustainOnly;
+    schema.push_back(c);
+  }
+  {
+    ZoneControl c;
+    c.controlType = ZoneControl::Type::DelayRelease;
+    c.label = "Delay release";
     c.min = 0;
     c.max = 5000;
     c.step = 1;
     c.suffix = " ms";
+    c.visible = releaseNormalOnly;
+    schema.push_back(c);
+  }
+  // Chord voicing: Instrument, Voicing Style, Add Bass (only when poly + chord)
+  {
+    ZoneControl c =
+        createSeparator("Chord voicing", juce::Justification::centredLeft);
     c.visible = polyAndChordOn;
     schema.push_back(c);
   }
@@ -323,14 +357,6 @@ ZoneSchema ZoneDefinition::getSchema(const Zone *zone) {
     c.options[2] = "Close (Pop)";
     c.options[3] = "Open (Cinematic)";
     c.affectsCache = true;
-    c.visible = polyAndChordOnPiano;
-    schema.push_back(c);
-  }
-  {
-    ZoneControl c;
-    c.controlType = ZoneControl::Type::Toggle;
-    c.label = "Humanize (velocity & timing)";
-    c.propertyKey = "humanize";
     c.visible = polyAndChordOnPiano;
     schema.push_back(c);
   }
@@ -378,31 +404,13 @@ ZoneSchema ZoneDefinition::getSchema(const Zone *zone) {
   }
   {
     ZoneControl c;
-    c.controlType = ZoneControl::Type::Toggle;
-    c.label = "Allow Sustain";
-    c.propertyKey = "allowSustain";
-    c.visible = polyAndChordOn;
-    schema.push_back(c);
-  }
-  {
-    ZoneControl c;
-    c.controlType = ZoneControl::Type::Toggle;
+    c.controlType = ZoneControl::Type::AddBassWithOctave;
     c.label = "Add Bass";
-    c.propertyKey = "addBassNote";
-    c.affectsCache = true;
-    c.visible = polyAndChordOn;
-    schema.push_back(c);
-  }
-  {
-    ZoneControl c;
-    c.controlType = ZoneControl::Type::Slider;
-    c.label = "Bass Octave";
-    c.propertyKey = "bassOctaveOffset";
     c.min = -3;
     c.max = -1;
     c.step = 1;
-    c.affectsCache = true;
     c.visible = polyAndChordOn;
+    c.affectsCache = true;
     schema.push_back(c);
   }
 
@@ -434,6 +442,8 @@ ZoneSchema ZoneDefinition::getSchema(const Zone *zone) {
     c.min = -12;
     c.max = 12;
     c.step = 1;
+    c.affectsCache = true;
+    c.visible = gridLayoutOnly;
     schema.push_back(c);
   }
   {

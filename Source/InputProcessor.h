@@ -13,6 +13,7 @@
 #include <vector>
 
 class ScaleLibrary;
+class Zone;
 
 // Phase 40.1: ordering for std::set<InputID>
 struct InputIDLess {
@@ -132,6 +133,11 @@ private:
 
   // Last zone key that triggered a strum (for cancel-on-new-chord)
   InputID lastStrumSource{0, 0};
+
+  // Sustain release mode: one-shot latch – last chord source (keyCode < 0 =
+  // none)
+  InputID lastSustainChordSource{0, -1};
+  Zone *lastSustainZone = nullptr;
 
   // Current CC values for relative inputs (scroll)
   std::unordered_map<InputID, float> currentCCValues;

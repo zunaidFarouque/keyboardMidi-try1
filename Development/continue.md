@@ -1,4 +1,12 @@
-overhawl the configurator window
+Root note global and state global.
+
+
+---
+
+===
+
+---
+
 
 for CC, it would be useful if we added some previews of the general mapping of CC numbers.
 

@@ -160,6 +160,9 @@ juce::String makeLabelForAction(const MidiAction &action) {
     if (action.data1 == static_cast<int>(OmniKey::CommandID::Panic) &&
         action.data2 == 1)
       return "Panic (Latch)";
+    if (action.data1 == static_cast<int>(OmniKey::CommandID::Panic) &&
+        action.data2 == 2)
+      return "Panic (Chords)";
     return base;
   }
   case ActionType::Macro:

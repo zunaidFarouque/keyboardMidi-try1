@@ -55,6 +55,66 @@ private:
   std::unique_ptr<juce::Label> label;
   std::unique_ptr<juce::Component> editor;
 };
+
+// Composite: [label] [checkbox] [slider] – label gets extra width so long text
+// isn’t clipped
+struct StrumTimingVariationRow : juce::Component {
+  std::unique_ptr<juce::Label> label;
+  std::unique_ptr<juce::ToggleButton> check;
+  std::unique_ptr<juce::Slider> slider;
+  static constexpr int labelW = 200;
+  static constexpr int checkW = 24;
+
+  void resized() override {
+    auto r = getLocalBounds();
+    if (label)
+      label->setBounds(r.removeFromLeft(labelW));
+    if (check)
+      check->setBounds(r.removeFromLeft(checkW));
+    if (slider)
+      slider->setBounds(r);
+  }
+};
+
+// Composite: [label "Add Bass:"] [checkbox] [slider "Octave"] – slider disabled
+// when checkbox off
+struct AddBassWithOctaveRow : juce::Component {
+  std::unique_ptr<juce::Label> label;
+  std::unique_ptr<juce::ToggleButton> check;
+  std::unique_ptr<juce::Slider> slider;
+  static constexpr int labelW = 120;
+  static constexpr int checkW = 24;
+
+  void resized() override {
+    auto r = getLocalBounds();
+    if (label)
+      label->setBounds(r.removeFromLeft(labelW));
+    if (check)
+      check->setBounds(r.removeFromLeft(checkW));
+    if (slider)
+      slider->setBounds(r);
+  }
+};
+
+// Composite: [label "Delay release:"] [checkbox] [slider] – slider disabled
+// when checkbox off (Normal release only; no timer when off)
+struct DelayReleaseRow : juce::Component {
+  std::unique_ptr<juce::Label> label;
+  std::unique_ptr<juce::ToggleButton> check;
+  std::unique_ptr<juce::Slider> slider;
+  static constexpr int labelW = 140;
+  static constexpr int checkW = 24;
+
+  void resized() override {
+    auto r = getLocalBounds();
+    if (label)
+      label->setBounds(r.removeFromLeft(labelW));
+    if (check)
+      check->setBounds(r.removeFromLeft(checkW));
+    if (slider)
+      slider->setBounds(r);
+  }
+};
 } // namespace
 
 ZonePropertiesPanel::SeparatorComponent::SeparatorComponent(
@@ -300,8 +360,6 @@ void ZonePropertiesPanel::createControl(const ZoneControl &def,
     else if (def.propertyKey == "ghostVelocityScale")
       sl->setValue(zone->ghostVelocityScale * 100.0,
                    juce::dontSendNotification);
-    else if (def.propertyKey == "bassOctaveOffset")
-      sl->setValue(zone->bassOctaveOffset, juce::dontSendNotification);
     else if (def.propertyKey == "glideTimeMs")
       sl->setValue(zone->glideTimeMs, juce::dontSendNotification);
     else if (def.propertyKey == "maxGlideTimeMs")
@@ -319,8 +377,6 @@ void ZonePropertiesPanel::createControl(const ZoneControl &def,
 
     if (def.propertyKey == "rootNote")
       sl->setEnabled(!zone->useGlobalRoot);
-    if (def.propertyKey == "bassOctaveOffset")
-      sl->setEnabled(zone->addBassNote);
     if (def.propertyKey == "gridInterval")
       sl->setEnabled(zone->layoutStrategy == Zone::LayoutStrategy::Grid);
 
@@ -343,8 +399,6 @@ void ZonePropertiesPanel::createControl(const ZoneControl &def,
         zone->velocityRandom = static_cast<int>(v);
       else if (def.propertyKey == "ghostVelocityScale")
         zone->ghostVelocityScale = static_cast<float>(v) / 100.0f;
-      else if (def.propertyKey == "bassOctaveOffset")
-        zone->bassOctaveOffset = static_cast<int>(v);
       else if (def.propertyKey == "glideTimeMs")
         zone->glideTimeMs = static_cast<int>(v);
       else if (def.propertyKey == "maxGlideTimeMs")
@@ -368,6 +422,125 @@ void ZonePropertiesPanel::createControl(const ZoneControl &def,
     rowComp->editor = std::move(sl);
     rowComp->addAndMakeVisible(*rowComp->label);
     rowComp->addAndMakeVisible(*rowComp->editor);
+    addItem(std::move(rowComp), def.widthWeight, def.autoWidth);
+    break;
+  }
+  case ZoneControl::Type::StrumTimingVariation: {
+    auto rowComp = std::make_unique<StrumTimingVariationRow>();
+    rowComp->label = std::make_unique<juce::Label>();
+    rowComp->label->setText(def.label + ":", juce::dontSendNotification);
+    rowComp->check = std::make_unique<juce::ToggleButton>();
+    rowComp->check->setClickingTogglesState(true);
+    rowComp->slider = std::make_unique<juce::Slider>();
+    rowComp->slider->setRange(def.min, def.max, def.step);
+    if (def.suffix.isNotEmpty())
+      rowComp->slider->setTextValueSuffix(" " + def.suffix);
+
+    rowComp->check->setToggleState(zone->strumTimingVariationOn,
+                                   juce::dontSendNotification);
+    rowComp->slider->setValue(zone->strumTimingVariationMs,
+                              juce::dontSendNotification);
+    rowComp->slider->setEnabled(zone->strumTimingVariationOn);
+
+    rowComp->check->onClick = [this, zone, rowComp = rowComp.get(),
+                               rebuildIfNeeded]() {
+      if (!currentZone || currentZone.get() != zone)
+        return;
+      zone->strumTimingVariationOn = rowComp->check->getToggleState();
+      rowComp->slider->setEnabled(zone->strumTimingVariationOn);
+      rebuildIfNeeded();
+    };
+    rowComp->slider->onValueChange = [this, zone, rowComp = rowComp.get(),
+                                      rebuildIfNeeded]() {
+      if (!currentZone || currentZone.get() != zone)
+        return;
+      zone->strumTimingVariationMs =
+          static_cast<int>(rowComp->slider->getValue());
+      rebuildIfNeeded();
+    };
+
+    rowComp->addAndMakeVisible(*rowComp->label);
+    rowComp->addAndMakeVisible(*rowComp->check);
+    rowComp->addAndMakeVisible(*rowComp->slider);
+    addItem(std::move(rowComp), def.widthWeight, def.autoWidth);
+    break;
+  }
+  case ZoneControl::Type::AddBassWithOctave: {
+    auto rowComp = std::make_unique<AddBassWithOctaveRow>();
+    rowComp->label = std::make_unique<juce::Label>();
+    rowComp->label->setText(def.label + ":", juce::dontSendNotification);
+    rowComp->check = std::make_unique<juce::ToggleButton>();
+    rowComp->check->setClickingTogglesState(true);
+    rowComp->check->setButtonText(juce::String());
+    rowComp->slider = std::make_unique<juce::Slider>();
+    rowComp->slider->setRange(def.min, def.max, def.step);
+    rowComp->slider->setNumDecimalPlacesToDisplay(0);
+
+    rowComp->check->setToggleState(zone->addBassNote,
+                                   juce::dontSendNotification);
+    rowComp->slider->setValue(zone->bassOctaveOffset,
+                              juce::dontSendNotification);
+    rowComp->slider->setEnabled(zone->addBassNote);
+
+    rowComp->check->onClick = [this, zone, rowComp = rowComp.get(),
+                               rebuildIfNeeded]() {
+      if (!currentZone || currentZone.get() != zone)
+        return;
+      zone->addBassNote = rowComp->check->getToggleState();
+      rowComp->slider->setEnabled(zone->addBassNote);
+      rebuildIfNeeded();
+    };
+    rowComp->slider->onValueChange = [this, zone, rowComp = rowComp.get(),
+                                      rebuildIfNeeded]() {
+      if (!currentZone || currentZone.get() != zone)
+        return;
+      zone->bassOctaveOffset = static_cast<int>(rowComp->slider->getValue());
+      rebuildIfNeeded();
+    };
+
+    rowComp->addAndMakeVisible(*rowComp->label);
+    rowComp->addAndMakeVisible(*rowComp->check);
+    rowComp->addAndMakeVisible(*rowComp->slider);
+    addItem(std::move(rowComp), def.widthWeight, def.autoWidth);
+    break;
+  }
+  case ZoneControl::Type::DelayRelease: {
+    auto rowComp = std::make_unique<DelayReleaseRow>();
+    rowComp->label = std::make_unique<juce::Label>();
+    rowComp->label->setText(def.label + ":", juce::dontSendNotification);
+    rowComp->check = std::make_unique<juce::ToggleButton>();
+    rowComp->check->setClickingTogglesState(true);
+    rowComp->check->setButtonText(juce::String());
+    rowComp->slider = std::make_unique<juce::Slider>();
+    rowComp->slider->setRange(def.min, def.max, def.step);
+    if (def.suffix.isNotEmpty())
+      rowComp->slider->setTextValueSuffix(" " + def.suffix);
+
+    rowComp->check->setToggleState(zone->delayReleaseOn,
+                                   juce::dontSendNotification);
+    rowComp->slider->setValue(zone->releaseDurationMs,
+                              juce::dontSendNotification);
+    rowComp->slider->setEnabled(zone->delayReleaseOn);
+
+    rowComp->check->onClick = [this, zone, rowComp = rowComp.get(),
+                               rebuildIfNeeded]() {
+      if (!currentZone || currentZone.get() != zone)
+        return;
+      zone->delayReleaseOn = rowComp->check->getToggleState();
+      rowComp->slider->setEnabled(zone->delayReleaseOn);
+      rebuildIfNeeded();
+    };
+    rowComp->slider->onValueChange = [this, zone, rowComp = rowComp.get(),
+                                      rebuildIfNeeded]() {
+      if (!currentZone || currentZone.get() != zone)
+        return;
+      zone->releaseDurationMs = static_cast<int>(rowComp->slider->getValue());
+      rebuildIfNeeded();
+    };
+
+    rowComp->addAndMakeVisible(*rowComp->label);
+    rowComp->addAndMakeVisible(*rowComp->check);
+    rowComp->addAndMakeVisible(*rowComp->slider);
     addItem(std::move(rowComp), def.widthWeight, def.autoWidth);
     break;
   }
@@ -415,17 +588,6 @@ void ZonePropertiesPanel::createControl(const ZoneControl &def,
         else if (zone->chordType == ChordUtilities::ChordType::Ninth)
           id = 4;
         else if (zone->chordType == ChordUtilities::ChordType::Power5)
-          id = 5;
-        cb->setSelectedId(id, juce::dontSendNotification);
-      } else if (def.propertyKey == "voicing") {
-        int id = 1;
-        if (zone->voicing == ChordUtilities::Voicing::Smooth)
-          id = 2;
-        else if (zone->voicing == ChordUtilities::Voicing::GuitarSpread)
-          id = 3;
-        else if (zone->voicing == ChordUtilities::Voicing::SmoothFilled)
-          id = 4;
-        else if (zone->voicing == ChordUtilities::Voicing::GuitarFilled)
           id = 5;
         cb->setSelectedId(id, juce::dontSendNotification);
       } else if (def.propertyKey == "playMode")
@@ -477,12 +639,6 @@ void ZonePropertiesPanel::createControl(const ZoneControl &def,
                           : (id == 3) ? ChordUtilities::ChordType::Seventh
                           : (id == 4) ? ChordUtilities::ChordType::Ninth
                                       : ChordUtilities::ChordType::Power5;
-      } else if (def.propertyKey == "voicing") {
-        zone->voicing = (id == 1)   ? ChordUtilities::Voicing::RootPosition
-                        : (id == 2) ? ChordUtilities::Voicing::Smooth
-                        : (id == 3) ? ChordUtilities::Voicing::GuitarSpread
-                        : (id == 4) ? ChordUtilities::Voicing::SmoothFilled
-                                    : ChordUtilities::Voicing::GuitarFilled;
       } else if (def.propertyKey == "playMode") {
         zone->playMode =
             (id == 1) ? Zone::PlayMode::Direct : Zone::PlayMode::Strum;
@@ -493,6 +649,8 @@ void ZonePropertiesPanel::createControl(const ZoneControl &def,
         zone->layoutStrategy = (id == 1)   ? Zone::LayoutStrategy::Linear
                                : (id == 2) ? Zone::LayoutStrategy::Grid
                                            : Zone::LayoutStrategy::Piano;
+        // Rebuild UI so Grid Interval slider enable state updates
+        juce::MessageManager::callAsync([this]() { rebuildUI(); });
       }
       rebuildIfNeeded();
     };
@@ -512,6 +670,9 @@ void ZonePropertiesPanel::createControl(const ZoneControl &def,
       tb->setButtonText("Global");
     else if (def.propertyKey == "useGlobalScale")
       tb->setButtonText("Global");
+    else if (def.propertyKey == "ignoreGlobalTranspose" ||
+             def.propertyKey == "ignoreGlobalSustain")
+      tb->setButtonText(juce::String()); // Label is in row; no text on checkbox
     else
       tb->setButtonText(def.label);
 
@@ -519,18 +680,15 @@ void ZonePropertiesPanel::createControl(const ZoneControl &def,
       tb->setToggleState(zone->useGlobalRoot, juce::dontSendNotification);
     else if (def.propertyKey == "useGlobalScale")
       tb->setToggleState(zone->useGlobalScale, juce::dontSendNotification);
-    else if (def.propertyKey == "isTransposeLocked")
-      tb->setToggleState(zone->isTransposeLocked, juce::dontSendNotification);
-    else if (def.propertyKey == "allowSustain")
-      tb->setToggleState(zone->allowSustain, juce::dontSendNotification);
+    else if (def.propertyKey == "ignoreGlobalTranspose")
+      tb->setToggleState(zone->ignoreGlobalTranspose,
+                         juce::dontSendNotification);
+    else if (def.propertyKey == "ignoreGlobalSustain")
+      tb->setToggleState(zone->ignoreGlobalSustain, juce::dontSendNotification);
     else if (def.propertyKey == "strictGhostHarmony")
       tb->setToggleState(zone->strictGhostHarmony, juce::dontSendNotification);
-    else if (def.propertyKey == "addBassNote")
-      tb->setToggleState(zone->addBassNote, juce::dontSendNotification);
     else if (def.propertyKey == "isAdaptiveGlide")
       tb->setToggleState(zone->isAdaptiveGlide, juce::dontSendNotification);
-    else if (def.propertyKey == "humanize")
-      tb->setToggleState(zone->humanize, juce::dontSendNotification);
     else if (def.propertyKey == "strumGhostNotes")
       tb->setToggleState(zone->strumGhostNotes, juce::dontSendNotification);
 
@@ -543,18 +701,14 @@ void ZonePropertiesPanel::createControl(const ZoneControl &def,
         zone->useGlobalRoot = v;
       else if (def.propertyKey == "useGlobalScale")
         zone->useGlobalScale = v;
-      else if (def.propertyKey == "isTransposeLocked")
-        zone->isTransposeLocked = v;
-      else if (def.propertyKey == "allowSustain")
-        zone->allowSustain = v;
+      else if (def.propertyKey == "ignoreGlobalTranspose")
+        zone->ignoreGlobalTranspose = v;
+      else if (def.propertyKey == "ignoreGlobalSustain")
+        zone->ignoreGlobalSustain = v;
       else if (def.propertyKey == "strictGhostHarmony")
         zone->strictGhostHarmony = v;
-      else if (def.propertyKey == "addBassNote")
-        zone->addBassNote = v;
       else if (def.propertyKey == "isAdaptiveGlide")
         zone->isAdaptiveGlide = v;
-      else if (def.propertyKey == "humanize")
-        zone->humanize = v;
       else if (def.propertyKey == "strumGhostNotes")
         zone->strumGhostNotes = v;
       rebuildIfNeeded();
@@ -576,6 +730,22 @@ void ZonePropertiesPanel::createControl(const ZoneControl &def,
     label->setText(def.label, juce::dontSendNotification);
     label->setColour(juce::Label::textColourId, juce::Colours::grey);
     addItem(std::move(label), 1.0f, false);
+    break;
+  }
+  case ZoneControl::Type::LabelOnlyWrappable: {
+    struct WrappableLabel : juce::Component {
+      juce::String text;
+      void paint(juce::Graphics &g) override {
+        g.setColour(juce::Colours::grey);
+        g.setFont(juce::Font(13.0f));
+        g.drawFittedText(text, getLocalBounds().reduced(4),
+                         juce::Justification::left, 10);
+      }
+    };
+    auto comp = std::make_unique<WrappableLabel>();
+    comp->text = def.label;
+    currentRow.isWrappableLabelRow = true;
+    addItem(std::move(comp), 1.0f, false);
     break;
   }
   default:
@@ -916,9 +1086,14 @@ void ZonePropertiesPanel::resized() {
       y += extraSeparatorMargin;
 
     int h = row.isSeparatorRow ? separatorRowHeight : rowHeight;
+    if (row.isWrappableLabelRow)
+      h = 44;
     if (row.isChipListRow && chipListRef && currentZone) {
       int n = static_cast<int>(currentZone->inputKeyCodes.size());
-      h = juce::jmax(120, n * 28 + 16);
+      const int chipW = 64, chipH = 28;
+      int chipsPerRow = std::max(1, bounds.getWidth() / chipW);
+      int rows = (n + chipsPerRow - 1) / chipsPerRow;
+      h = juce::jmax(120, rows * chipH + 16);
     }
 
     int totalAvailable = bounds.getWidth();
@@ -971,9 +1146,15 @@ int ZonePropertiesPanel::getRequiredHeight() const {
     if (row.isSeparatorRow)
       total += separatorTopMargin;
     int h = row.isSeparatorRow ? separatorHeight : controlHeight;
+    if (row.isWrappableLabelRow)
+      h = 44;
     if (row.isChipListRow && chipListRef && currentZone) {
       int n = static_cast<int>(currentZone->inputKeyCodes.size());
-      h = juce::jmax(120, n * 28 + 16);
+      const int chipW = 64, chipH = 28;
+      int availW = getWidth() > 0 ? getWidth() - 16 : 400;
+      int chipsPerRow = std::max(1, availW / chipW);
+      int rows = (n + chipsPerRow - 1) / chipsPerRow;
+      h = juce::jmax(120, rows * chipH + 16);
     }
     total += h + spacing;
   }

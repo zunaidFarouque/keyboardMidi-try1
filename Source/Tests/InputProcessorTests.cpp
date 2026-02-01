@@ -1,3 +1,4 @@
+#include "../ChordUtilities.h"
 #include "../DeviceManager.h"
 #include "../InputProcessor.h"
 #include "../MappingTypes.h"
@@ -6,6 +7,7 @@
 #include "../ScaleLibrary.h"
 #include "../SettingsManager.h"
 #include "../VoiceManager.h"
+#include "../Zone.h"
 #include <gtest/gtest.h>
 #include <set>
 
@@ -690,6 +692,77 @@ TEST_F(NoteTypeTest, FollowTransposeIgnoredWhenDisabled) {
   EXPECT_EQ(mockMidi.events[0].note, 60);
 }
 
+// Play mode Direct: chord notes must be sent immediately (strum 0, no timing).
+TEST_F(NoteTypeTest, DirectMode_ChordNotesSentImmediately) {
+  auto zone = std::make_shared<Zone>();
+  zone->name = "Direct Triad";
+  zone->layerID = 0;
+  zone->targetAliasHash = 0;
+  zone->inputKeyCodes = {81};
+  zone->chordType = ChordUtilities::ChordType::Triad;
+  zone->scaleName = "Major";
+  zone->rootNote = 60;
+  zone->playMode = Zone::PlayMode::Direct;
+  zone->midiChannel = 1;
+  proc.getZoneManager().addZone(zone);
+  proc.forceRebuildMappings();
+  mockMidi.clear();
+
+  proc.processEvent(InputID{0, 81}, true);
+
+  ASSERT_EQ(mockMidi.events.size(), 3u)
+      << "Direct mode must send all chord notes at once (triad=3)";
+  for (size_t i = 0; i < mockMidi.events.size(); ++i) {
+    EXPECT_TRUE(mockMidi.events[i].isNoteOn)
+        << "event " << i << " should be note-on";
+    EXPECT_EQ(mockMidi.events[i].channel, 1);
+  }
+}
+
+// Release mode Sustain: one-shot latch – no note-off on release; next chord
+// sends note-off then note-on.
+TEST_F(NoteTypeTest,
+       SustainMode_ReleaseSendsNoNoteOff_NextChordSendsNoteOffThenNoteOn) {
+  auto zone = std::make_shared<Zone>();
+  zone->name = "Sustain Triad";
+  zone->layerID = 0;
+  zone->targetAliasHash = 0;
+  zone->inputKeyCodes = {81, 70}; // Q and F
+  zone->chordType = ChordUtilities::ChordType::Triad;
+  zone->scaleName = "Major";
+  zone->rootNote = 60;
+  zone->playMode = Zone::PlayMode::Direct;
+  zone->releaseBehavior = Zone::ReleaseBehavior::Sustain;
+  zone->midiChannel = 1;
+  proc.getZoneManager().addZone(zone);
+  proc.forceRebuildMappings();
+  mockMidi.clear();
+
+  proc.processEvent(InputID{0, 81}, true); // Press Q -> C E G
+  ASSERT_EQ(mockMidi.events.size(), 3u);
+  for (size_t i = 0; i < 3u; ++i)
+    EXPECT_TRUE(mockMidi.events[i].isNoteOn);
+
+  proc.processEvent(InputID{0, 81},
+                    false); // Release Q -> no note-off (Sustain)
+  EXPECT_EQ(mockMidi.events.size(), 3u)
+      << "Sustain: release must not send note-off";
+
+  proc.processEvent(InputID{0, 70},
+                    true); // Press F -> note-off for Q's chord, then F's chord
+  ASSERT_EQ(mockMidi.events.size(), 9u)
+      << "Sustain: 3 on (Q) + 3 off (Q) + 3 on (F)";
+  size_t offCount = 0, onCount = 0;
+  for (const auto &e : mockMidi.events) {
+    if (e.isNoteOn)
+      ++onCount;
+    else
+      ++offCount;
+  }
+  EXPECT_EQ(offCount, 3u) << "Previous chord's 3 notes must be turned off";
+  EXPECT_EQ(onCount, 6u) << "Two chords: 3 note-ons (Q) + 3 note-ons (F)";
+}
+
 TEST_F(NoteTypeTest, AllParamsWorkTogether) {
   proc.getZoneManager().setGlobalTranspose(1, 0);          // +1 semitone
   addNoteMapping(34, 8, 83, 90, "Send Note Off", true, 0); // B4 + 1 = C5 (84)
@@ -994,6 +1067,51 @@ TEST_F(NoteTypeTest, PanicLatchedOnly_SendsNoteOffOnlyForLatched) {
   ASSERT_EQ(mockMidi.events.size(), 2u) << "NoteOff from panic latched";
   EXPECT_FALSE(mockMidi.events[1].isNoteOn);
   EXPECT_EQ(mockMidi.events[1].note, 60);
+}
+
+// Panic chords: turns off sustain-held chord (Sustain release mode)
+TEST_F(NoteTypeTest, PanicChords_SendsNoteOffForSustainChord) {
+  auto zone = std::make_shared<Zone>();
+  zone->name = "Sustain Triad";
+  zone->layerID = 0;
+  zone->targetAliasHash = 0;
+  zone->inputKeyCodes = {81};
+  zone->chordType = ChordUtilities::ChordType::Triad;
+  zone->scaleName = "Major";
+  zone->rootNote = 60;
+  zone->playMode = Zone::PlayMode::Direct;
+  zone->releaseBehavior = Zone::ReleaseBehavior::Sustain;
+  zone->midiChannel = 1;
+  proc.getZoneManager().addZone(zone);
+
+  {
+    auto mappings = presetMgr.getMappingsListForLayer(0);
+    juce::ValueTree panic("Mapping");
+    panic.setProperty("inputKey", 40, nullptr);
+    panic.setProperty("deviceHash",
+                      juce::String::toHexString((juce::int64)0).toUpperCase(),
+                      nullptr);
+    panic.setProperty("type", "Command", nullptr);
+    panic.setProperty("data1", 4, nullptr); // Panic
+    panic.setProperty("data2", 2, nullptr); // Panic chords
+    panic.setProperty("layerID", 0, nullptr);
+    mappings.addChild(panic, -1, nullptr);
+  }
+  proc.forceRebuildMappings();
+  mockMidi.clear();
+
+  proc.processEvent(InputID{0, 81}, true); // Press Q -> C E G (3 note-ons)
+  proc.processEvent(InputID{0, 81},
+                    false); // Release Q -> no note-off (Sustain)
+  ASSERT_EQ(mockMidi.events.size(), 3u) << "Sustain: 3 note-ons only";
+
+  proc.processEvent(InputID{0, 40}, true); // Panic chords
+  proc.processEvent(InputID{0, 40}, false);
+  ASSERT_EQ(mockMidi.events.size(), 6u)
+      << "3 note-ons + 3 note-offs from Panic chords";
+  EXPECT_FALSE(mockMidi.events[3].isNoteOn);
+  EXPECT_FALSE(mockMidi.events[4].isNoteOn);
+  EXPECT_FALSE(mockMidi.events[5].isNoteOn);
 }
 
 // Transpose command: up1, down1, up12, down12, set; zone selector is

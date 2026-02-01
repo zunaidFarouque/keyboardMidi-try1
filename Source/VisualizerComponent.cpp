@@ -1,4 +1,5 @@
 #include "VisualizerComponent.h"
+#include "ColourContrast.h"
 #include "InputProcessor.h"
 #include "KeyboardLayoutUtils.h"
 #include "PresetManager.h"
@@ -14,6 +15,11 @@ static uintptr_t aliasNameToHash(const juce::String &aliasName) {
       aliasName == "Unassigned")
     return 0;
   return static_cast<uintptr_t>(std::hash<juce::String>{}(aliasName));
+}
+
+juce::Colour
+VisualizerComponent::getTextColorForKeyFill(juce::Colour keyFillColor) {
+  return ColourContrast::getTextColorForKeyFill(keyFillColor);
 }
 
 VisualizerComponent::VisualizerComponent(ZoneManager *zoneMgr,
@@ -302,25 +308,20 @@ void VisualizerComponent::refreshCache() {
           (state == VisualState::Active || state == VisualState::Inherited))
         alpha *= 0.5f;
 
-      // Phase 54.1/54.4: Smart contrast – legible text
+      // Phase 54.1/54.4: Smart contrast – text color from key fill (not
+      // backdrop)
       // 1. Conflict: Always White on Red
       if (state == VisualState::Conflict) {
         textColor = juce::Colours::white;
       }
-      // 2. Inherited (Dim): Always White (alpha 0.3 over dark grey is dark)
+      // 2. Inherited (Dim): Always White (dim key is dark)
       else if (state == VisualState::Inherited) {
         textColor = juce::Colours::white;
       }
-      // 3. Active/Override: Use effective color and higher threshold (0.7)
+      // 3. Active/Override/Empty: Use key fill color (Layer 2 key body we draw)
       else {
-        juce::Colour backColor = underlayColor.isTransparent()
-                                     ? juce::Colour(0xff333333)
-                                     : underlayColor;
-        const juce::Colour bgBase(0xff333333);
-        juce::Colour effective = bgBase.interpolatedWith(backColor, alpha);
-        float brightness = effective.getPerceivedBrightness();
-        textColor =
-            (brightness > 0.7f) ? juce::Colours::black : juce::Colours::white;
+        const juce::Colour keyFillColor(0xff333333); // Key body fill
+        textColor = ColourContrast::getTextColorForKeyFill(keyFillColor);
       }
 
       // --- 4. Render Static Layers (Off State) ---
@@ -499,9 +500,9 @@ void VisualizerComponent::paint(juce::Graphics &g) {
     g.setColour(dynamicBorderColor);
     g.drawRoundedRectangle(keyBounds, 6.0f, dynamicBorderWidth);
 
-    // Redraw Text (Important: text must be on top of highlight)
+    // Redraw Text: active key always has brighter fill → black; else white
     juce::Colour textColor =
-        isPressed ? juce::Colours::black : juce::Colours::white;
+        (isPressed || isLatched) ? juce::Colours::black : juce::Colours::white;
     g.setColour(textColor);
     g.setFont(keySize * 0.4f);
     g.drawText(labelText, keyBounds, juce::Justification::centred, false);

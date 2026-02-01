@@ -32,6 +32,9 @@ public:
   // Phase 45.3: choose which layer the visualizer simulates for editing view
   void setVisualizedLayer(int layerId);
 
+  /// Returns black or white for legible text on the given key fill color.
+  static juce::Colour getTextColorForKeyFill(juce::Colour keyFillColor);
+
   void paint(juce::Graphics &) override;
   void resized() override;
 

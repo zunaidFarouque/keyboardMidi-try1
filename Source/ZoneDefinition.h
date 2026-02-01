@@ -20,7 +20,11 @@ struct ZoneControl {
     ComboBox,
     Toggle,
     LabelOnly,
+    LabelOnlyWrappable, // Multi-line, wraps when narrow
     Separator,
+    StrumTimingVariation, // Composite: label + checkbox + slider
+    AddBassWithOctave,    // Composite: label + checkbox + Octave slider
+    DelayRelease, // Composite: Delay release [checkbox] [slider] (Normal only)
     CustomAlias,
     CustomScale,
     CustomKeyAssign,

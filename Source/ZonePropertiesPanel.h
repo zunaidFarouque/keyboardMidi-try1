@@ -54,7 +54,8 @@ private:
   struct UiRow {
     std::vector<UiItem> items;
     bool isSeparatorRow = false;
-    bool isChipListRow = false; // dynamic height
+    bool isChipListRow = false;       // dynamic height
+    bool isWrappableLabelRow = false; // multi-line hint (e.g. Sustain)
   };
   std::vector<UiRow> uiRows;
   juce::String lastSchemaSignature_;

@@ -296,11 +296,11 @@ void MappingInspector::createControl(const InspectorControl &def,
       int id = (data1 >= 0 && data1 <= 2) ? (data1 + 1) : 1;
       cb->setSelectedId(id, juce::dontSendNotification);
     } else if (def.propertyId == "panicMode") {
-      // Virtual: data1==5 or data2==1 -> Panic latched only (2), else Panic all
-      // (1)
+      // Virtual: data1==5 or data2==1 -> Panic latched only (2), data2==2 ->
+      // Panic chords (3), else Panic all (1)
       int data1 = static_cast<int>(getCommonValue("data1"));
       int data2 = static_cast<int>(getCommonValue("data2"));
-      int id = (data1 == 5 || data2 == 1) ? 2 : 1;
+      int id = (data2 == 2) ? 3 : (data1 == 5 || data2 == 1) ? 2 : 1;
       cb->setSelectedId(id, juce::dontSendNotification);
     } else if (def.propertyId == "transposeMode") {
       juce::String modeStr = currentVal.toString();
@@ -373,9 +373,10 @@ void MappingInspector::createControl(const InspectorControl &def,
                      : (id == 110) ? juce::var(10) // Layer -> data1=10 (Hold)
                                    : juce::var(id);
       } else if (def.propertyId == "panicMode") {
-        // Virtual: 1=Panic all (data2=0), 2=Panic latched only (data2=1)
+        // Virtual: 1=Panic all (data2=0), 2=Panic latched only (data2=1),
+        // 3=Panic chords (data2=2)
         int id = cbPtr->getSelectedId();
-        int mode = (id == 2) ? 1 : 0;
+        int mode = (id == 2) ? 1 : (id == 3) ? 2 : 0;
         for (auto &tree : selectedTrees) {
           if (tree.isValid()) {
             tree.setProperty("data1", 4,

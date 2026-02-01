@@ -86,7 +86,7 @@ std::shared_ptr<Zone> ZoneManager::createDefaultZone() {
   zone->scaleName = "Major";
   zone->chromaticOffset = 0;
   zone->degreeOffset = 0;
-  zone->isTransposeLocked = false;
+  zone->ignoreGlobalTranspose = false;
 
   // Auto-assign color from palette
   static const juce::Colour colorPalette[] = {

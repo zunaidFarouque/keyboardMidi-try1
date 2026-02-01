@@ -9,9 +9,8 @@
 Zone::Zone()
     : name("Untitled Zone"), targetAliasHash(0), rootNote(60),
       scaleName("Major"), chromaticOffset(0), degreeOffset(0),
-      isTransposeLocked(false), layoutStrategy(LayoutStrategy::Linear),
-      gridInterval(5), zoneColor(juce::Colours::transparentBlack),
-      midiChannel(1) {
+      layoutStrategy(LayoutStrategy::Linear), gridInterval(5),
+      zoneColor(juce::Colours::transparentBlack), midiChannel(1) {
   // Cache will be rebuilt when zone is added to ZoneManager
 }
 
@@ -261,7 +260,7 @@ Zone::getNotesForKey(int keyCode, int globalChromTrans, int globalDegTrans) {
     return std::nullopt;
 
   const std::vector<ChordUtilities::ChordNote> &relativeChordNotes = it->second;
-  int effChromTrans = isTransposeLocked ? 0 : globalChromTrans;
+  int effChromTrans = ignoreGlobalTranspose ? 0 : globalChromTrans;
 
   std::vector<ChordUtilities::ChordNote> finalChordNotes;
   finalChordNotes.reserve(relativeChordNotes.size());
@@ -314,15 +313,17 @@ juce::ValueTree Zone::toValueTree() const {
   vt.setProperty("scaleName", scaleName, nullptr);
   vt.setProperty("chromaticOffset", chromaticOffset, nullptr);
   vt.setProperty("degreeOffset", degreeOffset, nullptr);
-  vt.setProperty("isTransposeLocked", isTransposeLocked, nullptr);
+  vt.setProperty("ignoreGlobalTranspose", ignoreGlobalTranspose, nullptr);
   vt.setProperty("layoutStrategy", static_cast<int>(layoutStrategy), nullptr);
   vt.setProperty("gridInterval", gridInterval, nullptr);
   vt.setProperty("chordType", static_cast<int>(chordType), nullptr);
-  vt.setProperty("voicing", static_cast<int>(voicing), nullptr);
   vt.setProperty("strumSpeedMs", strumSpeedMs, nullptr);
+  vt.setProperty("strumTimingVariationOn", strumTimingVariationOn, nullptr);
+  vt.setProperty("strumTimingVariationMs", strumTimingVariationMs, nullptr);
   vt.setProperty("playMode", static_cast<int>(playMode), nullptr);
-  vt.setProperty("allowSustain", allowSustain, nullptr);
+  vt.setProperty("ignoreGlobalSustain", ignoreGlobalSustain, nullptr);
   vt.setProperty("releaseBehavior", static_cast<int>(releaseBehavior), nullptr);
+  vt.setProperty("delayReleaseOn", delayReleaseOn, nullptr);
   vt.setProperty("releaseDurationMs", releaseDurationMs, nullptr);
   vt.setProperty("baseVel", baseVelocity, nullptr);
   vt.setProperty("randVel", velocityRandom, nullptr);
@@ -333,9 +334,8 @@ juce::ValueTree Zone::toValueTree() const {
   vt.setProperty("instrumentMode", static_cast<int>(instrumentMode), nullptr);
   vt.setProperty("pianoVoicingStyle", static_cast<int>(pianoVoicingStyle),
                  nullptr);
-  vt.setProperty("humanize", humanize, nullptr);
-  vt.setProperty("guitarPlayerPosition",
-                 static_cast<int>(guitarPlayerPosition), nullptr);
+  vt.setProperty("guitarPlayerPosition", static_cast<int>(guitarPlayerPosition),
+                 nullptr);
   vt.setProperty("guitarFretAnchor", guitarFretAnchor, nullptr);
   vt.setProperty("strumPattern", static_cast<int>(strumPattern), nullptr);
   vt.setProperty("strumGhostNotes", strumGhostNotes, nullptr);
@@ -402,7 +402,11 @@ std::shared_ptr<Zone> Zone::fromValueTree(const juce::ValueTree &vt) {
   }
   zone->chromaticOffset = vt.getProperty("chromaticOffset", 0);
   zone->degreeOffset = vt.getProperty("degreeOffset", 0);
-  zone->isTransposeLocked = vt.getProperty("isTransposeLocked", false);
+  if (vt.hasProperty("ignoreGlobalTranspose"))
+    zone->ignoreGlobalTranspose =
+        vt.getProperty("ignoreGlobalTranspose", false);
+  else
+    zone->ignoreGlobalTranspose = vt.getProperty("isTransposeLocked", false);
   zone->layoutStrategy = static_cast<LayoutStrategy>(
       vt.getProperty("layoutStrategy", static_cast<int>(LayoutStrategy::Linear))
           .operator int());
@@ -411,19 +415,23 @@ std::shared_ptr<Zone> Zone::fromValueTree(const juce::ValueTree &vt) {
       vt.getProperty("chordType",
                      static_cast<int>(ChordUtilities::ChordType::None))
           .operator int());
-  zone->voicing = static_cast<ChordUtilities::Voicing>(
-      vt.getProperty("voicing",
-                     static_cast<int>(ChordUtilities::Voicing::RootPosition))
-          .operator int());
+  // Legacy: "voicing" property no longer used (old architecture removed)
   zone->strumSpeedMs = vt.getProperty("strumSpeedMs", 0);
+  zone->strumTimingVariationOn =
+      vt.getProperty("strumTimingVariationOn", false);
+  zone->strumTimingVariationMs = vt.getProperty("strumTimingVariationMs", 0);
   zone->playMode = static_cast<PlayMode>(
       vt.getProperty("playMode", static_cast<int>(PlayMode::Direct))
           .operator int());
-  zone->allowSustain = vt.getProperty("allowSustain", true);
+  if (vt.hasProperty("ignoreGlobalSustain"))
+    zone->ignoreGlobalSustain = vt.getProperty("ignoreGlobalSustain", false);
+  else
+    zone->ignoreGlobalSustain = !vt.getProperty("allowSustain", true);
   zone->releaseBehavior = static_cast<ReleaseBehavior>(
       vt.getProperty("releaseBehavior",
                      static_cast<int>(ReleaseBehavior::Normal))
           .operator int());
+  zone->delayReleaseOn = vt.getProperty("delayReleaseOn", false);
   zone->releaseDurationMs = vt.getProperty("releaseDurationMs", 0);
   zone->baseVelocity = vt.getProperty("baseVel", 100);
   zone->velocityRandom = vt.getProperty("randVel", 0);
@@ -460,10 +468,10 @@ std::shared_ptr<Zone> Zone::fromValueTree(const juce::ValueTree &vt) {
       juce::jlimit(0, 1, (int)vt.getProperty("instrumentMode", 0)));
   zone->pianoVoicingStyle = static_cast<PianoVoicingStyle>(
       juce::jlimit(0, 2, (int)vt.getProperty("pianoVoicingStyle", 1)));
-  zone->humanize = vt.getProperty("humanize", false);
   zone->guitarPlayerPosition = static_cast<GuitarPlayerPosition>(
       juce::jlimit(0, 1, (int)vt.getProperty("guitarPlayerPosition", 0)));
-  zone->guitarFretAnchor = juce::jlimit(1, 12, (int)vt.getProperty("guitarFretAnchor", 5));
+  zone->guitarFretAnchor =
+      juce::jlimit(1, 12, (int)vt.getProperty("guitarFretAnchor", 5));
   zone->strumPattern = static_cast<StrumPattern>(
       juce::jlimit(0, 2, (int)vt.getProperty("strumPattern", 0)));
   zone->strumGhostNotes = vt.getProperty("strumGhostNotes", false);

@@ -41,7 +41,7 @@ public:
   juce::String scaleName;         // Scale name (looked up from ScaleLibrary)
   int chromaticOffset;            // Global transpose override
   int degreeOffset;               // Scale degree shift
-  bool isTransposeLocked;         // If true, ignore global transpose
+  bool ignoreGlobalTranspose = false; // If true, ignore global transpose
   LayoutStrategy layoutStrategy =
       LayoutStrategy::Linear; // Layout calculation method
   int gridInterval =
@@ -50,18 +50,21 @@ public:
   int midiChannel = 1;    // MIDI output channel (1-16)
   ChordUtilities::ChordType chordType =
       ChordUtilities::ChordType::None; // Chord type (None = single note)
-  ChordUtilities::Voicing voicing =
-      ChordUtilities::Voicing::RootPosition; // Chord voicing
   int strumSpeedMs =
       0; // Strum speed in milliseconds (0 = no strum, all notes at once)
+  bool strumTimingVariationOn = false; // When true, apply timing jitter
+  int strumTimingVariationMs =
+      0; // Timing jitter: ±N ms per note (when strum timing variation on)
   PlayMode playMode =
       PlayMode::Direct; // Play mode (Direct = immediate, Strum = buffered)
-  bool allowSustain =
-      true; // If false (e.g. Drums), sustain pedal does not hold notes
+  bool ignoreGlobalSustain =
+      false; // If true, sustain pedal does not hold notes (e.g. Drums)
   ReleaseBehavior releaseBehavior =
       ReleaseBehavior::Normal; // How to handle key release in strum mode
+  bool delayReleaseOn =
+      false; // When true (Normal only), use releaseDurationMs timer on release
   int releaseDurationMs =
-      0; // Continue playing for N ms after release (0 = stop immediately)
+      0; // Delay release duration in ms (used only when delayReleaseOn is true)
   int baseVelocity = 100; // Base MIDI velocity (1-127)
   int velocityRandom = 0; // Velocity randomization range (0-64)
   bool strictGhostHarmony =
@@ -72,7 +75,6 @@ public:
   int bassOctaveOffset = -1; // Octave offset for bass note (-3 to -1)
   InstrumentMode instrumentMode = InstrumentMode::Piano;
   PianoVoicingStyle pianoVoicingStyle = PianoVoicingStyle::Close;
-  bool humanize = false; // Velocity ±5%, timing ±15ms at play-time
   GuitarPlayerPosition guitarPlayerPosition = GuitarPlayerPosition::Campfire;
   int guitarFretAnchor = 5; // Fret anchor for Rhythm (Virtual Capo) mode
   StrumPattern strumPattern = StrumPattern::Down;

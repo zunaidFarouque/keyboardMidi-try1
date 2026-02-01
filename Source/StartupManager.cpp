@@ -150,7 +150,7 @@ void StartupManager::createFactoryDefault() {
     mainZone->scaleName = "Major";
     mainZone->chromaticOffset = 0;
     mainZone->degreeOffset = 0;
-    mainZone->isTransposeLocked = false;
+    mainZone->ignoreGlobalTranspose = false;
     mainZone->layoutStrategy = Zone::LayoutStrategy::Linear;
     mainZone->gridInterval = 5;
 
