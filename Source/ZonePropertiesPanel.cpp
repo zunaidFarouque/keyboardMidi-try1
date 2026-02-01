@@ -370,6 +370,8 @@ void ZonePropertiesPanel::createControl(const ZoneControl &def,
       sl->setValue(zone->guitarFretAnchor, juce::dontSendNotification);
     else if (def.propertyKey == "strumSpeedMs")
       sl->setValue(zone->strumSpeedMs, juce::dontSendNotification);
+    else if (def.propertyKey == "voicingMagnetSemitones")
+      sl->setValue(zone->voicingMagnetSemitones, juce::dontSendNotification);
     else if (def.propertyKey == "releaseDurationMs")
       sl->setValue(zone->releaseDurationMs, juce::dontSendNotification);
     else if (def.propertyKey == "gridInterval")
@@ -409,6 +411,8 @@ void ZonePropertiesPanel::createControl(const ZoneControl &def,
         zone->guitarFretAnchor = static_cast<int>(v);
       else if (def.propertyKey == "strumSpeedMs")
         zone->strumSpeedMs = static_cast<int>(v);
+      else if (def.propertyKey == "voicingMagnetSemitones")
+        zone->voicingMagnetSemitones = static_cast<int>(v);
       else if (def.propertyKey == "releaseDurationMs")
         zone->releaseDurationMs = static_cast<int>(v);
       else if (def.propertyKey == "gridInterval")

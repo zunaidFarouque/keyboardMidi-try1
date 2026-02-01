@@ -1,5 +1,5 @@
 {
-  "tests": 104,
+  "tests": 103,
   "name": "AllTests",
   "testsuites": [
     {
@@ -30,62 +30,62 @@
         {
           "name": "BlockTriad_ReturnsRootPositionSorted",
           "file": "D:\\_installed\\VScode repos\\AI\\Cursor\\keyboardMidi-try1\\Source\\Tests\\ChordUtilitiesTests.cpp",
-          "line": 41
+          "line": 38
         },
         {
           "name": "BlockSeventh_ReturnsFourNotesSorted",
           "file": "D:\\_installed\\VScode repos\\AI\\Cursor\\keyboardMidi-try1\\Source\\Tests\\ChordUtilitiesTests.cpp",
-          "line": 54
+          "line": 51
         },
         {
           "name": "BlockTriad_Degree1_DReturnsCorrectPitches",
           "file": "D:\\_installed\\VScode repos\\AI\\Cursor\\keyboardMidi-try1\\Source\\Tests\\ChordUtilitiesTests.cpp",
-          "line": 67
+          "line": 64
         },
         {
           "name": "CloseTriad_ReturnsThreeNotesClustered",
           "file": "D:\\_installed\\VScode repos\\AI\\Cursor\\keyboardMidi-try1\\Source\\Tests\\ChordUtilitiesTests.cpp",
-          "line": 81
+          "line": 77
         },
         {
           "name": "CloseSeventh_Degree0_Odd_UsesRootPosition",
           "file": "D:\\_installed\\VScode repos\\AI\\Cursor\\keyboardMidi-try1\\Source\\Tests\\ChordUtilitiesTests.cpp",
-          "line": 99
+          "line": 94
         },
         {
           "name": "CloseSeventh_Degree1_Even_ReturnsFourNotes",
           "file": "D:\\_installed\\VScode repos\\AI\\Cursor\\keyboardMidi-try1\\Source\\Tests\\ChordUtilitiesTests.cpp",
-          "line": 115
+          "line": 110
         },
         {
           "name": "OpenTriad_ReturnsSpreadVoicing",
           "file": "D:\\_installed\\VScode repos\\AI\\Cursor\\keyboardMidi-try1\\Source\\Tests\\ChordUtilitiesTests.cpp",
-          "line": 133
+          "line": 128
         },
         {
           "name": "OpenSeventh_ReturnsFourNotesSpread",
           "file": "D:\\_installed\\VScode repos\\AI\\Cursor\\keyboardMidi-try1\\Source\\Tests\\ChordUtilitiesTests.cpp",
-          "line": 145
+          "line": 140
         },
         {
           "name": "BlockNone_ReturnsSingleNote",
           "file": "D:\\_installed\\VScode repos\\AI\\Cursor\\keyboardMidi-try1\\Source\\Tests\\ChordUtilitiesTests.cpp",
-          "line": 159
+          "line": 154
         },
         {
-          "name": "Magnet_Zero_SameAsDefault",
+          "name": "CloseTriad_Magnet0_MatchesExplicitZero",
           "file": "D:\\_installed\\VScode repos\\AI\\Cursor\\keyboardMidi-try1\\Source\\Tests\\ChordUtilitiesTests.cpp",
-          "line": 168
+          "line": 163
         },
         {
-          "name": "Magnet_NonZero_CanChangeInversion",
+          "name": "CloseTriad_MagnetPlus1_ValidChord",
           "file": "D:\\_installed\\VScode repos\\AI\\Cursor\\keyboardMidi-try1\\Source\\Tests\\ChordUtilitiesTests.cpp",
-          "line": 182
+          "line": 177
         },
         {
-          "name": "Magnet_Extremes_ValidChord",
+          "name": "CloseTriad_MagnetClampedToRange",
           "file": "D:\\_installed\\VScode repos\\AI\\Cursor\\keyboardMidi-try1\\Source\\Tests\\ChordUtilitiesTests.cpp",
-          "line": 202
+          "line": 191
         }
       ]
     },
@@ -96,27 +96,27 @@
         {
           "name": "CampfireTriad_ReturnsNotesInFretRange",
           "file": "D:\\_installed\\VScode repos\\AI\\Cursor\\keyboardMidi-try1\\Source\\Tests\\ChordUtilitiesTests.cpp",
-          "line": 218
+          "line": 202
         },
         {
           "name": "CampfireSeventh_ReturnsNotesInFretRange",
           "file": "D:\\_installed\\VScode repos\\AI\\Cursor\\keyboardMidi-try1\\Source\\Tests\\ChordUtilitiesTests.cpp",
-          "line": 231
+          "line": 215
         },
         {
           "name": "RhythmTriad_ReturnsNotesInCapoRange",
           "file": "D:\\_installed\\VScode repos\\AI\\Cursor\\keyboardMidi-try1\\Source\\Tests\\ChordUtilitiesTests.cpp",
-          "line": 241
+          "line": 225
         },
         {
           "name": "RhythmSeventh_Degree2_ReturnsValidVoicing",
           "file": "D:\\_installed\\VScode repos\\AI\\Cursor\\keyboardMidi-try1\\Source\\Tests\\ChordUtilitiesTests.cpp",
-          "line": 256
+          "line": 240
         },
         {
           "name": "CampfireTriadDegree0_RootOnA_NoLowE",
           "file": "D:\\_installed\\VScode repos\\AI\\Cursor\\keyboardMidi-try1\\Source\\Tests\\ChordUtilitiesTests.cpp",
-          "line": 266
+          "line": 250
         }
       ]
     },
@@ -127,22 +127,22 @@
         {
           "name": "PianoClose_Triad_CompilesToChordPool",
           "file": "D:\\_installed\\VScode repos\\AI\\Cursor\\keyboardMidi-try1\\Source\\Tests\\ChordUtilitiesTests.cpp",
-          "line": 278
+          "line": 262
         },
         {
           "name": "PianoOpen_Seventh_CompilesToChordPool",
           "file": "D:\\_installed\\VScode repos\\AI\\Cursor\\keyboardMidi-try1\\Source\\Tests\\ChordUtilitiesTests.cpp",
-          "line": 309
+          "line": 292
         },
         {
           "name": "GuitarCampfire_Triad_CompilesToChordPool",
           "file": "D:\\_installed\\VScode repos\\AI\\Cursor\\keyboardMidi-try1\\Source\\Tests\\ChordUtilitiesTests.cpp",
-          "line": 339
+          "line": 321
         },
         {
           "name": "GuitarRhythm_VirtualCapo_CompilesToChordPool",
           "file": "D:\\_installed\\VScode repos\\AI\\Cursor\\keyboardMidi-try1\\Source\\Tests\\ChordUtilitiesTests.cpp",
-          "line": 371
+          "line": 351
         }
       ]
     },
@@ -605,28 +605,23 @@
       ]
     },
     {
-      "name": "ZonePianoVoicingMagnet",
-      "tests": 4,
+      "name": "ZoneVoicingMagnet",
+      "tests": 3,
       "testsuite": [
         {
-          "name": "SerializationRoundTripZero",
+          "name": "SerializationRoundTrip",
           "file": "D:\\_installed\\VScode repos\\AI\\Cursor\\keyboardMidi-try1\\Source\\Tests\\ZoneTests.cpp",
           "line": 263
         },
         {
-          "name": "SerializationRoundTripNonZero",
+          "name": "DefaultIsZero",
           "file": "D:\\_installed\\VScode repos\\AI\\Cursor\\keyboardMidi-try1\\Source\\Tests\\ZoneTests.cpp",
           "line": 272
         },
         {
-          "name": "SerializationRoundTripExtremes",
+          "name": "NegativeValueRoundTrip",
           "file": "D:\\_installed\\VScode repos\\AI\\Cursor\\keyboardMidi-try1\\Source\\Tests\\ZoneTests.cpp",
-          "line": 281
-        },
-        {
-          "name": "DefaultIsZero",
-          "file": "D:\\_installed\\VScode repos\\AI\\Cursor\\keyboardMidi-try1\\Source\\Tests\\ZoneTests.cpp",
-          "line": 296
+          "line": 277
         }
       ]
     }

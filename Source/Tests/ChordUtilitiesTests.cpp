@@ -1,14 +1,14 @@
 #include "../ChordUtilities.h"
+#include "../DeviceManager.h"
+#include "../GridCompiler.h"
+#include "../PresetManager.h"
+#include "../ScaleLibrary.h"
 #include "../ScaleUtilities.h"
+#include "../SettingsManager.h"
 #include "../Zone.h"
 #include "../ZoneManager.h"
-#include "../ScaleLibrary.h"
-#include "../GridCompiler.h"
-#include "../DeviceManager.h"
-#include "../PresetManager.h"
-#include "../SettingsManager.h"
-#include <gtest/gtest.h>
 #include <algorithm>
+#include <gtest/gtest.h>
 #include <set>
 
 // C Major scale intervals
@@ -16,15 +16,17 @@ static const std::vector<int> kCMajorIntervals = {0, 2, 4, 5, 7, 9, 11};
 static const int kCenterC4 = 60;
 
 // Helper: extract pitches from ChordNote vector
-static std::vector<int> pitchesOf(const std::vector<ChordUtilities::ChordNote>& notes) {
+static std::vector<int>
+pitchesOf(const std::vector<ChordUtilities::ChordNote> &notes) {
   std::vector<int> p;
-  for (const auto& n : notes)
+  for (const auto &n : notes)
     p.push_back(n.pitch);
   return p;
 }
 
 // Helper: assert sorted and in MIDI range
-static void expectValidSortedChord(const std::vector<int>& pitches, size_t minSize = 1) {
+static void expectValidSortedChord(const std::vector<int> &pitches,
+                                   size_t minSize = 1) {
   ASSERT_GE(pitches.size(), minSize);
   for (int midi : pitches) {
     EXPECT_GE(midi, 0);
@@ -73,7 +75,8 @@ TEST(ChordUtilitiesPiano, BlockTriad_Degree1_DReturnsCorrectPitches) {
   EXPECT_EQ(pitches[2], 69);
 }
 
-// --- Piano: Close (Smart Flow - Gravity Well for triads, Alternating Grip for 7th) ---
+// --- Piano: Close (Smart Flow - Gravity Well for triads, Alternating Grip for
+// 7th) ---
 TEST(ChordUtilitiesPiano, CloseTriad_ReturnsThreeNotesClustered) {
   auto notes = ChordUtilities::generateChordForPiano(
       kCenterC4, kCMajorIntervals, 0, ChordUtilities::ChordType::Triad,
@@ -81,14 +84,15 @@ TEST(ChordUtilitiesPiano, CloseTriad_ReturnsThreeNotesClustered) {
   auto pitches = pitchesOf(notes);
   expectValidSortedChord(pitches, 3u);
   EXPECT_EQ(pitches.size(), 3u);
-  // Gravity Well keeps notes near center 60; should still be C E G (possibly different octave)
+  // Gravity Well keeps notes near center 60; should still be C E G (possibly
+  // different octave)
   std::set<int> pitchClasses;
   for (int p : pitches)
     pitchClasses.insert(p % 12);
   EXPECT_EQ(pitchClasses.size(), 3u);
-  EXPECT_TRUE(pitchClasses.count(0));  // C
-  EXPECT_TRUE(pitchClasses.count(4));  // E
-  EXPECT_TRUE(pitchClasses.count(7));  // G
+  EXPECT_TRUE(pitchClasses.count(0)); // C
+  EXPECT_TRUE(pitchClasses.count(4)); // E
+  EXPECT_TRUE(pitchClasses.count(7)); // G
 }
 
 TEST(ChordUtilitiesPiano, CloseSeventh_Degree0_Odd_UsesRootPosition) {
@@ -159,8 +163,47 @@ TEST(ChordUtilitiesPiano, BlockNone_ReturnsSingleNote) {
   EXPECT_EQ(notes[0].pitch, 60);
 }
 
+// --- Piano: Magnet (center offset for Close/Open voicing) ---
+TEST(ChordUtilitiesPiano, CloseTriad_Magnet0_MatchesExplicitZero) {
+  auto notesDefault = ChordUtilities::generateChordForPiano(
+      kCenterC4, kCMajorIntervals, 0, ChordUtilities::ChordType::Triad,
+      ChordUtilities::PianoVoicingStyle::Close, true);
+  auto notesExplicit0 = ChordUtilities::generateChordForPiano(
+      kCenterC4, kCMajorIntervals, 0, ChordUtilities::ChordType::Triad,
+      ChordUtilities::PianoVoicingStyle::Close, true, 0);
+  auto pit0 = pitchesOf(notesDefault);
+  auto pit1 = pitchesOf(notesExplicit0);
+  ASSERT_EQ(pit0.size(), pit1.size());
+  for (size_t i = 0; i < pit0.size(); ++i)
+    EXPECT_EQ(pit0[i], pit1[i]) << "magnet 0 must match current voicing";
+}
+
+TEST(ChordUtilitiesPiano, CloseTriad_MagnetPlus1_ValidChord) {
+  auto notes = ChordUtilities::generateChordForPiano(
+      kCenterC4, kCMajorIntervals, 0, ChordUtilities::ChordType::Triad,
+      ChordUtilities::PianoVoicingStyle::Close, true, 1);
+  auto pitches = pitchesOf(notes);
+  expectValidSortedChord(pitches, 3u);
+  std::set<int> pc;
+  for (int p : pitches)
+    pc.insert(p % 12);
+  EXPECT_TRUE(pc.count(0));
+  EXPECT_TRUE(pc.count(4));
+  EXPECT_TRUE(pc.count(7));
+}
+
+TEST(ChordUtilitiesPiano, CloseTriad_MagnetClampedToRange) {
+  auto notes = ChordUtilities::generateChordForPiano(
+      kCenterC4, kCMajorIntervals, 0, ChordUtilities::ChordType::Triad,
+      ChordUtilities::PianoVoicingStyle::Close, true, 10);
+  auto pitches = pitchesOf(notes);
+  expectValidSortedChord(pitches, 3u);
+  EXPECT_EQ(pitches.size(), 3u);
+}
+
 // --- Guitar: Campfire (frets 0-4) ---
-// Not all chord tones may fit in a narrow fret window; we get as many as playable.
+// Not all chord tones may fit in a narrow fret window; we get as many as
+// playable.
 TEST(ChordUtilitiesGuitar, CampfireTriad_ReturnsNotesInFretRange) {
   auto notes = ChordUtilities::generateChordForGuitar(
       kCenterC4, kCMajorIntervals, 0, ChordUtilities::ChordType::Triad, 0, 4);
@@ -187,8 +230,8 @@ TEST(ChordUtilitiesGuitar, CampfireSeventh_ReturnsNotesInFretRange) {
 TEST(ChordUtilitiesGuitar, RhythmTriad_ReturnsNotesInCapoRange) {
   int fretMin = 5, fretMax = 8;
   auto notes = ChordUtilities::generateChordForGuitar(
-      kCenterC4, kCMajorIntervals, 0, ChordUtilities::ChordType::Triad,
-      fretMin, fretMax);
+      kCenterC4, kCMajorIntervals, 0, ChordUtilities::ChordType::Triad, fretMin,
+      fretMax);
   auto pitches = pitchesOf(notes);
   expectValidSortedChord(pitches, 1u);
   EXPECT_GE(pitches.size(), 1u);
@@ -210,8 +253,8 @@ TEST(ChordUtilitiesGuitar, RhythmSeventh_Degree2_ReturnsValidVoicing) {
 
 // --- Guitar: Bass isolation (root on A string -> no low E) ---
 TEST(ChordUtilitiesGuitar, CampfireTriadDegree0_RootOnA_NoLowE) {
-  // Root note 48 (C3): root=48 on A string fret 3 in Campfire. Root on string 1 (A) -> mute string 0 (E).
-  // So lowest note should be >= 45 (A open).
+  // Root note 48 (C3): root=48 on A string fret 3 in Campfire. Root on string 1
+  // (A) -> mute string 0 (E). So lowest note should be >= 45 (A open).
   const int rootC3 = 48;
   auto notes = ChordUtilities::generateChordForGuitar(
       rootC3, kCMajorIntervals, 0, ChordUtilities::ChordType::Triad, 0, 4);
@@ -241,12 +284,13 @@ TEST(ChordUtilitiesZoneIntegration, PianoClose_Triad_CompilesToChordPool) {
   zone->pianoVoicingStyle = Zone::PianoVoicingStyle::Close;
   zoneMgr.addZone(zone);
 
-  auto context = GridCompiler::compile(presetMgr, deviceMgr, zoneMgr, settingsMgr);
-  const auto& slot = (*context->globalGrids[0])[81];
+  auto context =
+      GridCompiler::compile(presetMgr, deviceMgr, zoneMgr, settingsMgr);
+  const auto &slot = (*context->globalGrids[0])[81];
   ASSERT_TRUE(slot.isActive);
   ASSERT_GE(slot.chordIndex, 0);
   ASSERT_LT(static_cast<size_t>(slot.chordIndex), context->chordPool.size());
-  const auto& chord = context->chordPool[static_cast<size_t>(slot.chordIndex)];
+  const auto &chord = context->chordPool[static_cast<size_t>(slot.chordIndex)];
   EXPECT_EQ(chord.size(), 3u);
 }
 
@@ -271,11 +315,12 @@ TEST(ChordUtilitiesZoneIntegration, PianoOpen_Seventh_CompilesToChordPool) {
   zone->pianoVoicingStyle = Zone::PianoVoicingStyle::Open;
   zoneMgr.addZone(zone);
 
-  auto context = GridCompiler::compile(presetMgr, deviceMgr, zoneMgr, settingsMgr);
-  const auto& slot = (*context->globalGrids[0])[81];
+  auto context =
+      GridCompiler::compile(presetMgr, deviceMgr, zoneMgr, settingsMgr);
+  const auto &slot = (*context->globalGrids[0])[81];
   ASSERT_TRUE(slot.isActive);
   ASSERT_GE(slot.chordIndex, 0);
-  const auto& chord = context->chordPool[static_cast<size_t>(slot.chordIndex)];
+  const auto &chord = context->chordPool[static_cast<size_t>(slot.chordIndex)];
   EXPECT_EQ(chord.size(), 4u);
 }
 
@@ -300,17 +345,19 @@ TEST(ChordUtilitiesZoneIntegration, GuitarCampfire_Triad_CompilesToChordPool) {
   zone->guitarPlayerPosition = Zone::GuitarPlayerPosition::Campfire;
   zoneMgr.addZone(zone);
 
-  auto context = GridCompiler::compile(presetMgr, deviceMgr, zoneMgr, settingsMgr);
-  const auto& slot = (*context->globalGrids[0])[81];
+  auto context =
+      GridCompiler::compile(presetMgr, deviceMgr, zoneMgr, settingsMgr);
+  const auto &slot = (*context->globalGrids[0])[81];
   ASSERT_TRUE(slot.isActive);
   ASSERT_GE(slot.chordIndex, 0);
-  const auto& chord = context->chordPool[static_cast<size_t>(slot.chordIndex)];
+  const auto &chord = context->chordPool[static_cast<size_t>(slot.chordIndex)];
   EXPECT_GE(chord.size(), 1u);
   EXPECT_LE(chord.size(), 6u);
 }
 
 // --- Zone integration: Guitar Rhythm (Virtual Capo) compiles ---
-TEST(ChordUtilitiesZoneIntegration, GuitarRhythm_VirtualCapo_CompilesToChordPool) {
+TEST(ChordUtilitiesZoneIntegration,
+     GuitarRhythm_VirtualCapo_CompilesToChordPool) {
   ScaleLibrary scaleLib;
   ZoneManager zoneMgr(scaleLib);
   PresetManager presetMgr;
@@ -331,11 +378,12 @@ TEST(ChordUtilitiesZoneIntegration, GuitarRhythm_VirtualCapo_CompilesToChordPool
   zone->guitarFretAnchor = 5;
   zoneMgr.addZone(zone);
 
-  auto context = GridCompiler::compile(presetMgr, deviceMgr, zoneMgr, settingsMgr);
-  const auto& slot = (*context->globalGrids[0])[81];
+  auto context =
+      GridCompiler::compile(presetMgr, deviceMgr, zoneMgr, settingsMgr);
+  const auto &slot = (*context->globalGrids[0])[81];
   ASSERT_TRUE(slot.isActive);
   ASSERT_GE(slot.chordIndex, 0);
-  const auto& chord = context->chordPool[static_cast<size_t>(slot.chordIndex)];
+  const auto &chord = context->chordPool[static_cast<size_t>(slot.chordIndex)];
   EXPECT_GE(chord.size(), 1u);
   EXPECT_LE(chord.size(), 6u);
 }

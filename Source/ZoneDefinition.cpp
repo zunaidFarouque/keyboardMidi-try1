@@ -41,6 +41,10 @@ static bool polyAndChordOn(const Zone *z) { return polyOnly(z) && chordOn(z); }
 static bool polyAndChordOnPiano(const Zone *z) {
   return polyAndChordOn(z) && pianoOnly(z);
 }
+static bool pianoCloseOrOpenOnly(const Zone *z) {
+  return polyAndChordOnPiano(z) &&
+         z->pianoVoicingStyle != Zone::PianoVoicingStyle::Block;
+}
 static bool polyAndChordOnGuitar(const Zone *z) {
   return polyAndChordOn(z) && guitarOnly(z);
 }
@@ -358,6 +362,19 @@ ZoneSchema ZoneDefinition::getSchema(const Zone *zone) {
     c.options[3] = "Open (Cinematic)";
     c.affectsCache = true;
     c.visible = polyAndChordOnPiano;
+    schema.push_back(c);
+  }
+  {
+    ZoneControl c;
+    c.controlType = ZoneControl::Type::Slider;
+    c.label = "Magnet";
+    c.propertyKey = "voicingMagnetSemitones";
+    c.min = -6;
+    c.max = 6;
+    c.step = 1;
+    c.suffix = " (0=root)";
+    c.affectsCache = true;
+    c.visible = pianoCloseOrOpenOnly;
     schema.push_back(c);
   }
   {

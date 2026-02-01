@@ -75,6 +75,8 @@ public:
   int bassOctaveOffset = -1; // Octave offset for bass note (-3 to -1)
   InstrumentMode instrumentMode = InstrumentMode::Piano;
   PianoVoicingStyle pianoVoicingStyle = PianoVoicingStyle::Close;
+  int voicingMagnetSemitones =
+      0; // Piano Close/Open: center offset -6..+6. 0 = root as center.
   GuitarPlayerPosition guitarPlayerPosition = GuitarPlayerPosition::Campfire;
   int guitarFretAnchor = 5; // Fret anchor for Rhythm (Virtual Capo) mode
   StrumPattern strumPattern = StrumPattern::Down;

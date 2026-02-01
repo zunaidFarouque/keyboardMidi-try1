@@ -4,7 +4,6 @@
 #include <algorithm>
 #include <sstream>
 
-
 // Helper: Convert int vector to ChordNote vector (all non-ghost)
 static std::vector<ChordUtilities::ChordNote>
 intsToChordNotes(const std::vector<int> &ints) {
@@ -265,7 +264,8 @@ std::vector<int> ChordUtilities::applySmartFlow(const std::vector<int> &notes,
 
 std::vector<ChordUtilities::ChordNote> ChordUtilities::generateChordForPiano(
     int rootNote, const std::vector<int> &scaleIntervals, int degreeIndex,
-    ChordType type, PianoVoicingStyle style, bool strictGhostHarmony) {
+    ChordType type, PianoVoicingStyle style, bool strictGhostHarmony,
+    int magnetSemitones) {
   if (type == ChordType::None) {
     int note = ScaleUtilities::calculateMidiNote(rootNote, scaleIntervals,
                                                  degreeIndex);
@@ -296,7 +296,10 @@ std::vector<ChordUtilities::ChordNote> ChordUtilities::generateChordForPiano(
     return intsToChordNotes(notes);
   }
 
-  const int centerPitch = rootNote; // Zone root as center
+  // Magnet: center of voicing = rootNote + magnetSemitones (relative, no
+  // octave). 0 = root.
+  magnetSemitones = juce::jlimit(-6, 6, magnetSemitones);
+  const int centerPitch = rootNote + magnetSemitones;
 
   if (style == PianoVoicingStyle::Block) {
     std::sort(notes.begin(), notes.end());

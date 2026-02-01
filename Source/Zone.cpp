@@ -39,7 +39,7 @@ void Zone::rebuildCache(const std::vector<int> &scaleIntervals,
         chordNotes = ChordUtilities::generateChordForPiano(
             effectiveRoot, scaleIntervals, degree, chordType,
             static_cast<ChordUtilities::PianoVoicingStyle>(pianoVoicingStyle),
-            strictGhostHarmony);
+            strictGhostHarmony, voicingMagnetSemitones);
       } else {
         int fretMin = (guitarPlayerPosition == GuitarPlayerPosition::Campfire)
                           ? 0
@@ -334,6 +334,7 @@ juce::ValueTree Zone::toValueTree() const {
   vt.setProperty("instrumentMode", static_cast<int>(instrumentMode), nullptr);
   vt.setProperty("pianoVoicingStyle", static_cast<int>(pianoVoicingStyle),
                  nullptr);
+  vt.setProperty("voicingMagnetSemitones", voicingMagnetSemitones, nullptr);
   vt.setProperty("guitarPlayerPosition", static_cast<int>(guitarPlayerPosition),
                  nullptr);
   vt.setProperty("guitarFretAnchor", guitarFretAnchor, nullptr);
@@ -468,6 +469,8 @@ std::shared_ptr<Zone> Zone::fromValueTree(const juce::ValueTree &vt) {
       juce::jlimit(0, 1, (int)vt.getProperty("instrumentMode", 0)));
   zone->pianoVoicingStyle = static_cast<PianoVoicingStyle>(
       juce::jlimit(0, 2, (int)vt.getProperty("pianoVoicingStyle", 1)));
+  zone->voicingMagnetSemitones =
+      juce::jlimit(-6, 6, (int)vt.getProperty("voicingMagnetSemitones", 0));
   zone->guitarPlayerPosition = static_cast<GuitarPlayerPosition>(
       juce::jlimit(0, 1, (int)vt.getProperty("guitarPlayerPosition", 0)));
   zone->guitarFretAnchor =

@@ -258,3 +258,27 @@ TEST(ZoneDelayRelease, DefaultIsOff) {
   auto zone = std::make_shared<Zone>();
   EXPECT_FALSE(zone->delayReleaseOn);
 }
+
+// --- Voicing magnet (Piano Close/Open: center offset -6..+6) ---
+TEST(ZoneVoicingMagnet, SerializationRoundTrip) {
+  auto zone = std::make_shared<Zone>();
+  zone->voicingMagnetSemitones = 3;
+  juce::ValueTree vt = zone->toValueTree();
+  auto loaded = Zone::fromValueTree(vt);
+  ASSERT_NE(loaded, nullptr);
+  EXPECT_EQ(loaded->voicingMagnetSemitones, 3);
+}
+
+TEST(ZoneVoicingMagnet, DefaultIsZero) {
+  auto zone = std::make_shared<Zone>();
+  EXPECT_EQ(zone->voicingMagnetSemitones, 0);
+}
+
+TEST(ZoneVoicingMagnet, NegativeValueRoundTrip) {
+  auto zone = std::make_shared<Zone>();
+  zone->voicingMagnetSemitones = -2;
+  juce::ValueTree vt = zone->toValueTree();
+  auto loaded = Zone::fromValueTree(vt);
+  ASSERT_NE(loaded, nullptr);
+  EXPECT_EQ(loaded->voicingMagnetSemitones, -2);
+}

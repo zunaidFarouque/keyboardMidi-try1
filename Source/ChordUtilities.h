@@ -37,9 +37,13 @@ public:
   // Generate chord using piano voicing style (Block / Close / Open).
   // Close = Smart Flow (Triad -> Gravity Well, 7th/9th -> Alternating Grip).
   // Open = Drop-2 then Smart Flow. Used at compile time only.
-  static std::vector<ChordNote> generateChordForPiano(
-      int rootNote, const std::vector<int> &scaleIntervals, int degreeIndex,
-      ChordType type, PianoVoicingStyle style, bool strictGhostHarmony = true);
+  // magnetSemitones: center offset for Close/Open (-6..+6). 0 = root as center
+  // (current).
+  static std::vector<ChordNote>
+  generateChordForPiano(int rootNote, const std::vector<int> &scaleIntervals,
+                        int degreeIndex, ChordType type,
+                        PianoVoicingStyle style, bool strictGhostHarmony = true,
+                        int magnetSemitones = 0);
 
   // Generate chord for guitar: fretboard logic in [fretMin, fretMax].
   // Campfire = 0,4; Rhythm (Virtual Capo) = guitarFretAnchor,
