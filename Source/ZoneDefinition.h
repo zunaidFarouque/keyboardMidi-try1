@@ -32,7 +32,8 @@ struct ZoneControl {
   Type controlType = Type::Slider;
   juce::Justification separatorAlign = juce::Justification::centred;
 
-  // For standard Slider/ComboBox/Toggle: which Zone member (panel maps to get/set)
+  // For standard Slider/ComboBox/Toggle: which Zone member (panel maps to
+  // get/set)
   juce::String propertyKey;
 
   // If set, only include this control when visible(z) is true
@@ -59,7 +60,11 @@ public:
   // pass their visibility predicate (if any). Order defines UI order.
   static ZoneSchema getSchema(const Zone *zone);
 
-  static ZoneControl createSeparator(
-      const juce::String &label = "",
-      juce::Justification align = juce::Justification::centred);
+  /// Returns a string that changes whenever the set of visible controls would
+  /// change.
+  static juce::String getSchemaSignature(const Zone *zone);
+
+  static ZoneControl
+  createSeparator(const juce::String &label = "",
+                  juce::Justification align = juce::Justification::centred);
 };

@@ -90,7 +90,8 @@ void ZonePropertiesPanel::SeparatorComponent::paint(juce::Graphics &g) {
   g.drawText(labelText, textLeft, bounds.getY(), textBlockWidth,
              bounds.getHeight(), textAlign, true);
   if (textLeft - pad > bounds.getX())
-    g.fillRect(bounds.getX(), lineY, textLeft - pad - bounds.getX(), lineHeight);
+    g.fillRect(bounds.getX(), lineY, textLeft - pad - bounds.getX(),
+               lineHeight);
   if (textRight + pad < bounds.getRight())
     g.fillRect(textRight + pad, lineY, bounds.getRight() - (textRight + pad),
                lineHeight);
@@ -155,6 +156,7 @@ void ZonePropertiesPanel::rebuildUI() {
   uiRows.clear();
 
   if (!currentZone) {
+    lastSchemaSignature_.clear();
     resized();
     if (onAfterRebuild)
       onAfterRebuild();
@@ -162,13 +164,14 @@ void ZonePropertiesPanel::rebuildUI() {
   }
 
   ZoneSchema schema = ZoneDefinition::getSchema(currentZone.get());
+  lastSchemaSignature_ = ZoneDefinition::getSchemaSignature(currentZone.get());
   for (const auto &def : schema) {
     if (def.controlType == ZoneControl::Type::Separator) {
       UiRow row;
       row.isSeparatorRow = true;
       row.isChipListRow = false;
-      auto sep = std::make_unique<SeparatorComponent>(def.label,
-                                                       def.separatorAlign);
+      auto sep =
+          std::make_unique<SeparatorComponent>(def.label, def.separatorAlign);
       addAndMakeVisible(*sep);
       row.items.push_back({std::move(sep), 1.0f, false});
       uiRows.push_back(std::move(row));
@@ -223,20 +226,28 @@ void ZonePropertiesPanel::createControl(const ZoneControl &def,
   Zone *zone = currentZone.get();
   const bool affectsCache = def.affectsCache;
   auto addItem = [this, &currentRow](std::unique_ptr<juce::Component> comp,
-                                    float weight, bool isAuto = false) {
+                                     float weight, bool isAuto = false) {
     if (!comp)
       return;
     addAndMakeVisible(*comp);
     currentRow.items.push_back({std::move(comp), weight, isAuto});
   };
 
-  auto rebuildIfNeeded = [this, affectsCache]() {
+  auto rebuildIfNeeded = [this, affectsCache, zone]() {
     if (affectsCache && zoneManager && scaleLibrary)
       rebuildZoneCache();
     if (zoneManager)
       zoneManager->sendChangeMessage();
     if (onResizeRequested)
       onResizeRequested();
+    // If visibility of controls would change (e.g. chord type on/off), rebuild
+    // UI
+    if (currentZone && zoneManager && currentZone.get() == zone) {
+      juce::String sig = ZoneDefinition::getSchemaSignature(currentZone.get());
+      if (sig != lastSchemaSignature_) {
+        juce::MessageManager::callAsync([this]() { rebuildUI(); });
+      }
+    }
   };
 
   switch (def.controlType) {
@@ -257,18 +268,20 @@ void ZonePropertiesPanel::createControl(const ZoneControl &def,
     if (def.propertyKey == "chromaticOffset") {
       sl->textFromValueFunction = [](double v) {
         int i = static_cast<int>(v);
-        if (i == 0) return juce::String("0");
+        if (i == 0)
+          return juce::String("0");
         return i > 0 ? juce::String("+") + juce::String(i) + "st"
                      : juce::String(i) + "st";
       };
     }
-    if (def.propertyKey == "degreeOffset" || def.propertyKey == "gridInterval" ||
+    if (def.propertyKey == "degreeOffset" ||
+        def.propertyKey == "gridInterval" ||
         def.propertyKey == "globalRootOctaveOffset") {
       sl->textFromValueFunction = [](double v) {
         int i = static_cast<int>(v);
-        if (i == 0) return juce::String("0");
-        return i > 0 ? juce::String("+") + juce::String(i)
-                     : juce::String(i);
+        if (i == 0)
+          return juce::String("0");
+        return i > 0 ? juce::String("+") + juce::String(i) : juce::String(i);
       };
     }
 
@@ -285,7 +298,8 @@ void ZonePropertiesPanel::createControl(const ZoneControl &def,
     else if (def.propertyKey == "velocityRandom")
       sl->setValue(zone->velocityRandom, juce::dontSendNotification);
     else if (def.propertyKey == "ghostVelocityScale")
-      sl->setValue(zone->ghostVelocityScale * 100.0, juce::dontSendNotification);
+      sl->setValue(zone->ghostVelocityScale * 100.0,
+                   juce::dontSendNotification);
     else if (def.propertyKey == "bassOctaveOffset")
       sl->setValue(zone->bassOctaveOffset, juce::dontSendNotification);
     else if (def.propertyKey == "glideTimeMs")
@@ -312,7 +326,8 @@ void ZonePropertiesPanel::createControl(const ZoneControl &def,
 
     juce::Slider *slPtr = sl.get();
     sl->onValueChange = [this, zone, slPtr, def, rebuildIfNeeded]() {
-      if (!currentZone || currentZone.get() != zone) return;
+      if (!currentZone || currentZone.get() != zone)
+        return;
       double v = slPtr->getValue();
       if (def.propertyKey == "rootNote")
         zone->rootNote = static_cast<int>(v);
@@ -366,107 +381,118 @@ void ZonePropertiesPanel::createControl(const ZoneControl &def,
         cb->setSelectedId(zone->showRomanNumerals ? 2 : 1,
                           juce::dontSendNotification);
       else if (def.propertyKey == "polyphonyMode") {
-        int id = (zone->polyphonyMode == PolyphonyMode::Poly) ? 1
-                 : (zone->polyphonyMode == PolyphonyMode::Mono) ? 2 : 3;
+        int id = (zone->polyphonyMode == PolyphonyMode::Poly)   ? 1
+                 : (zone->polyphonyMode == PolyphonyMode::Mono) ? 2
+                                                                : 3;
         cb->setSelectedId(id, juce::dontSendNotification);
       } else if (def.propertyKey == "instrumentMode")
-        cb->setSelectedId(zone->instrumentMode == Zone::InstrumentMode::Piano
-                              ? 1 : 2,
-                          juce::dontSendNotification);
+        cb->setSelectedId(
+            zone->instrumentMode == Zone::InstrumentMode::Piano ? 1 : 2,
+            juce::dontSendNotification);
       else if (def.propertyKey == "pianoVoicingStyle") {
         int id = (zone->pianoVoicingStyle == Zone::PianoVoicingStyle::Block) ? 1
                  : (zone->pianoVoicingStyle == Zone::PianoVoicingStyle::Close)
-                     ? 2 : 3;
+                     ? 2
+                     : 3;
         cb->setSelectedId(id, juce::dontSendNotification);
       } else if (def.propertyKey == "guitarPlayerPosition")
         cb->setSelectedId(zone->guitarPlayerPosition ==
                                   Zone::GuitarPlayerPosition::Campfire
-                              ? 1 : 2,
+                              ? 1
+                              : 2,
                           juce::dontSendNotification);
       else if (def.propertyKey == "strumPattern") {
         int id = (zone->strumPattern == Zone::StrumPattern::Down) ? 1
-                 : (zone->strumPattern == Zone::StrumPattern::Up) ? 2 : 3;
+                 : (zone->strumPattern == Zone::StrumPattern::Up) ? 2
+                                                                  : 3;
         cb->setSelectedId(id, juce::dontSendNotification);
       } else if (def.propertyKey == "chordType") {
         int id = 1;
-        if (zone->chordType == ChordUtilities::ChordType::Triad) id = 2;
-        else if (zone->chordType == ChordUtilities::ChordType::Seventh) id = 3;
-        else if (zone->chordType == ChordUtilities::ChordType::Ninth) id = 4;
-        else if (zone->chordType == ChordUtilities::ChordType::Power5) id = 5;
+        if (zone->chordType == ChordUtilities::ChordType::Triad)
+          id = 2;
+        else if (zone->chordType == ChordUtilities::ChordType::Seventh)
+          id = 3;
+        else if (zone->chordType == ChordUtilities::ChordType::Ninth)
+          id = 4;
+        else if (zone->chordType == ChordUtilities::ChordType::Power5)
+          id = 5;
         cb->setSelectedId(id, juce::dontSendNotification);
       } else if (def.propertyKey == "voicing") {
         int id = 1;
-        if (zone->voicing == ChordUtilities::Voicing::Smooth) id = 2;
-        else if (zone->voicing == ChordUtilities::Voicing::GuitarSpread) id = 3;
-        else if (zone->voicing == ChordUtilities::Voicing::SmoothFilled) id = 4;
-        else if (zone->voicing == ChordUtilities::Voicing::GuitarFilled) id = 5;
+        if (zone->voicing == ChordUtilities::Voicing::Smooth)
+          id = 2;
+        else if (zone->voicing == ChordUtilities::Voicing::GuitarSpread)
+          id = 3;
+        else if (zone->voicing == ChordUtilities::Voicing::SmoothFilled)
+          id = 4;
+        else if (zone->voicing == ChordUtilities::Voicing::GuitarFilled)
+          id = 5;
         cb->setSelectedId(id, juce::dontSendNotification);
       } else if (def.propertyKey == "playMode")
         cb->setSelectedId(zone->playMode == Zone::PlayMode::Direct ? 1 : 2,
-                         juce::dontSendNotification);
+                          juce::dontSendNotification);
       else if (def.propertyKey == "releaseBehavior")
-        cb->setSelectedId(zone->releaseBehavior == Zone::ReleaseBehavior::Normal
-                             ? 1 : 2,
-                         juce::dontSendNotification);
+        cb->setSelectedId(
+            zone->releaseBehavior == Zone::ReleaseBehavior::Normal ? 1 : 2,
+            juce::dontSendNotification);
       else if (def.propertyKey == "layoutStrategy") {
         int id = (zone->layoutStrategy == Zone::LayoutStrategy::Linear) ? 1
-                 : (zone->layoutStrategy == Zone::LayoutStrategy::Grid) ? 2 : 3;
+                 : (zone->layoutStrategy == Zone::LayoutStrategy::Grid) ? 2
+                                                                        : 3;
         cb->setSelectedId(id, juce::dontSendNotification);
       }
     };
     setComboFromZone();
 
     juce::ComboBox *cbPtr = cb.get();
-    cb->onChange = [this, zone, cbPtr, def, rebuildIfNeeded, setComboFromZone]() {
-      if (!currentZone || currentZone.get() != zone) return;
+    cb->onChange = [this, zone, cbPtr, def, rebuildIfNeeded,
+                    setComboFromZone]() {
+      if (!currentZone || currentZone.get() != zone)
+        return;
       int id = cbPtr->getSelectedId();
       if (def.propertyKey == "showRomanNumerals") {
         zone->showRomanNumerals = (id == 2);
       } else if (def.propertyKey == "polyphonyMode") {
-        zone->polyphonyMode = (id == 1) ? PolyphonyMode::Poly
+        zone->polyphonyMode = (id == 1)   ? PolyphonyMode::Poly
                               : (id == 2) ? PolyphonyMode::Mono
                                           : PolyphonyMode::Legato;
-        juce::MessageManager::callAsync([this]() { rebuildUI(); });
       } else if (def.propertyKey == "instrumentMode") {
         zone->instrumentMode = (id == 1) ? Zone::InstrumentMode::Piano
                                          : Zone::InstrumentMode::Guitar;
-        juce::MessageManager::callAsync([this]() { rebuildUI(); });
       } else if (def.propertyKey == "pianoVoicingStyle") {
-        zone->pianoVoicingStyle = (id == 1) ? Zone::PianoVoicingStyle::Block
-                                 : (id == 2) ? Zone::PianoVoicingStyle::Close
-                                             : Zone::PianoVoicingStyle::Open;
+        zone->pianoVoicingStyle = (id == 1)   ? Zone::PianoVoicingStyle::Block
+                                  : (id == 2) ? Zone::PianoVoicingStyle::Close
+                                              : Zone::PianoVoicingStyle::Open;
       } else if (def.propertyKey == "guitarPlayerPosition") {
-        zone->guitarPlayerPosition =
-            (id == 1) ? Zone::GuitarPlayerPosition::Campfire
-                      : Zone::GuitarPlayerPosition::Rhythm;
-        juce::MessageManager::callAsync([this]() { rebuildUI(); });
+        zone->guitarPlayerPosition = (id == 1)
+                                         ? Zone::GuitarPlayerPosition::Campfire
+                                         : Zone::GuitarPlayerPosition::Rhythm;
       } else if (def.propertyKey == "strumPattern") {
-        zone->strumPattern = (id == 1) ? Zone::StrumPattern::Down
-                            : (id == 2) ? Zone::StrumPattern::Up
-                                        : Zone::StrumPattern::AutoAlternating;
+        zone->strumPattern = (id == 1)   ? Zone::StrumPattern::Down
+                             : (id == 2) ? Zone::StrumPattern::Up
+                                         : Zone::StrumPattern::AutoAlternating;
       } else if (def.propertyKey == "chordType") {
-        zone->chordType = (id == 1) ? ChordUtilities::ChordType::None
-                         : (id == 2) ? ChordUtilities::ChordType::Triad
-                         : (id == 3) ? ChordUtilities::ChordType::Seventh
-                         : (id == 4) ? ChordUtilities::ChordType::Ninth
-                                    : ChordUtilities::ChordType::Power5;
+        zone->chordType = (id == 1)   ? ChordUtilities::ChordType::None
+                          : (id == 2) ? ChordUtilities::ChordType::Triad
+                          : (id == 3) ? ChordUtilities::ChordType::Seventh
+                          : (id == 4) ? ChordUtilities::ChordType::Ninth
+                                      : ChordUtilities::ChordType::Power5;
       } else if (def.propertyKey == "voicing") {
-        zone->voicing = (id == 1) ? ChordUtilities::Voicing::RootPosition
-                       : (id == 2) ? ChordUtilities::Voicing::Smooth
-                       : (id == 3) ? ChordUtilities::Voicing::GuitarSpread
-                       : (id == 4) ? ChordUtilities::Voicing::SmoothFilled
-                                  : ChordUtilities::Voicing::GuitarFilled;
+        zone->voicing = (id == 1)   ? ChordUtilities::Voicing::RootPosition
+                        : (id == 2) ? ChordUtilities::Voicing::Smooth
+                        : (id == 3) ? ChordUtilities::Voicing::GuitarSpread
+                        : (id == 4) ? ChordUtilities::Voicing::SmoothFilled
+                                    : ChordUtilities::Voicing::GuitarFilled;
       } else if (def.propertyKey == "playMode") {
-        zone->playMode = (id == 1) ? Zone::PlayMode::Direct
-                                    : Zone::PlayMode::Strum;
+        zone->playMode =
+            (id == 1) ? Zone::PlayMode::Direct : Zone::PlayMode::Strum;
       } else if (def.propertyKey == "releaseBehavior") {
         zone->releaseBehavior = (id == 1) ? Zone::ReleaseBehavior::Normal
-                                         : Zone::ReleaseBehavior::Sustain;
+                                          : Zone::ReleaseBehavior::Sustain;
       } else if (def.propertyKey == "layoutStrategy") {
-        zone->layoutStrategy = (id == 1) ? Zone::LayoutStrategy::Linear
+        zone->layoutStrategy = (id == 1)   ? Zone::LayoutStrategy::Linear
                                : (id == 2) ? Zone::LayoutStrategy::Grid
                                            : Zone::LayoutStrategy::Piano;
-        juce::MessageManager::callAsync([this]() { rebuildUI(); });
       }
       rebuildIfNeeded();
     };
@@ -510,7 +536,8 @@ void ZonePropertiesPanel::createControl(const ZoneControl &def,
 
     juce::ToggleButton *tbPtr = tb.get();
     tb->onClick = [this, zone, tbPtr, def, rebuildIfNeeded]() {
-      if (!currentZone || currentZone.get() != zone) return;
+      if (!currentZone || currentZone.get() != zone)
+        return;
       bool v = tbPtr->getToggleState();
       if (def.propertyKey == "useGlobalRoot")
         zone->useGlobalRoot = v;
@@ -522,18 +549,14 @@ void ZonePropertiesPanel::createControl(const ZoneControl &def,
         zone->allowSustain = v;
       else if (def.propertyKey == "strictGhostHarmony")
         zone->strictGhostHarmony = v;
-      else if (def.propertyKey == "addBassNote") {
+      else if (def.propertyKey == "addBassNote")
         zone->addBassNote = v;
-        juce::MessageManager::callAsync([this]() { rebuildUI(); });
-      }
       else if (def.propertyKey == "isAdaptiveGlide")
         zone->isAdaptiveGlide = v;
       else if (def.propertyKey == "humanize")
         zone->humanize = v;
       else if (def.propertyKey == "strumGhostNotes")
         zone->strumGhostNotes = v;
-      if (def.propertyKey == "useGlobalRoot" || def.propertyKey == "useGlobalScale")
-        juce::MessageManager::callAsync([this]() { rebuildUI(); });
       rebuildIfNeeded();
     };
 
@@ -578,7 +601,8 @@ void ZonePropertiesPanel::createAliasRow() {
   if (currentZone && currentZone->targetAliasHash == 0)
     aliasCombo->setSelectedItemIndex(0, juce::dontSendNotification);
   else if (currentZone && deviceManager) {
-    juce::String name = deviceManager->getAliasName(currentZone->targetAliasHash);
+    juce::String name =
+        deviceManager->getAliasName(currentZone->targetAliasHash);
     for (int i = 0; i < aliasCombo->getNumItems(); ++i) {
       if (aliasCombo->getItemText(i) == name) {
         aliasCombo->setSelectedItemIndex(i, juce::dontSendNotification);
@@ -589,7 +613,8 @@ void ZonePropertiesPanel::createAliasRow() {
 
   juce::ComboBox *cbPtr = aliasCombo.get();
   aliasCombo->onChange = [this, cbPtr]() {
-    if (!currentZone || !deviceManager) return;
+    if (!currentZone || !deviceManager)
+      return;
     int idx = cbPtr->getSelectedItemIndex();
     if (idx >= 0) {
       juce::String name = cbPtr->getItemText(idx);
@@ -624,11 +649,12 @@ void ZonePropertiesPanel::createLayerRow() {
         i + 1);
   if (currentZone)
     layerCombo->setSelectedId(currentZone->layerID + 1,
-                               juce::dontSendNotification);
+                              juce::dontSendNotification);
 
   juce::ComboBox *cbPtr = layerCombo.get();
   layerCombo->onChange = [this, cbPtr]() {
-    if (!currentZone || !zoneManager) return;
+    if (!currentZone || !zoneManager)
+      return;
     int id = cbPtr->getSelectedId() - 1;
     if (id >= 0 && id <= 8) {
       currentZone->layerID = id;
@@ -699,7 +725,8 @@ void ZonePropertiesPanel::createScaleRow() {
 
   auto editBtn = std::make_unique<juce::TextButton>("Edit...");
   editBtn->onClick = [this]() {
-    if (!scaleLibrary) return;
+    if (!scaleLibrary)
+      return;
     auto *editor = new ScaleEditorComponent(scaleLibrary);
     editor->setSize(600, 400);
     juce::DialogWindow::LaunchOptions opts;
@@ -718,7 +745,8 @@ void ZonePropertiesPanel::createScaleRow() {
   juce::ComboBox *scalePtr = scaleCombo.get();
   juce::ToggleButton *globalPtr = globalToggle.get();
   scaleCombo->onChange = [this, scalePtr]() {
-    if (!currentZone || !scaleLibrary) return;
+    if (!currentZone || !scaleLibrary)
+      return;
     int idx = scalePtr->getSelectedItemIndex();
     if (idx >= 0) {
       currentZone->scaleName = scalePtr->getItemText(idx);
@@ -726,11 +754,16 @@ void ZonePropertiesPanel::createScaleRow() {
     }
   };
   globalToggle->onClick = [this, globalPtr, scalePtr]() {
-    if (!currentZone || !zoneManager) return;
+    if (!currentZone || !zoneManager)
+      return;
     currentZone->useGlobalScale = globalPtr->getToggleState();
     scalePtr->setEnabled(!currentZone->useGlobalScale);
     rebuildZoneCache();
-    juce::MessageManager::callAsync([this]() { rebuildUI(); });
+    if (zoneManager) {
+      juce::String sig = ZoneDefinition::getSchemaSignature(currentZone.get());
+      if (sig != lastSchemaSignature_)
+        juce::MessageManager::callAsync([this]() { rebuildUI(); });
+    }
   };
 
   auto rowComp = std::make_unique<LabelEditorRow>();
@@ -791,14 +824,16 @@ void ZonePropertiesPanel::createChipListRow() {
   if (currentZone)
     chipList->setKeys(currentZone->inputKeyCodes);
   chipList->onKeyRemoved = [this](int keyCode) {
-    if (!currentZone || !scaleLibrary || !zoneManager) return;
+    if (!currentZone || !scaleLibrary || !zoneManager)
+      return;
     currentZone->removeKey(keyCode);
     if (chipListRef)
       chipListRef->setKeys(currentZone->inputKeyCodes);
     rebuildZoneCache();
     zoneManager->rebuildLookupTable();
     zoneManager->sendChangeMessage();
-    if (onResizeRequested) onResizeRequested();
+    if (onResizeRequested)
+      onResizeRequested();
   };
   chipListRef = chipList.get();
 
@@ -819,10 +854,11 @@ void ZonePropertiesPanel::createColorRow() {
   auto colorBtn = std::make_unique<juce::TextButton>("Color");
   if (currentZone)
     colorBtn->setColour(juce::TextButton::buttonColourId,
-                       currentZone->zoneColor);
+                        currentZone->zoneColor);
   juce::TextButton *btnPtr = colorBtn.get();
   colorBtn->onClick = [this, btnPtr]() {
-    if (!currentZone) return;
+    if (!currentZone)
+      return;
     int flags = juce::ColourSelector::showColourspace |
                 juce::ColourSelector::showSliders |
                 juce::ColourSelector::showColourAtTop;
@@ -840,7 +876,8 @@ void ZonePropertiesPanel::createColorRow() {
           zone->zoneColor = selector->getCurrentColour();
           button->setColour(juce::TextButton::buttonColourId, zone->zoneColor);
           button->repaint();
-          if (zoneMgr) zoneMgr->sendChangeMessage();
+          if (zoneMgr)
+            zoneMgr->sendChangeMessage();
         }
       }
       Zone *zone;
@@ -850,8 +887,7 @@ void ZonePropertiesPanel::createColorRow() {
     auto *listener = new ColorListener(currentZone.get(), zoneManager, btnPtr);
     sel->addChangeListener(listener);
     juce::CallOutBox::launchAsynchronously(
-        std::unique_ptr<juce::Component>(sel),
-        btnPtr->getScreenBounds(), this);
+        std::unique_ptr<juce::Component>(sel), btnPtr->getScreenBounds(), this);
   };
 
   rowComp->editor = std::move(colorBtn);
@@ -873,7 +909,8 @@ void ZonePropertiesPanel::resized() {
 
   for (size_t rowIdx = 0; rowIdx < uiRows.size(); ++rowIdx) {
     auto &row = uiRows[rowIdx];
-    if (row.items.empty()) continue;
+    if (row.items.empty())
+      continue;
 
     if (row.isSeparatorRow)
       y += extraSeparatorMargin;
@@ -944,7 +981,8 @@ int ZonePropertiesPanel::getRequiredHeight() const {
 }
 
 void ZonePropertiesPanel::rebuildZoneCache() {
-  if (!currentZone || !zoneManager || !scaleLibrary) return;
+  if (!currentZone || !zoneManager || !scaleLibrary)
+    return;
   std::vector<int> intervals;
   int root;
   if (currentZone->useGlobalScale)
@@ -968,7 +1006,8 @@ void ZonePropertiesPanel::changeListenerCallback(
 
 void ZonePropertiesPanel::handleRawKeyEvent(uintptr_t deviceHandle, int keyCode,
                                             bool isDown) {
-  if (!currentZone || !isDown) return;
+  if (!currentZone || !isDown)
+    return;
 
   if (captureKeysButtonRef && captureKeysButtonRef->getToggleState()) {
     auto &keys = currentZone->inputKeyCodes;
@@ -982,7 +1021,8 @@ void ZonePropertiesPanel::handleRawKeyEvent(uintptr_t deviceHandle, int keyCode,
           zoneManager->rebuildLookupTable();
           zoneManager->sendChangeMessage();
         }
-        if (onResizeRequested) onResizeRequested();
+        if (onResizeRequested)
+          onResizeRequested();
       });
     }
     return;
@@ -990,7 +1030,7 @@ void ZonePropertiesPanel::handleRawKeyEvent(uintptr_t deviceHandle, int keyCode,
 
   if (removeKeysButtonRef && removeKeysButtonRef->getToggleState()) {
     auto it = std::find(currentZone->inputKeyCodes.begin(),
-                       currentZone->inputKeyCodes.end(), keyCode);
+                        currentZone->inputKeyCodes.end(), keyCode);
     if (it != currentZone->inputKeyCodes.end()) {
       currentZone->removeKey(keyCode);
       juce::MessageManager::callAsync([this]() {
@@ -1001,7 +1041,8 @@ void ZonePropertiesPanel::handleRawKeyEvent(uintptr_t deviceHandle, int keyCode,
           zoneManager->rebuildLookupTable();
           zoneManager->sendChangeMessage();
         }
-        if (onResizeRequested) onResizeRequested();
+        if (onResizeRequested)
+          onResizeRequested();
       });
     }
     return;

@@ -57,8 +57,10 @@ private:
     bool isChipListRow = false; // dynamic height
   };
   std::vector<UiRow> uiRows;
+  juce::String lastSchemaSignature_;
 
-  // Refs used by handleRawKeyEvent and layout (set in rebuildUI, cleared when rebuilding)
+  // Refs used by handleRawKeyEvent and layout (set in rebuildUI, cleared when
+  // rebuilding)
   juce::ToggleButton *captureKeysButtonRef = nullptr;
   juce::ToggleButton *removeKeysButtonRef = nullptr;
   KeyChipList *chipListRef = nullptr;
