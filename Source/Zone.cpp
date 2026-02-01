@@ -324,6 +324,7 @@ juce::ValueTree Zone::toValueTree() const {
   vt.setProperty("ignoreGlobalSustain", ignoreGlobalSustain, nullptr);
   vt.setProperty("releaseBehavior", static_cast<int>(releaseBehavior), nullptr);
   vt.setProperty("delayReleaseOn", delayReleaseOn, nullptr);
+  vt.setProperty("overrideTimer", overrideTimer, nullptr);
   vt.setProperty("releaseDurationMs", releaseDurationMs, nullptr);
   vt.setProperty("baseVel", baseVelocity, nullptr);
   vt.setProperty("randVel", velocityRandom, nullptr);
@@ -433,6 +434,7 @@ std::shared_ptr<Zone> Zone::fromValueTree(const juce::ValueTree &vt) {
                      static_cast<int>(ReleaseBehavior::Normal))
           .operator int());
   zone->delayReleaseOn = vt.getProperty("delayReleaseOn", false);
+  zone->overrideTimer = vt.getProperty("overrideTimer", false);
   zone->releaseDurationMs = vt.getProperty("releaseDurationMs", 0);
   zone->baseVelocity = vt.getProperty("baseVel", 100);
   zone->velocityRandom = vt.getProperty("randVel", 0);

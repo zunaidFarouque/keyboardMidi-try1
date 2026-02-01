@@ -334,6 +334,18 @@ ZoneSchema ZoneDefinition::getSchema(const Zone *zone) {
     c.visible = releaseNormalOnly;
     schema.push_back(c);
   }
+  // Override timer checkbox (only when delay release is on)
+  {
+    ZoneControl c;
+    c.controlType = ZoneControl::Type::Toggle;
+    c.label = "Cancel previous";
+    c.propertyKey = "overrideTimer";
+    c.visible = [](const Zone *z) {
+      return z && z->releaseBehavior == Zone::ReleaseBehavior::Normal &&
+             z->delayReleaseOn;
+    };
+    schema.push_back(c);
+  }
   // Chord voicing: Instrument, Voicing Style, Add Bass (only when poly + chord)
   {
     ZoneControl c =

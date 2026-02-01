@@ -139,6 +139,9 @@ private:
   InputID lastSustainChordSource{0, -1};
   Zone *lastSustainZone = nullptr;
 
+  // Zone delayed release tracking: zone -> InputID (for override timer)
+  std::unordered_map<Zone *, InputID> zoneActiveTimers;
+
   // Current CC values for relative inputs (scroll)
   std::unordered_map<InputID, float> currentCCValues;
 

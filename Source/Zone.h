@@ -63,6 +63,8 @@ public:
       ReleaseBehavior::Normal; // How to handle key release in strum mode
   bool delayReleaseOn =
       false; // When true (Normal only), use releaseDurationMs timer on release
+  bool overrideTimer = false; // When true, new chord cancels old timer (ensures
+                              // only one timer per zone)
   int releaseDurationMs =
       0; // Delay release duration in ms (used only when delayReleaseOn is true)
   int baseVelocity = 100; // Base MIDI velocity (1-127)

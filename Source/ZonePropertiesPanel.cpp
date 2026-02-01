@@ -695,6 +695,8 @@ void ZonePropertiesPanel::createControl(const ZoneControl &def,
       tb->setToggleState(zone->isAdaptiveGlide, juce::dontSendNotification);
     else if (def.propertyKey == "strumGhostNotes")
       tb->setToggleState(zone->strumGhostNotes, juce::dontSendNotification);
+    else if (def.propertyKey == "overrideTimer")
+      tb->setToggleState(zone->overrideTimer, juce::dontSendNotification);
 
     juce::ToggleButton *tbPtr = tb.get();
     tb->onClick = [this, zone, tbPtr, def, rebuildIfNeeded]() {
@@ -715,6 +717,8 @@ void ZonePropertiesPanel::createControl(const ZoneControl &def,
         zone->isAdaptiveGlide = v;
       else if (def.propertyKey == "strumGhostNotes")
         zone->strumGhostNotes = v;
+      else if (def.propertyKey == "overrideTimer")
+        zone->overrideTimer = v;
       rebuildIfNeeded();
     };
 

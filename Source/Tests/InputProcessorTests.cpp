@@ -763,6 +763,99 @@ TEST_F(NoteTypeTest,
   EXPECT_EQ(onCount, 6u) << "Two chords: 3 note-ons (Q) + 3 note-ons (F)";
 }
 
+// Override timer: when enabled, new chord cancels old chord's timer immediately
+TEST_F(NoteTypeTest, OverrideTimer_NewChordCancelsOldTimer_OnlyOneTimerAlive) {
+  auto zone = std::make_shared<Zone>();
+  zone->name = "Override Triad";
+  zone->layerID = 0;
+  zone->targetAliasHash = 0;
+  zone->inputKeyCodes = {81, 70}; // Q and F
+  zone->chordType = ChordUtilities::ChordType::Triad;
+  zone->scaleName = "Major";
+  zone->rootNote = 60;
+  zone->playMode = Zone::PlayMode::Direct;
+  zone->releaseBehavior = Zone::ReleaseBehavior::Normal;
+  zone->delayReleaseOn = true;
+  zone->releaseDurationMs = 1000; // 1 second delay
+  zone->overrideTimer = true;     // Override enabled
+  zone->midiChannel = 1;
+  proc.getZoneManager().addZone(zone);
+  proc.forceRebuildMappings();
+  mockMidi.clear();
+
+  // Press Q -> C E G (note-on)
+  proc.processEvent(InputID{0, 81}, true);
+  ASSERT_EQ(mockMidi.events.size(), 3u);
+  for (size_t i = 0; i < 3u; ++i)
+    EXPECT_TRUE(mockMidi.events[i].isNoteOn);
+
+  // Release Q -> starts 1s timer (no immediate note-off)
+  proc.processEvent(InputID{0, 81}, false);
+  EXPECT_EQ(mockMidi.events.size(), 3u)
+      << "Delayed release: no immediate note-off";
+
+  // Press F immediately -> should cancel Q's timer and send note-off for Q,
+  // then note-on for F
+  proc.processEvent(InputID{0, 70}, true);
+  ASSERT_EQ(mockMidi.events.size(), 9u)
+      << "Override: 3 on (Q) + 3 off (Q, cancelled) + 3 on (F)";
+
+  // Verify sequence: first 3 are Q on, next 3 are Q off, last 3 are F on
+  for (size_t i = 0; i < 3u; ++i)
+    EXPECT_TRUE(mockMidi.events[i].isNoteOn) << "Q chord note-on at " << i;
+  for (size_t i = 3; i < 6u; ++i)
+    EXPECT_FALSE(mockMidi.events[i].isNoteOn)
+        << "Q chord note-off (cancelled) at " << i;
+  for (size_t i = 6; i < 9u; ++i)
+    EXPECT_TRUE(mockMidi.events[i].isNoteOn) << "F chord note-on at " << i;
+}
+
+// Override timer disabled: old timer still fires even if new chord plays
+TEST_F(NoteTypeTest, OverrideTimerOff_OldTimerStillFires_TwoTimersAlive) {
+  auto zone = std::make_shared<Zone>();
+  zone->name = "No Override Triad";
+  zone->layerID = 0;
+  zone->targetAliasHash = 0;
+  zone->inputKeyCodes = {81, 70}; // Q and F
+  zone->chordType = ChordUtilities::ChordType::Triad;
+  zone->scaleName = "Major";
+  zone->rootNote = 60;
+  zone->playMode = Zone::PlayMode::Direct;
+  zone->releaseBehavior = Zone::ReleaseBehavior::Normal;
+  zone->delayReleaseOn = true;
+  zone->releaseDurationMs = 50; // 50ms delay (short for testing)
+  zone->overrideTimer = false;  // Override disabled
+  zone->midiChannel = 1;
+  proc.getZoneManager().addZone(zone);
+  proc.forceRebuildMappings();
+  mockMidi.clear();
+
+  // Press Q -> C E G (note-on)
+  proc.processEvent(InputID{0, 81}, true);
+  ASSERT_EQ(mockMidi.events.size(), 3u);
+  for (size_t i = 0; i < 3u; ++i)
+    EXPECT_TRUE(mockMidi.events[i].isNoteOn);
+
+  // Release Q -> starts 50ms timer (no immediate note-off)
+  proc.processEvent(InputID{0, 81}, false);
+  EXPECT_EQ(mockMidi.events.size(), 3u)
+      << "Delayed release: no immediate note-off";
+
+  // Press F immediately -> note-on for F (Q's timer still alive)
+  proc.processEvent(InputID{0, 70}, true);
+  ASSERT_EQ(mockMidi.events.size(), 6u)
+      << "No override: 3 on (Q) + 3 on (F), Q timer still pending";
+
+  // Verify sequence: first 3 are Q on, last 3 are F on
+  for (size_t i = 0; i < 3u; ++i)
+    EXPECT_TRUE(mockMidi.events[i].isNoteOn) << "Q chord note-on at " << i;
+  for (size_t i = 3; i < 6u; ++i)
+    EXPECT_TRUE(mockMidi.events[i].isNoteOn) << "F chord note-on at " << i;
+  // Note: Q's timer will fire after 50ms in real execution, but we can't
+  // easily test that here without timer advancement. This test verifies that
+  // F's note-on doesn't cancel Q's timer.
+}
+
 TEST_F(NoteTypeTest, AllParamsWorkTogether) {
   proc.getZoneManager().setGlobalTranspose(1, 0);          // +1 semitone
   addNoteMapping(34, 8, 83, 90, "Send Note Off", true, 0); // B4 + 1 = C5 (84)

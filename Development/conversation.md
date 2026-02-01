@@ -455,6 +455,54 @@ If I were coding the UI, this is exactly how I would present it. It feels flexib
 
 
 
-___
-###### [top](#table-of-contents)
+## Implementation Summary (2026-02-01)
 
+### Override Timer Feature for Delayed Release
+
+**Requirement:**
+The user requested an improvement to the delayed release behavior for Normal release mode in zones. The problem was that every chord press would set its own timer, leading to old timers cutting off notes of newly played chords prematurely.
+
+**Solution:**
+Added an "override timer" option that ensures only one release timer can be active per zone at a time. When enabled and a new chord is played before the old timer expires, the old timer is immediately cancelled and the old chord's notes are turned off before the new chord plays.
+
+**Implementation Details:**
+
+1. **Zone.h / Zone.cpp:**
+   - Added `bool overrideTimer` property (default `false`)
+   - Added serialization support for the new property
+
+2. **InputProcessor.h / InputProcessor.cpp:**
+   - Added `std::unordered_map<Zone*, InputID> zoneActiveTimers` to track active timers per zone
+   - In `processZoneNote` and `processZoneChord`: When `overrideTimer` is true and a new chord is played, cancel the old timer for that zone by calling `voiceManager.cancelPendingRelease(oldInput)` and register the new input
+
+3. **VoiceManager.h / VoiceManager.cpp:**
+   - Added `void cancelPendingRelease(InputID source)` method
+   - Implementation: Removes the pending release from the map and immediately sends note-off for any voices with that source
+
+4. **ZoneDefinition.cpp:**
+   - Added a `Toggle` control for `overrideTimer` property
+   - Label: "Cancel previous"
+   - Visibility: Only shown when `releaseBehavior == Normal` and `delayReleaseOn == true`
+
+5. **ZonePropertiesPanel.cpp:**
+   - Added binding for `overrideTimer` toggle in both initialization and onClick handlers
+
+6. **Tests:**
+   - **ZoneTests.cpp:** Added serialization tests for `overrideTimer` (default, on, off)
+   - **InputProcessorTests.cpp:** Added functional tests:
+     - `OverrideTimer_NewChordCancelsOldTimer_OnlyOneTimerAlive`: Verifies that with override enabled, playing a new chord immediately cancels the old timer and sends note-off
+     - `OverrideTimerOff_OldTimerStillFires_TwoTimersAlive`: Verifies that with override disabled, old timers continue independently
+
+**UI Layout:**
+```
+Release behavior: [Normal ▼]
+Delay release: [☑] [1000 ms slider]
+Cancel previous: [☑]
+```
+
+The "Cancel previous" checkbox only appears when delayed release is enabled, keeping the UI clean and contextual.
+
+**Test Results:**
+All 108 tests pass successfully.
+
+___

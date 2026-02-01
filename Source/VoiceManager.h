@@ -27,15 +27,20 @@ public:
               const std::vector<int> &velocities, int channel, int strumSpeedMs,
               bool allowSustain = true, int releaseMs = 0,
               PolyphonyMode polyMode = PolyphonyMode::Poly,
-              int glideTimeMs = 50, int strumPattern = 0, int humanizeTimeMs = 0);
+              int glideTimeMs = 50, int strumPattern = 0,
+              int humanizeTimeMs = 0);
 
   void strumNotes(const std::vector<int> &notes, int speedMs, bool downstroke);
 
   void handleKeyUp(InputID source);
   void handleKeyUp(InputID source, int releaseDurationMs, bool shouldSustain);
 
+  // Cancel a pending delayed release for a specific source (for override timer)
+  void cancelPendingRelease(InputID source);
+
   void sendCC(int channel, int controller, int value);
-  void sendPitchBend(int channel, int value); // Phase 56.1: for Expression release
+  void sendPitchBend(int channel,
+                     int value); // Phase 56.1: for Expression release
 
   // --- Sustain (pedal) ---
   void setSustain(bool active);
@@ -69,7 +74,8 @@ private:
   void pushToMonoStack(int channel, int note, InputID source);
   void removeFromMonoStack(int channel, InputID source);
   int getMonoStackTop(int channel) const; // Returns -1 if empty
-  std::pair<int, InputID> getMonoStackTopWithSource(int channel) const; // Returns {-1, {0,0}} if empty
+  std::pair<int, InputID>
+  getMonoStackTopWithSource(int channel) const; // Returns {-1, {0,0}} if empty
   enum class VoiceState { Playing, Sustained, Latched };
 
   struct ActiveVoice {
@@ -77,10 +83,12 @@ private:
     int midiChannel;
     InputID source;
     bool allowSustain;
-    bool alwaysLatch = false; // If true, latch on release (ignores global latch)
+    bool alwaysLatch =
+        false; // If true, latch on release (ignores global latch)
     VoiceState state;
     int releaseMs = 0; // Zone release envelope; 0 = instant NoteOff
-    PolyphonyMode polyphonyMode = PolyphonyMode::Poly; // Polyphony mode for this voice (Phase 26.3)
+    PolyphonyMode polyphonyMode =
+        PolyphonyMode::Poly; // Polyphony mode for this voice (Phase 26.3)
   };
 
   void addVoiceFromStrum(InputID source, int note, int channel,

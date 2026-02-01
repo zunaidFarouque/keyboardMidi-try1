@@ -259,6 +259,31 @@ TEST(ZoneDelayRelease, DefaultIsOff) {
   EXPECT_FALSE(zone->delayReleaseOn);
 }
 
+// --- Override timer (cancel previous chord timer) ---
+
+TEST(ZoneOverrideTimer, SerializationRoundTripOff) {
+  auto zone = std::make_shared<Zone>();
+  zone->overrideTimer = false;
+  juce::ValueTree vt = zone->toValueTree();
+  auto loaded = Zone::fromValueTree(vt);
+  ASSERT_NE(loaded, nullptr);
+  EXPECT_FALSE(loaded->overrideTimer);
+}
+
+TEST(ZoneOverrideTimer, SerializationRoundTripOn) {
+  auto zone = std::make_shared<Zone>();
+  zone->overrideTimer = true;
+  juce::ValueTree vt = zone->toValueTree();
+  auto loaded = Zone::fromValueTree(vt);
+  ASSERT_NE(loaded, nullptr);
+  EXPECT_TRUE(loaded->overrideTimer);
+}
+
+TEST(ZoneOverrideTimer, DefaultIsOff) {
+  auto zone = std::make_shared<Zone>();
+  EXPECT_FALSE(zone->overrideTimer);
+}
+
 // --- Voicing magnet (Piano Close/Open: center offset -6..+6) ---
 TEST(ZoneVoicingMagnet, SerializationRoundTrip) {
   auto zone = std::make_shared<Zone>();

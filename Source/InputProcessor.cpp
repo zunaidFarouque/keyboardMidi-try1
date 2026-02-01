@@ -732,6 +732,21 @@ void InputProcessor::processZoneNote(InputID input, std::shared_ptr<Zone> zone,
       lastSustainChordSource = input;
       lastSustainZone = zone.get();
     }
+
+    // Normal mode with delay release and override timer: cancel old timer for
+    // this zone
+    if (zone->releaseBehavior == Zone::ReleaseBehavior::Normal &&
+        zone->delayReleaseOn && zone->overrideTimer) {
+      auto it = zoneActiveTimers.find(zone.get());
+      if (it != zoneActiveTimers.end()) {
+        // Cancel old timer and send immediate note-off for old input
+        voiceManager.cancelPendingRelease(it->second);
+        zoneActiveTimers.erase(it);
+      }
+      // Register this new input as the active timer for this zone
+      zoneActiveTimers[zone.get()] = input;
+    }
+
     int releaseMs = (zone->releaseBehavior == Zone::ReleaseBehavior::Sustain)
                         ? 0
                         : (zone->delayReleaseOn ? zone->releaseDurationMs : 0);
@@ -865,6 +880,21 @@ void InputProcessor::processZoneChord(
     lastSustainChordSource = input;
     lastSustainZone = zone.get();
   }
+
+  // Normal mode with delay release and override timer: cancel old timer for
+  // this zone
+  if (zone->releaseBehavior == Zone::ReleaseBehavior::Normal &&
+      zone->delayReleaseOn && zone->overrideTimer) {
+    auto it = zoneActiveTimers.find(zone.get());
+    if (it != zoneActiveTimers.end()) {
+      // Cancel old timer and send immediate note-off for old input
+      voiceManager.cancelPendingRelease(it->second);
+      zoneActiveTimers.erase(it);
+    }
+    // Register this new input as the active timer for this zone
+    zoneActiveTimers[zone.get()] = input;
+  }
+
   int releaseMsChord =
       (zone->releaseBehavior == Zone::ReleaseBehavior::Sustain)
           ? 0
