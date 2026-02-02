@@ -73,9 +73,7 @@ static bool releaseSustainOnly(const Zone *z) {
 ZoneSchema ZoneDefinition::getSchema(const Zone *zone) {
   ZoneSchema schema;
 
-  // --- Identity ---
-  schema.push_back(
-      createSeparator("Identity", juce::Justification::centredLeft));
+  // --- Identity (no header) ---
   {
     ZoneControl c;
     c.controlType = ZoneControl::Type::CustomAlias;

@@ -62,6 +62,9 @@ public:
   // Zone management
   ZoneManager &getZoneManager() { return zoneManager; }
 
+  // Run one ExpressionEngine timer tick (for benchmarks only).
+  void runExpressionEngineOneTick();
+
   // Get buffered notes (for visualizer - thread safe)
   std::vector<int> getBufferedNotes();
 

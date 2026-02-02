@@ -5,7 +5,9 @@
 #include "LogComponent.h" // <--- NEW
 #include "MappingEditorComponent.h"
 #include "MidiEngine.h"
+#include "MiniStatusWindow.h"
 #include "PresetManager.h"
+#include "QuickSetupWizard.h"
 #include "RawInputManager.h"
 #include "ScaleLibrary.h"
 #include "SettingsManager.h"
@@ -13,8 +15,6 @@
 #include "StartupManager.h"
 #include "VisualizerComponent.h"
 #include "ZoneEditorComponent.h"
-#include "MiniStatusWindow.h"
-#include "QuickSetupWizard.h"
 
 #include <JuceHeader.h>
 #include <vector>
@@ -53,7 +53,9 @@ private:
   DeviceManager deviceManager;
   MidiEngine midiEngine;
   ScaleLibrary scaleLibrary;
-  std::unique_ptr<RawInputManager> rawInputManager; // MOVED UP (Was #5) - Must be before UI components that reference it
+  std::unique_ptr<RawInputManager>
+      rawInputManager; // MOVED UP (Was #5) - Must be before UI components that
+                       // reference it
 
   // 2. Logic Managers
   VoiceManager voiceManager; // Depends on MidiEngine, SettingsManager
@@ -65,7 +67,8 @@ private:
   // 4. Persistence
   StartupManager startupManager;
 
-  // 5. Content Components (unique_ptr to isolate corruptor – create in ctor body when enabled)
+  // 5. Content Components (unique_ptr to isolate corruptor – create in ctor
+  // body when enabled)
   std::unique_ptr<VisualizerComponent> visualizer;
   std::unique_ptr<MappingEditorComponent> mappingEditor;
   std::unique_ptr<ZoneEditorComponent> zoneEditor;
@@ -74,7 +77,7 @@ private:
 
   // 6. Containers / Wrappers (Must die first)
   juce::TabbedComponent mainTabs;
-  juce::Component layoutPlaceholder;  // placeholder when visualizer/log are null
+  juce::Component layoutPlaceholder; // placeholder when visualizer/log are null
   DetachableContainer visualizerContainer;
   DetachableContainer editorContainer;
   DetachableContainer logContainer;
@@ -94,7 +97,7 @@ private:
 
   // 9. Windows
   std::unique_ptr<MiniStatusWindow> miniWindow;
-  
+
   // 10. Quick Setup Wizard (Phase 9.6)
   QuickSetupWizard setupWizard;
 
@@ -119,8 +122,13 @@ private:
   void loadLayoutPositions();
   void saveLayoutPositions();
 
+  // MIDI device list refresh (must be non-zero: JUCE ComboBox does not show
+  // items with ID 0)
+  static constexpr int kMidiRefreshItemId = 0x7FFF;
+  void refreshMidiDeviceList(bool triggerConnection = true);
+
   // ChangeListener implementation
-  void changeListenerCallback(juce::ChangeBroadcaster* source) override;
+  void changeListenerCallback(juce::ChangeBroadcaster *source) override;
 
   // MenuBarModel implementation
   juce::StringArray getMenuBarNames() override;

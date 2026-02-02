@@ -64,6 +64,10 @@ void InputProcessor::initialize() {
   applySustainDefaultFromPreset();
 }
 
+void InputProcessor::runExpressionEngineOneTick() {
+  expressionEngine.processOneTick();
+}
+
 InputProcessor::~InputProcessor() {
   // Remove listeners
   presetManager.getRootNode().removeListener(this);

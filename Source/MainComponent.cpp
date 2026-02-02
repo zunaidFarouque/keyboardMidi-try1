@@ -64,12 +64,17 @@ MainComponent::MainComponent()
   // --- Header Controls ---
   addAndMakeVisible(midiSelector);
   midiSelector.setTextWhenNoChoicesAvailable("No MIDI Devices");
-  // 1. Populate the list (safe – no driver open)
-  midiSelector.addItemList(midiEngine.getDeviceNames(), 1);
+  refreshMidiDeviceList(
+      false); // false = don't open driver yet (deferred below)
 
-  // 2. Setup selection logic – onChange will call setOutputDevice when
-  // selection changes
+  // Setup selection logic – onChange will call setOutputDevice when
+  // selection changes (or refresh when "Refresh devices" is chosen)
   midiSelector.onChange = [this] {
+    int selectedId = midiSelector.getSelectedId();
+    if (selectedId == kMidiRefreshItemId) {
+      refreshMidiDeviceList(true); // true = restore selection and open device
+      return;
+    }
     int selectedIndex = midiSelector.getSelectedItemIndex();
     if (selectedIndex >= 0) {
       midiEngine.setOutputDevice(selectedIndex);
@@ -572,6 +577,32 @@ juce::String MainComponent::getNoteName(int noteNumber) {
   int noteIndex = noteNumber % 12;
 
   return juce::String(notes[noteIndex]) + " " + juce::String(octave);
+}
+
+void MainComponent::refreshMidiDeviceList(bool triggerConnection) {
+  juce::String savedName = settingsManager.getLastMidiDevice();
+
+  midiSelector.clear();
+  juce::StringArray names = midiEngine.getDeviceNames();
+  int numDevices = names.size();
+  if (numDevices > 0) {
+    midiSelector.addItemList(names, 1);
+  }
+  midiSelector.addSeparator();
+  midiSelector.addItem("Refresh MIDI device list", kMidiRefreshItemId);
+
+  int indexToSelect = 0;
+  for (int i = 0; i < numDevices; ++i) {
+    if (names[i] == savedName) {
+      indexToSelect = i;
+      break;
+    }
+  }
+  if (numDevices > 0) {
+    auto notif = triggerConnection ? juce::sendNotificationSync
+                                   : juce::dontSendNotification;
+    midiSelector.setSelectedItemIndex(indexToSelect, notif);
+  }
 }
 
 void MainComponent::loadLayoutPositions() {

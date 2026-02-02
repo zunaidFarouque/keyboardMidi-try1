@@ -16,6 +16,16 @@ FetchContent_Declare(
 set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable(googletest)
 
+# 2b. Add Google Benchmark
+FetchContent_Declare(
+  benchmark
+  GIT_REPOSITORY https://github.com/google/benchmark.git
+  GIT_TAG v1.8.3
+)
+set(BENCHMARK_ENABLE_TESTING OFF CACHE BOOL "" FORCE)
+set(BENCHMARK_ENABLE_GTEST_TESTS OFF CACHE BOOL "" FORCE)
+FetchContent_MakeAvailable(benchmark)
+
 # 3. Add JUCE
 add_subdirectory(JUCE)
 
@@ -183,3 +193,40 @@ endif()
 # 13. Register with CTest
 include(GoogleTest)
 gtest_discover_tests(OmniKey_Tests)
+
+# --- BENCHMARKS ---
+
+# 14. Define the Benchmark Runner Exe
+add_executable(OmniKey_Benchmarks
+    Source/Benchmarks/MidiProcessingBenchmarks.cpp
+)
+
+# 15. Link Dependencies
+target_link_libraries(OmniKey_Benchmarks PRIVATE
+    OmniKey_Core
+    benchmark::benchmark
+    benchmark::benchmark_main
+)
+
+# 15a. Include Directories for Benchmarks
+target_include_directories(OmniKey_Benchmarks PRIVATE
+    ${CMAKE_BINARY_DIR}/OmniKey_artefacts/JuceLibraryCode
+)
+
+# 15b. MSVC: allow parallel compilation (avoid PDB lock)
+if(MSVC)
+  target_compile_options(OmniKey_Benchmarks PRIVATE /FS)
+endif()
+
+# 15c. CTest: run benchmarks in a manageable way (short min time, 1 rep, small subset)
+add_test(
+  NAME OmniKey_Benchmarks_Quick
+  COMMAND OmniKey_Benchmarks
+    --benchmark_min_time=0.1
+    --benchmark_repetitions=1
+    --benchmark_filter=ManualNote_SingleKey|Expression_CC_NoADSR|Zone_SingleNote_Poly|Stress_PolyChords_10Keys
+)
+set_tests_properties(OmniKey_Benchmarks_Quick PROPERTIES
+  LABELS "benchmark"
+  TIMEOUT 120
+)

@@ -694,6 +694,16 @@ void VisualizerComponent::onViewSelectorChanged() {
 }
 
 void VisualizerComponent::timerCallback() {
+  // Skip all processing if parent window is minimized (performance
+  // optimization)
+  if (auto *topLevel = getTopLevelComponent()) {
+    if (auto *peer = topLevel->getPeer()) {
+      if (peer->isMinimised()) {
+        return; // Skip visualizer updates when minimized
+      }
+    }
+  }
+
   // Phase 50.9: Async Dynamic View and 30Hz UI polling. Runs on the message
   // thread only.
 

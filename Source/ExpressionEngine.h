@@ -20,6 +20,10 @@ public:
   // HighResolutionTimer callback
   void hiResTimerCallback() override;
 
+  // Run one timer tick (same logic as hiResTimerCallback). For
+  // benchmarks/tests.
+  void processOneTick();
+
 private:
   enum class Stage { Attack, Decay, Sustain, Release, Finished };
 

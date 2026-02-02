@@ -4,12 +4,12 @@
 
 namespace {
 static bool isPitchBendTarget(const AdsrTarget target) {
-  return target == AdsrTarget::PitchBend || target == AdsrTarget::SmartScaleBend;
+  return target == AdsrTarget::PitchBend ||
+         target == AdsrTarget::SmartScaleBend;
 }
 } // namespace
 
-ExpressionEngine::ExpressionEngine(MidiEngine& engine)
-    : midiEngine(engine) {
+ExpressionEngine::ExpressionEngine(MidiEngine &engine) : midiEngine(engine) {
   for (int ch = 0; ch < 17; ++ch)
     currentPitchBendValues[ch] = 8192;
   startTimer(static_cast<int>(timerIntervalMs));
@@ -17,16 +17,19 @@ ExpressionEngine::ExpressionEngine(MidiEngine& engine)
 
 ExpressionEngine::~ExpressionEngine() {
   stopTimer(); // HighResolutionTimer
-  
+
   const juce::ScopedLock sl(lock);
   activeEnvelopes.clear();
 }
 
-void ExpressionEngine::triggerEnvelope(InputID source, int channel, const AdsrSettings& settings, int peakValue) {
+void ExpressionEngine::triggerEnvelope(InputID source, int channel,
+                                       const AdsrSettings &settings,
+                                       int peakValue) {
   juce::ScopedLock scopedLock(lock);
 
   // Phase 56.1: Fast path for simple CC/PB (no envelope curve)
-  if (settings.attackMs == 0 && settings.decayMs == 0 && settings.releaseMs == 0) {
+  if (settings.attackMs == 0 && settings.decayMs == 0 &&
+      settings.releaseMs == 0) {
     if (isPitchBendTarget(settings.target)) {
       midiEngine.sendPitchBend(channel, peakValue);
     } else {
@@ -35,19 +38,20 @@ void ExpressionEngine::triggerEnvelope(InputID source, int channel, const AdsrSe
     return;
   }
 
-  // If this source exists in the PB stack for this channel, remove it (re-press moves to top)
+  // If this source exists in the PB stack for this channel, remove it (re-press
+  // moves to top)
   if (isPitchBendTarget(settings.target)) {
-    auto& stack = pitchBendStacks[channel];
+    auto &stack = pitchBendStacks[channel];
     stack.erase(std::remove(stack.begin(), stack.end(), source), stack.end());
   }
 
   // Remove any existing envelope for this source (voice stealing)
-  activeEnvelopes.erase(
-    std::remove_if(activeEnvelopes.begin(), activeEnvelopes.end(),
-      [source](const ActiveEnvelope& env) {
-        return env.source == source;
-      }),
-    activeEnvelopes.end());
+  activeEnvelopes.erase(std::remove_if(activeEnvelopes.begin(),
+                                       activeEnvelopes.end(),
+                                       [source](const ActiveEnvelope &env) {
+                                         return env.source == source;
+                                       }),
+                        activeEnvelopes.end());
 
   // Create new envelope
   ActiveEnvelope env;
@@ -62,12 +66,13 @@ void ExpressionEngine::triggerEnvelope(InputID source, int channel, const AdsrSe
   env.isDormant = false;
 
   if (isPitchBendTarget(settings.target)) {
-    auto& stack = pitchBendStacks[channel];
+    auto &stack = pitchBendStacks[channel];
     // If another envelope is currently driving this channel, make it dormant
     if (!stack.empty()) {
       InputID prevTop = stack.back();
-      for (auto& e : activeEnvelopes) {
-        if (e.source == prevTop && e.channel == channel && isPitchBendTarget(e.settings.target)) {
+      for (auto &e : activeEnvelopes) {
+        if (e.source == prevTop && e.channel == channel &&
+            isPitchBendTarget(e.settings.target)) {
           e.isDormant = true;
           break;
         }
@@ -99,19 +104,20 @@ void ExpressionEngine::triggerEnvelope(InputID source, int channel, const AdsrSe
 void ExpressionEngine::releaseEnvelope(InputID source) {
   juce::ScopedLock scopedLock(lock);
 
-  auto findEnvIt = std::find_if(activeEnvelopes.begin(), activeEnvelopes.end(),
-    [source](const ActiveEnvelope& e) { return e.source == source; });
+  auto findEnvIt = std::find_if(
+      activeEnvelopes.begin(), activeEnvelopes.end(),
+      [source](const ActiveEnvelope &e) { return e.source == source; });
 
   if (findEnvIt == activeEnvelopes.end())
     return;
 
-  auto& env = *findEnvIt;
+  auto &env = *findEnvIt;
   if (env.stage == Stage::Finished)
     return;
 
   // Pitch Bend priority stack behavior (Phase 23.7)
   if (isPitchBendTarget(env.settings.target)) {
-    auto& stack = pitchBendStacks[env.channel];
+    auto &stack = pitchBendStacks[env.channel];
     auto it = std::find(stack.begin(), stack.end(), source);
     if (it == stack.end()) {
       // Fallback: behave like normal release
@@ -141,8 +147,10 @@ void ExpressionEngine::releaseEnvelope(InputID source) {
       env.stage = Stage::Finished; // Kill released owner immediately
 
       const InputID newTop = stack.back();
-      for (auto& e : activeEnvelopes) {
-        if (e.source == newTop && e.channel == env.channel && isPitchBendTarget(e.settings.target) && e.stage != Stage::Finished) {
+      for (auto &e : activeEnvelopes) {
+        if (e.source == newTop && e.channel == env.channel &&
+            isPitchBendTarget(e.settings.target) &&
+            e.stage != Stage::Finished) {
           e.isDormant = false;
           e.dynamicStartValue = currentPitchBendValues[env.channel];
           e.currentLevel = 0.0;
@@ -169,7 +177,8 @@ void ExpressionEngine::releaseEnvelope(InputID source) {
     env.stage = Stage::Release;
     env.lastSentValue = -1;
     env.dynamicStartValue = 8192;
-    env.peakValue = currentPitchBendValues[env.channel]; // start of release path
+    env.peakValue =
+        currentPitchBendValues[env.channel]; // start of release path
     env.currentLevel = 1.0;
     env.stageProgress = 0.0;
 
@@ -195,76 +204,80 @@ void ExpressionEngine::releaseEnvelope(InputID source) {
   }
 }
 
-void ExpressionEngine::hiResTimerCallback() {
+void ExpressionEngine::hiResTimerCallback() { processOneTick(); }
+
+void ExpressionEngine::processOneTick() {
   juce::ScopedLock scopedLock(lock);
 
-  for (auto& env : activeEnvelopes) {
+  for (auto &env : activeEnvelopes) {
     if (env.isDormant)
       continue;
 
     // Update level based on current stage
     switch (env.stage) {
-      case Stage::Attack: {
-        env.currentLevel += env.stepSize;
-        if (env.currentLevel >= 1.0) {
-          env.currentLevel = 1.0;
-          // Transition to Decay
-          env.stage = Stage::Decay;
-          if (env.settings.decayMs > 0) {
-            double numSteps = env.settings.decayMs / timerIntervalMs;
-            double levelRange = 1.0 - env.settings.sustainLevel;
-            env.stepSize = levelRange / numSteps;
-          } else {
-            // Instant decay
-            env.currentLevel = env.settings.sustainLevel;
-            env.stage = Stage::Sustain;
-          }
-        }
-        break;
-      }
-
-      case Stage::Decay: {
-        env.currentLevel -= env.stepSize;
-        if (env.currentLevel <= env.settings.sustainLevel) {
+    case Stage::Attack: {
+      env.currentLevel += env.stepSize;
+      if (env.currentLevel >= 1.0) {
+        env.currentLevel = 1.0;
+        // Transition to Decay
+        env.stage = Stage::Decay;
+        if (env.settings.decayMs > 0) {
+          double numSteps = env.settings.decayMs / timerIntervalMs;
+          double levelRange = 1.0 - env.settings.sustainLevel;
+          env.stepSize = levelRange / numSteps;
+        } else {
+          // Instant decay
           env.currentLevel = env.settings.sustainLevel;
-          // Transition to Sustain
           env.stage = Stage::Sustain;
-          env.stepSize = 0.0; // No change in Sustain
         }
-        break;
       }
+      break;
+    }
 
-      case Stage::Sustain: {
-        // Hold sustain level (no change)
+    case Stage::Decay: {
+      env.currentLevel -= env.stepSize;
+      if (env.currentLevel <= env.settings.sustainLevel) {
         env.currentLevel = env.settings.sustainLevel;
-        break;
+        // Transition to Sustain
+        env.stage = Stage::Sustain;
+        env.stepSize = 0.0; // No change in Sustain
       }
+      break;
+    }
 
-      case Stage::Release: {
-        env.currentLevel -= env.stepSize;
-        if (env.currentLevel <= 0.0) {
-          env.currentLevel = 0.0;
-          env.stage = Stage::Finished;
-        }
-        break;
+    case Stage::Sustain: {
+      // Hold sustain level (no change)
+      env.currentLevel = env.settings.sustainLevel;
+      break;
+    }
+
+    case Stage::Release: {
+      env.currentLevel -= env.stepSize;
+      if (env.currentLevel <= 0.0) {
+        env.currentLevel = 0.0;
+        env.stage = Stage::Finished;
       }
+      break;
+    }
 
-      case Stage::Finished:
-        // Already finished, will be removed below
-        break;
+    case Stage::Finished:
+      // Already finished, will be removed below
+      break;
     }
 
     const bool isPB = isPitchBendTarget(env.settings.target);
 
-    // Dynamic start logic (Phase 23.7): output = start + (level * (peak - start))
+    // Dynamic start logic (Phase 23.7): output = start + (level * (peak -
+    // start))
     int startValue = env.dynamicStartValue;
     if (startValue < 0)
       startValue = isPB ? 8192 : 0;
 
     int peak = env.peakValue;
     double range = static_cast<double>(peak - startValue);
-    int outputVal = static_cast<int>(static_cast<double>(startValue) + (env.currentLevel * range));
-    
+    int outputVal = static_cast<int>(static_cast<double>(startValue) +
+                                     (env.currentLevel * range));
+
     // Clamp to valid ranges
     if (isPB) {
       outputVal = juce::jlimit(0, 16383, outputVal);
@@ -285,10 +298,10 @@ void ExpressionEngine::hiResTimerCallback() {
   }
 
   // Remove finished envelopes
-  activeEnvelopes.erase(
-    std::remove_if(activeEnvelopes.begin(), activeEnvelopes.end(),
-      [](const ActiveEnvelope& env) {
-        return env.stage == Stage::Finished;
-      }),
-    activeEnvelopes.end());
+  activeEnvelopes.erase(std::remove_if(activeEnvelopes.begin(),
+                                       activeEnvelopes.end(),
+                                       [](const ActiveEnvelope &env) {
+                                         return env.stage == Stage::Finished;
+                                       }),
+                        activeEnvelopes.end());
 }
