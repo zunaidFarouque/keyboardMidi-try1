@@ -44,6 +44,7 @@ add_library(OmniKey_Core STATIC
     Source/VoiceManager.cpp
     Source/RawInputManager.cpp
     Source/PointerInputManager.cpp
+    Source/TouchpadHidParser.cpp
     Source/ExpressionEngine.cpp
     Source/PortamentoEngine.cpp
     Source/StrumEngine.cpp

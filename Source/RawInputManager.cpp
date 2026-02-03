@@ -2,6 +2,7 @@
 #include "MappingTypes.h"
 #include "PointerInputManager.h"
 #include "SettingsManager.h"
+#include "TouchpadHidParser.h"
 
 // 1. Windows Header Only
 // (We removed the #defines because CMake already sets them)
@@ -11,6 +12,26 @@
 static WNDPROC globalOriginalWndProc =
     nullptr; // Store the old proc here (survives class destruction)
 RawInputManager *RawInputManager::globalManagerInstance = nullptr;
+
+namespace {
+bool isPrecisionTouchpadDevice(HANDLE deviceHandle) {
+  if (deviceHandle == nullptr)
+    return false;
+
+  RID_DEVICE_INFO deviceInfo{};
+  deviceInfo.cbSize = sizeof(RID_DEVICE_INFO);
+  UINT deviceInfoSize = deviceInfo.cbSize;
+
+  if (GetRawInputDeviceInfo(deviceHandle, RIDI_DEVICEINFO, &deviceInfo,
+                            &deviceInfoSize) == static_cast<UINT>(-1)) {
+    return false;
+  }
+
+  return deviceInfo.dwType == RIM_TYPEHID &&
+         deviceInfo.hid.usUsagePage == 0x000D &&
+         deviceInfo.hid.usUsage == 0x0005;
+}
+} // namespace
 
 // Helper class to forward pointer events to RawInputManager listeners
 class RawInputManager::PointerEventForwarder
@@ -53,26 +74,42 @@ void RawInputManager::initialize(void *nativeWindowHandle,
       juce::String::toHexString((juce::int64)hwnd));
 
   // RAW INPUT REGISTRATION
-  RAWINPUTDEVICE rid[1];
+  RAWINPUTDEVICE keyboardRid[1];
 
   // Page 1, Usage 6 = Keyboard
-  rid[0].usUsagePage = 0x01;
-  rid[0].usUsage = 0x06;
+  keyboardRid[0].usUsagePage = 0x01;
+  keyboardRid[0].usUsage = 0x06;
 
   // CRITICAL FIX: RIDEV_INPUTSINK enables background monitoring.
   // We also keep RIDEV_DEVNOTIFY to handle plug/unplug events.
-  rid[0].dwFlags = RIDEV_INPUTSINK | RIDEV_DEVNOTIFY;
+  keyboardRid[0].dwFlags = RIDEV_INPUTSINK | RIDEV_DEVNOTIFY;
 
   // CRITICAL FIX: Target must be explicit for InputSink to work.
-  rid[0].hwndTarget = hwnd;
+  keyboardRid[0].hwndTarget = hwnd;
 
-  if (RegisterRawInputDevices(rid, 1, sizeof(rid[0])) == FALSE) {
+  if (RegisterRawInputDevices(keyboardRid, 1, sizeof(keyboardRid[0])) ==
+      FALSE) {
     DWORD error = GetLastError();
     DBG("RawInputManager: CRITICAL ERROR - Registration Failed! Error Code: " +
         juce::String(error));
     return;
   } else {
     DBG("RawInputManager: Registration Success. Flags: RIDEV_INPUTSINK");
+  }
+
+  RAWINPUTDEVICE touchpadRid[1];
+  touchpadRid[0].usUsagePage = 0x000D; // Digitizer
+  touchpadRid[0].usUsage = 0x0005;     // Touch Pad
+  touchpadRid[0].dwFlags = RIDEV_INPUTSINK | RIDEV_DEVNOTIFY;
+  touchpadRid[0].hwndTarget = hwnd;
+
+  if (RegisterRawInputDevices(touchpadRid, 1, sizeof(touchpadRid[0])) ==
+      FALSE) {
+    DWORD error = GetLastError();
+    DBG("RawInputManager: Touchpad registration failed. Error Code: " +
+        juce::String(error));
+  } else {
+    DBG("RawInputManager: Touchpad registration success.");
   }
 
   // Subclass the window
@@ -334,6 +371,21 @@ int64_t __stdcall RawInputManager::rawInputWndProc(void *hwnd, unsigned int msg,
                   l.handleRawKeyEvent(handle, InputTypes::ScrollDown, false);
                 });
               }
+            }
+          }
+        } else if (raw->header.dwType == RIM_TYPEHID) {
+          HANDLE deviceHandle = raw->header.hDevice;
+          if (isPrecisionTouchpadDevice(deviceHandle)) {
+            auto contacts = parsePrecisionTouchpadReport(
+                reinterpret_cast<void *>(lParam),
+                reinterpret_cast<void *>(deviceHandle));
+            if (!contacts.empty() && globalManagerInstance) {
+              uintptr_t handle = reinterpret_cast<uintptr_t>(deviceHandle);
+              auto contactsCopy = contacts;
+              globalManagerInstance->listeners.call(
+                  [handle, contactsCopy](Listener &l) {
+                    l.handleTouchpadContacts(handle, contactsCopy);
+                  });
             }
           }
         }

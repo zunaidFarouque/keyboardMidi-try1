@@ -5,7 +5,9 @@
 #include <map>
 #include <memory>
 #include <set>
+#include <vector>
 
+#include "TouchpadTypes.h"
 
 // Forward declaration
 class PointerInputManager;
@@ -20,13 +22,17 @@ public:
                                    bool isDown) = 0;
     virtual void handleAxisEvent(uintptr_t deviceHandle, int inputCode,
                                  float value) = 0;
+    virtual void
+    handleTouchpadContacts(uintptr_t deviceHandle,
+                           const std::vector<TouchpadContact> &contacts) {}
   };
 
   RawInputManager();
   ~RawInputManager();
 
   // Uses void* to avoid including <windows.h> in the header
-  void initialize(void *nativeWindowHandle, SettingsManager* settingsMgr = nullptr);
+  void initialize(void *nativeWindowHandle,
+                  SettingsManager *settingsMgr = nullptr);
   void shutdown();
 
   // Listener management
@@ -37,7 +43,7 @@ public:
   void resetState();
 
   // Focus target callback for dynamic window selection
-  void setFocusTargetCallback(std::function<void*()> cb);
+  void setFocusTargetCallback(std::function<void *()> cb);
 
   // Device change callback for hardware hygiene
   void setOnDeviceChangeCallback(std::function<void()> cb);
@@ -46,8 +52,8 @@ public:
 
 private:
   void *targetHwnd = nullptr;
-  SettingsManager* settingsManager = nullptr;
-  std::function<void*()> focusTargetCallback;
+  SettingsManager *settingsManager = nullptr;
+  std::function<void *()> focusTargetCallback;
   std::function<void()> onDeviceChangeCallback;
   juce::ListenerList<Listener> listeners;
   bool isInitialized = false;

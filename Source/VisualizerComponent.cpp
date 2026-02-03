@@ -508,6 +508,40 @@ void VisualizerComponent::paint(juce::Graphics &g) {
     g.drawText(labelText, keyBounds, juce::Justification::centred, false);
   }
 
+  // Touchpad contact panel (right of keyboard)
+  float keyboardRightEdge = startX + totalWidth;
+  float panelLeft = keyboardRightEdge + 16.0f;
+  float panelWidth = static_cast<float>(getWidth()) - panelLeft - 16.0f;
+  float panelTop = headerHeight + 8.0f;
+  float panelBottom = static_cast<float>(getHeight()) - 8.0f;
+  if (panelWidth > 100.0f && panelBottom > panelTop) {
+    std::vector<TouchpadContact> contactsSnapshot;
+    {
+      juce::ScopedLock lock(contactsLock);
+      contactsSnapshot = lastTouchpadContacts;
+    }
+    g.setColour(juce::Colours::white);
+    g.setFont(11.0f);
+    float lineHeight = 18.0f;
+    float y = panelTop;
+    juce::String title =
+        contactsSnapshot.empty() ? "Touchpad: (no contacts)" : "Touchpad:";
+    g.drawText(title, panelLeft, y, panelWidth, lineHeight,
+               juce::Justification::centredLeft, false);
+    y += lineHeight;
+    for (size_t i = 0;
+         i < contactsSnapshot.size() && y + lineHeight <= panelBottom; ++i) {
+      const auto &c = contactsSnapshot[i];
+      juce::String line = "Touch point " +
+                          juce::String(static_cast<int>(i) + 1) +
+                          ": [X: " + juce::String(c.normX, 2) +
+                          "] [Y: " + juce::String(c.normY, 2) + "]";
+      g.drawText(line, panelLeft, y, panelWidth, lineHeight,
+                 juce::Justification::centredLeft, false);
+      y += lineHeight;
+    }
+  }
+
   // Draw overlay if MIDI mode is disabled
   if (midiModeDisabled) {
     // Semi-transparent black overlay
@@ -592,6 +626,14 @@ void VisualizerComponent::handleRawKeyEvent(uintptr_t deviceHandle, int keyCode,
 void VisualizerComponent::handleAxisEvent(uintptr_t deviceHandle, int inputCode,
                                           float value) {
   // Ignore axis events
+}
+
+void VisualizerComponent::handleTouchpadContacts(
+    uintptr_t deviceHandle, const std::vector<TouchpadContact> &contacts) {
+  (void)deviceHandle;
+  juce::ScopedLock lock(contactsLock);
+  lastTouchpadContacts = contacts;
+  needsRepaint.store(true, std::memory_order_release);
 }
 
 void VisualizerComponent::changeListenerCallback(

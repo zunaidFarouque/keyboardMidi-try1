@@ -3,10 +3,12 @@
 // findZoneForKey / isKeyInAnyZone / simulateInput). juce::Timer drives refresh.
 #include "DeviceManager.h"
 #include "RawInputManager.h"
+#include "TouchpadTypes.h"
 #include "ZoneManager.h"
 #include <JuceHeader.h>
 #include <atomic>
 #include <set>
+#include <vector>
 
 class InputProcessor;
 class PresetManager;
@@ -43,6 +45,9 @@ public:
                          bool isDown) override;
   void handleAxisEvent(uintptr_t deviceHandle, int inputCode,
                        float value) override;
+  void
+  handleTouchpadContacts(uintptr_t deviceHandle,
+                         const std::vector<TouchpadContact> &contacts) override;
 
   // ChangeListener implementation
   void changeListenerCallback(juce::ChangeBroadcaster *source) override;
@@ -68,6 +73,11 @@ private:
   int currentVisualizedLayer = 0; // Phase 45.3: which layer we are inspecting
   std::set<int> activeKeys;
   mutable juce::CriticalSection keyStateLock;
+
+  // Touchpad contact display (written by handleTouchpadContacts, read in
+  // paint)
+  std::vector<TouchpadContact> lastTouchpadContacts;
+  mutable juce::CriticalSection contactsLock;
 
   // Phase 50.9: Async Dynamic View (mailbox-style atomics)
   std::atomic<uintptr_t> lastInputDeviceHandle{0}; // Written by Input Thread
