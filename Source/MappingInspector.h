@@ -5,12 +5,14 @@
 #include <vector>
 
 class DeviceManager;
+class SettingsManager;
 
 class MappingInspector : public juce::Component,
                          public juce::ValueTree::Listener,
                          public juce::ChangeListener {
 public:
-  MappingInspector(juce::UndoManager &undoMgr, DeviceManager &deviceMgr);
+  MappingInspector(juce::UndoManager &undoMgr, DeviceManager &deviceMgr,
+                   SettingsManager &settingsMgr);
   ~MappingInspector() override;
 
   void paint(juce::Graphics &) override;
@@ -26,6 +28,7 @@ public:
 private:
   juce::UndoManager &undoManager;
   DeviceManager &deviceManager;
+  SettingsManager &settingsManager;
   std::vector<juce::ValueTree> selectedTrees;
   bool isUpdatingFromTree = false;
 
@@ -37,7 +40,8 @@ private:
   };
   struct UiRow {
     std::vector<UiItem> items;
-    bool isSeparatorRow = false; // Phase 55.9: reduced height for separator rows
+    bool isSeparatorRow =
+        false; // Phase 55.9: reduced height for separator rows
   };
   std::vector<UiRow> uiRows;
 

@@ -7,6 +7,7 @@
 #include "../SettingsManager.h"
 #include "../Zone.h"
 #include "../ZoneManager.h"
+#include <cmath>
 #include <gtest/gtest.h>
 
 class GridCompilerTest : public ::testing::Test {
@@ -169,8 +170,9 @@ TEST_F(GridCompilerTest, DeviceInheritsFromGlobal) {
 // TEST D: Horizontal Override (Device masks Global) – device maps Q to CC
 TEST_F(GridCompilerTest, DeviceOverridesGlobalWithCC) {
   // Arrange
-  addMapping(0, 81, 0);                         // Global maps Q to Note
-  addMapping(0, 81, aliasHash, ActionType::Expression); // Device maps Q to Expression
+  addMapping(0, 81, 0); // Global maps Q to Note
+  addMapping(0, 81, aliasHash,
+             ActionType::Expression); // Device maps Q to Expression
 
   // Act
   auto context =
@@ -199,8 +201,8 @@ TEST_F(GridCompilerTest, GenericShiftExpandsToSides) {
 // If I map "Shift" (Generic) to CC, but then specifically map "LShift" to Note,
 // LShift uses the specific mapping.
 TEST_F(GridCompilerTest, SpecificModifierOverridesGeneric) {
-  addMapping(0, 0x10, 0, ActionType::Expression);   // Generic -> Expression
-  addMapping(0, 0xA0, 0, ActionType::Note); // LShift -> Note
+  addMapping(0, 0x10, 0, ActionType::Expression); // Generic -> Expression
+  addMapping(0, 0xA0, 0, ActionType::Note);       // LShift -> Note
 
   auto context =
       GridCompiler::compile(presetMgr, deviceMgr, zoneMgr, settingsMgr);
@@ -255,8 +257,8 @@ TEST_F(GridCompilerTest, LayerCommandsAreNotInherited) {
 
 // Phase 53.5: LayerToggle must not be inherited (same filter as LayerMomentary)
 TEST_F(GridCompilerTest, LayerToggleNotInherited) {
-  addCommandMapping(0, 11, 0,
-                    static_cast<int>(OmniKey::CommandID::LayerToggle), 1);
+  addCommandMapping(0, 11, 0, static_cast<int>(OmniKey::CommandID::LayerToggle),
+                    1);
 
   auto context =
       GridCompiler::compile(presetMgr, deviceMgr, zoneMgr, settingsMgr);
@@ -328,7 +330,8 @@ TEST_F(GridCompilerTest, ExpressionSimpleCcProducesFastPathAdsr) {
   EXPECT_FLOAT_EQ(slot.action.adsrSettings.sustainLevel, 1.0f);
 }
 
-// Phase 56.1: Expression with useCustomEnvelope=true -> reads ADSR from ValueTree
+// Phase 56.1: Expression with useCustomEnvelope=true -> reads ADSR from
+// ValueTree
 TEST_F(GridCompilerTest, ExpressionCustomEnvelopeReadsAdsr) {
   auto mappings = presetMgr.getMappingsListForLayer(0);
   juce::ValueTree m("Mapping");
@@ -411,4 +414,82 @@ TEST_F(GridCompilerTest, NoteReleaseBehaviorCompiles) {
   addAndCheck("Send Note Off", NoteReleaseBehavior::SendNoteOff);
   addAndCheck("Nothing", NoteReleaseBehavior::Nothing);
   addAndCheck("Always Latch", NoteReleaseBehavior::AlwaysLatch);
+}
+
+// SmartScaleBend: lookup is built from global scale + smartStepShift + PB range
+TEST_F(GridCompilerTest, SmartScaleBendLookupIsBuilt) {
+  scaleLib.loadDefaults(); // Ensure Major scale exists
+  zoneMgr.setGlobalScale("Major");
+  zoneMgr.setGlobalRoot(60);        // C4
+  settingsMgr.setPitchBendRange(2); // 2 semitones = full bend for C->D
+
+  auto mappings = presetMgr.getMappingsListForLayer(0);
+  juce::ValueTree m("Mapping");
+  m.setProperty("inputKey", 52, nullptr);
+  m.setProperty("deviceHash",
+                juce::String::toHexString((juce::int64)0).toUpperCase(),
+                nullptr);
+  m.setProperty("type", "Expression", nullptr);
+  m.setProperty("adsrTarget", "SmartScaleBend", nullptr);
+  m.setProperty("smartStepShift", 1,
+                nullptr); // +1 scale step (C -> D in Major)
+  m.setProperty("layerID", 0, nullptr);
+  mappings.addChild(m, -1, nullptr);
+
+  auto context =
+      GridCompiler::compile(presetMgr, deviceMgr, zoneMgr, settingsMgr);
+  auto audioGrid = context->globalGrids[0];
+  const auto &slot = (*audioGrid)[52];
+
+  EXPECT_EQ(slot.action.adsrSettings.target, AdsrTarget::SmartScaleBend);
+  ASSERT_EQ(slot.action.smartBendLookup.size(), 128u)
+      << "SmartScaleBend lookup must have 128 entries";
+
+  // C4 (60) + 1 scale step in C Major = D4 (62). Semitones = 2. PB range 2 ->
+  // full bend up = 16383
+  int c4Pb = slot.action.smartBendLookup[60];
+  EXPECT_EQ(c4Pb, 16383)
+      << "C4 +1 scale step (-> D4) with PB range 2 = full bend up";
+
+  // Center (no bend) for note that is already at target: e.g. bend +0 from any
+  // note = 8192 (Actually +0 step: target = same note, semitones = 0 -> 8192.
+  // We have step 1 so not this.) D4 (62) + 1 scale step = E4 (64). Semitones
+  // = 2. Same full bend.
+  int d4Pb = slot.action.smartBendLookup[62];
+  EXPECT_EQ(d4Pb, 16383)
+      << "D4 +1 scale step (-> E4) with PB range 2 = full bend up";
+}
+
+// SmartScaleBend: PB value scales with global PB range (2/6 of range -> ~1/3 of
+// full bend)
+TEST_F(GridCompilerTest, SmartScaleBendScalesWithPitchBendRange) {
+  scaleLib.loadDefaults();
+  zoneMgr.setGlobalScale("Major");
+  zoneMgr.setGlobalRoot(60);
+  settingsMgr.setPitchBendRange(
+      6); // 6 semitones: 2 semitones = 2/6 = 1/3 of full bend
+
+  auto mappings = presetMgr.getMappingsListForLayer(0);
+  juce::ValueTree m("Mapping");
+  m.setProperty("inputKey", 52, nullptr);
+  m.setProperty("deviceHash",
+                juce::String::toHexString((juce::int64)0).toUpperCase(),
+                nullptr);
+  m.setProperty("type", "Expression", nullptr);
+  m.setProperty("adsrTarget", "SmartScaleBend", nullptr);
+  m.setProperty("smartStepShift", 1, nullptr);
+  m.setProperty("layerID", 0, nullptr);
+  mappings.addChild(m, -1, nullptr);
+
+  auto context =
+      GridCompiler::compile(presetMgr, deviceMgr, zoneMgr, settingsMgr);
+  auto audioGrid = context->globalGrids[0];
+  const auto &slot = (*audioGrid)[52];
+
+  ASSERT_EQ(slot.action.smartBendLookup.size(), 128u);
+  // C4 -> D4 = 2 semitones. PB range 6 -> 2/6 * 8192 = 2730.67 up from center
+  // -> 8192+2731 = 10923
+  int c4Pb = slot.action.smartBendLookup[60];
+  int expected = 8192 + static_cast<int>(std::round(8192.0 * 2.0 / 6.0));
+  EXPECT_EQ(c4Pb, expected) << "C4 +1 step with PB range 6 = 1/3 of full bend";
 }

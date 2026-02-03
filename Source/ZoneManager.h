@@ -68,6 +68,8 @@ public:
   void setGlobalRoot(int root);
   juce::String getGlobalScaleName() const { return globalScaleName; }
   int getGlobalRootNote() const { return globalRootNote; }
+  // Intervals for global scale (for SmartScaleBend compilation)
+  std::vector<int> getGlobalScaleIntervals() const;
 
   // Rebuild the lookup table (call when zones or their keys change)
   void rebuildLookupTable();

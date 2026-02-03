@@ -313,6 +313,7 @@ void InputProcessor::valueTreePropertyChanged(
       property == juce::Identifier("data2") ||
       property == juce::Identifier("velRandom") ||
       property == juce::Identifier("adsrTarget") ||
+      property == juce::Identifier("smartStepShift") ||
       property == juce::Identifier("pbRange") ||
       property == juce::Identifier("pbShift") ||
       property == juce::Identifier("adsrAttack") ||

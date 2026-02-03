@@ -1,6 +1,7 @@
 #include "MappingInspector.h"
 #include "DeviceManager.h"
 #include "MidiNoteUtilities.h"
+#include "SettingsManager.h"
 
 namespace {
 // Phase 55.6: Invisible container for Label + Editor as one layout unit
@@ -51,13 +52,17 @@ private:
 } // namespace
 
 MappingInspector::MappingInspector(juce::UndoManager &undoMgr,
-                                   DeviceManager &deviceMgr)
-    : undoManager(undoMgr), deviceManager(deviceMgr) {
+                                   DeviceManager &deviceMgr,
+                                   SettingsManager &settingsMgr)
+    : undoManager(undoMgr), deviceManager(deviceMgr),
+      settingsManager(settingsMgr) {
   deviceManager.addChangeListener(this);
+  settingsManager.addChangeListener(this);
 }
 
 MappingInspector::~MappingInspector() {
   deviceManager.removeChangeListener(this);
+  settingsManager.removeChangeListener(this);
   for (auto &tree : selectedTrees) {
     if (tree.isValid())
       tree.removeListener(this);
@@ -105,7 +110,9 @@ void MappingInspector::rebuildUI() {
   // Device row at top, above Type
   createAliasRow();
 
-  InspectorSchema schema = MappingDefinition::getSchema(selectedTrees[0]);
+  int pbRange = settingsManager.getPitchBendRange();
+  InspectorSchema schema =
+      MappingDefinition::getSchema(selectedTrees[0], pbRange);
   for (const auto &def : schema) {
     // Phase 55.9: Handle explicit Separator items
     if (def.controlType == InspectorControl::Type::Separator) {
@@ -219,24 +226,45 @@ void MappingInspector::createControl(const InspectorControl &def,
       };
     }
 
-    if (sameVal && !currentVal.isVoid())
+    // PitchBend peak: valueScaleRange > 0 -> display semitones, store raw
+    // 0-16383
+    const int scaleRange = def.valueScaleRange;
+    if (scaleRange > 0) {
+      if (sameVal && !currentVal.isVoid()) {
+        int raw = static_cast<int>(currentVal);
+        double semitones = (raw - 8192) * scaleRange / 8192.0;
+        sl->setValue(juce::jlimit(def.min, def.max, semitones),
+                     juce::dontSendNotification);
+      } else {
+        sl->setValue(0.0, juce::dontSendNotification);
+        if (!sameVal)
+          sl->setTextValueSuffix(" (---)");
+      }
+    } else if (sameVal && !currentVal.isVoid()) {
       sl->setValue(static_cast<double>(currentVal), juce::dontSendNotification);
-    else if (!sameVal) {
+    } else if (!sameVal) {
       sl->setValue((def.min + def.max) * 0.5, juce::dontSendNotification);
       sl->setTextValueSuffix(" (---)");
     }
 
     juce::Slider *slPtr = sl.get();
-    sl->onValueChange = [this, propId, def, slPtr]() {
+    sl->onValueChange = [this, propId, def, slPtr, scaleRange]() {
       if (selectedTrees.empty())
         return;
       if (slPtr->getTextValueSuffix().contains("---"))
         return;
       undoManager.beginNewTransaction("Change " + def.label);
       double v = slPtr->getValue();
-      juce::var valueToSet = (def.step >= 1.0)
-                                 ? juce::var(static_cast<int>(std::round(v)))
-                                 : juce::var(v);
+      juce::var valueToSet;
+      if (scaleRange > 0) {
+        int raw = static_cast<int>(8192 + (v / scaleRange) * 8192);
+        raw = juce::jlimit(0, 16383, raw);
+        valueToSet = juce::var(raw);
+      } else {
+        valueToSet = (def.step >= 1.0)
+                         ? juce::var(static_cast<int>(std::round(v)))
+                         : juce::var(v);
+      }
       for (auto &tree : selectedTrees) {
         if (tree.isValid())
           tree.setProperty(propId, valueToSet, &undoManager);
@@ -433,6 +461,19 @@ void MappingInspector::createControl(const InspectorControl &def,
     auto tb = std::make_unique<juce::ToggleButton>();
     // Phase 55.8: No button text; label is separate on the left
     bool defaultForToggle = (def.propertyId == "releaseLatchedOnToggleOff");
+    // Reset pitch on release: default on when target is PitchBend or
+    // SmartScaleBend
+    if (def.propertyId == "sendReleaseValue" && selectedTrees.size() == 1 &&
+        selectedTrees[0].isValid()) {
+      juce::String targetStr =
+          selectedTrees[0].getProperty("adsrTarget", "CC").toString();
+      bool isPitchOrSmart = targetStr.equalsIgnoreCase("PitchBend") ||
+                            targetStr.equalsIgnoreCase("SmartScaleBend");
+      if (isPitchOrSmart && currentVal.isVoid()) {
+        defaultForToggle = true;
+        selectedTrees[0].setProperty("sendReleaseValue", true, &undoManager);
+      }
+    }
     if (sameVal && !currentVal.isVoid())
       tb->setToggleState(static_cast<bool>(currentVal),
                          juce::dontSendNotification);
@@ -640,7 +681,7 @@ juce::var MappingInspector::getCommonValue(const juce::Identifier &property) {
 }
 
 void MappingInspector::changeListenerCallback(juce::ChangeBroadcaster *source) {
-  if (source == &deviceManager)
+  if (source == &deviceManager || source == &settingsManager)
     rebuildUI();
 }
 
@@ -657,6 +698,14 @@ void MappingInspector::valueTreePropertyChanged(
   }
   if (!isRelevant)
     return;
+  // When target changes to PitchBend or SmartScaleBend, default "Reset pitch on
+  // release" on
+  if (property == juce::Identifier("adsrTarget")) {
+    juce::String targetStr = tree.getProperty("adsrTarget", "CC").toString();
+    if (targetStr.equalsIgnoreCase("PitchBend") ||
+        targetStr.equalsIgnoreCase("SmartScaleBend"))
+      tree.setProperty("sendReleaseValue", true, &undoManager);
+  }
   // Phase 55.6: Rebuild only when schema structure changes (avoids rebuild
   // during slider drag)
   bool needsRebuild = false;

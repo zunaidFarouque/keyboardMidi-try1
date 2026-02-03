@@ -1,5 +1,5 @@
 {
-  "tests": 103,
+  "tests": 111,
   "name": "AllTests",
   "testsuites": [
     {
@@ -30,62 +30,62 @@
         {
           "name": "BlockTriad_ReturnsRootPositionSorted",
           "file": "D:\\_installed\\VScode repos\\AI\\Cursor\\keyboardMidi-try1\\Source\\Tests\\ChordUtilitiesTests.cpp",
-          "line": 38
+          "line": 40
         },
         {
           "name": "BlockSeventh_ReturnsFourNotesSorted",
           "file": "D:\\_installed\\VScode repos\\AI\\Cursor\\keyboardMidi-try1\\Source\\Tests\\ChordUtilitiesTests.cpp",
-          "line": 51
+          "line": 53
         },
         {
           "name": "BlockTriad_Degree1_DReturnsCorrectPitches",
           "file": "D:\\_installed\\VScode repos\\AI\\Cursor\\keyboardMidi-try1\\Source\\Tests\\ChordUtilitiesTests.cpp",
-          "line": 64
+          "line": 66
         },
         {
           "name": "CloseTriad_ReturnsThreeNotesClustered",
           "file": "D:\\_installed\\VScode repos\\AI\\Cursor\\keyboardMidi-try1\\Source\\Tests\\ChordUtilitiesTests.cpp",
-          "line": 77
+          "line": 80
         },
         {
           "name": "CloseSeventh_Degree0_Odd_UsesRootPosition",
           "file": "D:\\_installed\\VScode repos\\AI\\Cursor\\keyboardMidi-try1\\Source\\Tests\\ChordUtilitiesTests.cpp",
-          "line": 94
+          "line": 98
         },
         {
           "name": "CloseSeventh_Degree1_Even_ReturnsFourNotes",
           "file": "D:\\_installed\\VScode repos\\AI\\Cursor\\keyboardMidi-try1\\Source\\Tests\\ChordUtilitiesTests.cpp",
-          "line": 110
+          "line": 114
         },
         {
           "name": "OpenTriad_ReturnsSpreadVoicing",
           "file": "D:\\_installed\\VScode repos\\AI\\Cursor\\keyboardMidi-try1\\Source\\Tests\\ChordUtilitiesTests.cpp",
-          "line": 128
+          "line": 132
         },
         {
           "name": "OpenSeventh_ReturnsFourNotesSpread",
           "file": "D:\\_installed\\VScode repos\\AI\\Cursor\\keyboardMidi-try1\\Source\\Tests\\ChordUtilitiesTests.cpp",
-          "line": 140
+          "line": 144
         },
         {
           "name": "BlockNone_ReturnsSingleNote",
           "file": "D:\\_installed\\VScode repos\\AI\\Cursor\\keyboardMidi-try1\\Source\\Tests\\ChordUtilitiesTests.cpp",
-          "line": 154
+          "line": 158
         },
         {
           "name": "CloseTriad_Magnet0_MatchesExplicitZero",
           "file": "D:\\_installed\\VScode repos\\AI\\Cursor\\keyboardMidi-try1\\Source\\Tests\\ChordUtilitiesTests.cpp",
-          "line": 163
+          "line": 167
         },
         {
           "name": "CloseTriad_MagnetPlus1_ValidChord",
           "file": "D:\\_installed\\VScode repos\\AI\\Cursor\\keyboardMidi-try1\\Source\\Tests\\ChordUtilitiesTests.cpp",
-          "line": 177
+          "line": 181
         },
         {
           "name": "CloseTriad_MagnetClampedToRange",
           "file": "D:\\_installed\\VScode repos\\AI\\Cursor\\keyboardMidi-try1\\Source\\Tests\\ChordUtilitiesTests.cpp",
-          "line": 191
+          "line": 195
         }
       ]
     },
@@ -96,27 +96,27 @@
         {
           "name": "CampfireTriad_ReturnsNotesInFretRange",
           "file": "D:\\_installed\\VScode repos\\AI\\Cursor\\keyboardMidi-try1\\Source\\Tests\\ChordUtilitiesTests.cpp",
-          "line": 202
+          "line": 207
         },
         {
           "name": "CampfireSeventh_ReturnsNotesInFretRange",
           "file": "D:\\_installed\\VScode repos\\AI\\Cursor\\keyboardMidi-try1\\Source\\Tests\\ChordUtilitiesTests.cpp",
-          "line": 215
+          "line": 220
         },
         {
           "name": "RhythmTriad_ReturnsNotesInCapoRange",
           "file": "D:\\_installed\\VScode repos\\AI\\Cursor\\keyboardMidi-try1\\Source\\Tests\\ChordUtilitiesTests.cpp",
-          "line": 225
+          "line": 230
         },
         {
           "name": "RhythmSeventh_Degree2_ReturnsValidVoicing",
           "file": "D:\\_installed\\VScode repos\\AI\\Cursor\\keyboardMidi-try1\\Source\\Tests\\ChordUtilitiesTests.cpp",
-          "line": 240
+          "line": 245
         },
         {
           "name": "CampfireTriadDegree0_RootOnA_NoLowE",
           "file": "D:\\_installed\\VScode repos\\AI\\Cursor\\keyboardMidi-try1\\Source\\Tests\\ChordUtilitiesTests.cpp",
-          "line": 250
+          "line": 255
         }
       ]
     },
@@ -127,22 +127,22 @@
         {
           "name": "PianoClose_Triad_CompilesToChordPool",
           "file": "D:\\_installed\\VScode repos\\AI\\Cursor\\keyboardMidi-try1\\Source\\Tests\\ChordUtilitiesTests.cpp",
-          "line": 262
+          "line": 267
         },
         {
           "name": "PianoOpen_Seventh_CompilesToChordPool",
           "file": "D:\\_installed\\VScode repos\\AI\\Cursor\\keyboardMidi-try1\\Source\\Tests\\ChordUtilitiesTests.cpp",
-          "line": 292
+          "line": 298
         },
         {
           "name": "GuitarCampfire_Triad_CompilesToChordPool",
           "file": "D:\\_installed\\VScode repos\\AI\\Cursor\\keyboardMidi-try1\\Source\\Tests\\ChordUtilitiesTests.cpp",
-          "line": 321
+          "line": 328
         },
         {
           "name": "GuitarRhythm_VirtualCapo_CompilesToChordPool",
           "file": "D:\\_installed\\VScode repos\\AI\\Cursor\\keyboardMidi-try1\\Source\\Tests\\ChordUtilitiesTests.cpp",
-          "line": 351
+          "line": 360
         }
       ]
     },
@@ -174,92 +174,102 @@
     },
     {
       "name": "GridCompilerTest",
-      "tests": 17,
+      "tests": 19,
       "testsuite": [
         {
           "name": "VerticalInheritance",
           "file": "D:\\_installed\\VScode repos\\AI\\Cursor\\keyboardMidi-try1\\Source\\Tests\\GridCompilerTests.cpp",
-          "line": 83
+          "line": 84
         },
         {
           "name": "VerticalOverride",
           "file": "D:\\_installed\\VScode repos\\AI\\Cursor\\keyboardMidi-try1\\Source\\Tests\\GridCompilerTests.cpp",
-          "line": 103
+          "line": 104
         },
         {
           "name": "ConflictDetection",
           "file": "D:\\_installed\\VScode repos\\AI\\Cursor\\keyboardMidi-try1\\Source\\Tests\\GridCompilerTests.cpp",
-          "line": 118
+          "line": 119
         },
         {
           "name": "DeviceOverridesGlobal",
           "file": "D:\\_installed\\VScode repos\\AI\\Cursor\\keyboardMidi-try1\\Source\\Tests\\GridCompilerTests.cpp",
-          "line": 137
+          "line": 138
         },
         {
           "name": "DeviceInheritsFromGlobal",
           "file": "D:\\_installed\\VScode repos\\AI\\Cursor\\keyboardMidi-try1\\Source\\Tests\\GridCompilerTests.cpp",
-          "line": 156
+          "line": 157
         },
         {
           "name": "DeviceOverridesGlobalWithCC",
           "file": "D:\\_installed\\VScode repos\\AI\\Cursor\\keyboardMidi-try1\\Source\\Tests\\GridCompilerTests.cpp",
-          "line": 170
+          "line": 171
         },
         {
           "name": "GenericShiftExpandsToSides",
           "file": "D:\\_installed\\VScode repos\\AI\\Cursor\\keyboardMidi-try1\\Source\\Tests\\GridCompilerTests.cpp",
-          "line": 187
+          "line": 189
         },
         {
           "name": "SpecificModifierOverridesGeneric",
           "file": "D:\\_installed\\VScode repos\\AI\\Cursor\\keyboardMidi-try1\\Source\\Tests\\GridCompilerTests.cpp",
-          "line": 201
+          "line": 203
         },
         {
           "name": "ZoneCompilesToChordPool",
           "file": "D:\\_installed\\VScode repos\\AI\\Cursor\\keyboardMidi-try1\\Source\\Tests\\GridCompilerTests.cpp",
-          "line": 216
+          "line": 218
         },
         {
           "name": "LayerCommandsAreNotInherited",
           "file": "D:\\_installed\\VScode repos\\AI\\Cursor\\keyboardMidi-try1\\Source\\Tests\\GridCompilerTests.cpp",
-          "line": 242
+          "line": 244
         },
         {
           "name": "LayerToggleNotInherited",
           "file": "D:\\_installed\\VScode repos\\AI\\Cursor\\keyboardMidi-try1\\Source\\Tests\\GridCompilerTests.cpp",
-          "line": 257
+          "line": 259
         },
         {
           "name": "DeviceVerticalInheritanceIsDimmed",
           "file": "D:\\_installed\\VScode repos\\AI\\Cursor\\keyboardMidi-try1\\Source\\Tests\\GridCompilerTests.cpp",
-          "line": 273
+          "line": 275
         },
         {
           "name": "DeviceBaseOverridesGlobalLayer",
           "file": "D:\\_installed\\VScode repos\\AI\\Cursor\\keyboardMidi-try1\\Source\\Tests\\GridCompilerTests.cpp",
-          "line": 288
+          "line": 290
         },
         {
           "name": "ExpressionSimpleCcProducesFastPathAdsr",
           "file": "D:\\_installed\\VScode repos\\AI\\Cursor\\keyboardMidi-try1\\Source\\Tests\\GridCompilerTests.cpp",
-          "line": 301
+          "line": 303
         },
         {
           "name": "ExpressionCustomEnvelopeReadsAdsr",
           "file": "D:\\_installed\\VScode repos\\AI\\Cursor\\keyboardMidi-try1\\Source\\Tests\\GridCompilerTests.cpp",
-          "line": 332
+          "line": 335
         },
         {
           "name": "ExpressionPitchBendCompilesCorrectly",
           "file": "D:\\_installed\\VScode repos\\AI\\Cursor\\keyboardMidi-try1\\Source\\Tests\\GridCompilerTests.cpp",
-          "line": 365
+          "line": 368
         },
         {
           "name": "NoteReleaseBehaviorCompiles",
           "file": "D:\\_installed\\VScode repos\\AI\\Cursor\\keyboardMidi-try1\\Source\\Tests\\GridCompilerTests.cpp",
-          "line": 389
+          "line": 392
+        },
+        {
+          "name": "SmartScaleBendLookupIsBuilt",
+          "file": "D:\\_installed\\VScode repos\\AI\\Cursor\\keyboardMidi-try1\\Source\\Tests\\GridCompilerTests.cpp",
+          "line": 420
+        },
+        {
+          "name": "SmartScaleBendScalesWithPitchBendRange",
+          "file": "D:\\_installed\\VScode repos\\AI\\Cursor\\keyboardMidi-try1\\Source\\Tests\\GridCompilerTests.cpp",
+          "line": 465
         }
       ]
     },
@@ -332,7 +342,7 @@
     },
     {
       "name": "NoteTypeTest",
-      "tests": 22,
+      "tests": 24,
       "testsuite": [
         {
           "name": "ChannelAndNoteNumberSentCorrectly",
@@ -365,90 +375,100 @@
           "line": 725
         },
         {
+          "name": "OverrideTimer_NewChordCancelsOldTimer_OnlyOneTimerAlive",
+          "file": "D:\\_installed\\VScode repos\\AI\\Cursor\\keyboardMidi-try1\\Source\\Tests\\InputProcessorTests.cpp",
+          "line": 767
+        },
+        {
+          "name": "OverrideTimerOff_OldTimerStillFires_TwoTimersAlive",
+          "file": "D:\\_installed\\VScode repos\\AI\\Cursor\\keyboardMidi-try1\\Source\\Tests\\InputProcessorTests.cpp",
+          "line": 814
+        },
+        {
           "name": "AllParamsWorkTogether",
           "file": "D:\\_installed\\VScode repos\\AI\\Cursor\\keyboardMidi-try1\\Source\\Tests\\InputProcessorTests.cpp",
-          "line": 766
+          "line": 859
         },
         {
           "name": "MomentaryChain_PhantomKey_ReleaseDoesNotTriggerNote",
           "file": "D:\\_installed\\VScode repos\\AI\\Cursor\\keyboardMidi-try1\\Source\\Tests\\InputProcessorTests.cpp",
-          "line": 786
+          "line": 879
         },
         {
           "name": "SustainToggleOffSendsOneNoteOffPerUniqueNote",
           "file": "D:\\_installed\\VScode repos\\AI\\Cursor\\keyboardMidi-try1\\Source\\Tests\\InputProcessorTests.cpp",
-          "line": 847
+          "line": 940
         },
         {
           "name": "SustainInverseDefaultAndConfigChangeCleanup",
           "file": "D:\\_installed\\VScode repos\\AI\\Cursor\\keyboardMidi-try1\\Source\\Tests\\InputProcessorTests.cpp",
-          "line": 911
+          "line": 1004
         },
         {
           "name": "LatchToggleReleaseLatchedOnToggleOff_SendsNoteOff",
           "file": "D:\\_installed\\VScode repos\\AI\\Cursor\\keyboardMidi-try1\\Source\\Tests\\InputProcessorTests.cpp",
-          "line": 940
+          "line": 1033
         },
         {
           "name": "PanicAll_SendsNoteOffForAllNotes",
           "file": "D:\\_installed\\VScode repos\\AI\\Cursor\\keyboardMidi-try1\\Source\\Tests\\InputProcessorTests.cpp",
-          "line": 989
+          "line": 1082
         },
         {
           "name": "PanicLatchedOnly_SendsNoteOffOnlyForLatched",
           "file": "D:\\_installed\\VScode repos\\AI\\Cursor\\keyboardMidi-try1\\Source\\Tests\\InputProcessorTests.cpp",
-          "line": 1032
+          "line": 1125
         },
         {
           "name": "PanicChords_SendsNoteOffForSustainChord",
           "file": "D:\\_installed\\VScode repos\\AI\\Cursor\\keyboardMidi-try1\\Source\\Tests\\InputProcessorTests.cpp",
-          "line": 1073
+          "line": 1166
         },
         {
           "name": "TransposeUp1Semitone_IncreasesChromatic",
           "file": "D:\\_installed\\VScode repos\\AI\\Cursor\\keyboardMidi-try1\\Source\\Tests\\InputProcessorTests.cpp",
-          "line": 1135
+          "line": 1228
         },
         {
           "name": "TransposeDown1Semitone_DecreasesChromatic",
           "file": "D:\\_installed\\VScode repos\\AI\\Cursor\\keyboardMidi-try1\\Source\\Tests\\InputProcessorTests.cpp",
-          "line": 1147
+          "line": 1240
         },
         {
           "name": "TransposeUp1Octave_IncreasesBy12",
           "file": "D:\\_installed\\VScode repos\\AI\\Cursor\\keyboardMidi-try1\\Source\\Tests\\InputProcessorTests.cpp",
-          "line": 1159
+          "line": 1252
         },
         {
           "name": "TransposeDown1Octave_DecreasesBy12",
           "file": "D:\\_installed\\VScode repos\\AI\\Cursor\\keyboardMidi-try1\\Source\\Tests\\InputProcessorTests.cpp",
-          "line": 1171
+          "line": 1264
         },
         {
           "name": "TransposeSet_AppliesSemitonesValue",
           "file": "D:\\_installed\\VScode repos\\AI\\Cursor\\keyboardMidi-try1\\Source\\Tests\\InputProcessorTests.cpp",
-          "line": 1183
+          "line": 1276
         },
         {
           "name": "TransposeSet_NegativeSemitones",
           "file": "D:\\_installed\\VScode repos\\AI\\Cursor\\keyboardMidi-try1\\Source\\Tests\\InputProcessorTests.cpp",
-          "line": 1195
+          "line": 1288
         },
         {
           "name": "TransposeClampedTo48",
           "file": "D:\\_installed\\VScode repos\\AI\\Cursor\\keyboardMidi-try1\\Source\\Tests\\InputProcessorTests.cpp",
-          "line": 1207
+          "line": 1300
         },
         {
           "name": "LegacyGlobalPitchDown_DecreasesChromaticByOne",
           "file": "D:\\_installed\\VScode repos\\AI\\Cursor\\keyboardMidi-try1\\Source\\Tests\\InputProcessorTests.cpp",
-          "line": 1221
+          "line": 1314
         }
       ]
     },
     {
       "name": "MappingDefinitionTest",
-      "tests": 5,
+      "tests": 6,
       "testsuite": [
         {
           "name": "SchemaGeneration",
@@ -468,12 +488,17 @@
         {
           "name": "EnvelopeContext",
           "file": "D:\\_installed\\VScode repos\\AI\\Cursor\\keyboardMidi-try1\\Source\\Tests\\MappingDefinitionTests.cpp",
-          "line": 90
+          "line": 91
+        },
+        {
+          "name": "SmartScaleBendNoPeakSlider",
+          "file": "D:\\_installed\\VScode repos\\AI\\Cursor\\keyboardMidi-try1\\Source\\Tests\\MappingDefinitionTests.cpp",
+          "line": 117
         },
         {
           "name": "CCCompactDependentLayout",
           "file": "D:\\_installed\\VScode repos\\AI\\Cursor\\keyboardMidi-try1\\Source\\Tests\\MappingDefinitionTests.cpp",
-          "line": 111
+          "line": 131
         }
       ]
     },
@@ -605,23 +630,44 @@
       ]
     },
     {
+      "name": "ZoneOverrideTimer",
+      "tests": 3,
+      "testsuite": [
+        {
+          "name": "SerializationRoundTripOff",
+          "file": "D:\\_installed\\VScode repos\\AI\\Cursor\\keyboardMidi-try1\\Source\\Tests\\ZoneTests.cpp",
+          "line": 264
+        },
+        {
+          "name": "SerializationRoundTripOn",
+          "file": "D:\\_installed\\VScode repos\\AI\\Cursor\\keyboardMidi-try1\\Source\\Tests\\ZoneTests.cpp",
+          "line": 273
+        },
+        {
+          "name": "DefaultIsOff",
+          "file": "D:\\_installed\\VScode repos\\AI\\Cursor\\keyboardMidi-try1\\Source\\Tests\\ZoneTests.cpp",
+          "line": 282
+        }
+      ]
+    },
+    {
       "name": "ZoneVoicingMagnet",
       "tests": 3,
       "testsuite": [
         {
           "name": "SerializationRoundTrip",
           "file": "D:\\_installed\\VScode repos\\AI\\Cursor\\keyboardMidi-try1\\Source\\Tests\\ZoneTests.cpp",
-          "line": 263
+          "line": 288
         },
         {
           "name": "DefaultIsZero",
           "file": "D:\\_installed\\VScode repos\\AI\\Cursor\\keyboardMidi-try1\\Source\\Tests\\ZoneTests.cpp",
-          "line": 272
+          "line": 297
         },
         {
           "name": "NegativeValueRoundTrip",
           "file": "D:\\_installed\\VScode repos\\AI\\Cursor\\keyboardMidi-try1\\Source\\Tests\\ZoneTests.cpp",
-          "line": 277
+          "line": 302
         }
       ]
     }

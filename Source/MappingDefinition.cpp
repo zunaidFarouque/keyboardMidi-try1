@@ -47,7 +47,8 @@ InspectorControl MappingDefinition::createSeparator(const juce::String &label,
   return c;
 }
 
-InspectorSchema MappingDefinition::getSchema(const juce::ValueTree &mapping) {
+InspectorSchema MappingDefinition::getSchema(const juce::ValueTree &mapping,
+                                             int pitchBendRange) {
   InspectorSchema schema;
 
   // Step 1: Common control – Type selector (ComboBox)
@@ -183,14 +184,27 @@ InspectorSchema MappingDefinition::getSchema(const juce::ValueTree &mapping) {
       schema.push_back(steps);
     }
 
-    InspectorControl peak;
-    peak.propertyId = "data2";
-    peak.label = "Peak Value";
-    peak.controlType = InspectorControl::Type::Slider;
-    peak.min = 0.0;
-    peak.max = isPitchOrSmart ? 16383.0 : 127.0;
-    peak.step = 1.0;
-    schema.push_back(peak);
+    // Peak value: for PitchBend use semitones (-global PB range to +range);
+    // for CC use 0–127; for SmartScaleBend no peak slider (peak is
+    // scale-derived).
+    if (!adsrTargetStr.equalsIgnoreCase("SmartScaleBend")) {
+      InspectorControl peak;
+      peak.propertyId = "data2";
+      peak.label = adsrTargetStr.equalsIgnoreCase("PitchBend")
+                       ? "Peak (semitones)"
+                       : "Peak Value";
+      peak.controlType = InspectorControl::Type::Slider;
+      if (adsrTargetStr.equalsIgnoreCase("PitchBend")) {
+        peak.min = -static_cast<double>(pitchBendRange);
+        peak.max = static_cast<double>(pitchBendRange);
+        peak.valueScaleRange = pitchBendRange;
+      } else {
+        peak.min = 0.0;
+        peak.max = 127.0;
+      }
+      peak.step = 1.0;
+      schema.push_back(peak);
+    }
 
     // 2. Mode Selection
     schema.push_back(
@@ -222,23 +236,28 @@ InspectorSchema MappingDefinition::getSchema(const juce::ValueTree &mapping) {
     } else {
       InspectorControl sendRel;
       sendRel.propertyId = "sendReleaseValue";
-      sendRel.label = "Send Value on Release";
+      sendRel.label =
+          isPitchOrSmart ? "Reset pitch on release" : "Send Value on Release";
       sendRel.controlType = InspectorControl::Type::Toggle;
-      sendRel.widthWeight = 0.45f;
+      sendRel.widthWeight = isPitchOrSmart ? 1.0f : 0.45f;
       sendRel.sameLine = false;
       schema.push_back(sendRel);
 
-      InspectorControl relVal;
-      relVal.propertyId = "releaseValue";
-      relVal.label = "";
-      relVal.controlType = InspectorControl::Type::Slider;
-      relVal.min = 0.0;
-      relVal.max = 127.0;
-      relVal.step = 1.0;
-      relVal.sameLine = true;
-      relVal.widthWeight = 0.55f;
-      relVal.enabledConditionProperty = "sendReleaseValue";
-      schema.push_back(relVal);
+      // Release value slider only for CC; for PitchBend/SmartScaleBend release
+      // is always 8192
+      if (!isPitchOrSmart) {
+        InspectorControl relVal;
+        relVal.propertyId = "releaseValue";
+        relVal.label = "";
+        relVal.controlType = InspectorControl::Type::Slider;
+        relVal.min = 0.0;
+        relVal.max = 127.0;
+        relVal.step = 1.0;
+        relVal.sameLine = true;
+        relVal.widthWeight = 0.55f;
+        relVal.enabledConditionProperty = "sendReleaseValue";
+        schema.push_back(relVal);
+      }
     }
   } else if (typeStr.equalsIgnoreCase("Command")) {
     // Sustain: one control with Style dropdown when Sustain; Layer: same

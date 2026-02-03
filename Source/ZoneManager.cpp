@@ -8,6 +8,10 @@ ZoneManager::ZoneManager(ScaleLibrary &scaleLib) : scaleLibrary(scaleLib) {
 
 ZoneManager::~ZoneManager() {}
 
+std::vector<int> ZoneManager::getGlobalScaleIntervals() const {
+  return scaleLibrary.getIntervals(globalScaleName);
+}
+
 void ZoneManager::rebuildZoneCache(Zone *zone) {
   std::vector<int> intervals = zone->usesGlobalScale()
                                    ? scaleLibrary.getIntervals(globalScaleName)

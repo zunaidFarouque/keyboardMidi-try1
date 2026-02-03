@@ -86,14 +86,16 @@ TEST(MappingDefinitionTest, LayerUnifiedUI) {
   }
 }
 
-// Phase 55.2 / 56.1: Expression with custom envelope, PitchBend -> data2 (Peak) has max 16383
+// Phase 55.2 / 56.1: Expression PitchBend -> data2 (Peak) in semitones
+// (-pitchBendRange to +pitchBendRange)
 TEST(MappingDefinitionTest, EnvelopeContext) {
   juce::ValueTree mapping("Mapping");
   mapping.setProperty("type", "Expression", nullptr);
   mapping.setProperty("useCustomEnvelope", true, nullptr);
   mapping.setProperty("adsrTarget", "PitchBend", nullptr);
 
-  InspectorSchema schema = MappingDefinition::getSchema(mapping);
+  const int pbRange = 12;
+  InspectorSchema schema = MappingDefinition::getSchema(mapping, pbRange);
 
   const InspectorControl *data2Control = nullptr;
   for (const auto &c : schema) {
@@ -103,11 +105,29 @@ TEST(MappingDefinitionTest, EnvelopeContext) {
     }
   }
   ASSERT_NE(data2Control, nullptr) << "Schema should have a 'data2' control";
-  EXPECT_DOUBLE_EQ(data2Control->max, 16383.0)
-      << "Envelope PitchBend data2 (Peak) should have max 16383";
+  EXPECT_DOUBLE_EQ(data2Control->min, -static_cast<double>(pbRange))
+      << "PitchBend peak should be in semitones (min -range)";
+  EXPECT_DOUBLE_EQ(data2Control->max, static_cast<double>(pbRange))
+      << "PitchBend peak should be in semitones (max +range)";
+  EXPECT_EQ(data2Control->valueScaleRange, pbRange)
+      << "PitchBend peak should use valueScaleRange for raw<->semitones";
 }
 
-// Phase 55.7 / 56.1: Expression (simple) with compact dependent layout - checkbox + slider
+// SmartScaleBend has no peak (data2) slider; peak is scale-derived
+TEST(MappingDefinitionTest, SmartScaleBendNoPeakSlider) {
+  juce::ValueTree mapping("Mapping");
+  mapping.setProperty("type", "Expression", nullptr);
+  mapping.setProperty("adsrTarget", "SmartScaleBend", nullptr);
+
+  InspectorSchema schema = MappingDefinition::getSchema(mapping, 12);
+
+  for (const auto &c : schema)
+    EXPECT_NE(c.propertyId, "data2")
+        << "SmartScaleBend should not have a Peak Value (data2) control";
+}
+
+// Phase 55.7 / 56.1: Expression (simple) with compact dependent layout -
+// checkbox + slider
 TEST(MappingDefinitionTest, CCCompactDependentLayout) {
   juce::ValueTree mapping("Mapping");
   mapping.setProperty("type", "Expression", nullptr);
@@ -123,7 +143,8 @@ TEST(MappingDefinitionTest, CCCompactDependentLayout) {
       break;
     }
   }
-  ASSERT_NE(sendRelControl, nullptr) << "Schema should have 'sendReleaseValue' control";
+  ASSERT_NE(sendRelControl, nullptr)
+      << "Schema should have 'sendReleaseValue' control";
   EXPECT_EQ(sendRelControl->controlType, InspectorControl::Type::Toggle);
   EXPECT_FLOAT_EQ(sendRelControl->widthWeight, 0.45f)
       << "Toggle should have 0.45 width weight (Phase 56.2)";
@@ -137,12 +158,15 @@ TEST(MappingDefinitionTest, CCCompactDependentLayout) {
       break;
     }
   }
-  ASSERT_NE(releaseValControl, nullptr) << "Schema should have 'releaseValue' control";
+  ASSERT_NE(releaseValControl, nullptr)
+      << "Schema should have 'releaseValue' control";
   EXPECT_EQ(releaseValControl->controlType, InspectorControl::Type::Slider);
-  EXPECT_TRUE(releaseValControl->label.isEmpty()) << "Slider should have empty label for compact layout";
-  EXPECT_TRUE(releaseValControl->sameLine) << "Slider should be on same line as toggle";
+  EXPECT_TRUE(releaseValControl->label.isEmpty())
+      << "Slider should have empty label for compact layout";
+  EXPECT_TRUE(releaseValControl->sameLine)
+      << "Slider should be on same line as toggle";
   EXPECT_FLOAT_EQ(releaseValControl->widthWeight, 0.55f)
       << "Slider should have 0.55 width weight (Phase 56.2)";
-  EXPECT_EQ(releaseValControl->enabledConditionProperty, "sendReleaseValue") 
+  EXPECT_EQ(releaseValControl->enabledConditionProperty, "sendReleaseValue")
       << "Slider should be dependent on sendReleaseValue property";
 }

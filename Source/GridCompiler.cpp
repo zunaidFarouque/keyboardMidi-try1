@@ -1,7 +1,9 @@
 #include "GridCompiler.h"
 #include "MidiNoteUtilities.h"
+#include "ScaleUtilities.h"
 #include "SettingsManager.h"
 #include <algorithm>
+#include <cmath>
 #include <numeric>
 
 namespace {
@@ -24,6 +26,32 @@ uintptr_t parseDeviceHash(const juce::var &var) {
   if (var.isString())
     return (uintptr_t)var.toString().getHexValue64();
   return (uintptr_t)static_cast<juce::int64>(var);
+}
+
+// Build SmartScaleBend lookup: for each MIDI note 0-127, PB value to reach
+// (note + scale step) using global scale and PB range.
+void buildSmartBendLookup(MidiAction &action, const juce::ValueTree &mapping,
+                          ZoneManager &zoneMgr, SettingsManager &settingsMgr) {
+  int stepShift = (int)mapping.getProperty("smartStepShift", 1);
+  std::vector<int> intervals = zoneMgr.getGlobalScaleIntervals();
+  if (intervals.empty())
+    intervals = {0, 2, 4, 5, 7, 9, 11}; // Major
+  int root = zoneMgr.getGlobalRootNote();
+  int pbRange = settingsMgr.getPitchBendRange();
+  if (pbRange < 1)
+    pbRange = 12;
+
+  action.smartBendLookup.resize(128);
+  for (int note = 0; note < 128; ++note) {
+    int degree = ScaleUtilities::findScaleDegree(note, root, intervals);
+    int targetDegree = degree + stepShift;
+    int targetNote =
+        ScaleUtilities::calculateMidiNote(root, intervals, targetDegree);
+    int semitones = targetNote - note;
+    double frac = (pbRange > 0) ? (semitones / (double)pbRange) : 0.0;
+    int pbValue = 8192 + static_cast<int>(std::round(frac * 8192));
+    action.smartBendLookup[(size_t)note] = juce::jlimit(0, 16383, pbValue);
+  }
 }
 
 // Helpers for generic modifier mapping (VK codes).
@@ -537,9 +565,15 @@ void compileMappingsForLayer(VisualGrid &vGrid, AudioGrid &aGrid,
         action.adsrSettings.ccNumber = (int)mapping.getProperty("data1", 1);
       }
       action.data2 = (int)mapping.getProperty("data2", 127);
+      bool defaultResetPitch =
+          (action.adsrSettings.target == AdsrTarget::PitchBend ||
+           action.adsrSettings.target == AdsrTarget::SmartScaleBend);
       action.sendReleaseValue =
-          (bool)mapping.getProperty("sendReleaseValue", false);
+          (bool)mapping.getProperty("sendReleaseValue", defaultResetPitch);
       action.releaseValue = (int)mapping.getProperty("releaseValue", 0);
+
+      if (action.adsrSettings.target == AdsrTarget::SmartScaleBend)
+        buildSmartBendLookup(action, mapping, zoneMgr, settingsMgr);
     }
 
     // Latch Toggle: release latched notes when toggling off

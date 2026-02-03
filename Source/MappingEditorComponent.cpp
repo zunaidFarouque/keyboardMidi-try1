@@ -63,7 +63,7 @@ MappingEditorComponent::MappingEditorComponent(PresetManager &pm,
                                                SettingsManager &settingsMgr)
     : presetManager(pm), rawInputManager(rawInputMgr), deviceManager(deviceMgr),
       settingsManager(settingsMgr), layerListPanel(pm),
-      inspector(undoManager, deviceManager),
+      inspector(undoManager, deviceManager, settingsManager),
       resizerBar(&horizontalLayout, 1, true) { // Item index 1, vertical bar
 
   // Phase 41/45: Setup layer list panel callback with per-layer selection
@@ -303,7 +303,8 @@ void MappingEditorComponent::finishInputCapture(uintptr_t deviceHandle,
     } else {
       uintptr_t hash =
           static_cast<uintptr_t>(std::hash<juce::String>{}(aliasName.trim()));
-      deviceHashStr = juce::String::toHexString((juce::int64)hash).toUpperCase();
+      deviceHashStr =
+          juce::String::toHexString((juce::int64)hash).toUpperCase();
       inputAlias = aliasName;
     }
   } else {
@@ -540,8 +541,9 @@ void MappingEditorComponent::handleRawKeyEvent(uintptr_t deviceHandle,
   // Phase 56.3: Smart Input Capture – capture key when overlay is active
   if (captureOverlay != nullptr) {
     if (isDown) {
-      juce::MessageManager::callAsync(
-          [this, deviceHandle, keyCode] { finishInputCapture(deviceHandle, keyCode, false); });
+      juce::MessageManager::callAsync([this, deviceHandle, keyCode] {
+        finishInputCapture(deviceHandle, keyCode, false);
+      });
     }
     return;
   }
