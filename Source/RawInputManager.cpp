@@ -4,6 +4,8 @@
 #include "SettingsManager.h"
 #include "TouchpadHidParser.h"
 
+#include <algorithm>
+
 // 1. Windows Header Only
 // (We removed the #defines because CMake already sets them)
 #include <windows.h>
@@ -379,9 +381,29 @@ int64_t __stdcall RawInputManager::rawInputWndProc(void *hwnd, unsigned int msg,
             auto contacts = parsePrecisionTouchpadReport(
                 reinterpret_cast<void *>(lParam),
                 reinterpret_cast<void *>(deviceHandle));
-            if (!contacts.empty() && globalManagerInstance) {
+            if (globalManagerInstance) {
               uintptr_t handle = reinterpret_cast<uintptr_t>(deviceHandle);
-              auto contactsCopy = contacts;
+              juce::ScopedLock lock(
+                  globalManagerInstance->touchpadContactsLock);
+              auto &acc =
+                  globalManagerInstance->touchpadContactsByDevice[handle];
+              if (contacts.empty()) {
+                acc.clear();
+              } else if (contacts.size() >= 2) {
+                acc = contacts;
+              } else {
+                for (const auto &c : contacts) {
+                  auto it = std::find_if(acc.begin(), acc.end(),
+                                         [&c](const TouchpadContact &a) {
+                                           return a.contactId == c.contactId;
+                                         });
+                  if (it != acc.end())
+                    *it = c;
+                  else
+                    acc.push_back(c);
+                }
+              }
+              auto contactsCopy = acc;
               globalManagerInstance->listeners.call(
                   [handle, contactsCopy](Listener &l) {
                     l.handleTouchpadContacts(handle, contactsCopy);

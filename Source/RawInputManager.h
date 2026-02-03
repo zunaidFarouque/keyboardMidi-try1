@@ -66,6 +66,10 @@ private:
   // Anti-ghosting and autorepeat filtering: Track pressed keys per device
   std::map<uintptr_t, std::set<int>> deviceKeyStates;
 
+  // Accumulated touchpad contacts per device (merge across WM_INPUT messages)
+  std::map<uintptr_t, std::vector<TouchpadContact>> touchpadContactsByDevice;
+  juce::CriticalSection touchpadContactsLock;
+
   // Static WNDPROC wrapper
   static int64_t __stdcall rawInputWndProc(void *hwnd, unsigned int msg,
                                            uint64_t wParam, int64_t lParam);
