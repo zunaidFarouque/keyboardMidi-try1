@@ -67,6 +67,9 @@ public:
   void saveConfig();
   void loadConfig();
 
+  // Get portable data directory (next to executable)
+  static juce::File getPortableDataDirectory();
+
 private:
   juce::ValueTree globalConfig{"OmniKeyConfig"};
 

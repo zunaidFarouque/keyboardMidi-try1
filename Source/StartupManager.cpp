@@ -1,4 +1,5 @@
 #include "StartupManager.h"
+#include "DeviceManager.h"
 #include "ScaleUtilities.h"
 #include "SettingsManager.h"
 #include "Zone.h"
@@ -9,10 +10,8 @@ StartupManager::StartupManager(PresetManager *presetMgr,
     : presetManager(presetMgr), deviceManager(deviceMgr), zoneManager(zoneMgr),
       settingsManager(settingsMgr) {
 
-  // Setup file paths
-  appDataFolder =
-      juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory)
-          .getChildFile("MIDIQy");
+  // Setup file paths (use portable data directory next to executable)
+  appDataFolder = DeviceManager::getPortableDataDirectory();
   autoloadFile = appDataFolder.getChildFile("autoload.xml");
   settingsFile = appDataFolder.getChildFile("settings.xml");
 

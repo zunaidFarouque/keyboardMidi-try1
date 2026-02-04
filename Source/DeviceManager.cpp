@@ -557,10 +557,15 @@ void DeviceManager::validateConnectedDevices() {
     saveConfig();
 }
 
+juce::File DeviceManager::getPortableDataDirectory() {
+  auto exeFile = juce::File::getSpecialLocation(juce::File::currentExecutableFile);
+  auto exeDir = exeFile.getParentDirectory();
+  auto dataDir = exeDir.getChildFile("MIDIQy_data");
+  dataDir.createDirectory();
+  return dataDir;
+}
+
 juce::File DeviceManager::getConfigFile() const {
-  auto dir =
-      juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory)
-          .getChildFile("MIDIQy");
-  dir.createDirectory();
+  auto dir = getPortableDataDirectory();
   return dir.getChildFile("MIDIQyConfig.xml");
 }
