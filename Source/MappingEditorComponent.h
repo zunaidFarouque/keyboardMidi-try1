@@ -78,6 +78,7 @@ private:
   juce::TableListBox table;
   juce::TextButton addButton;
   juce::TextButton duplicateButton;
+  juce::TextButton moveToLayerButton;
   juce::TextButton deleteButton;
   juce::ToggleButton learnButton;
   juce::UndoManager undoManager;
@@ -101,6 +102,8 @@ private:
 
   // Phase 41: Helper to get current layer's mappings
   juce::ValueTree getCurrentLayerMappings();
+
+  void moveSelectedMappingsToLayer(int targetLayerId);
 
   void updateInspectorFromSelection(); // Phase 45.1: refresh inspector on
                                        // layer/row change

@@ -4,7 +4,7 @@ SettingsManager::SettingsManager() {
   rootNode = juce::ValueTree("MIDIQySettings");
   rootNode.setProperty("pitchBendRange", 12, nullptr);
   rootNode.setProperty("midiModeActive", false, nullptr);
-  rootNode.setProperty("toggleKeyCode", 0x91, nullptr);          // VK_SCROLL
+  rootNode.setProperty("toggleKeyCode", 0x7B, nullptr);          // VK_F12
   rootNode.setProperty("performanceModeKeyCode", 0x7A, nullptr); // VK_F11
   rootNode.setProperty("lastMidiDevice", "", nullptr);
   rootNode.setProperty("studioMode", false,
@@ -15,6 +15,8 @@ SettingsManager::SettingsManager() {
   // layered.
   rootNode.setProperty("visualizerXOpacity", 0.45, nullptr);
   rootNode.setProperty("visualizerYOpacity", 0.45, nullptr);
+  rootNode.setProperty("delayMidiEnabled", false, nullptr);
+  rootNode.setProperty("delayMidiSeconds", 1, nullptr);
   rootNode.addListener(this);
 }
 
@@ -39,7 +41,7 @@ void SettingsManager::setMidiModeActive(bool active) {
 }
 
 int SettingsManager::getToggleKey() const {
-  return rootNode.getProperty("toggleKeyCode", 0x91); // VK_SCROLL default
+  return rootNode.getProperty("toggleKeyCode", 0x7B); // VK_F12 default
 }
 
 void SettingsManager::setToggleKey(int vkCode) {
@@ -85,6 +87,26 @@ void SettingsManager::setCapWindowRefresh30Fps(bool cap) {
 
 int SettingsManager::getWindowRefreshIntervalMs() const {
   return isCapWindowRefresh30Fps() ? 34 : 16; // 30 FPS cap vs ~60 FPS
+}
+
+bool SettingsManager::isDelayMidiEnabled() const {
+  return rootNode.getProperty("delayMidiEnabled", false);
+}
+
+void SettingsManager::setDelayMidiEnabled(bool enabled) {
+  rootNode.setProperty("delayMidiEnabled", enabled, nullptr);
+  sendChangeMessage();
+}
+
+int SettingsManager::getDelayMidiSeconds() const {
+  return juce::jlimit(1, 10,
+                      static_cast<int>(rootNode.getProperty("delayMidiSeconds", 1)));
+}
+
+void SettingsManager::setDelayMidiSeconds(int seconds) {
+  rootNode.setProperty("delayMidiSeconds", juce::jlimit(1, 10, seconds),
+                       nullptr);
+  sendChangeMessage();
 }
 
 float SettingsManager::getVisualizerXOpacity() const {
@@ -176,13 +198,15 @@ void SettingsManager::loadFromXml(juce::File file) {
         rootNode = juce::ValueTree("MIDIQySettings");
         rootNode.setProperty("pitchBendRange", 12, nullptr);
         rootNode.setProperty("midiModeActive", false, nullptr);
-        rootNode.setProperty("toggleKeyCode", 0x91, nullptr);
+        rootNode.setProperty("toggleKeyCode", 0x7B, nullptr);
         rootNode.setProperty("performanceModeKeyCode", 0x7A, nullptr);
         rootNode.setProperty("lastMidiDevice", "", nullptr);
         rootNode.setProperty("studioMode", false, nullptr);
         rootNode.setProperty("capWindowRefresh30Fps", true, nullptr);
         rootNode.setProperty("visualizerXOpacity", 0.45, nullptr);
         rootNode.setProperty("visualizerYOpacity", 0.45, nullptr);
+        rootNode.setProperty("delayMidiEnabled", false, nullptr);
+        rootNode.setProperty("delayMidiSeconds", 1, nullptr);
       } else {
         // Phase 43: Validate (sanitize) – prevent divide-by-zero from bad saved
         // data
@@ -195,6 +219,10 @@ void SettingsManager::loadFromXml(juce::File file) {
           rootNode.setProperty("visualizerXOpacity", 0.45, nullptr);
         if (!rootNode.hasProperty("visualizerYOpacity"))
           rootNode.setProperty("visualizerYOpacity", 0.45, nullptr);
+        if (!rootNode.hasProperty("delayMidiEnabled"))
+          rootNode.setProperty("delayMidiEnabled", false, nullptr);
+        if (!rootNode.hasProperty("delayMidiSeconds"))
+          rootNode.setProperty("delayMidiSeconds", 1, nullptr);
       }
       rootNode.addListener(this);
       sendChangeMessage();

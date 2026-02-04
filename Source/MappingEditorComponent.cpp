@@ -180,6 +180,37 @@ MappingEditorComponent::MappingEditorComponent(PresetManager &pm,
   };
   addAndMakeVisible(duplicateButton);
 
+  // Setup Move to Layer Button
+  moveToLayerButton.setButtonText("Move to layer...");
+  moveToLayerButton.onClick = [this] {
+    int numSelected = table.getNumSelectedRows();
+    if (numSelected == 0) {
+      juce::AlertWindow::showMessageBoxAsync(
+          juce::AlertWindow::InfoIcon, "No Selection",
+          "Please select one or more mappings to move.", "OK");
+      return;
+    }
+
+    juce::PopupMenu menu;
+    auto layerOptions = MappingDefinition::getLayerOptions();
+    for (const auto &pair : layerOptions) {
+      int layerId = pair.first;
+      juce::String name = pair.second;
+      bool isCurrent = (layerId == selectedLayerId);
+      menu.addItem(layerId + 1, name, !isCurrent, false);
+    }
+
+    menu.showMenuAsync(
+        juce::PopupMenu::Options().withTargetComponent(&moveToLayerButton),
+        [this](int result) {
+          if (result > 0) {
+            int targetLayerId = result - 1;
+            moveSelectedMappingsToLayer(targetLayerId);
+          }
+        });
+  };
+  addAndMakeVisible(moveToLayerButton);
+
   // Setup Delete Button
   deleteButton.setButtonText("-");
   deleteButton.onClick = [this] {
@@ -327,6 +358,7 @@ void MappingEditorComponent::finishInputCapture(uintptr_t deviceHandle,
   }
 
   juce::ValueTree newMapping("Mapping");
+  newMapping.setProperty("enabled", true, nullptr);
   newMapping.setProperty("inputKey", inputKey, nullptr);
   newMapping.setProperty("deviceHash", deviceHashStr, nullptr);
   newMapping.setProperty("inputAlias", inputAlias, nullptr);
@@ -381,6 +413,7 @@ void MappingEditorComponent::finishInputCaptureTouchpad() {
       juce::String::toHexString((juce::int64)hash).toUpperCase();
 
   juce::ValueTree newMapping("Mapping");
+  newMapping.setProperty("enabled", true, nullptr);
   newMapping.setProperty("inputKey", 0, nullptr);
   newMapping.setProperty("deviceHash", deviceHashStr, nullptr);
   newMapping.setProperty("inputAlias", inputAlias, nullptr);
@@ -415,6 +448,8 @@ void MappingEditorComponent::resized() {
   header.removeFromRight(4);
   duplicateButton.setBounds(header.removeFromRight(80));
   header.removeFromRight(4);
+  moveToLayerButton.setBounds(header.removeFromRight(110));
+  header.removeFromRight(4);
   deleteButton.setBounds(header.removeFromRight(30));
   header.removeFromRight(4);
   learnButton.setBounds(header.removeFromRight(60));
@@ -448,12 +483,64 @@ juce::ValueTree MappingEditorComponent::getCurrentLayerMappings() {
   return presetManager.getMappingsListForLayer(selectedLayerId);
 }
 
+void MappingEditorComponent::moveSelectedMappingsToLayer(int targetLayerId) {
+  if (targetLayerId == selectedLayerId)
+    return;
+  if (targetLayerId < 0 || targetLayerId > 8)
+    return;
+
+  auto sourceMappings = getCurrentLayerMappings();
+  juce::ValueTree targetMappings = presetManager.getMappingsListForLayer(targetLayerId);
+  if (!sourceMappings.isValid() || !targetMappings.isValid())
+    return;
+
+  int numSelected = table.getNumSelectedRows();
+  if (numSelected == 0)
+    return;
+
+  juce::Array<int> selectedRows;
+  for (int i = 0; i < numSelected; ++i) {
+    int row = table.getSelectedRow(i);
+    if (row >= 0 && row < sourceMappings.getNumChildren())
+      selectedRows.add(row);
+  }
+  selectedRows.sort();
+  std::reverse(selectedRows.begin(), selectedRows.end());
+
+  juce::String layerName = targetLayerId == 0
+                               ? "Base"
+                               : presetManager.getLayerNode(targetLayerId)
+                                     .getProperty("name", "Layer " + juce::String(targetLayerId))
+                                     .toString();
+  undoManager.beginNewTransaction("Move to " + layerName);
+
+  for (int row : selectedRows) {
+    auto child = sourceMappings.getChild(row);
+    if (!child.isValid())
+      continue;
+    juce::ValueTree copy = child.createCopy();
+    copy.setProperty("layerID", targetLayerId, &undoManager);
+    targetMappings.addChild(copy, -1, &undoManager);
+    sourceMappings.removeChild(child, &undoManager);
+  }
+
+  table.deselectAllRows();
+  table.updateContent();
+  table.repaint();
+  inspector.setSelection({});
+}
+
 void MappingEditorComponent::paintRowBackground(juce::Graphics &g,
                                                 int rowNumber, int width,
                                                 int height,
                                                 bool rowIsSelected) {
+  auto node = getCurrentLayerMappings().getChild(rowNumber);
+  const bool disabled =
+      node.isValid() && !MappingDefinition::isMappingEnabled(node);
   if (rowIsSelected)
     g.fillAll(juce::Colours::lightblue.withAlpha(0.3f));
+  else if (disabled)
+    g.fillAll(juce::Colours::grey.withAlpha(0.35f));
   else if (rowNumber % 2)
     g.fillAll(juce::Colours::white.withAlpha(0.05f));
 }
@@ -509,7 +596,8 @@ void MappingEditorComponent::paintCell(juce::Graphics &g, int rowNumber,
     break;
   }
 
-  g.setColour(juce::Colours::white);
+  const bool disabled = !MappingDefinition::isMappingEnabled(node);
+  g.setColour(disabled ? juce::Colours::grey : juce::Colours::white);
   g.setFont(14.0f);
   g.drawText(text, 2, 0, width - 4, height, juce::Justification::centredLeft,
              true);
@@ -778,8 +866,8 @@ void MappingEditorComponent::handleAxisEvent(uintptr_t deviceHandle,
     if (selectedRow < 0)
       return;
 
-    // Get the ValueTree for the selected row
-    auto mappingsNode = presetManager.getMappingsNode();
+    // Get the ValueTree for the selected row in the current layer
+    auto mappingsNode = getCurrentLayerMappings();
     if (!mappingsNode.isValid())
       return;
 

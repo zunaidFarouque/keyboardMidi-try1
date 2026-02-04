@@ -55,6 +55,10 @@ private:
   juce::ToggleButton studioModeToggle; // Studio Mode (Multi-Device Support)
   juce::ToggleButton capRefresh30FpsToggle; // Cap window refresh at 30 FPS
 
+  juce::Label delayMidiLabel;
+  juce::ToggleButton delayMidiCheckbox;
+  juce::Slider delayMidiSlider;
+
   juce::GroupComponent mappingColorsGroup;
   std::array<juce::TextButton, 3> typeColorButtons;
 

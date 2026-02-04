@@ -54,7 +54,7 @@ private:
   // 1. Core Engines & Inputs (Must die LAST)
   SettingsManager settingsManager;
   DeviceManager deviceManager;
-  MidiEngine midiEngine;
+  MidiEngine midiEngine{&settingsManager};
   ScaleLibrary scaleLibrary;
   std::unique_ptr<RawInputManager>
       rawInputManager; // MOVED UP (Was #5) - Must be before UI components that

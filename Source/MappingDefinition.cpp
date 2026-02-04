@@ -68,6 +68,10 @@ InspectorControl MappingDefinition::createSeparator(const juce::String &label,
   return c;
 }
 
+bool MappingDefinition::isMappingEnabled(const juce::ValueTree &mapping) {
+  return mapping.getProperty("enabled", true);
+}
+
 static bool isTouchpadMapping(const juce::ValueTree &mapping) {
   return mapping.getProperty("inputAlias", "")
       .toString()
@@ -85,6 +89,16 @@ static bool isTouchpadEventBoolean(int eventId) {
 InspectorSchema MappingDefinition::getSchema(const juce::ValueTree &mapping,
                                              int pitchBendRange) {
   InspectorSchema schema;
+
+  // Enabled: mapping can be turned off without deleting
+  InspectorControl enabledCtrl;
+  enabledCtrl.propertyId = "enabled";
+  enabledCtrl.label = "Enabled";
+  enabledCtrl.controlType = InspectorControl::Type::Toggle;
+  enabledCtrl.widthWeight = 0.5f;
+  schema.push_back(enabledCtrl);
+
+  schema.push_back(createSeparator("", juce::Justification::centred));
 
   // Step 1: Common control – Type selector (ComboBox)
   InspectorControl typeCtrl;

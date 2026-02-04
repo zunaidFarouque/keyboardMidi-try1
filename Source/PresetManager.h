@@ -1,6 +1,7 @@
 #pragma once
 #include <JuceHeader.h>
 #include <atomic>
+#include <vector>
 
 class PresetManager : public juce::ChangeBroadcaster {
 public:
@@ -15,6 +16,7 @@ public:
   juce::ValueTree getLayerNode(int layerIndex); // Find layer by id; invalid if missing/out of bounds
   juce::ValueTree
   getMappingsListForLayer(int layerIndex); // Get "Mappings" child of Layer
+  std::vector<juce::ValueTree> getEnabledMappingsForLayer(int layerIndex) const;
   void ensureStaticLayers(); // Ensure Layers 0-8 exist (call after load/construct)
 
   // Legacy: Returns Layer 0's mappings for backward compatibility

@@ -802,7 +802,7 @@ void VisualizerComponent::paint(juce::Graphics &g) {
     juce::String toggleKeyName =
         settingsManager
             ? RawInputManager::getKeyName(settingsManager->getToggleKey())
-            : "Scroll Lock";
+            : "F12";
     juce::String message =
         "MIDI MODE DISABLED\n(Press " + toggleKeyName + " to enable)";
     g.drawText(message, getLocalBounds(), juce::Justification::centred, false);

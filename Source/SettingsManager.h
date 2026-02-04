@@ -37,6 +37,12 @@ public:
   void setCapWindowRefresh30Fps(bool cap);
   int getWindowRefreshIntervalMs() const;
 
+  // Delay MIDI messages (for binding in other software)
+  bool isDelayMidiEnabled() const;
+  void setDelayMidiEnabled(bool enabled);
+  int getDelayMidiSeconds() const;
+  void setDelayMidiSeconds(int seconds);
+
   // Visualizer: opacity for X and Y touchpad overlays (0.0–1.0)
   float getVisualizerXOpacity() const;
   void setVisualizerXOpacity(float alpha);

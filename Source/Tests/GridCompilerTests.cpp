@@ -94,6 +94,51 @@ protected:
     zoneMgr.addZone(zone);
   }
 
+  // Helper: move one mapping by row index from source layer to target layer
+  // (same logic as MappingEditorComponent::moveSelectedMappingsToLayer).
+  void moveMappingToLayer(int sourceLayerId, int rowIndex, int targetLayerId) {
+    if (sourceLayerId == targetLayerId || targetLayerId < 0 || targetLayerId > 8)
+      return;
+    auto src = presetMgr.getMappingsListForLayer(sourceLayerId);
+    auto tgt = presetMgr.getMappingsListForLayer(targetLayerId);
+    if (!src.isValid() || !tgt.isValid() || rowIndex < 0 ||
+        rowIndex >= src.getNumChildren())
+      return;
+    auto child = src.getChild(rowIndex);
+    if (!child.isValid())
+      return;
+    juce::ValueTree copy = child.createCopy();
+    copy.setProperty("layerID", targetLayerId, nullptr);
+    tgt.addChild(copy, -1, nullptr);
+    src.removeChild(child, nullptr);
+  }
+
+  // Helper: move multiple mappings by row indices (descending order).
+  void moveMappingsToLayer(int sourceLayerId,
+                           const juce::Array<int> &rowIndices,
+                           int targetLayerId) {
+    if (sourceLayerId == targetLayerId || targetLayerId < 0 || targetLayerId > 8)
+      return;
+    auto src = presetMgr.getMappingsListForLayer(sourceLayerId);
+    auto tgt = presetMgr.getMappingsListForLayer(targetLayerId);
+    if (!src.isValid() || !tgt.isValid())
+      return;
+    juce::Array<int> rows = rowIndices;
+    rows.sort();
+    for (int i = rows.size(); --i >= 0;) {
+      int row = rows[i];
+      if (row >= 0 && row < src.getNumChildren()) {
+        auto child = src.getChild(row);
+        if (child.isValid()) {
+          juce::ValueTree copy = child.createCopy();
+          copy.setProperty("layerID", targetLayerId, nullptr);
+          tgt.addChild(copy, -1, nullptr);
+          src.removeChild(child, nullptr);
+        }
+      }
+    }
+  }
+
   // Helper to set layer inheritance flags (solo, passthru, private)
   void setLayerSolo(int layerId, bool value = true) {
     auto layer = presetMgr.getLayerNode(layerId);
@@ -526,6 +571,75 @@ TEST_F(GridCompilerTest, LayerInheritanceProperties_SerializeRoundTrip) {
   EXPECT_TRUE((bool)loaded.getProperty("soloLayer", false));
   EXPECT_TRUE((bool)loaded.getProperty("passthruInheritance", false));
   EXPECT_TRUE((bool)loaded.getProperty("privateToLayer", false));
+}
+
+// Move to layer: preset state after moving one mapping from layer 0 to layer 1.
+TEST_F(GridCompilerTest, MoveMappingsToLayer_PresetState) {
+  addMapping(0, 81, 0);
+  addMapping(0, 82, 0);
+  EXPECT_EQ(presetMgr.getMappingsListForLayer(0).getNumChildren(), 2);
+  EXPECT_EQ(presetMgr.getMappingsListForLayer(1).getNumChildren(), 0);
+
+  moveMappingToLayer(0, 1, 1);
+
+  EXPECT_EQ(presetMgr.getMappingsListForLayer(0).getNumChildren(), 1);
+  EXPECT_EQ(presetMgr.getMappingsListForLayer(1).getNumChildren(), 1);
+  auto moved = presetMgr.getMappingsListForLayer(1).getChild(0);
+  ASSERT_TRUE(moved.isValid());
+  EXPECT_EQ((int)moved.getProperty("layerID", -1), 1);
+  EXPECT_EQ((int)moved.getProperty("inputKey", -1), 82);
+  EXPECT_EQ((int)presetMgr.getMappingsListForLayer(0).getChild(0).getProperty("inputKey", -1), 81);
+}
+
+// Move to layer: compiled grids reflect moved mappings (key 82 on L1, key 81 on L0).
+TEST_F(GridCompilerTest, MoveMappingsToLayer_CompiledGridReflectsMove) {
+  addMapping(0, 81, 0);
+  addMapping(0, 82, 0);
+  moveMappingToLayer(0, 1, 1);
+
+  auto context =
+      GridCompiler::compile(presetMgr, deviceMgr, zoneMgr, settingsMgr);
+
+  auto l0 = context->visualLookup[0][0];
+  auto l1 = context->visualLookup[0][1];
+  EXPECT_EQ((*l0)[81].state, VisualState::Active);
+  EXPECT_EQ((*l0)[82].state, VisualState::Empty);
+  EXPECT_EQ((*l1)[81].state, VisualState::Inherited);
+  EXPECT_EQ((*l1)[82].state, VisualState::Active);
+
+  auto l0Audio = context->globalGrids[0];
+  auto l1Audio = context->globalGrids[1];
+  EXPECT_TRUE((*l0Audio)[81].isActive);
+  EXPECT_FALSE((*l0Audio)[82].isActive);
+  EXPECT_TRUE((*l1Audio)[81].isActive);
+  EXPECT_TRUE((*l1Audio)[82].isActive);
+}
+
+// Move to layer: move multiple mappings (two rows) from layer 0 to layer 2.
+TEST_F(GridCompilerTest, MoveMappingsToLayer_MultipleMappings) {
+  addMapping(0, 81, 0);
+  addMapping(0, 82, 0);
+  addMapping(0, 83, 0);
+  moveMappingsToLayer(0, {0, 2}, 2);
+
+  EXPECT_EQ(presetMgr.getMappingsListForLayer(0).getNumChildren(), 1);
+  EXPECT_EQ(presetMgr.getMappingsListForLayer(2).getNumChildren(), 2);
+  auto layer0 = presetMgr.getMappingsListForLayer(0);
+  auto layer2 = presetMgr.getMappingsListForLayer(2);
+  EXPECT_EQ((int)layer0.getChild(0).getProperty("inputKey", -1), 82);
+  juce::Array<int> keysOn2;
+  for (int i = 0; i < layer2.getNumChildren(); ++i)
+    keysOn2.add((int)layer2.getChild(i).getProperty("inputKey", -1));
+  keysOn2.sort();
+  EXPECT_TRUE(keysOn2.contains(81));
+  EXPECT_TRUE(keysOn2.contains(83));
+
+  auto context =
+      GridCompiler::compile(presetMgr, deviceMgr, zoneMgr, settingsMgr);
+  auto l2 = context->visualLookup[0][2];
+  EXPECT_EQ((*l2)[81].state, VisualState::Active);   // moved to L2
+  EXPECT_EQ((*l2)[82].state, VisualState::Inherited); // still on L0, inherited
+  EXPECT_EQ((*l2)[83].state, VisualState::Active);   // moved to L2
 }
 
 // Phase 53.4: Device view vertical inheritance – Layer 0 mapping on device

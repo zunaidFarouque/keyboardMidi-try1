@@ -69,4 +69,7 @@ public:
   // Touchpad mapping: event id (0-10) -> display name
   static juce::String getTouchpadEventName(int eventId);
   static std::map<int, juce::String> getTouchpadEventOptions();
+
+  // Single source of truth for mapping enabled state (property "enabled", default true)
+  static bool isMappingEnabled(const juce::ValueTree &mapping);
 };

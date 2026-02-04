@@ -1,9 +1,73 @@
 #include "MidiEngine.h"
+#include "SettingsManager.h"
 
-MidiEngine::MidiEngine() {}
+MidiEngine::MidiEngine(SettingsManager *settingsMgr)
+    : settingsManager(settingsMgr) {
+  if (settingsManager) {
+    settingsManager->addChangeListener(this);
+    cachedDelayMidiEnabled = settingsManager->isDelayMidiEnabled();
+  }
+}
 
 MidiEngine::~MidiEngine() {
+  stopTimer();
+  if (settingsManager)
+    settingsManager->removeChangeListener(this);
   // std::unique_ptr automatically closes the device on destruction
+}
+
+void MidiEngine::changeListenerCallback(juce::ChangeBroadcaster *source) {
+  if (source == settingsManager && settingsManager)
+    cachedDelayMidiEnabled = settingsManager->isDelayMidiEnabled();
+}
+
+void MidiEngine::queueOrSendNow(const juce::MidiMessage &msg) {
+  if (!cachedDelayMidiEnabled) {
+    sendImmediately(msg);
+    return;
+  }
+  if (!currentOutput)
+    return;
+
+  const double nowMs = juce::Time::getMillisecondCounterHiRes();
+  const int delaySec =
+      juce::jlimit(1, 10, settingsManager->getDelayMidiSeconds());
+  const double sendAtMs = nowMs + delaySec * 1000.0;
+
+  {
+    const juce::ScopedLock sl(delayQueueLock);
+    delayQueue.push_back({msg, sendAtMs});
+  }
+  if (!isTimerRunning())
+    startTimer(kDelayTimerIntervalMs);
+}
+
+void MidiEngine::sendImmediately(const juce::MidiMessage &msg) {
+  if (currentOutput)
+    currentOutput->sendMessageNow(msg);
+}
+
+void MidiEngine::timerCallback() {
+  const double nowMs = juce::Time::getMillisecondCounterHiRes();
+  std::vector<juce::MidiMessage> toSend;
+
+  {
+    const juce::ScopedLock sl(delayQueueLock);
+    auto it = delayQueue.begin();
+    while (it != delayQueue.end()) {
+      if (it->sendAtMs <= nowMs) {
+        toSend.push_back(it->message);
+        it = delayQueue.erase(it);
+      } else {
+        ++it;
+      }
+    }
+    if (delayQueue.empty())
+      stopTimer();
+  }
+
+  for (const auto &msg : toSend)
+    sendImmediately(msg);
 }
 
 juce::StringArray MidiEngine::getDeviceNames() {
@@ -40,41 +104,30 @@ void MidiEngine::setOutputDevice(int deviceIndex) {
 }
 
 void MidiEngine::sendNoteOn(int channel, int note, float velocity) {
-  if (currentOutput) {
-    auto msg = juce::MidiMessage::noteOn(channel, note, velocity);
-    currentOutput->sendMessageNow(msg);
-  }
+  auto msg = juce::MidiMessage::noteOn(channel, note, velocity);
+  queueOrSendNow(msg);
 }
 
 void MidiEngine::sendNoteOff(int channel, int note) {
-  if (currentOutput) {
-    auto msg = juce::MidiMessage::noteOff(channel, note);
-    currentOutput->sendMessageNow(msg);
-  }
+  auto msg = juce::MidiMessage::noteOff(channel, note);
+  queueOrSendNow(msg);
 }
 
 void MidiEngine::sendCC(int channel, int controller, int value) {
-  if (currentOutput) {
-    auto msg = juce::MidiMessage::controllerEvent(channel, controller, value);
-    currentOutput->sendMessageNow(msg);
-  }
+  auto msg = juce::MidiMessage::controllerEvent(channel, controller, value);
+  queueOrSendNow(msg);
 }
 
 void MidiEngine::sendPitchBend(int channel, int value) {
-  if (currentOutput) {
-    // Clamp value to valid range (0-16383)
-    value = juce::jlimit(0, 16383, value);
-    auto msg = juce::MidiMessage::pitchWheel(channel, value);
-    currentOutput->sendMessageNow(msg);
-  }
+  value = juce::jlimit(0, 16383, value);
+  auto msg = juce::MidiMessage::pitchWheel(channel, value);
+  queueOrSendNow(msg);
 }
 
 void MidiEngine::allNotesOff() {
-  if (currentOutput) {
-    for (int ch = 1; ch <= 16; ++ch) {
-      auto msg = juce::MidiMessage::controllerEvent(ch, 123, 0);
-      currentOutput->sendMessageNow(msg);
-    }
+  for (int ch = 1; ch <= 16; ++ch) {
+    auto msg = juce::MidiMessage::controllerEvent(ch, 123, 0);
+    queueOrSendNow(msg);
   }
 }
 
@@ -84,15 +137,15 @@ void MidiEngine::sendPitchBendRangeRPN(int channel, int rangeSemitones) {
 
   // RPN Setup: Pitch Bend Sensitivity is 00 00
   // Order: LSB (100) then MSB (101) is often safer for legacy/strict parsers
-  currentOutput->sendMessageNow(
+  queueOrSendNow(
       juce::MidiMessage::controllerEvent(channel, 100, 0));
-  currentOutput->sendMessageNow(
+  queueOrSendNow(
       juce::MidiMessage::controllerEvent(channel, 101, 0));
 
   // Data Entry: Set the Range
-  currentOutput->sendMessageNow(
+  queueOrSendNow(
       juce::MidiMessage::controllerEvent(channel, 6, rangeSemitones));
-  currentOutput->sendMessageNow(
+  queueOrSendNow(
       juce::MidiMessage::controllerEvent(channel, 38, 0)); // Cents = 0
 
   // NOTE: We are intentionally SKIPPING the "Null RPN" reset (101=127, 100=127).

@@ -927,7 +927,8 @@ void MappingInspector::valueTreePropertyChanged(
        property == juce::Identifier("touchpadInputMin") ||
        property == juce::Identifier("touchpadInputMax") ||
        property == juce::Identifier("touchpadOutputMin") ||
-       property == juce::Identifier("touchpadOutputMax"))) {
+       property == juce::Identifier("touchpadOutputMax") ||
+       property == juce::Identifier("enabled"))) {
     presetManager->sendChangeMessage();
   }
 }

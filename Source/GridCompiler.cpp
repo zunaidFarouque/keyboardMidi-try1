@@ -530,17 +530,18 @@ void compileMappingsForLayer(
     std::vector<bool> &touchedKeys, VisualState targetState,
     std::vector<TouchpadMappingEntry> *touchpadMappingsOut,
     std::vector<bool> *keysWrittenOut = nullptr) {
-  auto mappingsNode = presetMgr.getMappingsListForLayer(layerId);
-  if (!mappingsNode.isValid())
+  std::vector<juce::ValueTree> enabledList =
+      presetMgr.getEnabledMappingsForLayer(layerId);
+  if (enabledList.empty())
     return;
 
   // Phase 51.6: Process specific modifier keys (LShift, RShift, etc.) before
   // generic (Shift, Control, Alt) so specific mappings override expansion.
-  std::vector<int> order(mappingsNode.getNumChildren());
+  std::vector<int> order(enabledList.size());
   std::iota(order.begin(), order.end(), 0);
   std::sort(order.begin(), order.end(), [&](int a, int b) {
-    int keyA = (int)mappingsNode.getChild(a).getProperty("inputKey", 0);
-    int keyB = (int)mappingsNode.getChild(b).getProperty("inputKey", 0);
+    int keyA = (int)enabledList[a].getProperty("inputKey", 0);
+    int keyB = (int)enabledList[b].getProperty("inputKey", 0);
     bool specificA = isSpecificModifierKey(keyA);
     bool specificB = isSpecificModifierKey(keyB);
     if (specificA != specificB)
@@ -549,7 +550,7 @@ void compileMappingsForLayer(
   });
 
   for (int i : order) {
-    auto mapping = mappingsNode.getChild(i);
+    auto mapping = enabledList[i];
     if (!mapping.isValid() || !mapping.hasType("Mapping"))
       continue;
 

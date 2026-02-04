@@ -1,4 +1,5 @@
 #include "PresetManager.h"
+#include "MappingDefinition.h"
 
 PresetManager::PresetManager() {
   ensureStaticLayers();
@@ -190,6 +191,23 @@ juce::ValueTree PresetManager::getMappingsListForLayer(int layerIndex) {
     layer.addChild(mappings, -1, nullptr);
   }
   return mappings;
+}
+
+std::vector<juce::ValueTree> PresetManager::getEnabledMappingsForLayer(
+    int layerIndex) const {
+  std::vector<juce::ValueTree> out;
+  juce::ValueTree layer = const_cast<PresetManager *>(this)->getLayerNode(layerIndex);
+  if (!layer.isValid())
+    return out;
+  juce::ValueTree mappings = layer.getChildWithName("Mappings");
+  if (!mappings.isValid())
+    return out;
+  for (int i = 0; i < mappings.getNumChildren(); ++i) {
+    auto child = mappings.getChild(i);
+    if (child.isValid() && MappingDefinition::isMappingEnabled(child))
+      out.push_back(child);
+  }
+  return out;
 }
 
 juce::ValueTree PresetManager::getMappingsNode() {

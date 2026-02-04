@@ -143,12 +143,11 @@ MainComponent::MainComponent()
 
             // Phase 9.6: Rig Health Check
             if (settingsManager.isStudioMode()) {
-              // Extract all alias hashes from preset mappings
+              // Extract all alias hashes from enabled mappings (Layer 0)
               std::vector<uintptr_t> requiredAliasHashes;
-              auto mappings = presetManager.getMappingsNode();
+              auto list = presetManager.getEnabledMappingsForLayer(0);
 
-              for (int i = 0; i < mappings.getNumChildren(); ++i) {
-                auto mapping = mappings.getChild(i);
+              for (const auto &mapping : list) {
                 juce::String aliasName =
                     mapping.getProperty("inputAlias", "").toString();
 

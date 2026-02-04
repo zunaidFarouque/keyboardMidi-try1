@@ -98,9 +98,8 @@ static bool hasSustainInverseMapped(PresetManager &presetMgr) {
   const int sustainInverse =
       static_cast<int>(MIDIQy::CommandID::SustainInverse);
   for (int layer = 0; layer < 9; ++layer) {
-    auto mappings = presetMgr.getMappingsListForLayer(layer);
-    for (int i = 0; i < mappings.getNumChildren(); ++i) {
-      auto m = mappings.getChild(i);
+    auto list = presetMgr.getEnabledMappingsForLayer(layer);
+    for (const auto &m : list) {
       if (m.isValid() &&
           m.getProperty("type", juce::String())
               .toString()
@@ -310,7 +309,8 @@ void InputProcessor::valueTreePropertyChanged(
 
   // Optimization: Only rebuild if relevant properties changed (affects compiled
   // grid / touchpad mappings)
-  if (property == juce::Identifier("inputKey") ||
+  if (property == juce::Identifier("enabled") ||
+      property == juce::Identifier("inputKey") ||
       property == juce::Identifier("layerID") ||
       property == juce::Identifier("deviceHash") ||
       property == juce::Identifier("inputAlias") ||

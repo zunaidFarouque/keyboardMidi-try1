@@ -183,6 +183,33 @@ SettingsPanel::SettingsPanel(SettingsManager &settingsMgr, MidiEngine &midiEng,
         capRefresh30FpsToggle.getToggleState());
   };
   addAndMakeVisible(capRefresh30FpsToggle);
+
+  // Delay MIDI message (for binding in other software)
+  delayMidiLabel.setText("Delay MIDI message (seconds):",
+                         juce::dontSendNotification);
+  delayMidiLabel.attachToComponent(&delayMidiCheckbox, true);
+  addAndMakeVisible(delayMidiLabel);
+  addAndMakeVisible(delayMidiCheckbox);
+  addAndMakeVisible(delayMidiSlider);
+
+  delayMidiCheckbox.setButtonText("Enable");
+  delayMidiCheckbox.setToggleState(settingsManager.isDelayMidiEnabled(),
+                                   juce::dontSendNotification);
+  delayMidiCheckbox.onClick = [this] {
+    bool enabled = delayMidiCheckbox.getToggleState();
+    settingsManager.setDelayMidiEnabled(enabled);
+    delayMidiSlider.setEnabled(enabled);
+  };
+
+  delayMidiSlider.setRange(1, 10, 1);
+  delayMidiSlider.setTextValueSuffix(" s");
+  delayMidiSlider.setValue(settingsManager.getDelayMidiSeconds(),
+                           juce::dontSendNotification);
+  delayMidiSlider.setEnabled(settingsManager.isDelayMidiEnabled());
+  delayMidiSlider.onValueChange = [this] {
+    int value = static_cast<int>(delayMidiSlider.getValue());
+    settingsManager.setDelayMidiSeconds(value);
+  };
 }
 
 SettingsPanel::~SettingsPanel() {
@@ -199,6 +226,11 @@ void SettingsPanel::changeListenerCallback(juce::ChangeBroadcaster *source) {
                                     juce::dontSendNotification);
     capRefresh30FpsToggle.setToggleState(
         settingsManager.isCapWindowRefresh30Fps(), juce::dontSendNotification);
+    delayMidiCheckbox.setToggleState(settingsManager.isDelayMidiEnabled(),
+                                     juce::dontSendNotification);
+    delayMidiSlider.setValue(settingsManager.getDelayMidiSeconds(),
+                             juce::dontSendNotification);
+    delayMidiSlider.setEnabled(settingsManager.isDelayMidiEnabled());
     visXOpacitySlider.setValue(settingsManager.getVisualizerXOpacity() * 100.0,
                                juce::dontSendNotification);
     visYOpacitySlider.setValue(settingsManager.getVisualizerYOpacity() * 100.0,
@@ -335,6 +367,14 @@ void SettingsPanel::resized() {
 
   // Cap window refresh at 30 FPS
   capRefresh30FpsToggle.setBounds(leftMargin, y, width, controlHeight);
+  y += controlHeight + spacing;
+
+  // Delay MIDI message: checkbox and slider row
+  int checkboxWidth = 80;
+  int sliderWidth = width - checkboxWidth - spacing;
+  delayMidiCheckbox.setBounds(leftMargin, y, checkboxWidth, controlHeight);
+  delayMidiSlider.setBounds(leftMargin + checkboxWidth + spacing, y,
+                            sliderWidth, controlHeight);
   y += controlHeight + spacing;
 
   // Visualizer group (X/Y opacity sliders)
