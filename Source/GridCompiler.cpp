@@ -1,5 +1,6 @@
 #include "GridCompiler.h"
 #include "MidiNoteUtilities.h"
+#include "PitchPadUtilities.h"
 #include "ScaleUtilities.h"
 #include "SettingsManager.h"
 #include <algorithm>
@@ -603,6 +604,8 @@ void compileMappingsForLayer(
           entry.conversionKind = TouchpadConversionKind::ContinuousToRange;
           p.inputMin = (float)mapping.getProperty("touchpadInputMin", 0.0);
           p.inputMax = (float)mapping.getProperty("touchpadInputMax", 1.0);
+          float r = p.inputMax - p.inputMin;
+          p.invInputRange = (r > 0.0f) ? (1.0f / r) : 0.0f;
           if (isPB || isSmartBend) {
             // For pitch-based Expression targets, interpret the existing
             // touchpadOutputMin/Max as discrete step bounds and also store them
@@ -642,6 +645,7 @@ void compileMappingsForLayer(
             cfg.zeroStep = 0.0f;
 
             p.pitchPadConfig = cfg;
+            p.cachedPitchPadLayout = buildPitchPadLayout(cfg);
           } else {
             p.outputMin = (int)mapping.getProperty("touchpadOutputMin", 0);
             p.outputMax = (int)mapping.getProperty("touchpadOutputMax", 127);

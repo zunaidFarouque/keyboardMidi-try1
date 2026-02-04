@@ -26,8 +26,18 @@ int SettingsManager::getPitchBendRange() const {
   return rootNode.getProperty("pitchBendRange", 12);
 }
 
+void SettingsManager::updateCachedStepsPerSemitone() {
+  int range = juce::jmax(1, getPitchBendRange());
+  cachedStepsPerSemitone = 8192.0 / static_cast<double>(range);
+}
+
+double SettingsManager::getStepsPerSemitone() const {
+  return cachedStepsPerSemitone;
+}
+
 void SettingsManager::setPitchBendRange(int range) {
   rootNode.setProperty("pitchBendRange", juce::jlimit(1, 96, range), nullptr);
+  updateCachedStepsPerSemitone();
   sendChangeMessage();
 }
 
@@ -225,6 +235,7 @@ void SettingsManager::loadFromXml(juce::File file) {
           rootNode.setProperty("delayMidiSeconds", 1, nullptr);
       }
       rootNode.addListener(this);
+      updateCachedStepsPerSemitone();
       sendChangeMessage();
     }
   }

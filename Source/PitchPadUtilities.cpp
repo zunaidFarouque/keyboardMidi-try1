@@ -34,6 +34,8 @@ PitchPadLayout buildPitchPadLayout(const PitchPadConfig &config) {
     PitchPadBand restBand;
     restBand.xStart = x;
     restBand.xEnd = x + restWidth;
+    restBand.invSpan =
+        (restWidth > 0.0f) ? (1.0f / restWidth) : 0.0f;
     restBand.step = step;
     restBand.isRest = true;
     layout.bands.push_back(restBand);
@@ -44,6 +46,8 @@ PitchPadLayout buildPitchPadLayout(const PitchPadConfig &config) {
       PitchPadBand transBand;
       transBand.xStart = x;
       transBand.xEnd = x + transitionWidth;
+      transBand.invSpan =
+          (transitionWidth > 0.0f) ? (1.0f / transitionWidth) : 0.0f;
       transBand.step = step; // Transition from 'step' to 'step + 1'
       transBand.isRest = false;
       layout.bands.push_back(transBand);
@@ -53,7 +57,10 @@ PitchPadLayout buildPitchPadLayout(const PitchPadConfig &config) {
 
   // Ensure final band covers the end of the interval.
   if (!layout.bands.empty()) {
-    layout.bands.back().xEnd = 1.0f;
+    auto &back = layout.bands.back();
+    back.xEnd = 1.0f;
+    float span = back.xEnd - back.xStart;
+    back.invSpan = (span > 0.0f) ? (1.0f / span) : 0.0f;
   }
 
   return layout;
@@ -69,8 +76,7 @@ PitchSample mapXToStep(const PitchPadLayout &layout, float x) {
 
   for (const auto &band : layout.bands) {
     if (x >= band.xStart && x < band.xEnd) {
-      float span = band.xEnd - band.xStart;
-      float u = (span > 0.0f) ? (x - band.xStart) / span : 0.0f;
+      float u = (x - band.xStart) * band.invSpan;
       if (band.isRest) {
         sample.step = static_cast<float>(band.step);
         sample.inRestingBand = true;

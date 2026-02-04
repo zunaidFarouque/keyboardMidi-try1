@@ -330,6 +330,10 @@ void InputProcessor::valueTreePropertyChanged(
       property == juce::Identifier("touchpadInputMax") ||
       property == juce::Identifier("touchpadOutputMin") ||
       property == juce::Identifier("touchpadOutputMax") ||
+      property == juce::Identifier("pitchPadMode") ||
+      property == juce::Identifier("pitchPadStart") ||
+      property == juce::Identifier("pitchPadRestingPercent") ||
+      property == juce::Identifier("pitchPadCustomStart") ||
       property == juce::Identifier("adsrTarget") ||
       property == juce::Identifier("smartStepShift") ||
       property == juce::Identifier("pbRange") ||
@@ -558,8 +562,7 @@ void InputProcessor::processEvent(InputID input, bool isDown) {
       if (midiAction.type == ActionType::Expression) {
         int peakValue = midiAction.data2;
         if (midiAction.adsrSettings.target == AdsrTarget::PitchBend) {
-          int range = juce::jmax(1, settingsManager.getPitchBendRange());
-          double stepsPerSemitone = 8192.0 / static_cast<double>(range);
+          double stepsPerSemitone = settingsManager.getStepsPerSemitone();
           peakValue =
               static_cast<int>(8192.0 + (midiAction.data2 * stepsPerSemitone));
           peakValue = juce::jlimit(0, 16383, peakValue);
@@ -1511,9 +1514,8 @@ void InputProcessor::processTouchpadContacts(
           int peakValue;
           if (act.adsrSettings.target == AdsrTarget::CC) {
             peakValue = act.adsrSettings.valueWhenOn;
-          } else if (act.adsrSettings.target == AdsrTarget::PitchBend) {
-            int range = juce::jmax(1, settingsManager.getPitchBendRange());
-            double stepsPerSemitone = 8192.0 / static_cast<double>(range);
+          } else           if (act.adsrSettings.target == AdsrTarget::PitchBend) {
+            double stepsPerSemitone = settingsManager.getStepsPerSemitone();
             peakValue =
                 static_cast<int>(8192.0 + (act.data2 * stepsPerSemitone));
             peakValue = juce::jlimit(0, 16383, peakValue);
@@ -1598,9 +1600,7 @@ void InputProcessor::processTouchpadContacts(
           break;
         }
 
-        float inRange = p.inputMax - p.inputMin;
-        float t =
-            (inRange > 0.0f) ? (continuousVal - p.inputMin) / inRange : 0.0f;
+        float t = (continuousVal - p.inputMin) * p.invInputRange;
         t = std::clamp(t, 0.0f, 1.0f);
 
         float outVal = static_cast<float>(p.outputMin) +
@@ -1614,12 +1614,14 @@ void InputProcessor::processTouchpadContacts(
             (act.adsrSettings.target == AdsrTarget::PitchBend ||
              act.adsrSettings.target == AdsrTarget::SmartScaleBend)) {
           const PitchPadConfig &cfg = *p.pitchPadConfig;
-          PitchPadLayout layout = buildPitchPadLayout(cfg);
+          const PitchPadLayout &layout =
+              p.cachedPitchPadLayout ? *p.cachedPitchPadLayout
+                                    : buildPitchPadLayout(cfg);
 
           auto relKey = std::make_tuple(deviceHandle, entry.layerId,
                                         entry.eventId, act.channel);
 
-          if (cfg.mode == PitchPadMode::Relative) {
+            if (cfg.mode == PitchPadMode::Relative) {
             // Relative mode: anchor point (where user first touches) becomes PB
             // zero. Movement from anchor uses the SAME pitch-pad layout as
             // Absolute, just re-centered at the anchor.
@@ -1734,7 +1736,7 @@ void InputProcessor::processTouchpadContacts(
             float clampedOffset =
                 juce::jlimit(static_cast<float>(-pbRange),
                              static_cast<float>(pbRange), stepOffset);
-            double stepsPerSemitone = 8192.0 / static_cast<double>(pbRange);
+            double stepsPerSemitone = settingsManager.getStepsPerSemitone();
             pbVal = static_cast<int>(std::round(
                 8192.0 +
                 (static_cast<double>(clampedOffset) * stepsPerSemitone)));

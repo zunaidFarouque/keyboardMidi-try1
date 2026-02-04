@@ -98,8 +98,7 @@ void ExpressionEngine::triggerEnvelope(InputID source, int channel,
 
   // Calculate step size for Attack: from 0.0 to 1.0 in attackMs
   if (settings.attackMs > 0) {
-    double numSteps = settings.attackMs / timerIntervalMs;
-    env.stepSize = 1.0 / numSteps;
+    env.stepSize = timerIntervalMs / static_cast<double>(settings.attackMs);
   } else {
     // Instant attack
     env.stepSize = 1.0;
@@ -132,8 +131,8 @@ void ExpressionEngine::releaseEnvelope(InputID source) {
       // Fallback: behave like normal release
       env.stage = Stage::Release;
       if (env.settings.releaseMs > 0 && env.currentLevel > 0.0) {
-        double numSteps = env.settings.releaseMs / timerIntervalMs;
-        env.stepSize = env.currentLevel / numSteps;
+        env.stepSize = env.currentLevel * timerIntervalMs /
+                       static_cast<double>(env.settings.releaseMs);
       } else {
         env.stepSize = env.currentLevel;
       }
@@ -168,8 +167,8 @@ void ExpressionEngine::releaseEnvelope(InputID source) {
           e.stage = Stage::Attack;
 
           if (e.settings.attackMs > 0) {
-            double numSteps = e.settings.attackMs / timerIntervalMs;
-            e.stepSize = 1.0 / numSteps;
+            e.stepSize =
+                timerIntervalMs / static_cast<double>(e.settings.attackMs);
           } else {
             e.stepSize = 1.0;
             e.currentLevel = 1.0;
@@ -193,8 +192,8 @@ void ExpressionEngine::releaseEnvelope(InputID source) {
     env.stageProgress = 0.0;
 
     if (env.settings.releaseMs > 0) {
-      double numSteps = env.settings.releaseMs / timerIntervalMs;
-      env.stepSize = 1.0 / numSteps;
+      env.stepSize =
+          timerIntervalMs / static_cast<double>(env.settings.releaseMs);
     } else {
       env.stepSize = 1.0;
     }
@@ -206,8 +205,8 @@ void ExpressionEngine::releaseEnvelope(InputID source) {
 
   // Calculate step size for Release: from currentLevel to 0.0 in releaseMs
   if (env.settings.releaseMs > 0 && env.currentLevel > 0.0) {
-    double numSteps = env.settings.releaseMs / timerIntervalMs;
-    env.stepSize = env.currentLevel / numSteps;
+    env.stepSize = env.currentLevel * timerIntervalMs /
+                   static_cast<double>(env.settings.releaseMs);
   } else {
     // Instant release
     env.stepSize = env.currentLevel;
@@ -232,9 +231,9 @@ void ExpressionEngine::processOneTick() {
         // Transition to Decay
         env.stage = Stage::Decay;
         if (env.settings.decayMs > 0) {
-          double numSteps = env.settings.decayMs / timerIntervalMs;
           double levelRange = 1.0 - env.settings.sustainLevel;
-          env.stepSize = levelRange / numSteps;
+          env.stepSize = levelRange * timerIntervalMs /
+                         static_cast<double>(env.settings.decayMs);
         } else {
           // Instant decay
           env.currentLevel = env.settings.sustainLevel;

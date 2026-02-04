@@ -5,18 +5,7 @@
 // Helper types and functions for touchpad pitch-pad layout. Both the runtime
 // (InputProcessor) and UI (VisualizerComponent) should use these so that what
 // you see matches what you hear.
-
-struct PitchPadBand {
-  float xStart = 0.0f; // Inclusive
-  float xEnd = 0.0f;   // Exclusive
-  int step = 0;        // Base step index for this band
-  bool isRest =
-      false; // true = resting band; false = transition band to next step
-};
-
-struct PitchPadLayout {
-  std::vector<PitchPadBand> bands;
-};
+// PitchPadBand and PitchPadLayout are defined in MappingTypes.h.
 
 struct PitchSample {
   // Effective step value for this X position. In a resting band this will be

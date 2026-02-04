@@ -277,12 +277,25 @@ enum class TouchpadConversionKind {
   ContinuousToRange // Continuous input -> Expression (range map)
 };
 
+// Pitch-pad layout types (shared by TouchpadConversionParams and PitchPadUtilities)
+struct PitchPadBand {
+  float xStart = 0.0f;
+  float xEnd = 0.0f;
+  float invSpan = 0.0f;  // 1/(xEnd-xStart) when span > 0, else 0
+  int step = 0;
+  bool isRest = false;
+};
+struct PitchPadLayout {
+  std::vector<PitchPadBand> bands;
+};
+
 // Conversion parameters for touchpad mappings (use only fields for the kind)
 struct TouchpadConversionParams {
   float threshold = 0.5f;
   bool triggerAbove = true; // true = note on when above threshold
   float inputMin = 0.0f;
   float inputMax = 1.0f;
+  float invInputRange = 1.0f; // 1/(inputMax-inputMin) when range > 0, else 0
   int outputMin = 0;
   int outputMax = 127;
   int valueWhenOn = 127;
@@ -293,6 +306,8 @@ struct TouchpadConversionParams {
   // ContinuousToRange. When not set, ContinuousToRange falls back to the
   // legacy linear behaviour using outputMin/outputMax.
   std::optional<PitchPadConfig> pitchPadConfig;
+  // Pre-built layout for pitchPadConfig (avoids rebuilding every frame).
+  std::optional<PitchPadLayout> cachedPitchPadLayout;
 };
 
 // One compiled touchpad mapping (alias "Touchpad", layer, event, action,

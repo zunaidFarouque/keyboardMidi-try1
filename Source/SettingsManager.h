@@ -11,6 +11,8 @@ public:
   // Pitch Bend Range
   int getPitchBendRange() const;
   void setPitchBendRange(int range);
+  // Cached 8192/range for PB value conversion (avoids division on hot path)
+  double getStepsPerSemitone() const;
 
   // MIDI Mode Toggle
   bool isMidiModeActive() const;
@@ -63,8 +65,10 @@ public:
 
 private:
   juce::ValueTree rootNode;
+  double cachedStepsPerSemitone = 8192.0 / 12.0; // 8192 / pitchBendRange
 
   juce::String getTypePropertyName(ActionType type) const;
+  void updateCachedStepsPerSemitone();
 
   JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(SettingsManager)
 };
