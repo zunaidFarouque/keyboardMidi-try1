@@ -258,6 +258,15 @@ struct PitchPadConfig {
   // This is interpreted by helpers; runtime and visualizer share the same
   // meaning, but callers are free to ignore it if they only care about steps.
   float restingSpacePercent = 10.0f;
+
+  // Step index that should correspond to zero pitch-bend (0 semitones / 0
+  // scale steps). Used to implement the "Starting position" control. For
+  // example, with minStep=-2, maxStep=+2:
+  // - Left   start -> zeroStep = -2
+  // - Center start -> zeroStep = 0
+  // - Right  start -> zeroStep = +2
+  // - Custom start -> interpolated between minStep and maxStep.
+  float zeroStep = 0.0f;
 };
 
 // Touchpad mapping conversion kind (input type -> output type)

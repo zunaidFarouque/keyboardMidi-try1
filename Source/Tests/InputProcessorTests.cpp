@@ -23,11 +23,20 @@ public:
   };
   std::vector<Event> events;
 
+  struct PitchEvent {
+    int channel;
+    int value;
+  };
+  std::vector<PitchEvent> pitchEvents;
+
   void sendNoteOn(int channel, int note, float velocity) override {
     events.push_back({channel, note, velocity, true});
   }
   void sendNoteOff(int channel, int note) override {
     events.push_back({channel, note, 0.0f, false});
+  }
+  void sendPitchBend(int channel, int value) {
+    pitchEvents.push_back({channel, value});
   }
   void clear() { events.clear(); }
 };
@@ -50,6 +59,174 @@ protected:
     proc.initialize();
   }
 };
+
+// Fixture for touchpad pitch-pad behaviour (Absolute/Relative, Start position)
+class TouchpadPitchPadTest : public ::testing::Test {
+protected:
+  PresetManager presetMgr;
+  DeviceManager deviceMgr;
+  ScaleLibrary scaleLib;
+  SettingsManager settingsMgr;
+  MidiEngine midiEng;
+  VoiceManager voiceMgr{midiEng, settingsMgr};
+  InputProcessor proc{voiceMgr, presetMgr, deviceMgr,
+                      scaleLib, midiEng,   settingsMgr};
+
+  void SetUp() override {
+    presetMgr.getLayersList().removeAllChildren(nullptr);
+    presetMgr.ensureStaticLayers();
+    settingsMgr.setMidiModeActive(true);
+    settingsMgr.setPitchBendRange(2); // ±2 semitones for easier reasoning
+    proc.initialize();
+  }
+
+  void addTouchpadPitchMappingWithPBRange(juce::String mode, int pbRange,
+                                          int outputMin, int outputMax) {
+    settingsMgr.setPitchBendRange(pbRange);
+    auto mappings = presetMgr.getMappingsListForLayer(0);
+    juce::ValueTree m("Mapping");
+    m.setProperty("inputAlias", "Touchpad", nullptr);
+    m.setProperty("inputTouchpadEvent", TouchpadEvent::Finger1X, nullptr);
+    m.setProperty("type", "Expression", nullptr);
+    m.setProperty("adsrTarget", "PitchBend", nullptr);
+    m.setProperty("channel", 1, nullptr);
+    m.setProperty("layerID", 0, nullptr);
+    m.setProperty("touchpadInputMin", 0.0, nullptr);
+    m.setProperty("touchpadInputMax", 1.0, nullptr);
+    m.setProperty("touchpadOutputMin", outputMin, nullptr);
+    m.setProperty("touchpadOutputMax", outputMax, nullptr);
+    m.setProperty("pitchPadMode", mode, nullptr);
+    mappings.addChild(m, -1, nullptr);
+
+    proc.forceRebuildMappings();
+  }
+
+  void addTouchpadPitchMapping(juce::String mode) {
+    auto mappings = presetMgr.getMappingsListForLayer(0);
+    juce::ValueTree m("Mapping");
+    m.setProperty("inputAlias", "Touchpad", nullptr);
+    m.setProperty("inputTouchpadEvent", TouchpadEvent::Finger1X, nullptr);
+    m.setProperty("type", "Expression", nullptr);
+    m.setProperty("adsrTarget", "PitchBend", nullptr);
+    m.setProperty("channel", 1, nullptr);
+    m.setProperty("layerID", 0, nullptr);
+    m.setProperty("touchpadInputMin", 0.0, nullptr);
+    m.setProperty("touchpadInputMax", 1.0, nullptr);
+    m.setProperty("touchpadOutputMin", -2, nullptr);
+    m.setProperty("touchpadOutputMax", 2, nullptr);
+    m.setProperty("pitchPadMode", mode, nullptr);
+    mappings.addChild(m, -1, nullptr);
+
+    proc.forceRebuildMappings();
+  }
+
+  // Helper: simulate a single-frame touchpad contact at given normalized X.
+  void sendFinger1X(uintptr_t deviceHandle, float xNorm) {
+    std::vector<TouchpadContact> contacts = {
+        {0, 0, 0, xNorm, 0.5f, true},
+    };
+    proc.processTouchpadContacts(deviceHandle, contacts);
+  }
+
+  // Convert PB value back into approximate semitone offset for current range.
+  float pbToSemitones(int pbVal) const {
+    int range = juce::jmax(1, settingsMgr.getPitchBendRange());
+    double stepsPerSemitone = 8192.0 / static_cast<double>(range);
+    return static_cast<float>((static_cast<double>(pbVal) - 8192.0) /
+                              stepsPerSemitone);
+  }
+  // Helper: get last PB value from InputProcessor's internal cache.
+  int getLastPitchBend(uintptr_t deviceHandle) const {
+    auto key =
+        std::make_tuple(deviceHandle, 0, (int)TouchpadEvent::Finger1X, 1, -1);
+    auto it = proc.lastTouchpadContinuousValues.find(key);
+    if (it == proc.lastTouchpadContinuousValues.end())
+      return 8192;
+    return it->second;
+  }
+};
+
+TEST_F(TouchpadPitchPadTest, AbsoluteModeUsesRangeCenterAsZero) {
+  addTouchpadPitchMapping("Absolute");
+
+  uintptr_t dev = 0x2345;
+
+  sendFinger1X(dev, 0.5f);
+  int pbCenter = getLastPitchBend(dev);
+  float semitoneCenter = pbToSemitones(pbCenter);
+  EXPECT_NEAR(semitoneCenter, 0.0f, 0.25f);
+}
+
+TEST_F(TouchpadPitchPadTest, RelativeModeAnchorAtCenterMatchesAbsolute) {
+  addTouchpadPitchMapping("Relative");
+
+  uintptr_t dev = 0x3456;
+
+  // User presses on x=0.5, should send PB zero.
+  sendFinger1X(dev, 0.5f);
+  int pbAtAnchor = getLastPitchBend(dev);
+  float semitoneAtAnchor = pbToSemitones(pbAtAnchor);
+  EXPECT_NEAR(semitoneAtAnchor, 0.0f, 0.25f)
+      << "Anchor at center (0.5) should map to PB zero";
+
+  // Going x=1.0 should result in PB+2 (max of range).
+  sendFinger1X(dev, 1.0f);
+  int pbAtMax = getLastPitchBend(dev);
+  float semitoneAtMax = pbToSemitones(pbAtMax);
+  EXPECT_NEAR(semitoneAtMax, 2.0f, 0.25f)
+      << "At x=1.0, should reach PB+2 (max of configured range)";
+}
+
+TEST_F(TouchpadPitchPadTest, RelativeModeAnchorAt02Maps07ToPBPlus2) {
+  addTouchpadPitchMapping("Relative");
+
+  uintptr_t dev = 0x4567;
+
+  // User presses on x=0.2, should send PB zero.
+  sendFinger1X(dev, 0.2f);
+  int pbAtAnchor = getLastPitchBend(dev);
+  float semitoneAtAnchor = pbToSemitones(pbAtAnchor);
+  EXPECT_NEAR(semitoneAtAnchor, 0.0f, 0.25f)
+      << "Anchor at 0.2 should map to PB zero";
+
+  // Going x=0.7 should result in PB+2 (0.2 + 0.5 = 0.7, same delta as 0.5→1.0
+  // in absolute).
+  sendFinger1X(dev, 0.7f);
+  int pbAt07 = getLastPitchBend(dev);
+  float semitoneAt07 = pbToSemitones(pbAt07);
+  EXPECT_NEAR(semitoneAt07, 2.0f, 0.25f)
+      << "At x=0.7 (anchor 0.2 + 0.5 delta), should reach PB+2";
+}
+
+TEST_F(TouchpadPitchPadTest, RelativeModeExtrapolatesBeyondConfiguredRange) {
+  // Global PB range ±6, configured range [-2, +2]. Extrapolation should allow
+  // reaching up to ±6.
+  addTouchpadPitchMappingWithPBRange("Relative", 6, -2, 2);
+
+  uintptr_t dev = 0x5678;
+
+  // Start at left edge (x=0.0).
+  sendFinger1X(dev, 0.0f);
+  int pbAtAnchor = getLastPitchBend(dev);
+  float semitoneAtAnchor = pbToSemitones(pbAtAnchor);
+  EXPECT_NEAR(semitoneAtAnchor, 0.0f, 0.25f)
+      << "Anchor at 0.0 should map to PB zero";
+
+  // Swipe all the way to right edge (x=1.0). With range [-2,+2], this should
+  // map to approximately +2 in the base mapping, but with extrapolation we
+  // might get more. Actually, wait - if anchor is at 0.0 and we go to 1.0,
+  // that's a delta of 1.0. In absolute mode, 0.0→1.0 spans the full range
+  // [-2,+2] = 4 steps. So stepOffset should be around +4, which exceeds the
+  // configured +2. With extrapolation enabled, this should be allowed up to +6
+  // (global PB range).
+  sendFinger1X(dev, 1.0f);
+  int pbAtMax = getLastPitchBend(dev);
+  float semitoneAtMax = pbToSemitones(pbAtMax);
+  EXPECT_GT(semitoneAtMax, 2.0f)
+      << "Swipe from 0.0 to 1.0 should exceed configured max (+2) with "
+         "extrapolation";
+  EXPECT_LE(semitoneAtMax, 6.5f) << "Should not exceed global PB range (+6)";
+}
 
 TEST_F(InputProcessorTest, LayerMomentarySwitching) {
   // 1. Setup: Map Key 10 (Enter) on Layer 0 to "Layer Momentary 1"

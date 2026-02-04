@@ -362,6 +362,16 @@ void MappingInspector::createControl(const InspectorControl &def,
           break;
         }
       }
+    } else if (def.propertyId == "pitchPadMode") {
+      juce::String modeStr = currentVal.toString();
+      if (modeStr.isEmpty())
+        modeStr = "Absolute";
+      for (const auto &p : def.options) {
+        if (p.second.equalsIgnoreCase(modeStr)) {
+          cb->setSelectedId(p.first, juce::dontSendNotification);
+          break;
+        }
+      }
     } else if (def.propertyId == "sustainStyle") {
       // Virtual: data1 0,1,2 -> combo ids 1,2,3
       int data1 = static_cast<int>(getCommonValue("data1"));
@@ -434,7 +444,8 @@ void MappingInspector::createControl(const InspectorControl &def,
               : propId;
       juce::var valueToSet;
       if (def.propertyId == "type" || def.propertyId == "adsrTarget" ||
-          def.propertyId == "releaseBehavior") {
+          def.propertyId == "releaseBehavior" ||
+          def.propertyId == "pitchPadMode") {
         int id = cbPtr->getSelectedId();
         auto it = def.options.find(id);
         valueToSet =
@@ -488,8 +499,7 @@ void MappingInspector::createControl(const InspectorControl &def,
           def.propertyId == "commandCategory" ||
           def.propertyId == "sustainStyle" || def.propertyId == "panicMode" ||
           def.propertyId == "layerStyle" || def.propertyId == "transposeMode" ||
-          def.propertyId == "transposeModify" ||
-          def.propertyId == "pitchPadStart")
+          def.propertyId == "transposeModify")
         juce::MessageManager::callAsync([this]() { rebuildUI(); });
     };
 
@@ -896,25 +906,28 @@ void MappingInspector::valueTreePropertyChanged(
   // Notify PresetManager so InputProcessor (and others) rebuild grid when
   // mapping properties that affect compilation change (e.g. inputTouchpadEvent,
   // releaseBehavior). InputProcessor listens to PresetManager and will rebuild.
-  if (presetManager && (property == juce::Identifier("inputKey") ||
-                        property == juce::Identifier("inputTouchpadEvent") ||
-                        property == juce::Identifier("inputAlias") ||
-                        property == juce::Identifier("releaseBehavior") ||
-                        property == juce::Identifier("followTranspose") ||
-                        property == juce::Identifier("deviceHash") ||
-                        property == juce::Identifier("type") ||
-                        property == juce::Identifier("channel") ||
-                        property == juce::Identifier("data1") ||
-                        property == juce::Identifier("data2") ||
-                        property == juce::Identifier("velRandom") ||
-                        property == juce::Identifier("touchpadThreshold") ||
-                        property == juce::Identifier("touchpadTriggerAbove") ||
-                        property == juce::Identifier("touchpadValueWhenOn") ||
-                        property == juce::Identifier("touchpadValueWhenOff") ||
-                        property == juce::Identifier("touchpadInputMin") ||
-                        property == juce::Identifier("touchpadInputMax") ||
-                        property == juce::Identifier("touchpadOutputMin") ||
-                        property == juce::Identifier("touchpadOutputMax"))) {
+  if (presetManager &&
+      (property == juce::Identifier("inputKey") ||
+       property == juce::Identifier("inputTouchpadEvent") ||
+       property == juce::Identifier("inputAlias") ||
+       property == juce::Identifier("releaseBehavior") ||
+       property == juce::Identifier("followTranspose") ||
+       property == juce::Identifier("deviceHash") ||
+       property == juce::Identifier("pitchPadMode") ||
+       property == juce::Identifier("pitchPadRestingPercent") ||
+       property == juce::Identifier("type") ||
+       property == juce::Identifier("channel") ||
+       property == juce::Identifier("data1") ||
+       property == juce::Identifier("data2") ||
+       property == juce::Identifier("velRandom") ||
+       property == juce::Identifier("touchpadThreshold") ||
+       property == juce::Identifier("touchpadTriggerAbove") ||
+       property == juce::Identifier("touchpadValueWhenOn") ||
+       property == juce::Identifier("touchpadValueWhenOff") ||
+       property == juce::Identifier("touchpadInputMin") ||
+       property == juce::Identifier("touchpadInputMax") ||
+       property == juce::Identifier("touchpadOutputMin") ||
+       property == juce::Identifier("touchpadOutputMax"))) {
     presetManager->sendChangeMessage();
   }
 }

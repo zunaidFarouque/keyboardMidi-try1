@@ -34,7 +34,8 @@ TEST(PitchPadUtilitiesTest, MapXToStepRespectsRestingBands) {
 
   PitchPadLayout layout = buildPitchPadLayout(cfg);
 
-  // Sample a few representative X positions and ensure we get stable steps.
+  // Sample a few representative X positions inside resting bands and ensure we
+  // get integer steps that are ordered correctly.
   PitchSample left = mapXToStep(layout, 0.05f);
   PitchSample center = mapXToStep(layout, 0.5f);
   PitchSample right = mapXToStep(layout, 0.95f);
@@ -43,7 +44,7 @@ TEST(PitchPadUtilitiesTest, MapXToStepRespectsRestingBands) {
   EXPECT_TRUE(center.inRestingBand);
   EXPECT_TRUE(right.inRestingBand);
 
-  // Monotonicity: left step <= center step <= right step
-  EXPECT_LE(left.step, center.step);
-  EXPECT_LE(center.step, right.step);
+  EXPECT_NEAR(left.step, -1.0f, 1e-6f);
+  EXPECT_NEAR(center.step, 0.0f, 1e-6f);
+  EXPECT_NEAR(right.step, 1.0f, 1e-6f);
 }

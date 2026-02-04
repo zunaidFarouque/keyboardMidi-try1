@@ -1581,9 +1581,9 @@ void InputProcessor::processTouchpadContacts(
             (inRange > 0.0f) ? (continuousVal - p.inputMin) / inRange : 0.0f;
         t = std::clamp(t, 0.0f, 1.0f);
 
-        int outVal =
-            p.outputMin +
-            static_cast<int>(std::round(t * (p.outputMax - p.outputMin)));
+        float outVal = static_cast<float>(p.outputMin) +
+                       static_cast<float>(p.outputMax - p.outputMin) * t;
+        float stepOffset = 0.0f;
 
         // If a pitch-pad config is present and this is a pitch-based target,
         // use the shared pitch-pad layout to derive the discrete step from X
@@ -1594,28 +1594,13 @@ void InputProcessor::processTouchpadContacts(
           const PitchPadConfig &cfg = *p.pitchPadConfig;
           PitchPadLayout layout = buildPitchPadLayout(cfg);
 
-          // Base X determined by start position.
-          float baseX = 0.5f;
-          switch (cfg.start) {
-          case PitchPadStart::Left:
-            baseX = 0.0f;
-            break;
-          case PitchPadStart::Center:
-            baseX = 0.5f;
-            break;
-          case PitchPadStart::Right:
-            baseX = 1.0f;
-            break;
-          case PitchPadStart::Custom:
-            baseX = cfg.customStartX;
-            break;
-          }
-
-          float x = t;
           auto relKey = std::make_tuple(deviceHandle, entry.layerId,
                                         entry.eventId, act.channel);
 
           if (cfg.mode == PitchPadMode::Relative) {
+            // Relative mode: anchor point (where user first touches) becomes PB
+            // zero. Movement from anchor uses the SAME pitch-pad layout as
+            // Absolute, just re-centered at the anchor.
             bool startGesture = false;
             if (entry.eventId == TouchpadEvent::Finger1X ||
                 entry.eventId == TouchpadEvent::Finger1Y ||
@@ -1629,49 +1614,65 @@ void InputProcessor::processTouchpadContacts(
             }
 
             if (startGesture) {
+              // Store anchor X position and the absolute step it maps to.
               pitchPadRelativeAnchorT[relKey] = t;
-              pitchPadRelativeBaseX[relKey] = baseX;
+              float anchorXClamped = juce::jlimit(0.0f, 1.0f, t);
+              PitchSample anchorSample = mapXToStep(layout, anchorXClamped);
+              pitchPadRelativeAnchorStep[relKey] = anchorSample.step;
             }
 
-            auto itAnchor = pitchPadRelativeAnchorT.find(relKey);
-            auto itBase = pitchPadRelativeBaseX.find(relKey);
-            if (itAnchor != pitchPadRelativeAnchorT.end() &&
-                itBase != pitchPadRelativeBaseX.end()) {
-              float dx = t - itAnchor->second;
-              x = itBase->second + dx;
+            auto itAnchorStep = pitchPadRelativeAnchorStep.find(relKey);
+            if (itAnchorStep != pitchPadRelativeAnchorStep.end()) {
+              float xClamped = juce::jlimit(0.0f, 1.0f, t);
+              PitchSample sample = mapXToStep(layout, xClamped);
+              // Step offset is just the difference between current and anchor
+              // steps, so the anchor maps to 0 and everything else follows the
+              // same layout as Absolute.
+              stepOffset = sample.step - itAnchorStep->second;
             } else {
-              // Fallback: treat as offset from base around center.
-              x = baseX + (t - 0.5f);
+              // Fallback: no anchor yet, treat as zero offset.
+              stepOffset = 0.0f;
             }
           } else {
-            // Absolute: use normalized coordinate directly.
-            x = t;
+            // Absolute mode: use normalized coordinate directly. zeroStep is
+            // the configured center (currently 0.0f so middle of range).
+            float xClamped = juce::jlimit(0.0f, 1.0f, t);
+            PitchSample sample = mapXToStep(layout, xClamped);
+            stepOffset = sample.step - cfg.zeroStep;
           }
-
-          x = juce::jlimit(0.0f, 1.0f, x);
-          PitchSample sample = mapXToStep(layout, x);
-          outVal = sample.step;
+        } else {
+          // No pitch-pad config: fall back to simple linear mapping of the
+          // normalized touch value into the configured output step range.
+          stepOffset =
+              juce::jmap(t, static_cast<float>(p.outputMin),
+                         static_cast<float>(p.outputMax)); // may be fractional
         }
 
         // Change-only sending: only send CC/PB when the quantized value changes
         // for this (device, layer, eventId, channel, ccNumber/-1 for PB).
         if (act.adsrSettings.target == AdsrTarget::CC) {
-          outVal = juce::jlimit(0, 127, outVal);
+          int ccVal =
+              juce::jlimit(0, 127, static_cast<int>(std::round(outVal)));
           auto itLast = lastTouchpadContinuousValues.find(keyCont);
           if (itLast != lastTouchpadContinuousValues.end() &&
-              itLast->second == outVal) {
+              itLast->second == ccVal) {
             break; // No CC change – skip send
           }
-          voiceManager.sendCC(act.channel, act.adsrSettings.ccNumber, outVal);
-          lastTouchpadContinuousValues[keyCont] = outVal;
+          voiceManager.sendCC(act.channel, act.adsrSettings.ccNumber, ccVal);
+          lastTouchpadContinuousValues[keyCont] = ccVal;
         } else {
-          // Pitch-based targets: interpret outVal as a discrete step offset.
+          // Pitch-based targets: interpret the (possibly fractional) step
+          // offset and convert to a PB value. Allow extrapolation beyond
+          // configured range up to global PB range.
           int pbRange = juce::jmax(1, settingsManager.getPitchBendRange());
+          // Clamp to global PB range, not just configured output range, to
+          // allow extrapolation.
+          float clampedOffset =
+              juce::jlimit(static_cast<float>(-pbRange),
+                           static_cast<float>(pbRange), stepOffset);
 
           int pbVal = 8192;
           if (act.adsrSettings.target == AdsrTarget::SmartScaleBend) {
-            // SmartScale: convert scale step offset -> PB using current note
-            // and global scale.
             int currentNote = voiceManager.getCurrentPlayingNote(act.channel);
             if (currentNote >= 0) {
               std::vector<int> intervals =
@@ -1679,15 +1680,31 @@ void InputProcessor::processTouchpadContacts(
               if (intervals.empty())
                 intervals = {0, 2, 4, 5, 7, 9, 11}; // Major fallback
               int root = zoneManager.getGlobalRootNote();
-              pbVal = ScaleUtilities::smartStepOffsetToPitchBend(
-                  currentNote, root, intervals, outVal, pbRange);
+
+              float baseStep = std::floor(clampedOffset);
+              float frac = clampedOffset - baseStep;
+              int s0 = static_cast<int>(baseStep);
+              int s1 = (frac >= 0.0f) ? s0 + 1 : s0 - 1;
+              int pb0 = ScaleUtilities::smartStepOffsetToPitchBend(
+                  currentNote, root, intervals, s0, pbRange);
+              int pb1 = ScaleUtilities::smartStepOffsetToPitchBend(
+                  currentNote, root, intervals, s1, pbRange);
+              float f = std::abs(frac);
+              float blended = juce::jmap(f, 0.0f, 1.0f, static_cast<float>(pb0),
+                                         static_cast<float>(pb1));
+              pbVal =
+                  juce::jlimit(0, 16383, static_cast<int>(std::round(blended)));
             }
           } else {
-            // Standard PitchBend: treat outVal directly as semitone offset.
-            int clampedSteps = juce::jlimit(-pbRange, pbRange, outVal);
+            // Standard PitchBend: treat the clamped offset directly as a
+            // semitone offset.
+            float clampedSteps =
+                juce::jlimit(static_cast<float>(-pbRange),
+                             static_cast<float>(pbRange), clampedOffset);
             double stepsPerSemitone = 8192.0 / static_cast<double>(pbRange);
-            pbVal =
-                static_cast<int>(8192.0 + (clampedSteps * stepsPerSemitone));
+            pbVal = static_cast<int>(std::round(
+                8192.0 +
+                (static_cast<double>(clampedSteps) * stepsPerSemitone)));
             pbVal = juce::jlimit(0, 16383, pbVal);
           }
 

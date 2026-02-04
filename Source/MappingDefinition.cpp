@@ -244,20 +244,20 @@ InspectorSchema MappingDefinition::getSchema(const juce::ValueTree &mapping,
       schema.push_back(data1);
     }
     if (adsrTargetStr.equalsIgnoreCase("PitchBend")) {
-      InspectorControl bend;
-      bend.propertyId = "data2";
-      bend.label = "Bend (semitones)";
-      bend.controlType = InspectorControl::Type::Slider;
-      bend.min = -static_cast<double>(pitchBendRange);
-      bend.max = static_cast<double>(pitchBendRange);
-      bend.step = 1.0;
-      bend.valueScaleRange = pitchBendRange;
-      // For touchpad continuous Expression mappings, the bend slider is not
-      // used (continuous pitch comes from the touchpad range/step config), so
-      // disable it in that specific case.
-      if (touchpad && !touchpadInputBool)
-        bend.isEnabled = false;
-      schema.push_back(bend);
+      // For touchpad continuous Expression mappings, the Bend (semitones)
+      // slider is not used at all – continuous pitch comes from the touchpad
+      // range/step configuration – so we omit it entirely in that case.
+      if (!(touchpad && !touchpadInputBool)) {
+        InspectorControl bend;
+        bend.propertyId = "data2";
+        bend.label = "Bend (semitones)";
+        bend.controlType = InspectorControl::Type::Slider;
+        bend.min = -static_cast<double>(pitchBendRange);
+        bend.max = static_cast<double>(pitchBendRange);
+        bend.step = 1.0;
+        bend.valueScaleRange = pitchBendRange;
+        schema.push_back(bend);
+      }
     }
     if (adsrTargetStr.equalsIgnoreCase("SmartScaleBend")) {
       InspectorControl steps;
@@ -445,31 +445,6 @@ InspectorSchema MappingDefinition::getSchema(const juce::ValueTree &mapping,
         padMode.options[1] = "Absolute";
         padMode.options[2] = "Relative";
         schema.push_back(padMode);
-
-        InspectorControl padStart;
-        padStart.propertyId = "pitchPadStart";
-        padStart.label = "Start position";
-        padStart.controlType = InspectorControl::Type::ComboBox;
-        padStart.options[1] = "Left";
-        padStart.options[2] = "Center";
-        padStart.options[3] = "Right";
-        padStart.options[4] = "Custom";
-        schema.push_back(padStart);
-
-        juce::String startStr =
-            mapping.getProperty("pitchPadStart", "Center").toString();
-        bool showCustomStart = startStr.equalsIgnoreCase("Custom");
-        if (showCustomStart) {
-          InspectorControl padCustom;
-          padCustom.propertyId = "pitchPadCustomStart";
-          padCustom.label = "Custom start";
-          padCustom.controlType = InspectorControl::Type::Slider;
-          padCustom.min = 0.0;
-          padCustom.max = 1.0;
-          padCustom.step = 0.01;
-          padCustom.widthWeight = 0.5f;
-          schema.push_back(padCustom);
-        }
 
         InspectorControl restPct;
         restPct.propertyId = "pitchPadRestingPercent";

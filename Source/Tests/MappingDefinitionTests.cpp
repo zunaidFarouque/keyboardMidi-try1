@@ -218,18 +218,16 @@ TEST(MappingDefinitionTest,
   const int pbRange = 12;
   InspectorSchema schema = MappingDefinition::getSchema(mapping, pbRange);
 
-  const InspectorControl *bendCtrl = nullptr;
+  bool hasData2 = false;
   for (const auto &c : schema) {
     if (c.propertyId == "data2") {
-      bendCtrl = &c;
+      hasData2 = true;
       break;
     }
   }
-  ASSERT_NE(bendCtrl, nullptr)
-      << "Touchpad Expression PitchBend should still expose Bend control";
-  EXPECT_FALSE(bendCtrl->isEnabled)
-      << "Bend (semitones) slider should be disabled for touchpad continuous "
-         "PitchBend Expression";
+  EXPECT_FALSE(hasData2)
+      << "Touchpad continuous PitchBend Expression should not show Bend "
+         "(semitones) slider at all";
 }
 
 TEST(MappingDefinitionTest,

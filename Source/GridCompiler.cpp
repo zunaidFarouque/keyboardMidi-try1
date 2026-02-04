@@ -594,6 +594,11 @@ void compileMappingsForLayer(
             cfg.restingSpacePercent =
                 (float)mapping.getProperty("pitchPadRestingPercent", 10.0);
 
+            // For absolute mode: zero step is always 0 (center of range maps to
+            // center of pad). For relative mode, zero is determined dynamically
+            // at gesture start.
+            cfg.zeroStep = 0.0f;
+
             p.pitchPadConfig = cfg;
           } else {
             p.outputMin = (int)mapping.getProperty("touchpadOutputMin", 0);
@@ -601,13 +606,14 @@ void compileMappingsForLayer(
             p.pitchPadConfig.reset();
           }
         }
-        // Apply Expression adsr; valueWhenOn/Off only for CC
+        // Apply Expression ADSR and release behavior.
         if (isPB)
           entry.action.adsrSettings.target = AdsrTarget::PitchBend;
         else if (isSmartBend)
           entry.action.adsrSettings.target = AdsrTarget::SmartScaleBend;
         else
           entry.action.adsrSettings.target = AdsrTarget::CC;
+
         entry.action.adsrSettings.useCustomEnvelope =
             (bool)mapping.getProperty("useCustomEnvelope", false);
         if (!entry.action.adsrSettings.useCustomEnvelope) {
@@ -625,6 +631,15 @@ void compileMappingsForLayer(
           entry.action.adsrSettings.releaseMs =
               (int)mapping.getProperty("adsrRelease", 100);
         }
+
+        bool defaultResetPitch =
+            (entry.action.adsrSettings.target == AdsrTarget::PitchBend ||
+             entry.action.adsrSettings.target == AdsrTarget::SmartScaleBend);
+        entry.action.sendReleaseValue =
+            (bool)mapping.getProperty("sendReleaseValue", defaultResetPitch);
+        entry.action.releaseValue =
+            (int)mapping.getProperty("touchpadValueWhenOff", 0);
+
         if (entry.action.adsrSettings.target == AdsrTarget::CC) {
           entry.action.adsrSettings.ccNumber =
               (int)mapping.getProperty("data1", 1);

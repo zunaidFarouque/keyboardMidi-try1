@@ -614,8 +614,6 @@ TEST_F(GridCompilerTest, TouchpadPitchPadConfigCompiledForPitchBend) {
   m.setProperty("touchpadOutputMax", 2, nullptr);
   m.setProperty("pitchPadRestingPercent", 15.0, nullptr);
   m.setProperty("pitchPadMode", "Relative", nullptr);
-  m.setProperty("pitchPadStart", "Custom", nullptr);
-  m.setProperty("pitchPadCustomStart", 0.25, nullptr);
   mappings.addChild(m, -1, nullptr);
 
   auto context =
@@ -630,6 +628,33 @@ TEST_F(GridCompilerTest, TouchpadPitchPadConfigCompiledForPitchBend) {
   EXPECT_EQ(cfg.maxStep, 2);
   EXPECT_NEAR(cfg.restingSpacePercent, 15.0f, 0.001f);
   EXPECT_EQ(cfg.mode, PitchPadMode::Relative);
-  EXPECT_EQ(cfg.start, PitchPadStart::Custom);
-  EXPECT_NEAR(cfg.customStartX, 0.25f, 0.001f);
+  EXPECT_TRUE(entry.action.sendReleaseValue)
+      << "Pitch-bend touchpad expression should default to resetting PB on "
+         "release";
+}
+
+TEST_F(GridCompilerTest, TouchpadPitchPadHonoursResetPitchFlag) {
+  auto mappings = presetMgr.getMappingsListForLayer(0);
+  juce::ValueTree m("Mapping");
+  m.setProperty("inputAlias", "Touchpad", nullptr);
+  m.setProperty("inputTouchpadEvent", TouchpadEvent::Finger1X, nullptr);
+  m.setProperty("type", "Expression", nullptr);
+  m.setProperty("adsrTarget", "PitchBend", nullptr);
+  m.setProperty("layerID", 0, nullptr);
+  m.setProperty("channel", 1, nullptr);
+  m.setProperty("touchpadInputMin", 0.0, nullptr);
+  m.setProperty("touchpadInputMax", 1.0, nullptr);
+  m.setProperty("touchpadOutputMin", -2, nullptr);
+  m.setProperty("touchpadOutputMax", 2, nullptr);
+  m.setProperty("pitchPadRestingPercent", 10.0, nullptr);
+  m.setProperty("sendReleaseValue", false, nullptr);
+  mappings.addChild(m, -1, nullptr);
+
+  auto context =
+      GridCompiler::compile(presetMgr, deviceMgr, zoneMgr, settingsMgr);
+  ASSERT_EQ(context->touchpadMappings.size(), 1u);
+  const auto &entry = context->touchpadMappings.front();
+  EXPECT_FALSE(entry.action.sendReleaseValue)
+      << "sendReleaseValue should reflect mapping property for touchpad "
+         "expression PB";
 }
