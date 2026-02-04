@@ -3,7 +3,7 @@
 **Role:** Expert C++ Audio Developer (JUCE UI Specialist).
 
 **Context:**
-We are building "OmniKey".
+We are building "MIDIQy".
 *   **Current State:** Phase 18 Complete. The Engine supports Commands (Sustain, Latch) and Zone Sustain Permissions, but the UI has no controls for them.
 *   **Phase Goal:** Update `MappingInspector` to assign Commands to keys, and `ZonePropertiesPanel` to toggle sustain permission.
 

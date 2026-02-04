@@ -3,7 +3,7 @@
 **Role:** Expert C++ Audio Developer (JUCE Framework).
 
 **Context:**
-We are building "OmniKey".
+We are building "MIDIQy".
 *   **Current State:** Phase 16.10 Complete. We play single notes.
 *   **Phase Goal:** Implement `ChordUtilities` (Math) and `StrumEngine` (Timing). Upgrade `VoiceManager` to track multiple notes per input key.
 

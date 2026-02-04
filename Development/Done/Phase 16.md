@@ -3,7 +3,7 @@
 **Role:** Expert C++ Audio Developer (JUCE Framework).
 
 **Context:**
-We are building "OmniKey".
+We are building "MIDIQy".
 *   **Current State:** Phase 15.2 Complete. `ScaleUtilities` uses a hardcoded `enum ScaleType`.
 *   **Phase Goal:** Replace the hardcoded enum with a dynamic `ScaleLibrary` that supports Factory and User-defined scales.
 

@@ -3,7 +3,7 @@
 **Role:** Expert C++ Audio Developer (System Architecture).
 
 **Context:**
-We are building "OmniKey".
+We are building "MIDIQy".
 *   **Current State:** Phase 9.4 Complete. We have a complex Device Alias system.
 *   **Problem:** For casual users with one keyboard, dealing with Device IDs and Aliases is over-engineered. They just want "Plug and Play".
 *   **Phase Goal:** Implement **"Studio Mode"**.
@@ -15,7 +15,7 @@ We are building "OmniKey".
 2.  **UI Logic:**
     *   `MainComponent` must hide the "Device Setup" button when Studio Mode is OFF.
     *   `VisualizerComponent` must lock its view to "Global" when Studio Mode is OFF.
-3.  **Persistence:** Save this setting in `OmniKeySettings.xml`.
+3.  **Persistence:** Save this setting in `MIDIQySettings.xml`.
 
 ---
 

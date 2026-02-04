@@ -3,7 +3,7 @@
 **Role:** Expert C++ Audio Developer (JUCE Framework).
 
 **Context:**
-We are building "OmniKey".
+We are building "MIDIQy".
 *   **Current State:** Phase 4 Complete. The app works, but the "Log Console" is just a basic `TextEditor` in `MainComponent`.
 *   **Problem:** The log grows indefinitely (memory leak risk) and slows down the UI. The output text is also unformatted and hard to read.
 *   **Phase Goal:** Extract logging into a dedicated, high-performance component and implement rich string formatting.

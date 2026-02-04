@@ -3,10 +3,10 @@
 **Role:** Expert C++ Audio Developer (JUCE Framework).
 
 **Context:**
-We are building "OmniKey".
+We are building "MIDIQy".
 *   **Current State:** Phase 18.4 Complete. We have complex voicing logic (Smooth, Adaptive Guitar, etc.).
 *   **Goal:** Verify the logic by exporting a comprehensive text report.
-*   **Output:** A file `OmniKey_Voicings.txt` containing the generated notes for every combination of Voicing, Chord Type, and Scale Degree.
+*   **Output:** A file `MIDIQy_Voicings.txt` containing the generated notes for every combination of Voicing, Chord Type, and Scale Degree.
 
 **Strict Constraints:**
 1.  **Test Conditions:**
@@ -47,7 +47,7 @@ For easy access, add a **"Debug" Menu** to the window or a temporary button.
 
 **Implementation:**
 *   In `MainComponent` constructor (or a MenuBarModel), add a call/button:
-*   `"Export Voicing Report"` -> Calls `ChordUtilities::dumpDebugReport(juce::File::getSpecialLocation(juce::File::userDesktopDirectory).getChildFile("OmniKey_Voicings.txt"));`
+*   `"Export Voicing Report"` -> Calls `ChordUtilities::dumpDebugReport(juce::File::getSpecialLocation(juce::File::userDesktopDirectory).getChildFile("MIDIQy_Voicings.txt"));`
 
 ---
 

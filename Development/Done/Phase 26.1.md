@@ -3,7 +3,7 @@
 **Role:** Expert C++ Audio Developer (Real-time Systems Optimization).
 
 **Context:**
-We are building "OmniKey".
+We are building "MIDIQy".
 *   **Current State:** Phase 26 Complete. We have a static Legato engine.
 *   **Phase Goal:** Implement **Adaptive Glide**. The system must calculate the user's playing speed (Inter-Onset Interval) and adjust the Portamento time dynamically (faster playing = tighter glide).
 

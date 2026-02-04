@@ -1,4 +1,4 @@
-# Run OmniKey benchmarks in a manageable way (short runs, minimal output).
+# Run MIDIQy benchmarks in a manageable way (short runs, minimal output).
 #
 # Usage:
 #   .\run_benchmarks.ps1              # quick subset (default)
@@ -6,7 +6,7 @@
 #   .\run_benchmarks.ps1 -Filter "ManualNote.*"
 #
 # Alternatively via CTest (after cmake --build build-debug):
-#   cd build-debug && ctest -R OmniKey_Benchmarks_Quick -V
+#   cd build-debug && ctest -R MIDIQy_Benchmarks_Quick -V
 
 param(
     [switch]$Quick = $true,
@@ -20,17 +20,17 @@ $rootDir = Split-Path -Parent $scriptDir
 
 # Find benchmark exe (build or build-debug, Debug or Release)
 $dirs = @(
-    (Join-Path $rootDir "build\Debug\OmniKey_Benchmarks.exe"),
-    (Join-Path $rootDir "build\Release\OmniKey_Benchmarks.exe"),
-    (Join-Path $rootDir "build-debug\Debug\OmniKey_Benchmarks.exe"),
-    (Join-Path $rootDir "build-debug\Release\OmniKey_Benchmarks.exe")
+    (Join-Path $rootDir "build\Debug\MIDIQy_Benchmarks.exe"),
+    (Join-Path $rootDir "build\Release\MIDIQy_Benchmarks.exe"),
+    (Join-Path $rootDir "build-debug\Debug\MIDIQy_Benchmarks.exe"),
+    (Join-Path $rootDir "build-debug\Release\MIDIQy_Benchmarks.exe")
 )
 $exe = $null
 foreach ($d in $dirs) {
     if (Test-Path $d) { $exe = $d; break }
 }
 if (-not $exe) {
-    Write-Error "OmniKey_Benchmarks.exe not found. Build the project first (e.g. cmake --build build --config Debug --target OmniKey_Benchmarks)."
+    Write-Error "MIDIQy_Benchmarks.exe not found. Build the project first (e.g. cmake --build build --config Debug --target MIDIQy_Benchmarks)."
     exit 1
 }
 

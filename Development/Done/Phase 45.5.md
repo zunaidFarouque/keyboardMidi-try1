@@ -3,7 +3,7 @@
 **Role:** Expert C++ Audio Developer (JUCE Framework).
 
 **Context:**
-We are building "OmniKey".
+We are building "MIDIQy".
 *   **Current State:** Phase 45.3 Complete.
 *   **The Bug:** When using "Learn" in the Mapping Editor, it updates the Key Code (`inputKey`) but ignores the source device. The mapping defaults to whatever device was there before (usually "Global"), even if the user pressed a specific keyboard (e.g., "Laptop").
 *   **Phase Goal:** Update the Learn logic to capture the **Device Alias** corresponding to the hardware that triggered the event.

@@ -3,7 +3,7 @@
 **Role:** Expert C++ Audio Developer (JUCE Framework).
 
 **Context:**
-We are building "OmniKey".
+We are building "MIDIQy".
 *   **Current State:** Phase 9.2 Complete. Inputs are processed via `InputProcessor` -> `DeviceManager` (Alias Lookup) -> `MappingTable`.
 *   **Phase Goal:** Implement "Smart Zones" where a range of keys automatically maps to a musical scale, prioritizing this over manual mappings.
 

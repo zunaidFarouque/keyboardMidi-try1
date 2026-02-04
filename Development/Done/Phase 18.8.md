@@ -3,7 +3,7 @@
 **Role:** Expert C++ Audio Developer (JUCE Framework).
 
 **Context:**
-We are building "OmniKey".
+We are building "MIDIQy".
 *   **Current State:** Phase 18.7 Complete. The engine now uses `ChordNote` (pitch + `isGhost`) and supports "Filled" voicings with Strict/Loose harmony.
 *   **Problem:** The `dumpDebugReport` function (Phase 18.5) is outdated. It expects `std::vector<int>` and doesn't test the new "Filled" modes or Strict/Loose settings.
 *   **Phase Goal:** Update the debug reporter to visualize Ghost Notes and Harmony modes.

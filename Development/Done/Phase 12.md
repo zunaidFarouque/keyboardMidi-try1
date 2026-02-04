@@ -3,7 +3,7 @@
 **Role:** Expert C++ Audio Developer (JUCE Framework & Graphics).
 
 **Context:**
-We are building "OmniKey".
+We are building "MIDIQy".
 *   **Current State:** Phase 11 Complete. We have a robust `ZoneManager`, but no way to "see" the virtual layout.
 *   **Phase Goal:** Create a graphical Keyboard Visualizer that shows active zones, physical key presses, and dynamic note labels (e.g., showing "C#4" on the 'Q' key).
 

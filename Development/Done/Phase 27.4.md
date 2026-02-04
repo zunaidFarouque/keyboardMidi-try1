@@ -3,12 +3,12 @@
 **Role:** Expert C++ Audio Developer (Win32 API).
 
 **Context:**
-We are building "OmniKey".
+We are building "MIDIQy".
 *   **Current State:** The "Hook" method (Phase 27.1) prevents device distinction. The "Driver" method is too invasive.
 *   **Solution:** We will use a **Focus Stealing** strategy.
 *   **Phase Goal:**
     1.  Remove the Low-Level Hook (`SystemIntegrator`) entirely.
-    2.  Update `RawInputManager` to force the OmniKey window to the foreground whenever a key is pressed while "Midi Mode" is Active.
+    2.  Update `RawInputManager` to force the MIDIQy window to the foreground whenever a key is pressed while "Midi Mode" is Active.
 
 **Strict Constraints:**
 1.  **Cleanup:** Remove all `SystemIntegrator` code from `MainComponent`.

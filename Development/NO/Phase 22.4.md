@@ -3,7 +3,7 @@
 **Role:** Expert C++ Audio Developer (JUCE UI Specialist).
 
 **Context:**
-We are building "OmniKey".
+We are building "MIDIQy".
 *   **Current State:** Phase 22.3 Complete. The UI is modular.
 *   **Missing Features:**
     1.  The `allowSustain` toggle (implemented in Phase 18) was accidentally omitted from the `PerformanceSection` refactor.

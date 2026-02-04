@@ -3,7 +3,7 @@
 **Role:** Expert C++ Audio Developer (Win32 API Threading).
 
 **Context:**
-We are building "OmniKey".
+We are building "MIDIQy".
 *   **Current State:** Phase 27.7 Complete.
 *   **Problem:** Background Raw Input is unreliable when Hooks are active. The Message Loop on the main GUI thread gets deprioritized or conflicted.
 *   **Phase Goal:** Move `RawInputManager` to a **Dedicated std::thread**. This ensures a robust `RIDEV_INPUTSINK` that works even when the app is minimized or backgrounded.

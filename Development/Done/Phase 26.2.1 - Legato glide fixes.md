@@ -9,7 +9,7 @@ This focuses on fixing critical bugs in the Legato glide implementation discover
 **Role:** Expert C++ Audio Developer (Real-time Systems).
 
 **Context:**
-We are building "OmniKey".
+We are building "MIDIQy".
 *   **Current State:** Phase 26.2 Complete. Legato glide implemented but has bugs.
 *   **Issue 1:** Glide happens after a 5-second delay and sends MIDI every 5 seconds instead of smoothly.
 *   **Issue 2:** When releasing a note in Legato mode, it resets PB instantly instead of gliding back to the previous note.

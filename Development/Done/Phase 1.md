@@ -2,7 +2,7 @@
 
 **Role:** You are an expert C++ Audio Developer specializing in JUCE and Windows Win32 API.
 
-**Context:** We are building "OmniKey", a Windows-only JUCE application. We have strictly defined architectural rules to prevent "Windows Macro Hell" and build errors.
+**Context:** We are building "MIDIQy", a Windows-only JUCE application. We have strictly defined architectural rules to prevent "Windows Macro Hell" and build errors.
 
 **Objective:**
 Implement the **Phase 1** core: A JUCE GUI application that detects raw keyboard input using the Windows `WM_INPUT` API.
@@ -11,7 +11,7 @@ Implement the **Phase 1** core: A JUCE GUI application that detects raw keyboard
 1.  **Isolation:** NEVER include `<windows.h>`, `<hidsdi.h>`, or `<hidpi.h>` in any Header (`.h`) file. Use `void*` for handles (`HWND`, `HANDLE`).
 2.  **No HIDPI:** Do not use `<hidpi.h>`. Use standard `RegisterRawInputDevices` from `<windows.h>`.
 3.  **CMake:** Use `target_compile_definitions` for `NOMINMAX`. Do not define it in `.cpp` files.
-4.  **Header Gen:** `CMakeLists.txt` must call `juce_generate_juce_header(OmniKey)`.
+4.  **Header Gen:** `CMakeLists.txt` must call `juce_generate_juce_header(MIDIQy)`.
 
 ---
 

@@ -101,6 +101,9 @@ private:
   // 10. Quick Setup Wizard (Phase 9.6)
   QuickSetupWizard setupWizard;
 
+  // Main window refresh: capped at 30 FPS; no updates when minimized
+  static constexpr int kMainWindowRefreshIntervalMs = 34; // 1000/30 rounded up
+
   // Async logging: Input thread pushes POD only; timer processes batches
   // (Phase 21.1)
   struct PendingEvent {

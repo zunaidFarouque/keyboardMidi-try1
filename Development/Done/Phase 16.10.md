@@ -3,7 +3,7 @@
 **Role:** Expert C++ Audio Developer (JUCE Framework).
 
 **Context:**
-We are building "OmniKey".
+We are building "MIDIQy".
 *   **Current State:** Phase 16.9 Complete. Zone Editor supports "Assign Keys" (Add) via keyboard press, and removing keys via mouse click on chips.
 *   **Phase Goal:** Implement "Remove Keys" mode. The user clicks a toggle, presses keys on their physical keyboard, and those keys are *removed* from the Zone.
 

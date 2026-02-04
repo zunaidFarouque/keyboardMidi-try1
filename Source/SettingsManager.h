@@ -2,7 +2,8 @@
 #include "MappingTypes.h"
 #include <JuceHeader.h>
 
-class SettingsManager : public juce::ChangeBroadcaster, public juce::ValueTree::Listener {
+class SettingsManager : public juce::ChangeBroadcaster,
+                        public juce::ValueTree::Listener {
 public:
   SettingsManager();
   ~SettingsManager() override;
@@ -14,18 +15,23 @@ public:
   // MIDI Mode Toggle
   bool isMidiModeActive() const;
   void setMidiModeActive(bool active);
-  
+
   // Toggle Key
   int getToggleKey() const;
   void setToggleKey(int vkCode);
-  
+
   // Last MIDI Device
   juce::String getLastMidiDevice() const;
-  void setLastMidiDevice(const juce::String& name);
+  void setLastMidiDevice(const juce::String &name);
 
   // Studio Mode (Multi-Device Support)
   bool isStudioMode() const;
   void setStudioMode(bool active);
+
+  // Window refresh rate: when true, cap at 30 FPS; when false, use higher rate
+  bool isCapWindowRefresh30Fps() const;
+  void setCapWindowRefresh30Fps(bool cap);
+  int getWindowRefreshIntervalMs() const;
 
   // Mapping type colors (Phase 37)
   juce::Colour getTypeColor(ActionType type) const;
@@ -36,8 +42,8 @@ public:
   void loadFromXml(juce::File file);
 
   // ValueTree::Listener implementation
-  void valueTreePropertyChanged(juce::ValueTree& tree,
-                                const juce::Identifier& property) override;
+  void valueTreePropertyChanged(juce::ValueTree &tree,
+                                const juce::Identifier &property) override;
 
 private:
   juce::ValueTree rootNode;

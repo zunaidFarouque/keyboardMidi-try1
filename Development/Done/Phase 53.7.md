@@ -68,7 +68,7 @@ Fix the Data Race on layer state variables. Isolate the Mutable State (Layers) f
                         int cmd = slot.action.data1;
                         int target = juce::jlimit(0, 8, slot.action.data2);
 
-                        if (cmd == (int)OmniKey::CommandID::LayerMomentary) {
+                        if (cmd == (int)MIDIQy::CommandID::LayerMomentary) {
                             if (isDown) layerMomentaryCounts[target]++;
                             else if (layerMomentaryCounts[target] > 0) layerMomentaryCounts[target]--;
                             sendChangeMessage();

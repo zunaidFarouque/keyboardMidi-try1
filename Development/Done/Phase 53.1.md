@@ -60,7 +60,7 @@ Create a new test file to verify the **Runtime Behavior** of `InputProcessor`. W
     ```
 
 3.  **Update `CMakeLists.txt`:**
-    Add `Source/Tests/InputProcessorTests.cpp` to the `OmniKey_Tests` executable sources.
+    Add `Source/Tests/InputProcessorTests.cpp` to the `MIDIQy_Tests` executable sources.
 
 **Expectation:**
 This test will **FAIL**. The `getHighestActiveLayerIndex` will likely remain `0` because `processEvent` currently does nothing when it sees a Command. This confirms the bug.

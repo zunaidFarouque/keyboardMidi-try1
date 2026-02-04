@@ -9,6 +9,10 @@
 #include <JuceHeader.h>
 #include <algorithm>
 
+// Main window refresh cap: 30 FPS (must match
+// MainComponent::kMainWindowRefreshIntervalMs)
+static constexpr int kMainWindowRefreshIntervalMs = 34;
+
 // Helper to convert alias name to hash (same as in InputProcessor)
 static uintptr_t aliasNameToHash(const juce::String &aliasName) {
   if (aliasName.isEmpty() || aliasName == "Any / Master" ||
@@ -62,8 +66,8 @@ VisualizerComponent::VisualizerComponent(ZoneManager *zoneMgr,
 
   // Initial positioning (will be updated in resized(), but set initial bounds)
   viewSelector.setBounds(0, 0, 200, 25);
-  // Phase 50.9: Use juce::Timer at ~30 FPS instead of VBlankAttachment
-  startTimer(33);
+  startTimer(settingsManager ? settingsManager->getWindowRefreshIntervalMs()
+                             : kMainWindowRefreshIntervalMs);
 }
 
 void VisualizerComponent::setVisualizedLayer(int layerId) {
@@ -738,14 +742,17 @@ void VisualizerComponent::onViewSelectorChanged() {
   needsRepaint = true;
 }
 
+void VisualizerComponent::restartTimerWithInterval(int intervalMs) {
+  stopTimer();
+  startTimer(intervalMs);
+}
+
 void VisualizerComponent::timerCallback() {
-  // Skip all processing if parent window is minimized (performance
-  // optimization)
+  // Main window refresh: no updates when minimized (enforced 30 FPS cap)
   if (auto *topLevel = getTopLevelComponent()) {
     if (auto *peer = topLevel->getPeer()) {
-      if (peer->isMinimised()) {
-        return; // Skip visualizer updates when minimized
-      }
+      if (peer->isMinimised())
+        return;
     }
   }
 

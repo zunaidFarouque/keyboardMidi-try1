@@ -3,7 +3,7 @@
 **Role:** Expert C++ Audio Developer (JUCE Framework).
 
 **Context:**
-We are building "OmniKey".
+We are building "MIDIQy".
 *   **Current State:** Phase 23.3 Complete. The ADSR engine works for CCs, but Pitch Bend support is partial/boolean, and Aftertouch is missing.
 *   **Phase Goal:** Expand the ADSR capability to support **Pitch Bend** and **Channel Pressure (Aftertouch)** as selectable targets.
 

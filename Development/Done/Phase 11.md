@@ -3,7 +3,7 @@
 **Role:** Expert C++ Audio Developer (JUCE Framework).
 
 **Context:**
-We are building "OmniKey".
+We are building "MIDIQy".
 *   **Current State:** Phase 10 Complete. The `ZoneManager` engine works, but we have no UI to create/edit zones.
 *   **Phase Goal:** Implement the UI to manage Zones, including a "Key Capture" workflow to define input ranges.
 

@@ -3,7 +3,7 @@
 **Role:** Expert C++ Audio Developer (JUCE Graphics).
 
 **Context:**
-We are building "OmniKey".
+We are building "MIDIQy".
 *   **Current State:** Phase 16 Complete. The Visualizer exists but is basic.
 *   **Problem:** It is hard to distinguish Zones visually. The rendering is flat.
 *   **Phase Goal:** Implement a **4-Layer Rendering System** (Underlay -> Fill -> Border -> Text) and assign Colors to Zones.

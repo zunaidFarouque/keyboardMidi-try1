@@ -3,7 +3,7 @@
 **Role:** Expert C++ Audio Developer (JUCE Framework).
 
 **Context:**
-We are building "OmniKey".
+We are building "MIDIQy".
 *   **Current State:** Phase 12 Complete. We have `Visualizer`, `ZoneEditor`, `MappingEditor`, and `Inspector`. Currently, they are hardcoded in `MainComponent::resized()`.
 *   **Phase Goal:** Implement a flexible IDE-style layout with resizable split-bars and the ability to "Pop Out" (detach) panels into separate windows.
 

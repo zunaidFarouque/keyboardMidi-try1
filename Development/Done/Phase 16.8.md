@@ -3,7 +3,7 @@
 **Role:** Expert C++ Audio Developer (JUCE Framework).
 
 **Context:**
-We are building "OmniKey".
+We are building "MIDIQy".
 *   **Current State:** Phase 16.6 Complete. Zones calculate notes on-the-fly using math.
 *   **Goal 1 (Performance):** Refactor `Zone` to **pre-compile** mappings into a cache (`std::unordered_map`). `processKey` should effectively be a simple lookup, doing zero math during performance.
 *   **Goal 2 (Feature):** Implement `LayoutStrategy::Piano`. This maps two rows of keys to a piano layout (Bottom Row = White Keys, Top Row = Black Keys).

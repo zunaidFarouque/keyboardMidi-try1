@@ -10,40 +10,45 @@ class SettingsPanel : public juce::Component,
                       public juce::ChangeListener,
                       public RawInputManager::Listener {
 public:
-  explicit SettingsPanel(SettingsManager& settingsMgr, MidiEngine& midiEng, RawInputManager& rawInputMgr);
+  explicit SettingsPanel(SettingsManager &settingsMgr, MidiEngine &midiEng,
+                         RawInputManager &rawInputMgr);
   ~SettingsPanel() override;
 
   // Phase 42: Two-stage init – call after object graph is built
   void initialize();
 
   // RawInputManager::Listener implementation
-  void handleRawKeyEvent(uintptr_t deviceHandle, int keyCode, bool isDown) override;
-  void handleAxisEvent(uintptr_t deviceHandle, int inputCode, float value) override;
+  void handleRawKeyEvent(uintptr_t deviceHandle, int keyCode,
+                         bool isDown) override;
+  void handleAxisEvent(uintptr_t deviceHandle, int inputCode,
+                       float value) override;
 
-  void paint(juce::Graphics& g) override;
+  void paint(juce::Graphics &g) override;
   void resized() override;
-  void changeListenerCallback(juce::ChangeBroadcaster* source) override;
+  void changeListenerCallback(juce::ChangeBroadcaster *source) override;
 
 private:
-  SettingsManager& settingsManager;
-  MidiEngine& midiEngine;
-  RawInputManager& rawInputManager;
+  SettingsManager &settingsManager;
+  MidiEngine &midiEngine;
+  RawInputManager &rawInputManager;
   juce::Slider pbRangeSlider;
   juce::Label pbRangeLabel;
-  juce::TextButton sendRpnButton; // Button to send RPN to all channels (Phase 25.2)
+  juce::TextButton
+      sendRpnButton; // Button to send RPN to all channels (Phase 25.2)
   juce::Label toggleKeyLabel;
-  juce::TextButton toggleKeyButton; // Button to set toggle key
+  juce::TextButton toggleKeyButton;      // Button to set toggle key
   juce::TextButton resetToggleKeyButton; // Button to reset toggle key to F12
   bool isLearningToggleKey = false;
 
   juce::ToggleButton studioModeToggle; // Studio Mode (Multi-Device Support)
+  juce::ToggleButton capRefresh30FpsToggle; // Cap window refresh at 30 FPS
 
   juce::GroupComponent mappingColorsGroup;
   std::array<juce::TextButton, 3> typeColorButtons;
-  
+
   void updateToggleKeyButtonText();
   void refreshTypeColorButtons();
-  void launchColourSelectorForType(ActionType type, juce::TextButton* button);
+  void launchColourSelectorForType(ActionType type, juce::TextButton *button);
 
   JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(SettingsPanel)
 };

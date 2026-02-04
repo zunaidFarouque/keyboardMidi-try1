@@ -3,7 +3,7 @@
 **Role:** Expert C++ Audio Developer (Real-time Systems).
 
 **Context:**
-We are building "OmniKey".
+We are building "MIDIQy".
 *   **Current State:** Phase 16.8 Complete. `Zone` calculates notes efficiently, but `ZoneManager` still loops through every single zone to check if an input matches.
 *   **Phase Goal:** Implement a "Master Lookup Table" in `ZoneManager`. This compiles all active Zones into a single `std::unordered_map` for instant access.
 

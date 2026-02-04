@@ -513,7 +513,7 @@ void DeviceManager::validateConnectedDevices() {
 juce::File DeviceManager::getConfigFile() const {
   auto dir =
       juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory)
-          .getChildFile("OmniKey");
+          .getChildFile("MIDIQy");
   dir.createDirectory();
-  return dir.getChildFile("OmniKeyConfig.xml");
+  return dir.getChildFile("MIDIQyConfig.xml");
 }

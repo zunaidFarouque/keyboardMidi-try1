@@ -3,7 +3,7 @@
 **Role:** Expert C++ Audio Developer (Win32 API).
 
 **Context:**
-We are building "OmniKey".
+We are building "MIDIQy".
 *   **Current State:** The input system has become overly complex with "Injection" logic causing loops and instability.
 *   **Goal:** Revert to a clean, stable **Global Mode**.
     *   **Midi Mode ON:** ALL keyboards are blocked from Windows (No Typing). MIDI works globally (Foreground & Background).

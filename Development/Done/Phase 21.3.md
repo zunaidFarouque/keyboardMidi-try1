@@ -3,7 +3,7 @@
 **Role:** Expert C++ Audio Developer (JUCE Framework).
 
 **Context:**
-We are building "OmniKey".
+We are building "MIDIQy".
 *   **Current State:** Phase 21.2 Complete.
 *   **Problem:** When a key is released, the `NoteOff` event is sent instantly. This sounds synthetic and abrupt. Real instruments have a decay tail.
 *   **Phase Goal:** Implement a "Release Duration" parameter per Zone. When a key is lifted, the system should wait $N$ milliseconds before sending the MIDI NoteOff.

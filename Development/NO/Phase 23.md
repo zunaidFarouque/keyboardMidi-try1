@@ -3,7 +3,7 @@
 **Role:** Expert C++ Audio Developer (JUCE Framework).
 
 **Context:**
-We are building "OmniKey".
+We are building "MIDIQy".
 *   **Current State:** The Zone Editor has a "Release Duration" slider, but the audio engine doesn't use it. Notes stop instantly.
 *   **Phase Goal:** Implement the backend logic to support delayed Note Off events (Timed Release).
 

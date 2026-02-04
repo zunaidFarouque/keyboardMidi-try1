@@ -3,7 +3,7 @@
 **Role:** Expert C++ Audio Developer (JUCE Framework).
 
 **Context:**
-We are building "OmniKey".
+We are building "MIDIQy".
 *   **Current State:** Phase 6 Complete. Mappings can be added/loaded but not easily edited.
 *   **Phase Goal:** Implement a `MappingInspector` panel that binds to the Table's selection for powerful batch editing.
 

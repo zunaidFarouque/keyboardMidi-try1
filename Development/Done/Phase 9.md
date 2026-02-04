@@ -16,14 +16,14 @@
 Manage the configuration.
 
 **Requirements:**
-1.  **Storage:** `juce::ValueTree globalConfig { "OmniKeyConfig" };`
+1.  **Storage:** `juce::ValueTree globalConfig { "MIDIQyConfig" };`
     *   XML Structure: `<Alias name="Main Keys"><Hardware id="12345"/><Hardware id="67890"/></Alias>`
 2.  **API:**
     *   `void createAlias(String name);`
     *   `void assignHardware(String alias, uintptr_t hardwareId);`
     *   `Array<uintptr_t> getHardwareForAlias(String aliasName);`
     *   `String getAliasForHardware(uintptr_t hardwareId);` (For UI display).
-3.  **Persistence:** Save/Load `OmniKeyConfig.xml` to `juce::File::getSpecialLocation(userApplicationDataDirectory)`.
+3.  **Persistence:** Save/Load `MIDIQyConfig.xml` to `juce::File::getSpecialLocation(userApplicationDataDirectory)`.
 4.  **Broadcasting:** Inherit `juce::ChangeBroadcaster`. Broadcast when config changes.
 
 ### Step 2: `InputProcessor` (The Compiler)

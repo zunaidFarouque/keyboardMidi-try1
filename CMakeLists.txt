@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.22)
 
 # 1. Project Setup
-project(OmniKey VERSION 1.0.0 LANGUAGES C CXX)
+project(MIDIQy VERSION 1.0.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -89,9 +89,12 @@ endif()
 
 # 5. Create the GUI App
 juce_add_gui_app(OmniKey
-    PRODUCT_NAME "OmniKey"
+    PRODUCT_NAME "MIDIQy"
     VERSION 1.0.0
-    COMPANY_NAME "OmniKey"
+    COMPANY_NAME "Md. Zunaid Farouque"
+    COMPANY_WEBSITE "https://github.com/zunaidFarouque"
+    ICON_BIG "${CMAKE_CURRENT_SOURCE_DIR}/branding/logo only 512 (transparent).png"
+    ICON_SMALL "${CMAKE_CURRENT_SOURCE_DIR}/branding/logo only 512 (transparent).png"
     NEEDS_STANDALONE_SHELL FALSE
 )
 
@@ -190,6 +193,7 @@ target_include_directories(OmniKey_Tests PRIVATE
 if(MSVC)
   target_compile_options(OmniKey_Tests PRIVATE /FS)
 endif()
+set_target_properties(OmniKey_Tests PROPERTIES OUTPUT_NAME "MIDIQy_Tests")
 
 # 13. Register with CTest
 include(GoogleTest)
@@ -218,16 +222,17 @@ target_include_directories(OmniKey_Benchmarks PRIVATE
 if(MSVC)
   target_compile_options(OmniKey_Benchmarks PRIVATE /FS)
 endif()
+set_target_properties(OmniKey_Benchmarks PROPERTIES OUTPUT_NAME "MIDIQy_Benchmarks")
 
 # 15c. CTest: run benchmarks in a manageable way (short min time, 1 rep, small subset)
 add_test(
-  NAME OmniKey_Benchmarks_Quick
+  NAME MIDIQy_Benchmarks_Quick
   COMMAND OmniKey_Benchmarks
     --benchmark_min_time=0.1
     --benchmark_repetitions=1
     --benchmark_filter=ManualNote_SingleKey|Expression_CC_NoADSR|Zone_SingleNote_Poly|Stress_PolyChords_10Keys
 )
-set_tests_properties(OmniKey_Benchmarks_Quick PROPERTIES
+set_tests_properties(MIDIQy_Benchmarks_Quick PROPERTIES
   LABELS "benchmark"
   TIMEOUT 120
 )

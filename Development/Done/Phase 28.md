@@ -3,7 +3,7 @@
 **Role:** Expert C++ Audio Developer (JUCE Framework).
 
 **Context:**
-We are building "OmniKey".
+We are building "MIDIQy".
 *   **Current State:** Phase 27.1 Complete.
 *   **Issue 1:** Every time the app restarts, the MIDI Output resets to "No Device" or the first default. The user has to manually re-select "loopMIDI" or "HALion".
 *   **Issue 2:** Creating similar mappings (e.g., CC 1 and CC 11) requires clicking "+", then re-entering all settings from scratch. Users want to Duplicate an existing row.

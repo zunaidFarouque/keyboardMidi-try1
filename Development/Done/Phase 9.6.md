@@ -3,7 +3,7 @@
 **Role:** Expert C++ Audio Developer (JUCE Framework).
 
 **Context:**
-We are building "OmniKey".
+We are building "MIDIQy".
 *   **Current State:** Phase 9.5 Complete. Studio Mode allows specific Alias usage.
 *   **Problem:** If a user loads a complex Preset (e.g., "LeftKeys" + "RightKeys") but hasn't configured their hardware, the Preset loads silently but makes no sound (mapped aliases have no hardware attached).
 *   **Phase Goal:** Implement a **Rig Health Check** on preset load. If Aliases are missing hardware, launch a **Quick Setup Wizard** overlay.

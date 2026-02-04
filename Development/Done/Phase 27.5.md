@@ -8,7 +8,7 @@
 *   **Phase Goal:** Implement a robust `forceForegroundWindow` helper using `AttachThreadInput` to bypass the OS restriction.
 
 **Strict Constraints:**
-1.  **Mechanism:** You must use `AttachThreadInput` to attach the OmniKey thread to the current Foreground Window's thread before attempting to switch focus.
+1.  **Mechanism:** You must use `AttachThreadInput` to attach the MIDIQy thread to the current Foreground Window's thread before attempting to switch focus.
 2.  **Safety:** Always detach (`AttachThreadInput(..., FALSE)`) immediately after the switch.
 3.  **Restore:** Handle the `IsIconic` (Minimized) case explicitly with `ShowWindow(SW_RESTORE)`.
 

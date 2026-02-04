@@ -3,7 +3,7 @@
 **Role:** Expert C++ Audio Developer (Music Theory Specialist).
 
 **Context:**
-We are building "OmniKey".
+We are building "MIDIQy".
 *   **Current State:** Phase 18.1 Complete. `ChordUtilities` currently generates basic root-position stacks.
 *   **Problem:** Basic chords sound robotic. 9th/11th chords sound muddy because notes are crammed into one octave.
 *   **Phase Goal:** Implement "Smooth Voicing" (Inversions to minimize movement) and "Guitar Voicing" (Spread voicings to reduce mud).

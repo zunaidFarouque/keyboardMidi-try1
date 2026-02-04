@@ -3,7 +3,7 @@
 **Role:** Expert C++ Audio Developer (Music Theory Specialist).
 
 **Context:**
-We are building "OmniKey".
+We are building "MIDIQy".
 *   **Current State:** Phase 18.8 Debug Report reveals a logic bug in `ChordUtilities`.
 *   **The Bug:** When `strictGhostHarmony` is **ON**, the engine is still inserting **7ths** (Interval 11) into Triads.
     *   *Example Output:* C Major Triad + Strict Mode -> Adds 'B' (7th) as a ghost note.

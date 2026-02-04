@@ -61,7 +61,7 @@ void PresetManager::endTransaction()
 void StartupManager::initApp()
 {
     // 1. Load Settings
-    juce::File settingsFile = appDataFolder.getChildFile("OmniKeySettings.xml");
+    juce::File settingsFile = appDataFolder.getChildFile("MIDIQySettings.xml");
     if (settingsFile.exists())
     {
         settingsManager.loadFromXml(settingsFile);

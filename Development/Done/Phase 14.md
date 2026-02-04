@@ -3,7 +3,7 @@
 **Role:** Expert C++ Audio Developer (JUCE Framework).
 
 **Context:**
-We are building "OmniKey".
+We are building "MIDIQy".
 *   **Current State:** Phase 13 Complete. Zones logic is strictly "Linear" (based on the order keys were added).
 *   **Phase Goal:** Implement "Grid/Guitar Mode" for zones (calculating pitch based on X/Y row/col) and a "Chip List" UI to visualize/remove individual keys.
 

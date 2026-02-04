@@ -3,7 +3,7 @@
 **Role:** Expert C++ Audio Developer (JUCE UI & State Management).
 
 **Context:**
-We are building "OmniKey".
+We are building "MIDIQy".
 *   **Current State:** Phase 44 Complete.
 *   **Issue 1:** Switching Layers in `MappingEditor` clears the table selection, disabling the Inspector. The user has to re-select a row every time they switch tabs.
 *   **Issue 2:** The Visualizer shows keys, but doesn't show which **Layers** (Banks) are currently active in the engine (e.g., did I toggle "Shift" on?).

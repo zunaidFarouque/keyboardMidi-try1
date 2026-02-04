@@ -3,7 +3,7 @@
 **Role:** Expert C++ Audio Developer (JUCE Framework).
 
 **Context:**
-We are building "OmniKey".
+We are building "MIDIQy".
 *   **Current State:** Phase 27.1 Complete. "MIDI Mode" blocks *all* assigned devices globally.
 *   **Problem 1:** Users want to selectively allow specific Aliases (e.g., "Laptop Keyboard") to type text even while MIDI Mode is active, without removing them from the rig.
 *   **Problem 2:** When MIDI Mode is OFF, the Visualizer is completely blocked by an opaque overlay, making it impossible to see settings/keys.
@@ -30,7 +30,7 @@ Store the state.
     *   `void setPassthrough(String alias, bool enable);` (Broadcast change).
     *   `bool isPassthrough(String alias);`
     *   `bool isHardwarePassthrough(uintptr_t hardwareId);` (Helper: Lookup Alias for ID, then check state).
-3.  **Serialization:** Save/Load these states in `OmniKeyConfig.xml`.
+3.  **Serialization:** Save/Load these states in `MIDIQyConfig.xml`.
 
 ### Step 2: Update `RawInputManager.cpp`
 Refactor the routing logic.

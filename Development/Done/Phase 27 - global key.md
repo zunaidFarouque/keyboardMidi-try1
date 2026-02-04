@@ -3,7 +3,7 @@
 **Role:** Expert C++ Audio Developer (Win32 API Specialist).
 
 **Context:**
-We are building "OmniKey".
+We are building "MIDIQy".
 *   **Current State:** Phase 26 Complete. The app generates MIDI from keyboard input.
 *   **Problem:** Keystrokes still reach the active window (e.g., typing "Q" into a document while playing C4).
 *   **Phase Goal:** Implement a **Global Toggle** (default: Scroll Lock).

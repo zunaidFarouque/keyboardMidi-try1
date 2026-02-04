@@ -3,7 +3,7 @@
 **Role:** Expert C++ Audio Developer (JUCE Graphics Optimization).
 
 **Context:**
-We are building "OmniKey".
+We are building "MIDIQy".
 *   **Current State:** Phase 29 Complete. The app works well but consumes ~9% CPU when idle.
 *   **Diagnosis:** `VisualizerComponent` uses `VBlankAttachment` to call `repaint()` every frame (60fps+), regardless of activity.
 *   **Phase Goal:** Implement a **Dirty Flag** pattern to only repaint when visual data has actually changed.

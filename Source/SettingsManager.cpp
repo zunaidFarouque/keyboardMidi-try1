@@ -6,13 +6,14 @@ SettingsManager::SettingsManager() {
   rootNode.setProperty("midiModeActive", false, nullptr);
   rootNode.setProperty("toggleKeyCode", 0x91, nullptr); // VK_SCROLL
   rootNode.setProperty("lastMidiDevice", "", nullptr);
-  rootNode.setProperty("studioMode", false, nullptr); // Default: Studio Mode OFF
+  rootNode.setProperty("studioMode", false,
+                       nullptr); // Default: Studio Mode OFF
+  rootNode.setProperty("capWindowRefresh30Fps", true,
+                       nullptr); // Default: cap at 30 FPS
   rootNode.addListener(this);
 }
 
-SettingsManager::~SettingsManager() {
-  rootNode.removeListener(this);
-}
+SettingsManager::~SettingsManager() { rootNode.removeListener(this); }
 
 int SettingsManager::getPitchBendRange() const {
   return rootNode.getProperty("pitchBendRange", 12);
@@ -45,7 +46,7 @@ juce::String SettingsManager::getLastMidiDevice() const {
   return rootNode.getProperty("lastMidiDevice", "").toString();
 }
 
-void SettingsManager::setLastMidiDevice(const juce::String& name) {
+void SettingsManager::setLastMidiDevice(const juce::String &name) {
   rootNode.setProperty("lastMidiDevice", name, nullptr);
   sendChangeMessage();
 }
@@ -59,34 +60,47 @@ void SettingsManager::setStudioMode(bool active) {
   sendChangeMessage();
 }
 
+bool SettingsManager::isCapWindowRefresh30Fps() const {
+  return rootNode.getProperty("capWindowRefresh30Fps", true);
+}
+
+void SettingsManager::setCapWindowRefresh30Fps(bool cap) {
+  rootNode.setProperty("capWindowRefresh30Fps", cap, nullptr);
+  sendChangeMessage();
+}
+
+int SettingsManager::getWindowRefreshIntervalMs() const {
+  return isCapWindowRefresh30Fps() ? 34 : 16; // 30 FPS cap vs ~60 FPS
+}
+
 juce::String SettingsManager::getTypePropertyName(ActionType type) const {
   switch (type) {
-    case ActionType::Note:
-      return "color_Note";
-    case ActionType::Expression:
-      return "color_Expression";
-    case ActionType::Command:
-      return "color_Command";
-    case ActionType::Macro:
-      return "color_Macro";
-    default:
-      return "color_Note";
+  case ActionType::Note:
+    return "color_Note";
+  case ActionType::Expression:
+    return "color_Expression";
+  case ActionType::Command:
+    return "color_Command";
+  case ActionType::Macro:
+    return "color_Macro";
+  default:
+    return "color_Note";
   }
 }
 
 namespace {
 juce::Colour getTypeColorDefault(ActionType type) {
   switch (type) {
-    case ActionType::Note:
-      return juce::Colours::skyblue;
-    case ActionType::Expression:
-      return juce::Colours::orange;
-    case ActionType::Command:
-      return juce::Colours::red;
-    case ActionType::Macro:
-      return juce::Colours::yellow;
-    default:
-      return juce::Colours::grey;
+  case ActionType::Note:
+    return juce::Colours::skyblue;
+  case ActionType::Expression:
+    return juce::Colours::orange;
+  case ActionType::Command:
+    return juce::Colours::red;
+  case ActionType::Macro:
+    return juce::Colours::yellow;
+  default:
+    return juce::Colours::grey;
   }
 }
 } // namespace
@@ -103,7 +117,8 @@ juce::Colour SettingsManager::getTypeColor(ActionType type) const {
 }
 
 void SettingsManager::setTypeColor(ActionType type, juce::Colour colour) {
-  rootNode.setProperty(juce::Identifier(getTypePropertyName(type)), colour.toString(), nullptr);
+  rootNode.setProperty(juce::Identifier(getTypePropertyName(type)),
+                       colour.toString(), nullptr);
   sendChangeMessage();
 }
 
@@ -128,8 +143,10 @@ void SettingsManager::loadFromXml(juce::File file) {
         rootNode.setProperty("toggleKeyCode", 0x91, nullptr);
         rootNode.setProperty("lastMidiDevice", "", nullptr);
         rootNode.setProperty("studioMode", false, nullptr);
+        rootNode.setProperty("capWindowRefresh30Fps", true, nullptr);
       } else {
-        // Phase 43: Validate (sanitize) – prevent divide-by-zero from bad saved data
+        // Phase 43: Validate (sanitize) – prevent divide-by-zero from bad saved
+        // data
         int pb = rootNode.getProperty("pitchBendRange", 12);
         if (pb < 1) {
           rootNode.setProperty("pitchBendRange", 12, nullptr);
@@ -141,8 +158,8 @@ void SettingsManager::loadFromXml(juce::File file) {
   }
 }
 
-void SettingsManager::valueTreePropertyChanged(juce::ValueTree& tree,
-                                               const juce::Identifier& property) {
+void SettingsManager::valueTreePropertyChanged(
+    juce::ValueTree &tree, const juce::Identifier &property) {
   if (tree == rootNode) {
     sendChangeMessage();
   }

@@ -9,7 +9,7 @@ This connects the configuration (Colors) to the user experience (Visualizer). We
 **Role:** Expert C++ Audio Developer (JUCE Graphics).
 
 **Context:**
-We are building "OmniKey".
+We are building "MIDIQy".
 *   **Current State:** Phase 37 Complete. `SettingsManager` stores colors for Note, CC, Command, etc.
 *   **Problem:** The Visualizer only shows Zone colors. Manual mappings (which override zones) are invisible until pressed.
 *   **Phase Goal:** Update the Visualizer to render an underlay for Manual Mappings using the colors defined in Settings.

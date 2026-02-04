@@ -3,7 +3,7 @@
 **Role:** Expert C++ Audio Developer (JUCE UI).
 
 **Context:**
-We are building "OmniKey".
+We are building "MIDIQy".
 *   **Current State:** `DeviceSetupComponent` exists but has a refresh bug.
 *   **The Bug:** Clicking a different Alias in the left list **does not** update the Hardware list on the right. It keeps showing the previous selection until the window is reopened.
 *   **UX Issues:** No column headers/labels. No way to Rename an alias.

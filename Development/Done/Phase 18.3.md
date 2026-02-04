@@ -3,7 +3,7 @@
 **Role:** Expert C++ Audio Developer (Music Theory Specialist).
 
 **Context:**
-We are building "OmniKey".
+We are building "MIDIQy".
 *   **Current State:** Phase 18.2 added basic voicing, but the "Guitar" mode is too rigid (always spreads, often jumping too high).
 *   **Phase Goal:** Implement **"Adaptive Guitar Voicing"**.
 *   **Logic:**

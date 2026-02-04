@@ -9,7 +9,7 @@ This builds the infrastructure to store and edit the colors.
 **Role:** Expert C++ Audio Developer (JUCE Framework).
 
 **Context:**
-We are building "OmniKey".
+We are building "MIDIQy".
 *   **Current State:** Phase 36.1 Complete.
 *   **Phase Goal:** Allow the user to define global colors for each Manual Mapping Type (Note, CC, Command, Macro, Envelope). These colors will later be used in the Visualizer.
 

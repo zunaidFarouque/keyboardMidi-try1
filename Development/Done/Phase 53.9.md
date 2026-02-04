@@ -39,7 +39,7 @@ Add a test case that mimics the exact user scenario: Using a specific Hardware D
             m.setProperty("inputKey", keyLayer, nullptr);
             m.setProperty("inputAlias", "TestDevice", nullptr); // Map to Alias
             m.setProperty("type", "Command", nullptr);
-            m.setProperty("data1", (int)OmniKey::CommandID::LayerMomentary, nullptr);
+            m.setProperty("data1", (int)MIDIQy::CommandID::LayerMomentary, nullptr);
             m.setProperty("data2", 1, nullptr);
             mappings.addChild(m, -1, nullptr);
         }

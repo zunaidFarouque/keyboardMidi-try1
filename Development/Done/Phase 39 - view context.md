@@ -9,7 +9,7 @@ This phase implements the **View Context** logic. It upgrades the `InputProcesso
 **Role:** Expert C++ Audio Developer (JUCE Framework).
 
 **Context:**
-We are building "OmniKey".
+We are building "MIDIQy".
 *   **Current State:** Phase 38 Complete. The Visualizer always shows the "Master" context (Device 0). It doesn't show what happens on specific devices.
 *   **Phase Goal:**
     1.  Add a **View Selector** (ComboBox) to the Visualizer to choose a specific Device Alias.

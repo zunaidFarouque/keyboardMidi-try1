@@ -3,7 +3,7 @@
 **Role:** Expert C++ Audio Developer (JUCE Framework).
 
 **Context:**
-We are building "OmniKey".
+We are building "MIDIQy".
 *   **Current State:** Phase 3 Complete. We have `InputProcessor` using a `std::unordered_map` for lookups, but it is currently populated via `loadDebugMappings()`.
 *   **Phase Goal:** Replace hardcoded mappings with a dynamic `juce::ValueTree` system, implement XML Save/Load, and create a GUI Table to view mappings.
 
@@ -17,7 +17,7 @@ We are building "OmniKey".
 Create a class to own the data.
 
 **Requirements:**
-1.  **Member:** `juce::ValueTree rootNode;` (Identifier: `"OmniKeyPreset"`).
+1.  **Member:** `juce::ValueTree rootNode;` (Identifier: `"MIDIQyPreset"`).
 2.  **Constructor:** Check if `rootNode` has a `"Mappings"` child. If not, create it.
 3.  **Persistence:**
     *   `void saveToFile(juce::File file)`: Writes `rootNode` to XML.

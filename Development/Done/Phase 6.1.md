@@ -3,7 +3,7 @@
 **Role:** Expert C++ Audio Developer (JUCE Framework).
 
 **Context:**
-We are building "OmniKey".
+We are building "MIDIQy".
 *   **Current State:** Phase 6 Complete. The Engine can process Mouse/Trackpad data (`PointerInputManager`), but the UI has no way to map them. The "Performance Mode" (Cursor Lock) is currently dumb and just hides the mouse regardless of whether it's needed.
 *   **Phase Goal:** Make the Mouse/Trackpad features accessible in the UI, allow "Learning" of axis movements, and implement "Smart Locking" for the cursor.
 

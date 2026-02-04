@@ -3,7 +3,7 @@
 **Role:** Expert C++ Audio Developer (Real-time Systems Optimization).
 
 **Context:**
-We are building "OmniKey".
+We are building "MIDIQy".
 *   **Current State:** Phase 21 Complete.
 *   **Problem:** Rapid key presses cause "Catch-up" lag. The system processes Input -> MIDI -> **String Formatting** -> **UI Repaint** synchronously. The UI/String overhead causes backpressure on the Input queue.
 *   **Phase Goal:** Decouple the UI from the Input Thread. Implement "Fire-and-Forget" logging and "VSync-synced" visualization.

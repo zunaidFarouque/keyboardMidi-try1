@@ -3,7 +3,7 @@
 **Role:** Expert C++ Audio Developer (Real-time Systems).
 
 **Context:**
-We are building "OmniKey".
+We are building "MIDIQy".
 *   **Current State:** Phase 26.2.1 Complete.
 *   **The Bug:** In Legato Mode, holding A, pressing B (Glide), then releasing A causes the sound to stop or retrigger.
 *   **The Cause:** Releasing A triggers `NoteOff A`. But in our "Fake Legato" implementation, Note A is the "Anchor" (Carrier) for the sound of B (via Pitch Bend). Killing A kills B.

@@ -3,7 +3,7 @@
 **Role:** Expert C++ Audio Developer (System Logic).
 
 **Context:**
-We are building "OmniKey".
+We are building "MIDIQy".
 *   **Current State:** Phase 39.7 Complete.
 *   **The Bug:** When a user creates a Manual Mapping for a Key that is *already* part of a Zone on the **same Device Alias**, the Visualizer shows it as a normal "Override" (Blue).
 *   **The Goal:** This specific scenario (Same Key, Same Device, Both Manual and Zone defined) must be flagged as a **Conflict** (Red) to warn the user.

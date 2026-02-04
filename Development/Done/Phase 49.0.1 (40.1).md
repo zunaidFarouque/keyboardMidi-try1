@@ -90,7 +90,7 @@ void InputProcessor::updateLayerState()
                     // Found the active mapping for this key
                     const auto& action = it->second;
                     if (action.type == ActionType::Command && 
-                        action.data1 == (int)OmniKey::CommandID::LayerMomentary)
+                        action.data1 == (int)MIDIQy::CommandID::LayerMomentary)
                     {
                         int targetLayer = action.data2;
                         if (targetLayer >= 0 && targetLayer < layers.size())

@@ -11,7 +11,7 @@ This means you can have a "C Major Zone" on **Layer 0**, and a "Drum Pad Zone" o
 **Role:** Expert C++ Audio Developer (System Architecture).
 
 **Context:**
-We are building "OmniKey".
+We are building "MIDIQy".
 *   **Current State:**
     *   Manual Mappings belong to Layers (0-8).
     *   Zones are "Global" and only trigger if *no* manual mapping is found in *any* active layer.

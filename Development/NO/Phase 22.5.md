@@ -3,7 +3,7 @@
 **Role:** Expert C++ Audio Developer (JUCE UI Specialist).
 
 **Context:**
-We are building "OmniKey".
+We are building "MIDIQy".
 *   **Current State:** `ZonePropertiesPanel` is in a broken "Hybrid" state. It contains **Duplicate Controls**: one set inside the new `struct` sections (`headerSection`, `musicalSection`...) and one set of "Legacy" member variables (`rootSlider`, `scaleSelector`...) at the main class level.
 *   **Problem:** This causes visual glitches (double rendering), logic bugs, and spaghetti code.
 *   **Phase Goal:** Delete ALL legacy variables and enforce a strict "Section-Based" visibility logic.

@@ -3,7 +3,7 @@
 **Role:** Expert C++ Audio Developer (JUCE Framework).
 
 **Context:**
-We are building "OmniKey".
+We are building "MIDIQy".
 *   **Current State:** Phase 14 Complete. The app has advanced features (Zones, Guitar Mode, Mappings), but they are lost immediately upon restart.
 *   **Phase Goal:** Implement `StartupManager` to handle auto-loading state, creating a robust "Factory Default" experience, and debounced auto-saving.
 
@@ -53,7 +53,7 @@ The persistence engine.
 *   `void triggerSave();`: Starts the timer (2 seconds).
 *   `timerCallback()`:
     *   Stop timer.
-    *   Construct a Master XML (`<OmniKeySession>`).
+    *   Construct a Master XML (`<MIDIQySession>`).
     *   Add `PresetManager::getRootNode()`.
     *   Add `ZoneManager::toValueTree()`.
     *   Write to `autoload.xml`.

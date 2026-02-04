@@ -3,7 +3,7 @@
 **Role:** Expert C++ Audio Developer (JUCE Framework).
 
 **Context:**
-We are building "OmniKey".
+We are building "MIDIQy".
 *   **Current State:** Phase 45.2 Complete. The Visualizer always simulates the "Live" state (checking all active layers).
 *   **Problem:** When editing "Layer 1", the Visualizer might still show Layer 0's mappings as "Active", or ignore Layer 1 if it's currently toggled off in the engine.
 *   **Phase Goal:** Update the Visualizer to show the **Editing Context**.

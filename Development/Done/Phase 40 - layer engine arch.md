@@ -3,7 +3,7 @@
 **Role:** Expert C++ Audio Developer (System Architecture).
 
 **Context:**
-We are building "OmniKey".
+We are building "MIDIQy".
 *   **Current State:** Phase 39.8 Complete. `InputProcessor` uses `compiledMap` (HardwareID) for Audio and `configMap` (Alias) for UI.
 *   **Phase Goal:** Implement a **Multi-Layer System** (Banks/Modifiers).
     *   Allow creating multiple "Layers" of mappings.

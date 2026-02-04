@@ -12,7 +12,7 @@ StartupManager::StartupManager(PresetManager *presetMgr,
   // Setup file paths
   appDataFolder =
       juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory)
-          .getChildFile("OmniKey");
+          .getChildFile("MIDIQy");
   autoloadFile = appDataFolder.getChildFile("autoload.xml");
   settingsFile = appDataFolder.getChildFile("settings.xml");
 

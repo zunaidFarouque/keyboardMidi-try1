@@ -24,7 +24,7 @@ Add a test case that simulates a real-world performance scenario: Holding a Mome
             juce::ValueTree m("Mapping");
             m.setProperty("inputKey", keyLayer, nullptr);
             m.setProperty("type", "Command", nullptr);
-            m.setProperty("data1", (int)OmniKey::CommandID::LayerMomentary, nullptr);
+            m.setProperty("data1", (int)MIDIQy::CommandID::LayerMomentary, nullptr);
             m.setProperty("data2", 1, nullptr); // Target Layer 1
             mappings.addChild(m, -1, nullptr);
         }

@@ -3,7 +3,7 @@
 **Role:** Expert C++ Audio Developer (JUCE Framework & Win32 API).
 
 **Context:**
-We are building "OmniKey".
+We are building "MIDIQy".
 *   **Current State:** Phase 27.5 Complete. The app successfully steals focus using `AttachThreadInput` to block typing in other apps when MIDI Mode is ON.
 *   **Problem:** Currently, it forces the **Main Window** to the front. If the user wants to work in a DAW while performing, the Main Window covers the screen.
 *   **Phase Goal:** Implement a **"Mini Status Window"**.
@@ -24,7 +24,7 @@ Create the UI component.
 **Requirements:**
 1.  **Inheritance:** `juce::DocumentWindow`.
 2.  **Constructor:**
-    *   Title: "OmniKey Status".
+    *   Title: "MIDIQy Status".
     *   Style: `allButtons` (to get Close/Min).
     *   Options: `setAlwaysOnTop(true)`, `setResizable(true, false)`.
     *   Content: A simple `juce::Label` ("MIDI Mode is ON. Press Scroll Lock or Close to stop.").

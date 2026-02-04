@@ -3,7 +3,7 @@
 **Role:** Expert C++ Audio Developer (Music Theory Specialist).
 
 **Context:**
-We are building "OmniKey".
+We are building "MIDIQy".
 *   **Current State:** Phase 23.5 Complete. Pitch Bend works but uses raw semitones.
 *   **Phase Goal:** Implement **Smart Pitch Bend**.
     *   User selects "Shift Scale Steps" (e.g., +1).

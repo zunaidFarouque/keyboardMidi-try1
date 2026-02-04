@@ -3,7 +3,7 @@
 **Role:** Expert C++ Audio Developer (JUCE Framework).
 
 **Context:**
-We are building "OmniKey".
+We are building "MIDIQy".
 *   **Current State:**
     1.  `VoiceManager::panic()` might rely only on `CC 123` (All Notes Off), which some synths ignore, or it fails to clear internal "Sustained" states, leaving notes stuck in the engine logic.
     2.  `MainComponent` has a split layout (Left: Tabbed Editors, Right: Inspector/Log), but the divider is static. The user cannot drag it to resize the panels.

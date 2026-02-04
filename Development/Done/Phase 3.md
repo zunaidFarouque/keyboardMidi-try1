@@ -3,7 +3,7 @@
 **Role:** Expert C++ Audio Developer (JUCE Framework).
 
 **Context:**
-We are building "OmniKey".
+We are building "MIDIQy".
 *   **Current State:** Phase 2 Complete. Input and Output work, but logic is hardcoded in `MainComponent`.
 *   **Phase Goal:** Implement `InputProcessor` (Mapping Logic) and `VoiceManager` (Note-Off Safety).
 

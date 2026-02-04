@@ -11,7 +11,7 @@ Since we already added the "Generic Fallback" logic in `InputProcessor` (Phase 3
 **Role:** Expert C++ Audio Developer (Win32 API).
 
 **Context:**
-We are building "OmniKey".
+We are building "MIDIQy".
 *   **Current State:** `RawInputManager` receives key events but often reports generic Virtual Keys (`VK_SHIFT` 0x10, `VK_CONTROL` 0x11) instead of specific ones (`VK_LSHIFT`, `VK_RCONTROL`).
 *   **Problem:** Users cannot map Left Shift and Right Shift to different functions.
 *   **Phase Goal:** Update `rawInputWndProc` to refine the `VKey` using the Scan Code (`MakeCode`) and the Extended Flag (`RI_KEY_E0`).

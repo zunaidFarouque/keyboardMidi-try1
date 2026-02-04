@@ -3,7 +3,7 @@
 **Role:** Expert C++ Audio Developer (System Architecture).
 
 **Context:**
-We are building "OmniKey".
+We are building "MIDIQy".
 *   **Current State:** Phase 45 Complete.
 *   **The Bug:** `DeviceManager` automatically assigns any new/unknown USB device to the "Master Input" alias. This fills the Global list with "Zombie" devices (phantom IDs like `FE869`) that reappear even after removal.
 *   **Phase Goal:**

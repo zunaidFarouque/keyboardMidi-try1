@@ -3,9 +3,9 @@
 **Role:** Expert C++ Audio Developer (Win32 API).
 
 **Context:**
-We are building "OmniKey".
+We are building "MIDIQy".
 *   **Current State:** Phase 27.1 Complete. The Global Hook blocks keys correctly.
-*   **The Bug:** MIDI generation stops when the OmniKey window loses focus (e.g., clicking into a DAW).
+*   **The Bug:** MIDI generation stops when the MIDIQy window loses focus (e.g., clicking into a DAW).
 *   **The Cause:** `RegisterRawInputDevices` is likely missing the `RIDEV_INPUTSINK` flag, or `hwndTarget` is not set correctly. Without `INPUTSINK`, Windows only sends `WM_INPUT` to the foreground window.
 
 **Phase Goal:** Force the application to receive Raw Input globally, even when minimized or in the background.

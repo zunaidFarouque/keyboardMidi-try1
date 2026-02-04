@@ -3,7 +3,7 @@
 **Role:** Expert C++ Audio Developer (JUCE Framework).
 
 **Context:**
-We are building "OmniKey".
+We are building "MIDIQy".
 *   **Current State:** Phase 20 Complete. Zones operate independently with their own Root and Scale.
 *   **Phase Goal:** Implement "Global Scale" and "Global Root" concepts in `ZoneManager`. Update `Zone` to optionally inherit these settings instead of using local values.
 

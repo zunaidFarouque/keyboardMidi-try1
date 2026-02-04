@@ -4,7 +4,7 @@
 **Role:** Expert C++ Audio Developer (JUCE Framework).
 
 **Context:**
-We are building "OmniKey".
+We are building "MIDIQy".
 *   **Current State:** Phase 17.3 Complete. Notes stop immediately upon Key Up.
 *   **Phase Goal:** Implement the backend logic for **Sustain** (holding notes), **Latch** (toggling notes), and **Panic**, driven by a unified Mapping system.
 

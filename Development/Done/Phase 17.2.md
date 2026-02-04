@@ -3,7 +3,7 @@
 **Role:** Expert C++ Audio Developer (JUCE Framework).
 
 **Context:**
-We are building "OmniKey".
+We are building "MIDIQy".
 *   **Current State:** Phase 17 and 17.1 are complete. The backend (`ChordUtilities`, `StrumEngine`, `InputProcessor`) supports complex chords and strumming logic.
 *   **Problem:** The `ZonePropertiesPanel` does not have controls for these features. Users cannot change Chord Type, Voicing, or Strum Speed.
 *   **Phase Goal:** Update the UI to expose these parameters.

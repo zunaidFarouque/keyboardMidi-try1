@@ -3,7 +3,7 @@
 **Role:** Expert C++ Audio Developer (JUCE Framework).
 
 **Context:**
-We are building "OmniKey".
+We are building "MIDIQy".
 *   **Current State:** Phase 23.1 Complete. `ExpressionEngine` logic exists, but there is no way to configure an Envelope in the UI, and the settings are not saved to disk.
 *   **Phase Goal:** Update `MappingInspector` to expose ADSR controls and `InputProcessor` to serialize them.
 

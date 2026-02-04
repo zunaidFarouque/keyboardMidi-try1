@@ -3,7 +3,7 @@
 **Role:** Expert C++ Audio Developer (Win32 API).
 
 **Context:**
-We are building "OmniKey".
+We are building "MIDIQy".
 *   **Current State:** The app works well, but physical computer keyboards send repeated "Down" signals when a key is held (Autorepeat).
 *   **Problem:** This causes the `VoiceManager` to re-trigger the note repeatedly (machine-gun effect) and messes up the Visualizer.
 *   **Goal:** Filter out these repeated events in `RawInputManager` so the app only hears the *first* Down event and the *final* Up event.

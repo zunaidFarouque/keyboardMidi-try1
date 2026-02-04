@@ -3,7 +3,7 @@
 **Role:** Expert C++ Audio Developer (Real-time Systems).
 
 **Context:**
-We are building "OmniKey".
+We are building "MIDIQy".
 *   **Current State:** Phase 23.2 Complete. The ADSR Envelope works, but it transmits data on every single timer tick (200Hz).
 *   **Problem:** During the **Sustain** phase (or slow ramps), the calculated value often stays the same (e.g., 127), but the engine keeps sending `CC 1 = 127` redundantly. This floods the MIDI bus.
 *   **Phase Goal:** Implement a **Delta Check** to only transmit when the value changes.

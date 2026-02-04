@@ -14,7 +14,7 @@ Here is the prompt for **Phase 25**.
 **Role:** Expert C++ Audio Developer (JUCE Framework).
 
 **Context:**
-We are building "OmniKey".
+We are building "MIDIQy".
 *   **Current State:** Pitch Bend mappings currently rely on local, hardcoded ranges in the Inspector. This makes it hard to sync with VSTs.
 *   **Phase Goal:** Implement a **Global Pitch Bend Range** setting. Update the system so that Mappings define a *Semitone Shift*, and the `InputProcessor` "compiles" this into the correct MIDI value based on the Global Range.
 
@@ -30,7 +30,7 @@ The configuration container.
 
 **Requirements:**
 1.  **Inheritance:** `juce::ChangeBroadcaster`, `juce::ValueTree::Listener`.
-2.  **Storage:** `juce::ValueTree rootNode { "OmniKeySettings" };`
+2.  **Storage:** `juce::ValueTree rootNode { "MIDIQySettings" };`
 3.  **Properties:**
     *   `pitchBendRange` (int): Default 12.
 4.  **Methods:**

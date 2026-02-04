@@ -3,7 +3,7 @@
 **Role:** Expert C++ Audio Developer (JUCE Framework).
 
 **Context:**
-We are building "OmniKey".
+We are building "MIDIQy".
 *   **Current State:** Phase 6.1 Complete.
 *   **Issue 1:** Scroll Wheel currently sends one code (`0x1000`) for both directions. We need separate events (Up vs Down) so they can trigger different actions (e.g., Volume Up vs Volume Down).
 *   **Issue 2:** Trackpad Learning is flaky or non-existent. The UI likely isn't listening to axis events, or jitter handling is missing.

@@ -3,7 +3,7 @@
 **Role:** Expert C++ Audio Developer (Real-time Systems).
 
 **Context:**
-We are building "OmniKey".
+We are building "MIDIQy".
 *   **Current State:** Phase 23 Complete. `AdsrSettings` struct exists, and `ExpressionEngine` is linked but empty.
 *   **Phase Goal:** Implement the ADSR State Machine inside `ExpressionEngine`.
 

@@ -3,7 +3,7 @@
 **Role:** Expert C++ Audio Developer (Real-time Systems).
 
 **Context:**
-We are building "OmniKey".
+We are building "MIDIQy".
 *   **Current State:** Phase 26.5 Complete. The system is robust, but extreme usage ("spamming") can still result in rare stuck notes due to race conditions between the Input Thread and Audio/Timer threads.
 *   **Phase Goal:** Implement a **"Watchdog Timer"** inside `VoiceManager`. This background process periodically checks for logic inconsistencies (e.g., Audio playing but no Keys held) and forcibly corrects them.
 

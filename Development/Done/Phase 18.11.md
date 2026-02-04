@@ -3,7 +3,7 @@
 **Role:** Expert C++ Audio Developer (JUCE Framework).
 
 **Context:**
-We are building "OmniKey".
+We are building "MIDIQy".
 *   **Current State:** Phase 18.10 Complete. Voicing logic is solid.
 *   **Phase Goal:**
     1.  **Bass Option:** Allow adding a specific Bass Note (Root shifted down by N octaves) to any chord zone.

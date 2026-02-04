@@ -3,7 +3,7 @@
 **Role:** Expert C++ Audio Developer (JUCE UI Specialist).
 
 **Context:**
-We are building "OmniKey".
+We are building "MIDIQy".
 *   **Current State:** Phase 22.2 Complete. `Header` and `Musical` sections are modular. However, `Performance` and `Appearance` controls are still loose legacy variables at the bottom of the file.
 *   **Phase Goal:** Migrate the remaining controls into `PerformanceSection` and `AppearanceSection`, implement dynamic visibility (e.g., hide Ghost controls if not using Filled voicing), and delete legacy code.
 

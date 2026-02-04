@@ -4,7 +4,7 @@
 class OmniKeyApplication : public juce::JUCEApplication {
 public:
   OmniKeyApplication() {}
-  const juce::String getApplicationName() override { return "OmniKey"; }
+  const juce::String getApplicationName() override { return "MIDIQy"; }
   const juce::String getApplicationVersion() override { return "1.0.0"; }
   bool moreThanOneInstanceAllowed() override { return true; }
 
@@ -23,7 +23,7 @@ public:
                   juce::ResizableWindow::backgroundColourId),
               DocumentWindow::allButtons) {
       setUsingNativeTitleBar(true);
-      auto* mainComp = new MainComponent();
+      auto *mainComp = new MainComponent();
       setContentOwned(mainComp, true);
       setMenuBar(mainComp); // Set MainComponent as menu bar model
       setResizable(true, true);

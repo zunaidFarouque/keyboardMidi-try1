@@ -3,7 +3,7 @@
 **Role:** Expert C++ Audio Developer (JUCE Framework).
 
 **Context:**
-We are building "OmniKey".
+We are building "MIDIQy".
 *   **Current State:** Phase 1 is complete. `RawInputManager` logs keyboard events. Architectural rules (`void*` isolation, no `hidpi.h`) are strictly enforced.
 *   **Phase Goal:** Implement `MidiEngine` to send MIDI messages to external devices.
 

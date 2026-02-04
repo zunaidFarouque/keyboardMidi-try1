@@ -3,7 +3,7 @@
 **Role:** Expert C++ Audio Developer (Win32 API).
 
 **Context:**
-We are building "OmniKey".
+We are building "MIDIQy".
 *   **Current State:** Phase 39 Complete.
 *   **Issue 1 (Identity):** The UI uses "Any / Master", but sometimes creates a specific alias named "Master". We need to enforce **"Global"** as the name and **0** as the Hash.
 *   **Issue 2 (Dead Hardware):** If a USB device is replugged, it gets a new Windows Handle. The old Handle remains in `DeviceManager` as a "Zombie", confusing the logic (it looks like the Alias is assigned, but it won't work).

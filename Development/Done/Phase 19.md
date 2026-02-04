@@ -3,7 +3,7 @@
 **Role:** Expert C++ Audio Developer (JUCE Framework & Graphics).
 
 **Context:**
-We are building "OmniKey".
+We are building "MIDIQy".
 *   **Current State:** Phase 18 Complete. `VoiceManager` maintains complex note states (`Playing`, `Sustained`, `Latched`), but the Visualizer only shows physical key presses.
 *   **Phase Goal:** Update the Visualizer to show a global "Sustain" indicator and colorize specific keys that are currently "Latched" (droning).
 

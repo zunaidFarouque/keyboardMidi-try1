@@ -3,7 +3,7 @@
 **Role:** Expert C++ Audio Developer (System Architecture).
 
 **Context:**
-We are building "OmniKey".
+We are building "MIDIQy".
 *   **Current State:** Phase 39.2 Complete.
 *   **The Bug:** The Visualizer fails to show mappings for specific Device Aliases.
 *   **The Cause:** `InputProcessor` compiles mappings into `HardwareID` keys for performance. The Visualizer queries using `AliasHash` keys. The map lookup fails because an Alias Hash != a Hardware ID.

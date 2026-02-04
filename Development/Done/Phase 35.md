@@ -73,7 +73,7 @@ setContentNonOwned(&messageLabel, true); // true = resizeToFit
 // Source/MiniStatusWindow.cpp
 
 MiniStatusWindow::MiniStatusWindow()
-    : DocumentWindow("OmniKey Status",
+    : DocumentWindow("MIDIQy Status",
                      juce::Colours::black,
                      juce::DocumentWindow::closeButton)
 {

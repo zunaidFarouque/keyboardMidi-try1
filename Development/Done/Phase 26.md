@@ -3,7 +3,7 @@
 **Role:** Expert C++ Audio Developer (Real-time Systems).
 
 **Context:**
-We are building "OmniKey".
+We are building "MIDIQy".
 *   **Current State:** Phase 25.1 Complete. The app is strictly Polyphonic.
 *   **Phase Goal:** Implement **Mono Mode** (Last-Note Priority) and **Legato Mode** (Pitch Glide).
 *   **Key Behavior:**

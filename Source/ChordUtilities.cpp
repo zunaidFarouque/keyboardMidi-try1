@@ -413,7 +413,7 @@ void ChordUtilities::dumpDebugReport(juce::File targetFile) {
   const int zoneAnchor = 60;
 
   juce::String report;
-  report += "=== OmniKey Chord Debug Report ===\n";
+  report += "=== MIDIQy Chord Debug Report ===\n";
   report += "Scale: C Major, Root: C4 (MIDI 60)\n\n";
 
   auto repeatString = [](const juce::String &str, int count) {

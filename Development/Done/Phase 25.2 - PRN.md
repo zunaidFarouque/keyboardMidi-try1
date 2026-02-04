@@ -3,9 +3,9 @@
 **Role:** Expert C++ Audio Developer (JUCE Framework).
 
 **Context:**
-We are building "OmniKey".
+We are building "MIDIQy".
 *   **Current State:** Phase 26.2 Complete. The app relies on `Global Pitch Bend Range` for Legato and Smart Bends to work correctly.
-*   **Problem:** If the external synth (e.g., HALion) is set to a different range (e.g., 2 semitones) than OmniKey (e.g., 12), the pitch math will be wrong.
+*   **Problem:** If the external synth (e.g., HALion) is set to a different range (e.g., 2 semitones) than MIDIQy (e.g., 12), the pitch math will be wrong.
 *   **Phase Goal:** Implement a button to send the **RPN (Registered Parameter Number)** sequence to automatically configure the synth's range.
 
 **Strict Constraints:**

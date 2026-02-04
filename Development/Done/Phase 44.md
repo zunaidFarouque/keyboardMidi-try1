@@ -15,7 +15,7 @@ Here is the prompt for **Phase 44**.
 **Role:** Expert C++ Audio Developer (JUCE UI).
 
 **Context:**
-We are building "OmniKey".
+We are building "MIDIQy".
 *   **Current State:**
     1.  **Inspector:** When selecting "Layer Momentary" or "Layer Toggle" commands, there is **no input** to select *which* layer to trigger. The `data1` field (Target Layer) is hidden.
     2.  **Layer List:** The `LayerListPanel` looks raw and unstyled ("Bad UI").

@@ -14,8 +14,8 @@ Create the `MappingDefinition` system. This allows the Core logic to define the 
 **Specific Instructions:**
 
 1.  **Update `CMakeLists.txt`:**
-    *   Add `Source/MappingDefinition.cpp` to `OmniKey_Core`.
-    *   Add `Source/Tests/MappingDefinitionTests.cpp` to `OmniKey_Tests`.
+    *   Add `Source/MappingDefinition.cpp` to `MIDIQy_Core`.
+    *   Add `Source/Tests/MappingDefinitionTests.cpp` to `MIDIQy_Tests`.
 
 2.  **Create `Source/MappingDefinition.h`:**
     *   Include `<JuceHeader.h>` and `"MappingTypes.h"`.

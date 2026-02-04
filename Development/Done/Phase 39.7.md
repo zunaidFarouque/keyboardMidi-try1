@@ -3,7 +3,7 @@
 **Role:** Expert C++ Audio Developer (JUCE Framework).
 
 **Context:**
-We are building "OmniKey".
+We are building "MIDIQy".
 *   **Current State:** Phase 39.6 Complete. Visualizer shows Active, Inherited, and Override states correctly.
 *   **The Bug:** Keys with **Self-Conflicts** (e.g., covered by Two Zones on the *same* device alias) are not shown in **Red**. They just show as "Active".
 *   **Diagnosis:** `InputProcessor::simulateInput` returns the first valid action it finds. It does not check for overlaps.

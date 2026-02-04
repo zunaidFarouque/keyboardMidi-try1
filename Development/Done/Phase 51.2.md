@@ -7,7 +7,7 @@ Here is the Cursor prompt for **Phase 51.2**. This phase installs the testing ma
 2.  `Source/Tests/SanityTest.cpp` (New File)
 
 **Task:**
-Set up the GoogleTest framework and create a new console executable named `OmniKey_Tests`. This executable will run our unit tests.
+Set up the GoogleTest framework and create a new console executable named `MIDIQy_Tests`. This executable will run our unit tests.
 
 **Specific Instructions:**
 
@@ -32,20 +32,20 @@ Set up the GoogleTest framework and create a new console executable named `OmniK
         enable_testing()
 
         # 2. Define the Test Runner Exe
-        add_executable(OmniKey_Tests
+        add_executable(MIDIQy_Tests
             Source/Tests/SanityTest.cpp
         )
 
         # 3. Link Dependencies
         # We link against our Core library (logic) and GTest
-        target_link_libraries(OmniKey_Tests PRIVATE
-            OmniKey_Core
+        target_link_libraries(MIDIQy_Tests PRIVATE
+            MIDIQy_Core
             GTest::gtest_main # Provides a standard main() that runs all tests
         )
 
         # 4. Register with CTest
         include(GoogleTest)
-        gtest_discover_tests(OmniKey_Tests)
+        gtest_discover_tests(MIDIQy_Tests)
         ```
 
 2.  **Create `Source/Tests/SanityTest.cpp`:**
@@ -63,7 +63,7 @@ Set up the GoogleTest framework and create a new console executable named `OmniK
 
     // 2. Core Linkage Check (Dependency Test)
     TEST(SanityCheck, CanAccessCoreEnums) {
-        // Just verify we can use types defined in OmniKey_Core
+        // Just verify we can use types defined in MIDIQy_Core
         ActionType t = ActionType::Note;
         EXPECT_EQ(t, ActionType::Note);
     }
@@ -83,4 +83,4 @@ Set up the GoogleTest framework and create a new console executable named `OmniK
     ```
 
 **Goal:**
-After this, you should be able to run `OmniKey_Tests` (or use the Test Explorer in your IDE) and see 3 passing tests. This proves the architecture is ready for complex logic verification.
+After this, you should be able to run `MIDIQy_Tests` (or use the Test Explorer in your IDE) and see 3 passing tests. This proves the architecture is ready for complex logic verification.

@@ -9,7 +9,7 @@ This focuses on fixing the **Legato Glide** logic (ensuring the math and state h
 **Role:** Expert C++ Audio Developer (Real-time Systems).
 
 **Context:**
-We are building "OmniKey".
+We are building "MIDIQy".
 *   **Current State:** Phase 26.1 Complete. Mono/Legato modes exist.
 *   **Issue 1 (Legato):** Gliding doesn't work. The system likely falls back to Retrigger mode because the Pitch Bend Lookup Table (`pbLookup`) is empty or incorrect, or the start-value logic is wrong.
 *   **Issue 2 (UX):** Users confusingly put Chords and Mono lines on the same MIDI channel, causing note stealing. We need a UI warning.

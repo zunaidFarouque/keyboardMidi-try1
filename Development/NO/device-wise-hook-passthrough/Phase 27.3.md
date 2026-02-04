@@ -3,7 +3,7 @@
 **Role:** Expert C++ Audio Developer (Win32 API).
 
 **Context:**
-We are building "OmniKey".
+We are building "MIDIQy".
 *   **Current State:** Phase 27.2 Complete.
 *   **Bug 1 (Background):** MIDI/Typing stops working when the app loses focus. This is because `RegisterRawInputDevices` is missing the `RIDEV_INPUTSINK` flag.
 *   **Bug 2 (Double Typing):** When Passthrough is active, typing 'e' results in 'ee'. The `RawInputManager` is likely reacting to its own Injected event and re-injecting it.

@@ -3,7 +3,7 @@
 **Role:** Expert C++ Audio Developer (JUCE Framework).
 
 **Context:**
-We are building "OmniKey".
+We are building "MIDIQy".
 *   **Current State:** Phase 18.3 Complete. Chords are voiced beautifully, but velocity is static (robotic).
 *   **Phase Goal:** Implement **Velocity Randomization**.
 *   **Logic:** `FinalVelocity = BaseVelocity + Random(-Range, +Range)`.

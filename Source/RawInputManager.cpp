@@ -390,6 +390,11 @@ int64_t __stdcall RawInputManager::rawInputWndProc(void *hwnd, unsigned int msg,
               if (contacts.empty()) {
                 acc.clear();
               } else {
+                // Update or add each contact from this report. Do not mark
+                // contacts missing from this report as lifted: many PTPs send
+                // one contact per WM_INPUT (alternating), which would otherwise
+                // flicker the other finger to "-". Lift is shown only when the
+                // parser reports that contact with Tip Switch = 0.
                 for (const auto &c : contacts) {
                   auto it = std::find_if(acc.begin(), acc.end(),
                                          [&c](const TouchpadContact &a) {
@@ -399,16 +404,6 @@ int64_t __stdcall RawInputManager::rawInputWndProc(void *hwnd, unsigned int msg,
                     *it = c;
                   else
                     acc.push_back(c);
-                }
-                // Mark contacts that disappeared from the report as lifted
-                for (auto &a : acc) {
-                  bool inReport =
-                      std::any_of(contacts.begin(), contacts.end(),
-                                  [&a](const TouchpadContact &c) {
-                                    return c.contactId == a.contactId;
-                                  });
-                  if (!inReport)
-                    a.tipDown = false;
                 }
               }
               auto contactsCopy = acc;

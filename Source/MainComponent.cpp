@@ -309,7 +309,7 @@ MainComponent::MainComponent()
 
   // Note: Test zone removed - StartupManager now handles factory default zones
 
-  startTimer(33); // 30 Hz for async log processing (Phase 21.1)
+  startTimer(settingsManager.getWindowRefreshIntervalMs());
 
   // Load layout positions from DeviceManager
   loadLayoutPositions();
@@ -487,6 +487,13 @@ void MainComponent::changeListenerCallback(juce::ChangeBroadcaster *source) {
     // Handle Studio Mode changes - update Device Setup button visibility
     deviceSetupButton.setVisible(settingsManager.isStudioMode());
     resized(); // Trigger re-layout of header
+
+    // Apply window refresh rate (cap 30 FPS vs uncapped)
+    stopTimer();
+    startTimer(settingsManager.getWindowRefreshIntervalMs());
+    if (visualizer)
+      visualizer->restartTimerWithInterval(
+          settingsManager.getWindowRefreshIntervalMs());
   }
 }
 
@@ -669,7 +676,7 @@ void MainComponent::menuItemSelected(int menuItemID, int topLevelMenuIndex) {
     case FileExportVoicingReport: {
       juce::File targetFile =
           juce::File::getSpecialLocation(juce::File::userDesktopDirectory)
-              .getChildFile("OmniKey_Voicings.txt");
+              .getChildFile("MIDIQy_Voicings.txt");
       ChordUtilities::dumpDebugReport(targetFile);
       if (logComponent)
         logComponent->addEntry("Voicing report exported to: " +
@@ -720,6 +727,17 @@ void MainComponent::menuItemSelected(int menuItemID, int topLevelMenuIndex) {
       break;
     }
     resized();
+  } else if (topLevelMenuIndex == 3 && menuItemID == 4) {
+    // Help > About
+    juce::AlertWindow::showMessageBoxAsync(
+        juce::AlertWindow::InfoIcon, "About MIDIQy",
+        "MIDIQy\n"
+        "The QWERTY Performance Engine\n\n"
+        "Version 1.0.0\n"
+        "By Md. Zunaid Farouque\n\n"
+        "Turn the hardware you have into the instrument you need.\n\n"
+        "github.com/zunaidFarouque\n"
+        "Report issues & discussions on GitHub");
   }
 }
 
@@ -807,11 +825,14 @@ void MainComponent::timerCallback() {
     }
   }
 
-  // Check Minimization State
+  // Main window refresh: no updates when minimized (enforced 30 FPS cap)
   bool isMinimized = false;
-  if (auto *peer = getPeer()) {
-    isMinimized = peer->isMinimised();
+  if (auto *top = getTopLevelComponent()) {
+    if (auto *peer = top->getPeer())
+      isMinimized = peer->isMinimised();
   }
+  if (isMinimized)
+    return;
 
   // 1. Swap Queue (Thread Safe)
   std::vector<PendingEvent> tempQueue;
@@ -821,13 +842,7 @@ void MainComponent::timerCallback() {
     // eventQueue is now empty, Input Thread is free to write
   }
 
-  // 2. OPTIMIZATION: If minimized, discard data and abort.
-  // We do not want to format strings or update TextEditors for invisible logs.
-  if (isMinimized) {
-    return;
-  }
-
-  // 3. Process Queue (Only if Visible)
+  // 2. Process Queue (only when not minimized)
   for (const auto &ev : tempQueue) {
     logEvent(ev.device, ev.keyCode, ev.isDown);
   }

@@ -3,7 +3,7 @@
 **Role:** Expert C++ Audio Developer (Real-time Systems).
 
 **Context:**
-We are building "OmniKey".
+We are building "MIDIQy".
 *   **Current State:** Phase 23.7 Complete. Mono mode has retrigger logic, but two bugs exist:
     1. **Bug 1:** When releasing the retriggered last note, NoteOff is not sent (because dummy source doesn't match).
     2. **Bug 2:** When releasing a background key (A) while another key (B) is overriding it, A remains in the mono stack and gets incorrectly retriggered when B is released.

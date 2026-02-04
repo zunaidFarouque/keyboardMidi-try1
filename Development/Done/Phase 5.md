@@ -3,7 +3,7 @@
 **Role:** Expert C++ Audio Developer (JUCE Framework).
 
 **Context:**
-We are building "OmniKey".
+We are building "MIDIQy".
 *   **Current State:** Phase 4 Complete. We have a `ValueTree` backed Table Editor.
 *   **Phase Goal:** Implement "MIDI Learn". The user clicks "Learn", presses a key, and the mapping updates automatically.
 

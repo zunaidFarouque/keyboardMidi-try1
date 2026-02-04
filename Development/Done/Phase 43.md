@@ -5,7 +5,7 @@
 **Context:**
 *   **Current State:** Phase 42 Complete.
 *   **The Bug:** App works on fresh install. After closing and reopening, it crashes or fails to open.
-*   **Diagnosis:** `autoload.xml` or `OmniKeySettings.xml` contains invalid data (e.g., `pitchBendRange="0"`). This causes Division By Zero in `InputProcessor` or Array Out of Bounds during the startup load sequence.
+*   **Diagnosis:** `autoload.xml` or `MIDIQySettings.xml` contains invalid data (e.g., `pitchBendRange="0"`). This causes Division By Zero in `InputProcessor` or Array Out of Bounds during the startup load sequence.
 
 **Phase Goal:** Implement aggressive data validation and a "Fail-Safe" loading mechanism.
 
@@ -74,7 +74,7 @@ Implement the Fail-Safe.
 void StartupManager::initApp()
 {
     // 1. Load Settings (Global)
-    File settingsFile = appDataFolder.getChildFile("OmniKeySettings.xml");
+    File settingsFile = appDataFolder.getChildFile("MIDIQySettings.xml");
     if (settingsFile.exists())
     {
         settingsManager.loadFromXml(settingsFile);

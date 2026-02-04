@@ -3,7 +3,7 @@
 **Role:** Expert C++ Audio Developer (Music Theory Specialist).
 
 **Context:**
-We are building "OmniKey".
+We are building "MIDIQy".
 *   **Current State:** Phase 18.6 Complete. We have adaptive voicings, but the data pipeline assumes every note in a chord has the same velocity.
 *   **Phase Goal:** Implement "Filled" voicings (Ghost Notes).
     *   **Strict Mode:** Fill gaps using existing chord tones (Root/5th).

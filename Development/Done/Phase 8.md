@@ -3,7 +3,7 @@
 **Role:** Expert C++ Audio Developer (JUCE Framework).
 
 **Context:**
-We are building "OmniKey".
+We are building "MIDIQy".
 *   **Current State:** Phase 7 Complete (Inspector Panel).
 *   **Phase Goal:** Replace "Blind Numbers" in the Inspector with musical context. "Note 60" should appear as "C4". Users should be able to type "C#3" to set the value.
 

@@ -3,7 +3,7 @@
 **Role:** Expert C++ Audio Developer (Win32 API Specialist).
 
 **Context:**
-We are building "OmniKey".
+We are building "MIDIQy".
 *   **Current State:** Phase 5 Complete. We have `RawInputManager` (Keyboard) and `InputProcessor` (Notes).
 *   **Phase Goal:** Add Mouse Scroll (Relative CC) and Precision Trackpad (Absolute XY).
 

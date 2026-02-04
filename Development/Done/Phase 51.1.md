@@ -8,9 +8,9 @@ Refactor the build system to separate the "Business Logic" from the "GUI Applica
 
 **Specific Instructions:**
 
-1.  **Define a Static Library (`OmniKey_Core`):**
-    *   Create a new target `juce_add_binary_data` (if needed) or just `add_library(OmniKey_Core STATIC ...)`.
-    *   **Move these Source Files** from the `OmniKey` target to `OmniKey_Core`:
+1.  **Define a Static Library (`MIDIQy_Core`):**
+    *   Create a new target `juce_add_binary_data` (if needed) or just `add_library(MIDIQy_Core STATIC ...)`.
+    *   **Move these Source Files** from the `MIDIQy` target to `MIDIQy_Core`:
         *   `Source/GridCompiler.cpp`
         *   `Source/InputProcessor.cpp`
         *   `Source/PresetManager.cpp`
@@ -39,7 +39,7 @@ Refactor the build system to separate the "Business Logic" from the "GUI Applica
         *   `juce::juce_audio_devices`
         *   `user32`, `hid`, `setupapi`
 
-2.  **Update the GUI App (`OmniKey`):**
+2.  **Update the GUI App (`MIDIQy`):**
     *   **Keep only UI/Main files:**
         *   `Source/Main.cpp`
         *   `Source/MainComponent.cpp`
@@ -59,10 +59,10 @@ Refactor the build system to separate the "Business Logic" from the "GUI Applica
         *   `Source/MiniStatusWindow.cpp`
         *   `Source/QuickSetupWizard.cpp`
         *   `Source/StartupManager.cpp` (Keep here for now as it orchestrates everything)
-    *   **Link:** Add `OmniKey_Core` to `target_link_libraries` for `OmniKey`.
+    *   **Link:** Add `MIDIQy_Core` to `target_link_libraries` for `MIDIQy`.
 
 3.  **Include Paths:**
-    Ensure `target_include_directories` is set so `OmniKey` can find headers in `Source/` (which is now shared).
+    Ensure `target_include_directories` is set so `MIDIQy` can find headers in `Source/` (which is now shared).
 
 **Goal:**
 The app should compile and run exactly as before, but internally the logic is now in a reusable `.lib` file.

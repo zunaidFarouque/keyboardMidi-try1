@@ -19,7 +19,7 @@ Change the `requiredButtons` argument in the initializer list.
 
 ```cpp
 MiniStatusWindow::MiniStatusWindow()
-    : DocumentWindow("OmniKey Status",
+    : DocumentWindow("MIDIQy Status",
                      juce::Colours::black, // Background color
                      juce::DocumentWindow::closeButton) // <--- CHANGE THIS (Was allButtons)
 {

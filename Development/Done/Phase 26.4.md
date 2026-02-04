@@ -3,7 +3,7 @@
 **Role:** Expert C++ Audio Developer (Real-time Systems).
 
 **Context:**
-We are building "OmniKey".
+We are building "MIDIQy".
 *   **Current State:** Phase 26.3 Complete. The Legato engine keeps the anchor alive, but it misses edge cases.
 *   **Problem:** If a note (B) overrides the anchor (A) because it was out of PB range, releasing B **silences the synth** instead of retriggering A.
 *   **Phase Goal:** Implement a robust "Retrigger vs Glide" decision tree in `handleKeyUp`.

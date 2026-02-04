@@ -48,7 +48,7 @@ Restore the Layer State Machine logic (`Latched` vs `Momentary`) and handle `Act
             int targetLayer = action.data2;
             
             // Handle Layer Commands
-            if (cmd == static_cast<int>(OmniKey::CommandID::LayerMomentary)) {
+            if (cmd == static_cast<int>(MIDIQy::CommandID::LayerMomentary)) {
                 targetLayer = juce::jlimit(0, 8, targetLayer);
                 if (isDown) {
                     layerMomentaryCounts[targetLayer]++;
@@ -58,14 +58,14 @@ Restore the Layer State Machine logic (`Latched` vs `Momentary`) and handle `Act
                 }
                 sendChangeMessage(); // Notify Visualizer
             }
-            else if (cmd == static_cast<int>(OmniKey::CommandID::LayerToggle)) {
+            else if (cmd == static_cast<int>(MIDIQy::CommandID::LayerToggle)) {
                 if (isDown) { // Toggle on press
                     targetLayer = juce::jlimit(0, 8, targetLayer);
                     layerLatchedState[targetLayer] = !layerLatchedState[targetLayer];
                     sendChangeMessage();
                 }
             }
-            else if (cmd == static_cast<int>(OmniKey::CommandID::LayerSolo)) {
+            else if (cmd == static_cast<int>(MIDIQy::CommandID::LayerSolo)) {
                 if (isDown) {
                     std::fill(layerLatchedState.begin(), layerLatchedState.end(), false);
                     targetLayer = juce::jlimit(0, 8, targetLayer);

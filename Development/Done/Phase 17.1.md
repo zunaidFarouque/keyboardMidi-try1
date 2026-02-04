@@ -3,7 +3,7 @@
 **Role:** Expert C++ Audio Developer (JUCE Framework).
 
 **Context:**
-We are building "OmniKey".
+We are building "MIDIQy".
 *   **Current State:** Phase 17 Complete. We can generate chords and strum them, but they play immediately upon key press (`Direct` mode).
 *   **Phase Goal:** Implement `PlayMode::Strum`.
     *   **Behavior:** Pressing Zone Keys updates a "Buffer" (Silent). Pressing a "Trigger Key" (Space/Shift) plays the Buffer.

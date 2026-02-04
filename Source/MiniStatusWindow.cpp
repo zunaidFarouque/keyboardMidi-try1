@@ -1,11 +1,16 @@
 #include "MiniStatusWindow.h"
 #include "RawInputManager.h"
 
-MiniStatusWindow::MiniStatusWindow(SettingsManager& settingsMgr)
-    : juce::DocumentWindow("OmniKey Status", juce::Colour(0xff2a2a2a), DocumentWindow::closeButton),
+MiniStatusWindow::MiniStatusWindow(SettingsManager &settingsMgr)
+    : juce::DocumentWindow("MIDIQy Status", juce::Colour(0xff2a2a2a),
+                           DocumentWindow::closeButton),
       settingsManager(settingsMgr) {
   // Configure Label
-  statusLabel.setText("MIDI Mode is ON. Press " + RawInputManager::getKeyName(settingsManager.getToggleKey()) + " or Close to stop.", juce::dontSendNotification);
+  statusLabel.setText(
+      "MIDI Mode is ON. Press " +
+          RawInputManager::getKeyName(settingsManager.getToggleKey()) +
+          " or Close to stop.",
+      juce::dontSendNotification);
   statusLabel.setJustificationType(juce::Justification::centred);
   statusLabel.setColour(juce::Label::textColourId, juce::Colours::white);
 
@@ -22,8 +27,9 @@ MiniStatusWindow::MiniStatusWindow(SettingsManager& settingsMgr)
 }
 
 MiniStatusWindow::~MiniStatusWindow() {
-  // Detach content without deleting (we own the member). With setContentNonOwned,
-  // clearContentComponent() simply removes it; it does not delete.
+  // Detach content without deleting (we own the member). With
+  // setContentNonOwned, clearContentComponent() simply removes it; it does not
+  // delete.
   clearContentComponent();
 }
 

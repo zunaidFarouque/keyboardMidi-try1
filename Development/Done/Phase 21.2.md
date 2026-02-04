@@ -3,7 +3,7 @@
 **Role:** Expert C++ Audio Developer (JUCE Framework).
 
 **Context:**
-We are building "OmniKey".
+We are building "MIDIQy".
 *   **Current State:** Phase 21.1 Complete. The Backend (`Zone`, `ZoneManager`) supports `useGlobalScale` and `useGlobalRoot` flags, but the UI (`ZonePropertiesPanel`) does not expose them.
 *   **Phase Goal:** Add controls to `ZonePropertiesPanel` to toggle these flags.
 

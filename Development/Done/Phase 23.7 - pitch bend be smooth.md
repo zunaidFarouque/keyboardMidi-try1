@@ -3,7 +3,7 @@
 **Role:** Expert C++ Audio Developer (Real-time Systems).
 
 **Context:**
-We are building "OmniKey".
+We are building "MIDIQy".
 *   **Current State:** Phase 23.6 Complete. Pitch Bend envelopes calculate values, but overlapping presses fight each other or reset incorrectly.
 *   **Phase Goal:** Implement a **Priority Stack** for Pitch Bend.
     *   **Behavior:** The most recently pressed key controls the pitch.

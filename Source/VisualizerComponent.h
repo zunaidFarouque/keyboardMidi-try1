@@ -37,6 +37,10 @@ public:
   /// Returns black or white for legible text on the given key fill color.
   static juce::Colour getTextColorForKeyFill(juce::Colour keyFillColor);
 
+  /// Restart timer with the given interval (ms). Used when cap-30-FPS setting
+  /// changes.
+  void restartTimerWithInterval(int intervalMs);
+
   void paint(juce::Graphics &) override;
   void resized() override;
 

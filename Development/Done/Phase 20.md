@@ -3,7 +3,7 @@
 **Role:** Expert C++ Audio Developer (JUCE Framework).
 
 **Context:**
-We are building "OmniKey".
+We are building "MIDIQy".
 *   **Current State:** Phase 19 Complete.
 *   **Issue 1 (Sustain Bug):** If a "Sustain Inverse" mapping is deleted, Sustain stays ON forever.
 *   **Issue 2 (Global Control):** Users cannot map keys to change the Global Transpose (Pitch/Degree) or see these values in the UI.

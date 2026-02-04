@@ -3,7 +3,7 @@
 **Role:** Expert C++ Audio Developer (Real-time Systems).
 
 **Context:**
-We are building "OmniKey".
+We are building "MIDIQy".
 *   **Current State:** Phase 26.4 Complete.
 *   **Problem:** Rapid input ("spamming") causes race conditions in the Mono/Legato engine.
     1.  **Stuck Notes:** The stack empties, but the audio engine thinks a note is still playing.

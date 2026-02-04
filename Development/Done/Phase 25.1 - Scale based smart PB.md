@@ -3,7 +3,7 @@
 **Role:** Expert C++ Audio Developer (Real-time Systems).
 
 **Context:**
-We are building "OmniKey".
+We are building "MIDIQy".
 *   **Current State:** Phase 25 Complete. We have `SettingsManager` for Global Pitch Bend Range.
 *   **Phase Goal:** Implement **"Smart Scale Bend"**.
     *   User maps a key to "Bend +1 Scale Step".
