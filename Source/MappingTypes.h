@@ -18,9 +18,10 @@ enum class ActionType {
 
 // Note release behavior for manual Note mappings
 enum class NoteReleaseBehavior {
-  SendNoteOff,  // Send Note Off on key release (default)
-  Nothing,      // Do nothing on release (note keeps playing)
-  AlwaysLatch   // Always latch on release (ignores global latch mode)
+  SendNoteOff,           // Send Note Off on key release (default)
+  SustainUntilRetrigger, // Do nothing on release; retrigger = note on only (no
+                         // note off)
+  AlwaysLatch            // Always latch on release (ignores global latch mode)
 };
 
 // Polyphony modes (Phase 26)
@@ -66,6 +67,22 @@ constexpr int Key_LAlt = 0xA4;
 constexpr int Key_RAlt = 0xA5;
 } // namespace InputTypes
 
+// Touchpad mapping events (0-10). Used when inputAlias == "Touchpad".
+namespace TouchpadEvent {
+constexpr int Finger1Down = 0;
+constexpr int Finger1Up = 1;
+constexpr int Finger1X = 2;
+constexpr int Finger1Y = 3;
+constexpr int Finger2Down = 4;
+constexpr int Finger2Up = 5;
+constexpr int Finger2X = 6;
+constexpr int Finger2Y = 7;
+constexpr int Finger1And2Dist = 8;
+constexpr int Finger1And2AvgX = 9;
+constexpr int Finger1And2AvgY = 10;
+constexpr int Count = 11;
+} // namespace TouchpadEvent
+
 // ADSR envelope target types (Phase 25.1)
 enum class AdsrTarget {
   CC,            // Control Change
@@ -81,7 +98,8 @@ struct AdsrSettings {
   int releaseMs = 100;                // Release time in milliseconds
   AdsrTarget target = AdsrTarget::CC; // Target type
   int ccNumber = 1;                   // CC number (if target is CC)
-  bool useCustomEnvelope = false;     // Phase 56.1: false = fast path (simple CC/PB)
+  bool useCustomEnvelope =
+      false; // Phase 56.1: false = fast path (simple CC/PB)
 
   // Legacy compatibility: isPitchBend maps to target
   bool isPitchBend() const {
@@ -97,7 +115,7 @@ struct MidiAction {
   int data1;              // Note number or CC number
   int data2;              // Velocity or CC value
   int velocityRandom = 0; // Velocity randomization range (0 = no randomization)
-  AdsrSettings adsrSettings;        // ADSR settings (for ActionType::Expression)
+  AdsrSettings adsrSettings; // ADSR settings (for ActionType::Expression)
   std::vector<int> smartBendLookup; // Pre-compiled PB lookup table (128
                                     // entries) for SmartScaleBend
 
@@ -105,16 +123,18 @@ struct MidiAction {
   NoteReleaseBehavior releaseBehavior = NoteReleaseBehavior::SendNoteOff;
 
   // Phase 55.4: CC options
-  bool sendReleaseValue = false; // If true, send a specific value on key release
+  bool sendReleaseValue =
+      false; // If true, send a specific value on key release
   int releaseValue = 0;
 
   // Latch Toggle: when true, call panicLatch() when toggling latch off
   bool releaseLatchedOnLatchToggleOff = true;
 
-  // Transpose command: mode (false=global, true=local), modify type, semitones for "set"
-  bool transposeLocal = false;   // true = local (affected zones; placeholder)
-  int transposeModify = 0;       // 0=up1, 1=down1, 2=up12, 3=down12, 4=set
-  int transposeSemitones = 0;    // for set: -12..+12 (or wider)
+  // Transpose command: mode (false=global, true=local), modify type, semitones
+  // for "set"
+  bool transposeLocal = false; // true = local (affected zones; placeholder)
+  int transposeModify = 0;     // 0=up1, 1=down1, 2=up12, 3=down12, 4=set
+  int transposeSemitones = 0;  // for set: -12..+12 (or wider)
 };
 
 // Represents a unique input source (device + key)
@@ -213,6 +233,36 @@ struct KeyVisualSlot {
 using AudioGrid = std::array<KeyAudioSlot, 256>;
 using VisualGrid = std::array<KeyVisualSlot, 256>;
 
+// Touchpad mapping conversion kind (input type -> output type)
+enum class TouchpadConversionKind {
+  BoolToGate,       // Boolean input -> Note/Command (direct)
+  BoolToCC,         // Boolean input -> Expression (value when on/off)
+  ContinuousToGate, // Continuous input -> Note (threshold)
+  ContinuousToRange // Continuous input -> Expression (range map)
+};
+
+// Conversion parameters for touchpad mappings (use only fields for the kind)
+struct TouchpadConversionParams {
+  float threshold = 0.5f;
+  bool triggerAbove = true; // true = note on when above threshold
+  float inputMin = 0.0f;
+  float inputMax = 1.0f;
+  int outputMin = 0;
+  int outputMax = 127;
+  int valueWhenOn = 127;
+  int valueWhenOff = 0;
+};
+
+// One compiled touchpad mapping (alias "Touchpad", layer, event, action,
+// conversion)
+struct TouchpadMappingEntry {
+  int layerId = 0;
+  int eventId = 0; // TouchpadEvent::Finger1Down etc.
+  MidiAction action;
+  TouchpadConversionKind conversionKind = TouchpadConversionKind::BoolToGate;
+  TouchpadConversionParams conversionParams;
+};
+
 // Holds the entire pre-calculated state of the engine.
 struct CompiledContext {
   // 1. Audio Data (Read by InputProcessor/AudioThread)
@@ -232,6 +282,9 @@ struct CompiledContext {
   // Using vector for layers for O(1) access [0..8]
   std::unordered_map<uintptr_t, std::vector<std::shared_ptr<const VisualGrid>>>
       visualLookup;
+
+  // 3. Touchpad mappings (alias "Touchpad"); applied by InputProcessor
+  std::vector<TouchpadMappingEntry> touchpadMappings;
 };
 
 // Backward-compatible alias used in development docs/prompts.

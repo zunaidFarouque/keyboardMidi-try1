@@ -33,6 +33,9 @@ public:
                          bool isDown) override;
   void handleAxisEvent(uintptr_t deviceHandle, int inputCode,
                        float value) override;
+  void
+  handleTouchpadContacts(uintptr_t deviceHandle,
+                         const std::vector<TouchpadContact> &contacts) override;
 
   void paint(juce::Graphics &) override;
   void resized() override;
@@ -83,8 +86,11 @@ private:
   // Phase 56.3: Smart Input Capture
   std::unique_ptr<InputCaptureOverlay> captureOverlay;
   bool wasMidiModeEnabledBeforeCapture = false;
+  uintptr_t lastTouchpadDeviceForCapture =
+      0; // Set while overlay visible for Map Touchpad
   void startInputCapture();
   void finishInputCapture(uintptr_t deviceHandle, int keyCode, bool skipped);
+  void finishInputCaptureTouchpad();
 
   // 3. Containers (Must die first)
   juce::Viewport inspectorViewport;

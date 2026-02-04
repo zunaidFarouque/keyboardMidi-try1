@@ -1,5 +1,6 @@
 #include "MappingEditorComponent.h"
 #include "KeyNameUtilities.h"
+#include "MappingDefinition.h"
 #include <algorithm>
 #include <functional>
 
@@ -7,6 +8,7 @@
 class InputCaptureOverlay : public juce::Component {
 public:
   std::function<void(bool skipped)> onDismiss;
+  std::function<void()> onMapTouchpad;
 
   InputCaptureOverlay() {
     label.setText("Press any key to add mapping...",
@@ -15,6 +17,13 @@ public:
     label.setJustificationType(juce::Justification::centred);
     label.setColour(juce::Label::textColourId, juce::Colours::white);
     addAndMakeVisible(label);
+
+    mapTouchpadButton.setButtonText("Map Touchpad");
+    mapTouchpadButton.onClick = [this] {
+      if (onMapTouchpad)
+        onMapTouchpad();
+    };
+    addAndMakeVisible(mapTouchpadButton);
 
     skipButton.setButtonText("Skip (Add Default)");
     skipButton.onClick = [this] {
@@ -42,10 +51,13 @@ public:
     cancelButton.setBounds(btnArea.removeFromRight(80));
     btnArea.removeFromRight(10);
     skipButton.setBounds(btnArea.removeFromRight(140));
+    btnArea.removeFromRight(10);
+    mapTouchpadButton.setBounds(btnArea.removeFromRight(120));
   }
 
 private:
   juce::Label label;
+  juce::TextButton mapTouchpadButton;
   juce::TextButton skipButton;
   juce::TextButton cancelButton;
 };
@@ -63,7 +75,7 @@ MappingEditorComponent::MappingEditorComponent(PresetManager &pm,
                                                SettingsManager &settingsMgr)
     : presetManager(pm), rawInputManager(rawInputMgr), deviceManager(deviceMgr),
       settingsManager(settingsMgr), layerListPanel(pm),
-      inspector(undoManager, deviceManager, settingsManager),
+      inspector(undoManager, deviceManager, settingsManager, &presetManager),
       resizerBar(&horizontalLayout, 1, true) { // Item index 1, vertical bar
 
   // Phase 41/45: Setup layer list panel callback with per-layer selection
@@ -276,6 +288,7 @@ void MappingEditorComponent::startInputCapture() {
       resized();
     }
   };
+  captureOverlay->onMapTouchpad = [this] { finishInputCaptureTouchpad(); };
   addAndMakeVisible(captureOverlay.get());
   resized();
 }
@@ -334,6 +347,51 @@ void MappingEditorComponent::finishInputCapture(uintptr_t deviceHandle,
     newMapping.setProperty("releaseBehavior", "Send Note Off", nullptr);
     newMapping.setProperty("followTranspose", true, nullptr);
   }
+
+  auto mappingsNode = getCurrentLayerMappings();
+  if (mappingsNode.isValid()) {
+    mappingsNode.addChild(newMapping, -1, &undoManager);
+  }
+
+  table.updateContent();
+  table.repaint();
+
+  int newRow = getNumRows() - 1;
+  if (newRow >= 0)
+    table.selectRow(newRow);
+}
+
+void MappingEditorComponent::finishInputCaptureTouchpad() {
+  uintptr_t deviceHandle = lastTouchpadDeviceForCapture;
+  if (!wasMidiModeEnabledBeforeCapture)
+    settingsManager.setMidiModeActive(false);
+  captureOverlay.reset();
+  lastTouchpadDeviceForCapture = 0;
+  resized();
+
+  juce::String inputAlias("Touchpad");
+  if (!deviceManager.aliasExists(inputAlias))
+    deviceManager.createAlias(inputAlias);
+  if (deviceHandle != 0)
+    deviceManager.assignHardware(inputAlias, deviceHandle);
+
+  uintptr_t hash =
+      static_cast<uintptr_t>(std::hash<juce::String>{}(inputAlias));
+  juce::String deviceHashStr =
+      juce::String::toHexString((juce::int64)hash).toUpperCase();
+
+  juce::ValueTree newMapping("Mapping");
+  newMapping.setProperty("inputKey", 0, nullptr);
+  newMapping.setProperty("deviceHash", deviceHashStr, nullptr);
+  newMapping.setProperty("inputAlias", inputAlias, nullptr);
+  newMapping.setProperty("inputTouchpadEvent", 0, nullptr);
+  newMapping.setProperty("layerID", selectedLayerId, nullptr);
+  newMapping.setProperty("type", "Note", nullptr);
+  newMapping.setProperty("channel", 1, nullptr);
+  newMapping.setProperty("data1", 60, nullptr);
+  newMapping.setProperty("data2", 127, nullptr);
+  newMapping.setProperty("releaseBehavior", "Send Note Off", nullptr);
+  newMapping.setProperty("followTranspose", true, nullptr);
 
   auto mappingsNode = getCurrentLayerMappings();
   if (mappingsNode.isValid()) {
@@ -417,10 +475,16 @@ void MappingEditorComponent::paintCell(juce::Graphics &g, int rowNumber,
   };
 
   switch (columnId) {
-  case 1:
-    // Calculate clean name dynamically from inputKey
-    text = KeyNameUtilities::getKeyName((int)node.getProperty("inputKey"));
+  case 1: {
+    juce::String alias = node.getProperty("inputAlias", "").toString().trim();
+    if (alias.equalsIgnoreCase("Touchpad")) {
+      int ev = (int)node.getProperty("inputTouchpadEvent", 0);
+      text = MappingDefinition::getTouchpadEventName(ev);
+    } else {
+      text = KeyNameUtilities::getKeyName((int)node.getProperty("inputKey"));
+    }
     break;
+  }
   case 2:
     // Show alias name if available, otherwise convert deviceHash to alias name
     if (node.hasProperty("inputAlias")) {
@@ -534,6 +598,12 @@ void MappingEditorComponent::updateInspectorFromSelection() {
 
   // 3. Update inspector with selection (may be empty to clear)
   inspector.setSelection(selectedTrees);
+}
+
+void MappingEditorComponent::handleTouchpadContacts(
+    uintptr_t deviceHandle, const std::vector<TouchpadContact> &contacts) {
+  if (captureOverlay != nullptr && !contacts.empty())
+    lastTouchpadDeviceForCapture = deviceHandle;
 }
 
 void MappingEditorComponent::handleRawKeyEvent(uintptr_t deviceHandle,

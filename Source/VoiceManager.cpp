@@ -137,7 +137,7 @@ void VoiceManager::changeListenerCallback(juce::ChangeBroadcaster *source) {
 void VoiceManager::noteOn(InputID source, int note, int vel, int channel,
                           bool allowSustain, int releaseMs,
                           PolyphonyMode polyMode, int glideSpeed,
-                          bool alwaysLatch) {
+                          bool alwaysLatch, bool sustainUntilRetrigger) {
   {
     juce::ScopedLock rl(releasesLock);
     releaseQueue.erase(std::remove_if(releaseQueue.begin(), releaseQueue.end(),
@@ -232,8 +232,9 @@ void VoiceManager::noteOn(InputID source, int note, int vel, int channel,
 
   juce::ScopedLock lock(voicesLock);
 
-  // Second press of same key: unlatch (send note off) if we have a latched
-  // voice from this source (global latch or always-latch)
+  // Second press of same key: for SustainUntilRetrigger, clear voice without
+  // note off (then fall through to note on); otherwise unlatch (note off +
+  // return).
   auto it =
       std::find_if(voices.begin(), voices.end(), [&](const ActiveVoice &v) {
         return v.source == source && (v.state == VoiceState::Playing ||
@@ -243,12 +244,14 @@ void VoiceManager::noteOn(InputID source, int note, int vel, int channel,
     for (auto i = voices.begin(); i != voices.end();) {
       if (i->source.deviceHandle == source.deviceHandle &&
           i->source.keyCode == source.keyCode) {
-        midiEngine.sendNoteOff(i->midiChannel, i->noteNumber);
+        if (!sustainUntilRetrigger)
+          midiEngine.sendNoteOff(i->midiChannel, i->noteNumber);
         i = voices.erase(i);
       } else
         ++i;
     }
-    return;
+    if (!sustainUntilRetrigger)
+      return;
   }
 
   midiEngine.sendNoteOn(channel, note, static_cast<float>(vel) / 127.0f);

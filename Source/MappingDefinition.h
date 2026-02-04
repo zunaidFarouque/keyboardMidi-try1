@@ -65,4 +65,8 @@ public:
   static InspectorControl
   createSeparator(const juce::String &label = "",
                   juce::Justification align = juce::Justification::centred);
+
+  // Touchpad mapping: event id (0-10) -> display name
+  static juce::String getTouchpadEventName(int eventId);
+  static std::map<int, juce::String> getTouchpadEventOptions();
 };

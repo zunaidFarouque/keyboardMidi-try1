@@ -7,6 +7,8 @@
 #include "SettingsManager.h"
 #include <algorithm>
 #include <array>
+#include <cmath>
+#include <tuple>
 
 // Phase 39.9: Modifier key aliasing (Left/Right -> Generic).
 // Visualizer/layout uses VK_LSHIFT/VK_RSHIFT etc, while older mappings may
@@ -122,6 +124,8 @@ void InputProcessor::rebuildGrid() {
     juce::ScopedWriteLock sl(mapLock);
     activeContext = std::move(newContext);
   }
+  touchpadNoteOnSent.clear();
+  touchpadPrevState.clear();
   // Phase 53.7: Layer state under stateLock only
   {
     juce::ScopedLock sl(stateLock);
@@ -302,16 +306,28 @@ void InputProcessor::valueTreePropertyChanged(
     applySustainDefaultFromPreset();
   }
 
-  // Optimization: Only rebuild if relevant properties changed
+  // Optimization: Only rebuild if relevant properties changed (affects compiled
+  // grid / touchpad mappings)
   if (property == juce::Identifier("inputKey") ||
       property == juce::Identifier("layerID") ||
       property == juce::Identifier("deviceHash") ||
       property == juce::Identifier("inputAlias") ||
+      property == juce::Identifier("inputTouchpadEvent") ||
       property == juce::Identifier("type") ||
       property == juce::Identifier("channel") ||
       property == juce::Identifier("data1") ||
       property == juce::Identifier("data2") ||
       property == juce::Identifier("velRandom") ||
+      property == juce::Identifier("releaseBehavior") ||
+      property == juce::Identifier("followTranspose") ||
+      property == juce::Identifier("touchpadThreshold") ||
+      property == juce::Identifier("touchpadTriggerAbove") ||
+      property == juce::Identifier("touchpadValueWhenOn") ||
+      property == juce::Identifier("touchpadValueWhenOff") ||
+      property == juce::Identifier("touchpadInputMin") ||
+      property == juce::Identifier("touchpadInputMax") ||
+      property == juce::Identifier("touchpadOutputMin") ||
+      property == juce::Identifier("touchpadOutputMax") ||
       property == juce::Identifier("adsrTarget") ||
       property == juce::Identifier("smartStepShift") ||
       property == juce::Identifier("pbRange") ||
@@ -348,6 +364,26 @@ int InputProcessor::calculateVelocity(int base, int range) {
 
   // Clamp result between 1 and 127
   return juce::jlimit(1, 127, base + delta);
+}
+
+void InputProcessor::triggerManualNoteOn(InputID id, const MidiAction &act,
+                                         bool allowLatchFromAction) {
+  int vel = calculateVelocity(act.data2, act.velocityRandom);
+  bool alwaysLatch = allowLatchFromAction &&
+                     (act.releaseBehavior == NoteReleaseBehavior::AlwaysLatch);
+  bool sustainUntilRetrigger =
+      (act.releaseBehavior == NoteReleaseBehavior::SustainUntilRetrigger);
+  voiceManager.noteOn(id, act.data1, vel, act.channel, true, 0,
+                      PolyphonyMode::Poly, 50, alwaysLatch,
+                      sustainUntilRetrigger);
+  lastTriggeredNote = act.data1;
+}
+
+void InputProcessor::triggerManualNoteRelease(InputID id,
+                                              const MidiAction &act) {
+  if (act.releaseBehavior == NoteReleaseBehavior::SustainUntilRetrigger)
+    return;
+  voiceManager.handleKeyUp(id);
 }
 
 // Phase 53.2: Momentary is updated in processEvent via ref count; no recompute.
@@ -491,7 +527,8 @@ void InputProcessor::processEvent(InputID input, bool isDown) {
         }
         // Phase 55.4: Note release behavior
         if (midiAction.type == ActionType::Note &&
-            midiAction.releaseBehavior == NoteReleaseBehavior::Nothing) {
+            midiAction.releaseBehavior ==
+                NoteReleaseBehavior::SustainUntilRetrigger) {
           return; // Do nothing on release
         }
         // Sustain mode: one-shot latch – do not send note-off on release
@@ -510,7 +547,7 @@ void InputProcessor::processEvent(InputID input, bool isDown) {
           else
             voiceManager.handleKeyUp(input);
         } else if (!zone) {
-          voiceManager.handleKeyUp(input);
+          triggerManualNoteRelease(input, midiAction);
         }
         return; // Stop searching lower layers
       }
@@ -657,15 +694,8 @@ void InputProcessor::processEvent(InputID input, bool isDown) {
             // Zone single note: use zone's special behavior
             processZoneNote(input, zone, midiAction);
           } else {
-            // Manual mapping: simple playback
-            int vel =
-                calculateVelocity(midiAction.data2, midiAction.velocityRandom);
-            bool alwaysLatch = (midiAction.releaseBehavior ==
-                                NoteReleaseBehavior::AlwaysLatch);
-            voiceManager.noteOn(input, midiAction.data1, vel,
-                                midiAction.channel, true, 0,
-                                PolyphonyMode::Poly, 50, alwaysLatch);
-            lastTriggeredNote = midiAction.data1;
+            // Manual mapping: simple playback (shared with touchpad path)
+            triggerManualNoteOn(input, midiAction);
           }
         }
         return; // Stop searching lower layers
@@ -1317,4 +1347,172 @@ bool InputProcessor::hasPointerMappings() {
     }
   }
   return false;
+}
+
+void InputProcessor::processTouchpadContacts(
+    uintptr_t deviceHandle, const std::vector<TouchpadContact> &contacts) {
+  if (!settingsManager.isMidiModeActive())
+    return;
+
+  std::array<bool, 9> activeLayersSnapshot{};
+  {
+    juce::ScopedLock sl(stateLock);
+    for (int i = 0; i < 9; ++i)
+      activeLayersSnapshot[(size_t)i] = (i == 0) ||
+                                        layerLatchedState[(size_t)i] ||
+                                        (layerMomentaryCounts[(size_t)i] > 0);
+  }
+
+  juce::ScopedReadLock rl(mapLock);
+  auto ctx = activeContext;
+  if (!ctx || ctx->touchpadMappings.empty())
+    return;
+
+  TouchpadPrevState &prev = touchpadPrevState[deviceHandle];
+  bool tip1 = false, tip2 = false;
+  float x1 = 0.0f, y1 = 0.0f, x2 = 0.0f, y2 = 0.0f;
+  if (contacts.size() >= 1) {
+    tip1 = contacts[0].tipDown;
+    x1 = contacts[0].normX;
+    y1 = contacts[0].normY;
+  }
+  if (contacts.size() >= 2) {
+    tip2 = contacts[1].tipDown;
+    x2 = contacts[1].normX;
+    y2 = contacts[1].normY;
+  }
+  float dist = 0.0f, avgX = x1, avgY = y1;
+  if (contacts.size() >= 2) {
+    float dx = x2 - x1, dy = y2 - y1;
+    dist = std::sqrt(dx * dx + dy * dy);
+    avgX = (x1 + x2) * 0.5f;
+    avgY = (y1 + y2) * 0.5f;
+  }
+
+  bool finger1Down = tip1 && !prev.tip1;
+  bool finger1Up = !tip1 && prev.tip1;
+  bool finger2Down = tip2 && !prev.tip2;
+  bool finger2Up = !tip2 && prev.tip2;
+
+  for (const auto &entry : ctx->touchpadMappings) {
+    if (!activeLayersSnapshot[(size_t)entry.layerId])
+      continue;
+
+    bool boolVal = false;
+    float continuousVal = 0.0f;
+    switch (entry.eventId) {
+    case TouchpadEvent::Finger1Down:
+      boolVal = finger1Down;
+      break;
+    case TouchpadEvent::Finger1Up:
+      boolVal = finger1Up;
+      break;
+    case TouchpadEvent::Finger1X:
+      continuousVal = x1;
+      break;
+    case TouchpadEvent::Finger1Y:
+      continuousVal = y1;
+      break;
+    case TouchpadEvent::Finger2Down:
+      boolVal = finger2Down;
+      break;
+    case TouchpadEvent::Finger2Up:
+      boolVal = finger2Up;
+      break;
+    case TouchpadEvent::Finger2X:
+      continuousVal = x2;
+      break;
+    case TouchpadEvent::Finger2Y:
+      continuousVal = y2;
+      break;
+    case TouchpadEvent::Finger1And2Dist:
+      continuousVal = dist;
+      break;
+    case TouchpadEvent::Finger1And2AvgX:
+      continuousVal = avgX;
+      break;
+    case TouchpadEvent::Finger1And2AvgY:
+      continuousVal = avgY;
+      break;
+    default:
+      continue;
+    }
+
+    const auto &act = entry.action;
+    const auto &p = entry.conversionParams;
+    auto key = std::make_tuple(deviceHandle, entry.layerId, entry.eventId);
+
+    switch (entry.conversionKind) {
+    case TouchpadConversionKind::BoolToGate:
+      if (act.type == ActionType::Note) {
+        bool isDownEvent = (entry.eventId == TouchpadEvent::Finger1Down ||
+                            entry.eventId == TouchpadEvent::Finger2Down);
+        bool releaseThisFrame =
+            (entry.eventId == TouchpadEvent::Finger1Down && finger1Up) ||
+            (entry.eventId == TouchpadEvent::Finger2Down && finger2Up);
+        InputID touchpadInput{deviceHandle, 0};
+        if (isDownEvent && boolVal)
+          triggerManualNoteOn(touchpadInput, act,
+                              true); // Latch applies to Down
+        else if (releaseThisFrame)
+          triggerManualNoteRelease(touchpadInput, act);
+        else if (!isDownEvent && boolVal)
+          // Finger1Up/Finger2Up: trigger note when finger lifts (one-shot); no
+          // Send Note Off, Latch only applies to Down so pass false
+          triggerManualNoteOn(touchpadInput, act, false);
+      } else if (act.type == ActionType::Command && boolVal) {
+        int cmd = act.data1;
+        if (cmd == static_cast<int>(OmniKey::CommandID::SustainMomentary))
+          voiceManager.setSustain(true);
+        else if (cmd == static_cast<int>(OmniKey::CommandID::SustainToggle))
+          voiceManager.setSustain(!voiceManager.isSustainActive());
+        else if (cmd == static_cast<int>(OmniKey::CommandID::Panic))
+          voiceManager.panic();
+        else if (cmd == static_cast<int>(OmniKey::CommandID::PanicLatch))
+          voiceManager.panicLatch();
+      }
+      break;
+    case TouchpadConversionKind::BoolToCC:
+      if (act.type == ActionType::Expression) {
+        int val = boolVal ? p.valueWhenOn : p.valueWhenOff;
+        voiceManager.sendCC(act.channel, act.adsrSettings.ccNumber, val);
+      }
+      break;
+    case TouchpadConversionKind::ContinuousToGate: {
+      bool above = continuousVal >= p.threshold;
+      bool trigger = p.triggerAbove ? above : !above;
+      InputID touchpadInput{deviceHandle, 0};
+      if (trigger) {
+        if (touchpadNoteOnSent.find(key) == touchpadNoteOnSent.end()) {
+          touchpadNoteOnSent.insert(key);
+          triggerManualNoteOn(touchpadInput, act);
+        }
+      } else {
+        if (touchpadNoteOnSent.erase(key))
+          triggerManualNoteRelease(touchpadInput, act);
+      }
+      break;
+    }
+    case TouchpadConversionKind::ContinuousToRange:
+      if (act.type == ActionType::Expression) {
+        float inRange = p.inputMax - p.inputMin;
+        float t =
+            (inRange > 0.0f) ? (continuousVal - p.inputMin) / inRange : 0.0f;
+        t = std::clamp(t, 0.0f, 1.0f);
+        int outVal =
+            p.outputMin +
+            static_cast<int>(std::round(t * (p.outputMax - p.outputMin)));
+        outVal = juce::jlimit(0, 127, outVal);
+        voiceManager.sendCC(act.channel, act.adsrSettings.ccNumber, outVal);
+      }
+      break;
+    }
+  }
+
+  prev.tip1 = tip1;
+  prev.tip2 = tip2;
+  prev.x1 = x1;
+  prev.y1 = y1;
+  prev.x2 = x2;
+  prev.y2 = y2;
 }

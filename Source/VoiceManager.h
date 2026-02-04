@@ -22,7 +22,8 @@ public:
   void noteOn(InputID source, int note, int vel, int channel,
               bool allowSustain = true, int releaseMs = 0,
               PolyphonyMode polyMode = PolyphonyMode::Poly,
-              int glideTimeMs = 50, bool alwaysLatch = false);
+              int glideTimeMs = 50, bool alwaysLatch = false,
+              bool sustainUntilRetrigger = false);
   void noteOn(InputID source, const std::vector<int> &notes,
               const std::vector<int> &velocities, int channel, int strumSpeedMs,
               bool allowSustain = true, int releaseMs = 0,

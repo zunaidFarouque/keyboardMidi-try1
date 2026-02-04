@@ -1,8 +1,27 @@
 #include "DeviceManager.h"
 #include "PresetManager.h"
+#include <algorithm>
 #include <set>
 #include <vector>
 #include <windows.h>
+
+namespace {
+// Same criteria as RawInputManager: Precision Touchpad (HID Usage Page 0x0D, Usage 0x05).
+// Used so we include touchpad devices in the live list and can re-assign Touchpad alias on startup.
+bool isPrecisionTouchpadHandle(HANDLE deviceHandle) {
+  if (deviceHandle == nullptr)
+    return false;
+  RID_DEVICE_INFO deviceInfo{};
+  deviceInfo.cbSize = sizeof(RID_DEVICE_INFO);
+  UINT deviceInfoSize = deviceInfo.cbSize;
+  if (GetRawInputDeviceInfo(deviceHandle, RIDI_DEVICEINFO, &deviceInfo,
+                            &deviceInfoSize) == static_cast<UINT>(-1))
+    return false;
+  return deviceInfo.dwType == RIM_TYPEHID &&
+         deviceInfo.hid.usUsagePage == 0x000D &&
+         deviceInfo.hid.usUsage == 0x0005;
+}
+} // namespace
 
 DeviceManager::DeviceManager() {
   loadConfig();
@@ -443,13 +462,17 @@ void DeviceManager::validateConnectedDevices() {
     return;
   }
 
-  // Step 2: Extract valid hDevice handles into a set
+  // Step 2: Extract valid hDevice handles into a set (keyboards + precision touchpads)
   std::set<uintptr_t> liveHandles;
+  std::vector<uintptr_t> touchpadHandles;
   for (const auto &device : deviceList) {
-    // Only include keyboard devices (RIM_TYPEKEYBOARD = 1)
+    uintptr_t handle = reinterpret_cast<uintptr_t>(device.hDevice);
     if (device.dwType == RIM_TYPEKEYBOARD) {
-      uintptr_t handle = reinterpret_cast<uintptr_t>(device.hDevice);
       liveHandles.insert(handle);
+    } else if (device.dwType == RIM_TYPEHID &&
+               isPrecisionTouchpadHandle(device.hDevice)) {
+      liveHandles.insert(handle);
+      touchpadHandles.push_back(handle);
     }
   }
 
@@ -501,7 +524,31 @@ void DeviceManager::validateConnectedDevices() {
     }
   }
 
-  // Step 6: If changes were made, send change message and save
+  // Step 6: If "Touchpad" alias exists but has no hardware (e.g. after restart,
+  // saved handle was invalid), and there is exactly one precision touchpad in
+  // the unassigned list, assign it so touchpad mapping works without re-mapping.
+  juce::String touchpadAliasName("Touchpad");
+  if (aliasExists(touchpadAliasName)) {
+    juce::Array<uintptr_t> touchpadHardware = getHardwareForAlias(touchpadAliasName);
+    if (touchpadHardware.isEmpty()) {
+      std::vector<uintptr_t> unassignedTouchpads;
+      for (uintptr_t h : touchpadHandles) {
+        if (assignedHandles.find(h) == assignedHandles.end())
+          unassignedTouchpads.push_back(h);
+      }
+      if (unassignedTouchpads.size() == 1) {
+        assignHardware(touchpadAliasName, unassignedTouchpads.front());
+        changesMade = true;
+        assignedHandles.insert(unassignedTouchpads.front());
+        unassignedDevices.erase(
+            std::remove(unassignedDevices.begin(), unassignedDevices.end(),
+                        unassignedTouchpads.front()),
+            unassignedDevices.end());
+      }
+    }
+  }
+
+  // Step 7: If changes were made, send change message and save
   // Always notify UI: the unassignedDevices list can change even if no dead
   // devices were removed.
   sendChangeMessage();

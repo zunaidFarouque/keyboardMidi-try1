@@ -1,5 +1,26 @@
 #include "MappingDefinition.h"
 
+namespace {
+const char *kTouchpadEventNames[] = {
+    "Finger 1: Down",     "Finger 1: Up",      "Finger 1: X",
+    "Finger 1: Y",        "Finger 2: Down",    "Finger 2: Up",
+    "Finger 2: X",        "Finger 2: Y",       "Finger 1 & 2 dist",
+    "Finger 1 & 2 avg X", "Finger 1 & 2 avg Y"};
+}
+
+juce::String MappingDefinition::getTouchpadEventName(int eventId) {
+  if (eventId >= 0 && eventId < TouchpadEvent::Count)
+    return juce::String(kTouchpadEventNames[eventId]);
+  return "Unknown";
+}
+
+std::map<int, juce::String> MappingDefinition::getTouchpadEventOptions() {
+  std::map<int, juce::String> m;
+  for (int i = 0; i < TouchpadEvent::Count; ++i)
+    m[i] = kTouchpadEventNames[i];
+  return m;
+}
+
 juce::String MappingDefinition::getTypeName(ActionType type) {
   switch (type) {
   case ActionType::Note:
@@ -47,6 +68,20 @@ InspectorControl MappingDefinition::createSeparator(const juce::String &label,
   return c;
 }
 
+static bool isTouchpadMapping(const juce::ValueTree &mapping) {
+  return mapping.getProperty("inputAlias", "")
+      .toString()
+      .trim()
+      .equalsIgnoreCase("Touchpad");
+}
+
+static bool isTouchpadEventBoolean(int eventId) {
+  return (eventId == TouchpadEvent::Finger1Down ||
+          eventId == TouchpadEvent::Finger1Up ||
+          eventId == TouchpadEvent::Finger2Down ||
+          eventId == TouchpadEvent::Finger2Up);
+}
+
 InspectorSchema MappingDefinition::getSchema(const juce::ValueTree &mapping,
                                              int pitchBendRange) {
   InspectorSchema schema;
@@ -65,6 +100,11 @@ InspectorSchema MappingDefinition::getSchema(const juce::ValueTree &mapping,
 
   // Step 2: Branch on current type
   juce::String typeStr = mapping.getProperty("type", "Note").toString().trim();
+  const bool touchpad = isTouchpadMapping(mapping);
+  const int touchpadEvent =
+      touchpad ? (int)mapping.getProperty("inputTouchpadEvent", 0) : 0;
+  const bool touchpadInputBool =
+      touchpad && isTouchpadEventBoolean(touchpadEvent);
 
   if (typeStr.equalsIgnoreCase("Note")) {
     // Channel: Slider 1–16
@@ -115,14 +155,24 @@ InspectorSchema MappingDefinition::getSchema(const juce::ValueTree &mapping,
     schema.push_back(
         createSeparator("Note Settings", juce::Justification::centredLeft));
 
-    // Release Behavior: Send Note Off | Nothing | Always Latch
+    // Release Behavior: Send Note Off | Sustain until retrigger | Always Latch
+    // For Finger 1 Up / Finger 2 Up there is no "release after" — don't offer
+    // Send Note Off
+    const bool touchpadUpEvent =
+        touchpad && (touchpadEvent == TouchpadEvent::Finger1Up ||
+                     touchpadEvent == TouchpadEvent::Finger2Up);
     InspectorControl releaseBehavior;
     releaseBehavior.propertyId = "releaseBehavior";
     releaseBehavior.label = "Release Behaviour";
     releaseBehavior.controlType = InspectorControl::Type::ComboBox;
-    releaseBehavior.options[1] = "Send Note Off";
-    releaseBehavior.options[2] = "Nothing";
-    releaseBehavior.options[3] = "Always Latch";
+    if (!touchpadUpEvent) {
+      releaseBehavior.options[1] = "Send Note Off";
+      releaseBehavior.options[2] = "Sustain until retrigger";
+      releaseBehavior.options[3] = "Always Latch";
+    } else {
+      releaseBehavior.options[2] = "Sustain until retrigger";
+      releaseBehavior.options[3] = "Always Latch";
+    }
     schema.push_back(releaseBehavior);
 
     // Follow Global Transpose (default on)
@@ -132,6 +182,26 @@ InspectorSchema MappingDefinition::getSchema(const juce::ValueTree &mapping,
     followTranspose.controlType = InspectorControl::Type::Toggle;
     followTranspose.widthWeight = 0.5f;
     schema.push_back(followTranspose);
+
+    if (touchpad && !touchpadInputBool) {
+      schema.push_back(createSeparator("Touchpad: Continuous to Note",
+                                       juce::Justification::centredLeft));
+      InspectorControl thresh;
+      thresh.propertyId = "touchpadThreshold";
+      thresh.label = "Threshold";
+      thresh.controlType = InspectorControl::Type::Slider;
+      thresh.min = 0.0;
+      thresh.max = 1.0;
+      thresh.step = 0.01;
+      schema.push_back(thresh);
+      InspectorControl trigger;
+      trigger.propertyId = "touchpadTriggerAbove";
+      trigger.label = "Trigger";
+      trigger.controlType = InspectorControl::Type::ComboBox;
+      trigger.options[1] = "Below threshold";
+      trigger.options[2] = "Above threshold";
+      schema.push_back(trigger);
+    }
   } else if (typeStr.equalsIgnoreCase("Expression")) {
     juce::String adsrTargetStr =
         mapping.getProperty("adsrTarget", "CC").toString().trim();
@@ -258,6 +328,71 @@ InspectorSchema MappingDefinition::getSchema(const juce::ValueTree &mapping,
         relVal.enabledConditionProperty = "sendReleaseValue";
         schema.push_back(relVal);
       }
+    }
+
+    if (touchpad && touchpadInputBool) {
+      schema.push_back(createSeparator("Touchpad: Boolean to Expression",
+                                       juce::Justification::centredLeft));
+      InspectorControl valOn;
+      valOn.propertyId = "touchpadValueWhenOn";
+      valOn.label = "Value when On";
+      valOn.controlType = InspectorControl::Type::Slider;
+      valOn.min = 0.0;
+      valOn.max = 127.0;
+      valOn.step = 1.0;
+      schema.push_back(valOn);
+      InspectorControl valOff;
+      valOff.propertyId = "touchpadValueWhenOff";
+      valOff.label = "Value when Off";
+      valOff.controlType = InspectorControl::Type::Slider;
+      valOff.min = 0.0;
+      valOff.max = 127.0;
+      valOff.step = 1.0;
+      schema.push_back(valOff);
+    }
+    if (touchpad && !touchpadInputBool) {
+      schema.push_back(
+          createSeparator("Touchpad: Range", juce::Justification::centredLeft));
+      InspectorControl inMin;
+      inMin.propertyId = "touchpadInputMin";
+      inMin.label = "Input min";
+      inMin.controlType = InspectorControl::Type::Slider;
+      inMin.min = 0.0;
+      inMin.max = 1.0;
+      inMin.step = 0.01;
+      inMin.widthWeight = 0.5f;
+      inMin.sameLine = false;
+      schema.push_back(inMin);
+      InspectorControl inMax;
+      inMax.propertyId = "touchpadInputMax";
+      inMax.label = "Input max";
+      inMax.controlType = InspectorControl::Type::Slider;
+      inMax.min = 0.0;
+      inMax.max = 1.0;
+      inMax.step = 0.01;
+      inMax.widthWeight = 0.5f;
+      inMax.sameLine = true;
+      schema.push_back(inMax);
+      InspectorControl outMin;
+      outMin.propertyId = "touchpadOutputMin";
+      outMin.label = "Output min";
+      outMin.controlType = InspectorControl::Type::Slider;
+      outMin.min = 0.0;
+      outMin.max = 127.0;
+      outMin.step = 1.0;
+      outMin.widthWeight = 0.5f;
+      outMin.sameLine = false;
+      schema.push_back(outMin);
+      InspectorControl outMax;
+      outMax.propertyId = "touchpadOutputMax";
+      outMax.label = "Output max";
+      outMax.controlType = InspectorControl::Type::Slider;
+      outMax.min = 0.0;
+      outMax.max = 127.0;
+      outMax.step = 1.0;
+      outMax.widthWeight = 0.5f;
+      outMax.sameLine = true;
+      schema.push_back(outMax);
     }
   } else if (typeStr.equalsIgnoreCase("Command")) {
     // Sustain: one control with Style dropdown when Sustain; Layer: same

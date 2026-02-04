@@ -5,6 +5,7 @@
 #include <vector>
 
 class DeviceManager;
+class PresetManager;
 class SettingsManager;
 
 class MappingInspector : public juce::Component,
@@ -12,7 +13,8 @@ class MappingInspector : public juce::Component,
                          public juce::ChangeListener {
 public:
   MappingInspector(juce::UndoManager &undoMgr, DeviceManager &deviceMgr,
-                   SettingsManager &settingsMgr);
+                   SettingsManager &settingsMgr,
+                   PresetManager *presetMgr = nullptr);
   ~MappingInspector() override;
 
   void paint(juce::Graphics &) override;
@@ -29,6 +31,8 @@ private:
   juce::UndoManager &undoManager;
   DeviceManager &deviceManager;
   SettingsManager &settingsManager;
+  PresetManager *presetManager =
+      nullptr; // optional: notify to trigger grid rebuild
   std::vector<juce::ValueTree> selectedTrees;
   bool isUpdatingFromTree = false;
 
@@ -60,6 +64,8 @@ private:
   void rebuildUI();
   void createControl(const InspectorControl &def, UiRow &currentRow);
   void createAliasRow();
+  void createKeyRow();
+  void createTouchpadEventRow();
 
   bool allTreesHaveSameValue(const juce::Identifier &property);
   juce::var getCommonValue(const juce::Identifier &property);

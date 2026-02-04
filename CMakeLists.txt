@@ -141,6 +141,10 @@ target_compile_definitions(OmniKey PRIVATE
     WIN32_LEAN_AND_MEAN
     JUCE_WEB_BROWSER_PATH=""
 )
+# 7a. MSVC: allow parallel compilation (avoid C1041 PDB lock)
+if(MSVC)
+  target_compile_options(OmniKey PRIVATE /FS)
+endif()
 
 # 8. Include Directories (so OmniKey can find headers in Source/)
 target_include_directories(OmniKey PRIVATE

@@ -1,6 +1,9 @@
 #include "MappingInspector.h"
 #include "DeviceManager.h"
+#include "KeyNameUtilities.h"
+#include "MappingTypes.h"
 #include "MidiNoteUtilities.h"
+#include "PresetManager.h"
 #include "SettingsManager.h"
 
 namespace {
@@ -53,9 +56,10 @@ private:
 
 MappingInspector::MappingInspector(juce::UndoManager &undoMgr,
                                    DeviceManager &deviceMgr,
-                                   SettingsManager &settingsMgr)
+                                   SettingsManager &settingsMgr,
+                                   PresetManager *presetMgr)
     : undoManager(undoMgr), deviceManager(deviceMgr),
-      settingsManager(settingsMgr) {
+      settingsManager(settingsMgr), presetManager(presetMgr) {
   deviceManager.addChangeListener(this);
   settingsManager.addChangeListener(this);
 }
@@ -107,8 +111,14 @@ void MappingInspector::rebuildUI() {
   if (selectedTrees.empty())
     return;
 
-  // Device row at top, above Type
+  // Device row at top, then Key or Events (touchpad), then Type
   createAliasRow();
+  juce::String alias =
+      selectedTrees[0].getProperty("inputAlias", "").toString().trim();
+  if (alias.equalsIgnoreCase("Touchpad"))
+    createTouchpadEventRow();
+  else
+    createKeyRow();
 
   int pbRange = settingsManager.getPitchBendRange();
   InspectorSchema schema =
@@ -583,6 +593,119 @@ void MappingInspector::createAliasRow() {
   uiRows.push_back(std::move(row));
 }
 
+// Map keyCode to ComboBox item id (JUCE requires non-zero ids). 0..255
+// -> 1..256; specials -> 257..260.
+static int keyCodeToItemId(int keyCode) {
+  if (keyCode == InputTypes::ScrollUp)
+    return 257;
+  if (keyCode == InputTypes::ScrollDown)
+    return 258;
+  if (keyCode == InputTypes::PointerX)
+    return 259;
+  if (keyCode == InputTypes::PointerY)
+    return 260;
+  if (keyCode >= 0 && keyCode <= 255)
+    return keyCode + 1;
+  return 1; // fallback: Key 0
+}
+
+static int itemIdToKeyCode(int itemId) {
+  if (itemId >= 257 && itemId <= 260) {
+    const int codes[] = {InputTypes::ScrollUp, InputTypes::ScrollDown,
+                         InputTypes::PointerX, InputTypes::PointerY};
+    return codes[itemId - 257];
+  }
+  if (itemId >= 1 && itemId <= 256)
+    return itemId - 1;
+  return 0;
+}
+
+void MappingInspector::createKeyRow() {
+  UiRow row;
+  row.isSeparatorRow = false;
+
+  auto rowComp = std::make_unique<LabelEditorRow>();
+  rowComp->label = std::make_unique<juce::Label>();
+  rowComp->label->setText("Key:", juce::dontSendNotification);
+
+  auto keyCombo = std::make_unique<juce::ComboBox>();
+  for (int keyCode = 0; keyCode <= 255; ++keyCode)
+    keyCombo->addItem(KeyNameUtilities::getKeyName(keyCode), keyCode + 1);
+  keyCombo->addItem("Scroll Up", 257);
+  keyCombo->addItem("Scroll Down", 258);
+  keyCombo->addItem("Trackpad X", 259);
+  keyCombo->addItem("Trackpad Y", 260);
+
+  const juce::Identifier inputKeyId("inputKey");
+  int currentKey = 0;
+  if (allTreesHaveSameValue(inputKeyId))
+    currentKey = static_cast<int>(getCommonValue(inputKeyId));
+  keyCombo->setSelectedId(keyCodeToItemId(currentKey),
+                          juce::dontSendNotification);
+  if (!allTreesHaveSameValue(inputKeyId))
+    keyCombo->setSelectedId(-1, juce::dontSendNotification);
+
+  juce::ComboBox *keyComboPtr = keyCombo.get();
+  keyCombo->onChange = [this, keyComboPtr]() {
+    if (selectedTrees.empty() || keyComboPtr->getSelectedId() == -1)
+      return;
+    int newKeyCode = itemIdToKeyCode(keyComboPtr->getSelectedId());
+    undoManager.beginNewTransaction("Change Key");
+    for (auto &tree : selectedTrees) {
+      if (tree.isValid())
+        tree.setProperty("inputKey", newKeyCode, &undoManager);
+    }
+  };
+
+  rowComp->editor = std::move(keyCombo);
+  rowComp->addAndMakeVisible(*rowComp->label);
+  rowComp->addAndMakeVisible(*rowComp->editor);
+  addAndMakeVisible(*rowComp);
+  row.items.push_back({std::move(rowComp), 1.0f, false});
+  uiRows.push_back(std::move(row));
+}
+
+void MappingInspector::createTouchpadEventRow() {
+  UiRow row;
+  row.isSeparatorRow = false;
+
+  auto rowComp = std::make_unique<LabelEditorRow>();
+  rowComp->label = std::make_unique<juce::Label>();
+  rowComp->label->setText("Events:", juce::dontSendNotification);
+
+  auto eventCombo = std::make_unique<juce::ComboBox>();
+  auto options = MappingDefinition::getTouchpadEventOptions();
+  for (const auto &p : options)
+    eventCombo->addItem(p.second, p.first + 1);
+
+  const juce::Identifier inputTouchpadEventId("inputTouchpadEvent");
+  int currentEvent = 0;
+  if (allTreesHaveSameValue(inputTouchpadEventId))
+    currentEvent = static_cast<int>(getCommonValue(inputTouchpadEventId));
+  eventCombo->setSelectedId(currentEvent + 1, juce::dontSendNotification);
+  if (!allTreesHaveSameValue(inputTouchpadEventId))
+    eventCombo->setSelectedId(-1, juce::dontSendNotification);
+
+  juce::ComboBox *eventComboPtr = eventCombo.get();
+  eventCombo->onChange = [this, eventComboPtr]() {
+    if (selectedTrees.empty() || eventComboPtr->getSelectedId() == -1)
+      return;
+    int newEvent = eventComboPtr->getSelectedId() - 1;
+    undoManager.beginNewTransaction("Change Touchpad Event");
+    for (auto &tree : selectedTrees) {
+      if (tree.isValid())
+        tree.setProperty("inputTouchpadEvent", newEvent, &undoManager);
+    }
+  };
+
+  rowComp->editor = std::move(eventCombo);
+  rowComp->addAndMakeVisible(*rowComp->label);
+  rowComp->addAndMakeVisible(*rowComp->editor);
+  addAndMakeVisible(*rowComp);
+  row.items.push_back({std::move(rowComp), 1.0f, false});
+  uiRows.push_back(std::move(row));
+}
+
 void MappingInspector::resized() {
   const int rowHeight = 25;
   const int separatorRowHeight = 15; // Phase 55.9: smaller for separator rows
@@ -707,12 +830,18 @@ void MappingInspector::valueTreePropertyChanged(
       tree.setProperty("sendReleaseValue", true, &undoManager);
   }
   // Phase 55.6: Rebuild only when schema structure changes (avoids rebuild
-  // during slider drag)
+  // during slider drag). Also rebuild when inputKey / inputTouchpadEvent
+  // change so Key/Events dropdown and dependent controls (e.g. Release
+  // Behaviour options for touchpad) stay in sync.
   bool needsRebuild = false;
-  if (property == juce::Identifier("type") ||
+  if (property == juce::Identifier("inputKey") ||
+      property == juce::Identifier("inputTouchpadEvent") ||
+      property == juce::Identifier("inputAlias") ||
+      property == juce::Identifier("type") ||
       property == juce::Identifier("adsrTarget") ||
       property == juce::Identifier("sendReleaseValue") ||
-      property == juce::Identifier("useCustomEnvelope")) {
+      property == juce::Identifier("useCustomEnvelope") ||
+      property == juce::Identifier("releaseBehavior")) {
     needsRebuild = true;
   } else if (property == juce::Identifier("data1")) {
     if (allTreesHaveSameValue("type") &&
@@ -727,5 +856,30 @@ void MappingInspector::valueTreePropertyChanged(
     });
   } else {
     repaint();
+  }
+
+  // Notify PresetManager so InputProcessor (and others) rebuild grid when
+  // mapping properties that affect compilation change (e.g. inputTouchpadEvent,
+  // releaseBehavior). InputProcessor listens to PresetManager and will rebuild.
+  if (presetManager && (property == juce::Identifier("inputKey") ||
+                        property == juce::Identifier("inputTouchpadEvent") ||
+                        property == juce::Identifier("inputAlias") ||
+                        property == juce::Identifier("releaseBehavior") ||
+                        property == juce::Identifier("followTranspose") ||
+                        property == juce::Identifier("deviceHash") ||
+                        property == juce::Identifier("type") ||
+                        property == juce::Identifier("channel") ||
+                        property == juce::Identifier("data1") ||
+                        property == juce::Identifier("data2") ||
+                        property == juce::Identifier("velRandom") ||
+                        property == juce::Identifier("touchpadThreshold") ||
+                        property == juce::Identifier("touchpadTriggerAbove") ||
+                        property == juce::Identifier("touchpadValueWhenOn") ||
+                        property == juce::Identifier("touchpadValueWhenOff") ||
+                        property == juce::Identifier("touchpadInputMin") ||
+                        property == juce::Identifier("touchpadInputMax") ||
+                        property == juce::Identifier("touchpadOutputMin") ||
+                        property == juce::Identifier("touchpadOutputMax"))) {
+    presetManager->sendChangeMessage();
   }
 }

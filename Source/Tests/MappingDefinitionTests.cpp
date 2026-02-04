@@ -2,6 +2,78 @@
 #include "../MappingTypes.h"
 #include <gtest/gtest.h>
 
+// --- Touchpad event names and options (recent touchpad mapping feature) ---
+TEST(MappingDefinitionTest, TouchpadEventNames) {
+  EXPECT_EQ(MappingDefinition::getTouchpadEventName(0), "Finger 1: Down");
+  EXPECT_EQ(MappingDefinition::getTouchpadEventName(1), "Finger 1: Up");
+  EXPECT_EQ(MappingDefinition::getTouchpadEventName(2), "Finger 1: X");
+  EXPECT_EQ(
+      MappingDefinition::getTouchpadEventName(TouchpadEvent::Finger1And2Dist),
+      "Finger 1 & 2 dist");
+  EXPECT_EQ(MappingDefinition::getTouchpadEventName(TouchpadEvent::Count - 1),
+            "Finger 1 & 2 avg Y");
+  EXPECT_EQ(MappingDefinition::getTouchpadEventName(-1), "Unknown");
+  EXPECT_EQ(MappingDefinition::getTouchpadEventName(TouchpadEvent::Count),
+            "Unknown");
+}
+
+TEST(MappingDefinitionTest, TouchpadEventOptions) {
+  auto options = MappingDefinition::getTouchpadEventOptions();
+  EXPECT_EQ(options.size(), static_cast<size_t>(TouchpadEvent::Count));
+  EXPECT_EQ(options[0], "Finger 1: Down");
+  EXPECT_EQ(options[TouchpadEvent::Finger2Up], "Finger 2: Up");
+  EXPECT_EQ(options[TouchpadEvent::Finger1And2AvgY], "Finger 1 & 2 avg Y");
+}
+
+TEST(MappingDefinitionTest, TouchpadMappingSchemaHasNoteAndReleaseControls) {
+  juce::ValueTree mapping("Mapping");
+  mapping.setProperty("inputAlias", "Touchpad", nullptr);
+  mapping.setProperty("inputTouchpadEvent", 0, nullptr); // Finger 1: Down
+  mapping.setProperty("type", "Note", nullptr);
+
+  InspectorSchema schema = MappingDefinition::getSchema(mapping);
+
+  bool hasReleaseBehavior = false;
+  bool hasNoteControl = false;
+  for (const auto &c : schema) {
+    if (c.propertyId == "releaseBehavior")
+      hasReleaseBehavior = true;
+    if (c.propertyId == "data1" && c.label == "Note")
+      hasNoteControl = true;
+  }
+  EXPECT_TRUE(hasReleaseBehavior)
+      << "Touchpad Note schema should have releaseBehavior (release behaviour)";
+  EXPECT_TRUE(hasNoteControl)
+      << "Touchpad Note schema should have Note (data1) control";
+}
+
+// Release "Send Note Off" must not be offered for Finger 1 Up / Finger 2 Up
+TEST(MappingDefinitionTest, TouchpadFingerUpSchemaNoSendNoteOffOption) {
+  juce::ValueTree mapping("Mapping");
+  mapping.setProperty("inputAlias", "Touchpad", nullptr);
+  mapping.setProperty("inputTouchpadEvent", TouchpadEvent::Finger1Up, nullptr);
+  mapping.setProperty("type", "Note", nullptr);
+
+  InspectorSchema schema = MappingDefinition::getSchema(mapping);
+
+  const InspectorControl *releaseCtrl = nullptr;
+  for (const auto &c : schema) {
+    if (c.propertyId == "releaseBehavior") {
+      releaseCtrl = &c;
+      break;
+    }
+  }
+  ASSERT_NE(releaseCtrl, nullptr);
+  // Option 1 (Send Note Off) must not be present for Up events
+  auto it = releaseCtrl->options.find(1);
+  EXPECT_TRUE(it == releaseCtrl->options.end())
+      << "Finger 1 Up must not have 'Send Note Off' option (id 1)";
+  EXPECT_NE(releaseCtrl->options.find(2), releaseCtrl->options.end())
+      << "Sustain until retrigger (2) should be available";
+  EXPECT_NE(releaseCtrl->options.find(3), releaseCtrl->options.end())
+      << "Always Latch (3) should be available";
+}
+
 TEST(MappingDefinitionTest, SchemaGeneration) {
   juce::ValueTree mapping("Mapping");
   mapping.setProperty("type", "Note", nullptr);

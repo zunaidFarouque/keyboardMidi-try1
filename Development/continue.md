@@ -1,3 +1,26 @@
+release mode "Nothing" and "latch" doing exact same thing...
+"Nothing" should not send the opposite thing is previous thing is in the state.
+
+example:
+intended behaviour for "Nothing"
+```
+finger 1 down -> midi C5 note on
+finger 1 up -> [no midi data sent because "Nothing is chosen"]
+finger 1 down -> midi C5 note off and immediately then note on.
+```
+
+it is both for touchpad and the keys's intended behaviour... so please properly fix it.
+also rename it- "Nothing" -> "Sustain until retrigger".
+
+
+---
+
+===
+
+---
+
+
+
 Root note global and state global.
 
 

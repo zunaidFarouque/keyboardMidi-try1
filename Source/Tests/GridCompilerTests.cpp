@@ -78,6 +78,25 @@ protected:
       zone->inputKeyCodes.push_back(startKey + i);
     // Zone is already added to manager by createDefaultZone
   }
+
+  // Helper to add a Touchpad mapping (inputAlias "Touchpad")
+  void addTouchpadMapping(int layerId, int eventId,
+                          const juce::String &typeStr = "Note",
+                          const juce::String &releaseBehavior = "Send Note Off",
+                          bool followTranspose = true) {
+    auto mappings = presetMgr.getMappingsListForLayer(layerId);
+    juce::ValueTree m("Mapping");
+    m.setProperty("inputAlias", "Touchpad", nullptr);
+    m.setProperty("inputTouchpadEvent", eventId, nullptr);
+    m.setProperty("type", typeStr, nullptr);
+    m.setProperty("layerID", layerId, nullptr);
+    m.setProperty("releaseBehavior", releaseBehavior, nullptr);
+    m.setProperty("followTranspose", followTranspose, nullptr);
+    m.setProperty("channel", 1, nullptr);
+    m.setProperty("data1", 60, nullptr);
+    m.setProperty("data2", 127, nullptr);
+    mappings.addChild(m, -1, nullptr);
+  }
 };
 
 // Test Case 1: Vertical Inheritance (Layer 0 -> Layer 1)
@@ -412,7 +431,8 @@ TEST_F(GridCompilerTest, NoteReleaseBehaviorCompiles) {
         << "releaseBehavior \"" << rbStr << "\"";
   };
   addAndCheck("Send Note Off", NoteReleaseBehavior::SendNoteOff);
-  addAndCheck("Nothing", NoteReleaseBehavior::Nothing);
+  addAndCheck("Sustain until retrigger",
+              NoteReleaseBehavior::SustainUntilRetrigger);
   addAndCheck("Always Latch", NoteReleaseBehavior::AlwaysLatch);
 }
 
@@ -492,4 +512,55 @@ TEST_F(GridCompilerTest, SmartScaleBendScalesWithPitchBendRange) {
   int c4Pb = slot.action.smartBendLookup[60];
   int expected = 8192 + static_cast<int>(std::round(8192.0 * 2.0 / 6.0));
   EXPECT_EQ(c4Pb, expected) << "C4 +1 step with PB range 6 = 1/3 of full bend";
+}
+
+// --- Touchpad mapping compilation (recent touchpad feature) ---
+TEST_F(GridCompilerTest, TouchpadMappingCompiledIntoContext) {
+  addTouchpadMapping(0, TouchpadEvent::Finger1Down, "Note");
+
+  auto context =
+      GridCompiler::compile(presetMgr, deviceMgr, zoneMgr, settingsMgr);
+
+  ASSERT_EQ(context->touchpadMappings.size(), 1u);
+  const auto &entry = context->touchpadMappings.front();
+  EXPECT_EQ(entry.layerId, 0);
+  EXPECT_EQ(entry.eventId, TouchpadEvent::Finger1Down);
+  EXPECT_EQ(entry.action.type, ActionType::Note);
+  EXPECT_EQ(entry.action.data1, 60);
+  EXPECT_EQ(entry.conversionKind, TouchpadConversionKind::BoolToGate);
+}
+
+TEST_F(GridCompilerTest, TouchpadNoteReleaseBehaviorApplied) {
+  addTouchpadMapping(0, TouchpadEvent::Finger1Down, "Note",
+                     "Sustain until retrigger", true);
+
+  auto context =
+      GridCompiler::compile(presetMgr, deviceMgr, zoneMgr, settingsMgr);
+
+  ASSERT_EQ(context->touchpadMappings.size(), 1u);
+  EXPECT_EQ(context->touchpadMappings.front().action.releaseBehavior,
+            NoteReleaseBehavior::SustainUntilRetrigger);
+}
+
+TEST_F(GridCompilerTest, TouchpadNoteAlwaysLatchApplied) {
+  addTouchpadMapping(0, TouchpadEvent::Finger2Down, "Note", "Always Latch",
+                     true);
+
+  auto context =
+      GridCompiler::compile(presetMgr, deviceMgr, zoneMgr, settingsMgr);
+
+  ASSERT_EQ(context->touchpadMappings.size(), 1u);
+  EXPECT_EQ(context->touchpadMappings.front().action.releaseBehavior,
+            NoteReleaseBehavior::AlwaysLatch);
+}
+
+TEST_F(GridCompilerTest, TouchpadContinuousEventCompiledAsContinuousToGate) {
+  addTouchpadMapping(0, TouchpadEvent::Finger1X, "Note"); // continuous event
+
+  auto context =
+      GridCompiler::compile(presetMgr, deviceMgr, zoneMgr, settingsMgr);
+
+  ASSERT_EQ(context->touchpadMappings.size(), 1u);
+  EXPECT_EQ(context->touchpadMappings.front().conversionKind,
+            TouchpadConversionKind::ContinuousToGate);
 }

@@ -39,6 +39,9 @@ public:
                          bool isDown) override;
   void handleAxisEvent(uintptr_t deviceHandle, int inputCode,
                        float value) override;
+  void
+  handleTouchpadContacts(uintptr_t deviceHandle,
+                         const std::vector<TouchpadContact> &contacts) override;
 
   // ApplicationCommandTarget implementation
   void getAllCommands(juce::Array<juce::CommandID> &commands) override;

@@ -5,6 +5,7 @@
 #include "MappingTypes.h"
 #include "PresetManager.h"
 #include "RhythmAnalyzer.h"
+#include "TouchpadTypes.h"
 #include "VoiceManager.h"
 #include "ZoneManager.h"
 #include <JuceHeader.h>
@@ -41,6 +42,10 @@ public:
 
   // Handle continuous axis events (scroll, pointer X/Y)
   void handleAxisEvent(uintptr_t deviceHandle, int inputCode, float value);
+
+  // Handle touchpad contact updates (for alias "Touchpad" mappings)
+  void processTouchpadContacts(uintptr_t deviceHandle,
+                               const std::vector<TouchpadContact> &contacts);
 
   // Check if preset has pointer mappings (for smart cursor locking)
   bool hasPointerMappings();
@@ -154,6 +159,17 @@ private:
   // Rhythm analyzer for adaptive glide (Phase 26.1)
   RhythmAnalyzer rhythmAnalyzer;
 
+  // Touchpad: previous state per device for edge detection (Finger Down/Up)
+  struct TouchpadPrevState {
+    bool tip1 = false;
+    bool tip2 = false;
+    float x1 = 0.0f, y1 = 0.0f, x2 = 0.0f, y2 = 0.0f;
+  };
+  std::unordered_map<uintptr_t, TouchpadPrevState> touchpadPrevState;
+  // Continuous->Note: track whether note is currently "on" per (device,
+  // layerId, eventId) to send note off
+  std::set<std::tuple<uintptr_t, int, int>> touchpadNoteOnSent;
+
   // ValueTree Callbacks
   void valueTreeChildAdded(juce::ValueTree &parentTree,
                            juce::ValueTree &child) override;
@@ -175,6 +191,14 @@ private:
 
   // Velocity randomization helper
   int calculateVelocity(int base, int range);
+
+  // Shared manual-note trigger (keyboard and touchpad). Respects
+  // releaseBehavior and velocity random.
+  // allowLatchFromAction: if false, alwaysLatch is forced false (e.g. for
+  // touchpad Finger Up events where Latch only applies to Down).
+  void triggerManualNoteOn(InputID id, const MidiAction &act,
+                           bool allowLatchFromAction = true);
+  void triggerManualNoteRelease(InputID id, const MidiAction &act);
 
   // Phase 50.5: Zone processing helpers (extract complex zone logic)
   void processZoneNote(InputID input, std::shared_ptr<Zone> zone,

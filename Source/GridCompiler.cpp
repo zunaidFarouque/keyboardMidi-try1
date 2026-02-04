@@ -357,6 +357,28 @@ MidiAction buildMidiActionFromMapping(juce::ValueTree mappingNode) {
   return action;
 }
 
+// Apply Note options (followTranspose, releaseBehavior) from mapping to action.
+// Shared by keyboard and touchpad mapping paths.
+static void applyNoteOptionsFromMapping(juce::ValueTree mapping,
+                                        ZoneManager &zoneMgr,
+                                        MidiAction &action) {
+  if (action.type != ActionType::Note)
+    return;
+  bool followTranspose = (bool)mapping.getProperty("followTranspose", true);
+  if (followTranspose) {
+    int chrom = zoneMgr.getGlobalChromaticTranspose();
+    action.data1 = juce::jlimit(0, 127, action.data1 + chrom);
+  }
+  juce::String rbStr =
+      mapping.getProperty("releaseBehavior", "Send Note Off").toString().trim();
+  if (rbStr.equalsIgnoreCase("Sustain until retrigger"))
+    action.releaseBehavior = NoteReleaseBehavior::SustainUntilRetrigger;
+  else if (rbStr.equalsIgnoreCase("Always Latch"))
+    action.releaseBehavior = NoteReleaseBehavior::AlwaysLatch;
+  else
+    action.releaseBehavior = NoteReleaseBehavior::SendNoteOff;
+}
+
 // Phase 51.4 / 53.5: Apply zones for a single layer. targetState = Active or
 // Inherited for device Pass 2.
 void compileZonesForLayer(VisualGrid &vGrid, AudioGrid &aGrid,
@@ -451,14 +473,22 @@ static bool isLayerCommand(const MidiAction &action) {
           cmd == static_cast<int>(OmniKey::CommandID::LayerToggle));
 }
 
+static bool isTouchpadEventBoolean(int eventId) {
+  return (eventId == TouchpadEvent::Finger1Down ||
+          eventId == TouchpadEvent::Finger1Up ||
+          eventId == TouchpadEvent::Finger2Down ||
+          eventId == TouchpadEvent::Finger2Up);
+}
+
 // Phase 51.4 / 53.5: Apply manual mappings for a single layer. targetState for
-// device Pass 2 (Inherited vs Active).
-void compileMappingsForLayer(VisualGrid &vGrid, AudioGrid &aGrid,
-                             PresetManager &presetMgr, DeviceManager &deviceMgr,
-                             ZoneManager &zoneMgr, SettingsManager &settingsMgr,
-                             uintptr_t aliasHash, int layerId,
-                             std::vector<bool> &touchedKeys,
-                             VisualState targetState) {
+// device Pass 2 (Inherited vs Active). If touchpadMappingsOut is non-null,
+// Touchpad mappings are appended there instead of writing to the grid.
+void compileMappingsForLayer(
+    VisualGrid &vGrid, AudioGrid &aGrid, PresetManager &presetMgr,
+    DeviceManager &deviceMgr, ZoneManager &zoneMgr,
+    SettingsManager &settingsMgr, uintptr_t aliasHash, int layerId,
+    std::vector<bool> &touchedKeys, VisualState targetState,
+    std::vector<TouchpadMappingEntry> *touchpadMappingsOut) {
   auto mappingsNode = presetMgr.getMappingsListForLayer(layerId);
   if (!mappingsNode.isValid())
     return;
@@ -482,12 +512,59 @@ void compileMappingsForLayer(VisualGrid &vGrid, AudioGrid &aGrid,
     if (!mapping.isValid() || !mapping.hasType("Mapping"))
       continue;
 
+    juce::String aliasName =
+        mapping.getProperty("inputAlias", "").toString().trim();
+    const bool isTouchpadMapping =
+        aliasName.trim().equalsIgnoreCase("Touchpad");
+
+    if (isTouchpadMapping && touchpadMappingsOut != nullptr) {
+      int eventId = (int)mapping.getProperty("inputTouchpadEvent", 0);
+      eventId = juce::jlimit(0, TouchpadEvent::Count - 1, eventId);
+      MidiAction action = buildMidiActionFromMapping(mapping);
+      TouchpadMappingEntry entry;
+      entry.layerId = layerId;
+      entry.eventId = eventId;
+      entry.action = std::move(action);
+      TouchpadConversionParams &p = entry.conversionParams;
+
+      juce::String typeStr =
+          mapping.getProperty("type", "Note").toString().trim();
+      const bool inputBool = isTouchpadEventBoolean(eventId);
+
+      if (typeStr.equalsIgnoreCase("Note")) {
+        applyNoteOptionsFromMapping(mapping, zoneMgr, entry.action);
+        if (inputBool) {
+          entry.conversionKind = TouchpadConversionKind::BoolToGate;
+        } else {
+          entry.conversionKind = TouchpadConversionKind::ContinuousToGate;
+          p.threshold = (float)mapping.getProperty("touchpadThreshold", 0.5);
+          int triggerId = (int)mapping.getProperty("touchpadTriggerAbove", 2);
+          p.triggerAbove = (triggerId == 2);
+        }
+      } else if (typeStr.equalsIgnoreCase("Expression")) {
+        if (inputBool) {
+          entry.conversionKind = TouchpadConversionKind::BoolToCC;
+          p.valueWhenOn = (int)mapping.getProperty("touchpadValueWhenOn", 127);
+          p.valueWhenOff = (int)mapping.getProperty("touchpadValueWhenOff", 0);
+        } else {
+          entry.conversionKind = TouchpadConversionKind::ContinuousToRange;
+          p.inputMin = (float)mapping.getProperty("touchpadInputMin", 0.0);
+          p.inputMax = (float)mapping.getProperty("touchpadInputMax", 1.0);
+          p.outputMin = (int)mapping.getProperty("touchpadOutputMin", 0);
+          p.outputMax = (int)mapping.getProperty("touchpadOutputMax", 127);
+        }
+      } else {
+        entry.conversionKind = TouchpadConversionKind::BoolToGate;
+      }
+
+      touchpadMappingsOut->push_back(std::move(entry));
+      continue;
+    }
+
     const int inputKey = (int)mapping.getProperty("inputKey", 0);
     if (inputKey < 0 || inputKey > 0xFF)
       continue;
 
-    juce::String aliasName =
-        mapping.getProperty("inputAlias", "").toString().trim();
     uintptr_t mappingAliasHash = aliasNameToHash(aliasName);
 
     juce::var deviceHashVar = mapping.getProperty("deviceHash");
@@ -510,25 +587,7 @@ void compileMappingsForLayer(VisualGrid &vGrid, AudioGrid &aGrid,
       continue;
 
     MidiAction action = buildMidiActionFromMapping(mapping);
-
-    // Phase 55.4: Note options (followTranspose, releaseBehavior)
-    if (action.type == ActionType::Note) {
-      bool followTranspose = (bool)mapping.getProperty("followTranspose", true);
-      if (followTranspose) {
-        int chrom = zoneMgr.getGlobalChromaticTranspose();
-        action.data1 = juce::jlimit(0, 127, action.data1 + chrom);
-      }
-      juce::String rbStr =
-          mapping.getProperty("releaseBehavior", "Send Note Off")
-              .toString()
-              .trim();
-      if (rbStr.equalsIgnoreCase("Nothing"))
-        action.releaseBehavior = NoteReleaseBehavior::Nothing;
-      else if (rbStr.equalsIgnoreCase("Always Latch"))
-        action.releaseBehavior = NoteReleaseBehavior::AlwaysLatch;
-      else
-        action.releaseBehavior = NoteReleaseBehavior::SendNoteOff;
-    }
+    applyNoteOptionsFromMapping(mapping, zoneMgr, action);
 
     // Phase 56.1: Expression (unified CC + Envelope)
     if (action.type == ActionType::Expression) {
@@ -624,7 +683,20 @@ GridCompiler::compile(PresetManager &presetMgr, DeviceManager &deviceMgr,
   // 1. Setup Context
   auto context = std::make_shared<CompiledMapContext>();
 
-  // 2. Define Helper Lambda "applyLayerToGrid"
+  // 2. Collect touchpad mappings (one pass over all layers)
+  const uintptr_t touchpadAliasHash = static_cast<uintptr_t>(
+      std::hash<juce::String>{}(juce::String("Touchpad").trim()));
+  for (int layerId = 0; layerId < 9; ++layerId) {
+    VisualGrid dummyV;
+    AudioGrid dummyA;
+    std::vector<bool> touchedKeys(256, false);
+    compileMappingsForLayer(dummyV, dummyA, presetMgr, deviceMgr, zoneMgr,
+                            settingsMgr, touchpadAliasHash, layerId,
+                            touchedKeys, VisualState::Active,
+                            &context->touchpadMappings);
+  }
+
+  // 3. Define Helper Lambda "applyLayerToGrid"
   // Phase 53.5: targetState = Active for current layer, Inherited for lower
   // layer (device Pass 2).
   auto applyLayerToGrid = [&](VisualGrid &vGrid, AudioGrid &aGrid, int layerId,
@@ -637,7 +709,7 @@ GridCompiler::compile(PresetManager &presetMgr, DeviceManager &deviceMgr,
 
     compileMappingsForLayer(vGrid, aGrid, presetMgr, deviceMgr, zoneMgr,
                             settingsMgr, aliasHash, layerId, touchedKeys,
-                            targetState);
+                            targetState, nullptr);
   };
 
   // 3. PASS 1: Compile Global Stack (Vertical) – Hash 0 only

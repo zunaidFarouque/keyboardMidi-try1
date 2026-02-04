@@ -576,6 +576,14 @@ void MainComponent::handleAxisEvent(uintptr_t deviceHandle, int inputCode,
   inputProcessor.handleAxisEvent(deviceHandle, inputCode, value);
 }
 
+void MainComponent::handleTouchpadContacts(
+    uintptr_t deviceHandle, const std::vector<TouchpadContact> &contacts) {
+  juce::String aliasName = deviceManager.getAliasForHardware(deviceHandle);
+  if (!aliasName.trim().equalsIgnoreCase("Touchpad"))
+    return;
+  inputProcessor.processTouchpadContacts(deviceHandle, contacts);
+}
+
 juce::String MainComponent::getNoteName(int noteNumber) {
   // Simple converter: 60 -> C4
   const char *notes[] = {"C",  "C#", "D",  "D#", "E",  "F",
@@ -817,6 +825,7 @@ void MainComponent::timerCallback() {
         if (hwnd != nullptr) {
           rawInputManager->initialize(hwnd, &settingsManager);
           isInputInitialized = true;
+          deviceManager.validateConnectedDevices(); // Scan devices and re-assign Touchpad alias if needed
           if (logComponent)
             logComponent->addEntry(
                 "--- SYSTEM: Raw Input Hooked Successfully ---");

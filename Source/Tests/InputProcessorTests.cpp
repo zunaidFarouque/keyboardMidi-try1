@@ -6,6 +6,7 @@
 #include "../PresetManager.h"
 #include "../ScaleLibrary.h"
 #include "../SettingsManager.h"
+#include "../TouchpadTypes.h"
 #include "../VoiceManager.h"
 #include "../Zone.h"
 #include <gtest/gtest.h>
@@ -572,8 +573,9 @@ TEST_F(ReleaseBehaviorTest, SendNoteOff_PressRelease_SendsNoteOnThenNoteOff) {
   EXPECT_EQ(mockMidi.events[1].note, 60);
 }
 
-TEST_F(ReleaseBehaviorTest, Nothing_PressRelease_NoNoteOffOnRelease) {
-  addNoteMapping(20, 60, "Nothing");
+TEST_F(ReleaseBehaviorTest,
+       SustainUntilRetrigger_PressRelease_NoNoteOffOnRelease) {
+  addNoteMapping(20, 60, "Sustain until retrigger");
   proc.forceRebuildMappings();
 
   InputID id{0, 20};
@@ -584,6 +586,30 @@ TEST_F(ReleaseBehaviorTest, Nothing_PressRelease_NoNoteOffOnRelease) {
 
   proc.processEvent(id, false); // Release - nothing should happen
   EXPECT_EQ(mockMidi.events.size(), 1u) << "No note off should be sent";
+}
+
+// Re-trigger (second down while note still on) must not send note off before
+// note on
+TEST_F(ReleaseBehaviorTest,
+       SustainUntilRetrigger_ReTrigger_NoNoteOffBeforeSecondNoteOn) {
+  addNoteMapping(20, 60, "Sustain until retrigger");
+  proc.forceRebuildMappings();
+
+  InputID id{0, 20};
+
+  proc.processEvent(id, true); // First down -> note on
+  ASSERT_EQ(mockMidi.events.size(), 1u);
+  EXPECT_TRUE(mockMidi.events[0].isNoteOn);
+  EXPECT_EQ(mockMidi.events[0].note, 60);
+
+  proc.processEvent(id, false); // Up -> no MIDI
+  EXPECT_EQ(mockMidi.events.size(), 1u);
+
+  proc.processEvent(id, true); // Second down -> note on only (no note off)
+  ASSERT_EQ(mockMidi.events.size(), 2u)
+      << "Only one extra event (Note On); no Note Off before it";
+  EXPECT_TRUE(mockMidi.events[1].isNoteOn);
+  EXPECT_EQ(mockMidi.events[1].note, 60);
 }
 
 TEST_F(ReleaseBehaviorTest,
@@ -1331,4 +1357,183 @@ TEST_F(NoteTypeTest, LegacyGlobalPitchDown_DecreasesChromaticByOne) {
   EXPECT_EQ(proc.getZoneManager().getGlobalChromaticTranspose(), 2)
       << "Legacy GlobalPitchDown should act as down 1 semitone";
   EXPECT_EQ(proc.getZoneManager().getGlobalDegreeTranspose(), 0);
+}
+
+// --- Touchpad mapping: Finger 1 Down -> Note sends Note On, release sends Note
+// Off ---
+TEST_F(InputProcessorTest, TouchpadFinger1DownSendsNoteOnThenNoteOff) {
+  MockMidiEngine mockEng;
+  VoiceManager voiceMgr(mockEng, settingsMgr);
+  InputProcessor proc(voiceMgr, presetMgr, deviceMgr, scaleLib, midiEng,
+                      settingsMgr);
+  presetMgr.getLayersList().removeAllChildren(nullptr);
+  presetMgr.ensureStaticLayers();
+  settingsMgr.setMidiModeActive(true);
+
+  // Add Touchpad mapping: Finger 1 Down -> Note C4 (60), Send Note Off on
+  // release
+  {
+    auto mappings = presetMgr.getMappingsListForLayer(0);
+    juce::ValueTree m("Mapping");
+    m.setProperty("inputAlias", "Touchpad", nullptr);
+    m.setProperty("inputTouchpadEvent", TouchpadEvent::Finger1Down, nullptr);
+    m.setProperty("type", "Note", nullptr);
+    m.setProperty("layerID", 0, nullptr);
+    m.setProperty("releaseBehavior", "Send Note Off", nullptr);
+    m.setProperty("channel", 1, nullptr);
+    m.setProperty("data1", 60, nullptr);
+    m.setProperty("data2", 127, nullptr);
+    mappings.addChild(m, -1, nullptr);
+  }
+
+  proc.initialize();
+  mockEng.clear();
+
+  uintptr_t deviceHandle = 0x1234;
+  // Finger down: one contact with tipDown = true
+  std::vector<TouchpadContact> downContacts = {{0, 100, 100, 0.5f, 0.5f, true}};
+  proc.processTouchpadContacts(deviceHandle, downContacts);
+
+  ASSERT_GE(mockEng.events.size(), 1u) << "Expected at least Note On";
+  EXPECT_TRUE(mockEng.events[0].isNoteOn);
+  EXPECT_EQ(mockEng.events[0].note, 60);
+  EXPECT_EQ(mockEng.events[0].channel, 1);
+
+  // Finger up: no contacts (or tipDown = false)
+  std::vector<TouchpadContact> upContacts = {{0, 100, 100, 0.5f, 0.5f, false}};
+  proc.processTouchpadContacts(deviceHandle, upContacts);
+
+  ASSERT_EQ(mockEng.events.size(), 2u) << "Expected Note On then Note Off";
+  EXPECT_FALSE(mockEng.events[1].isNoteOn);
+  EXPECT_EQ(mockEng.events[1].note, 60);
+  EXPECT_EQ(mockEng.events[1].channel, 1);
+}
+
+// Sustain until retrigger: note on on finger down, no note off on finger up
+TEST_F(InputProcessorTest,
+       TouchpadFinger1DownSustainUntilRetrigger_NoNoteOffOnRelease) {
+  MockMidiEngine mockEng;
+  VoiceManager voiceMgr(mockEng, settingsMgr);
+  InputProcessor proc(voiceMgr, presetMgr, deviceMgr, scaleLib, midiEng,
+                      settingsMgr);
+  presetMgr.getLayersList().removeAllChildren(nullptr);
+  presetMgr.ensureStaticLayers();
+  settingsMgr.setMidiModeActive(true);
+
+  {
+    auto mappings = presetMgr.getMappingsListForLayer(0);
+    juce::ValueTree m("Mapping");
+    m.setProperty("inputAlias", "Touchpad", nullptr);
+    m.setProperty("inputTouchpadEvent", TouchpadEvent::Finger1Down, nullptr);
+    m.setProperty("type", "Note", nullptr);
+    m.setProperty("releaseBehavior", "Sustain until retrigger", nullptr);
+    m.setProperty("layerID", 0, nullptr);
+    m.setProperty("channel", 1, nullptr);
+    m.setProperty("data1", 60, nullptr);
+    m.setProperty("data2", 127, nullptr);
+    mappings.addChild(m, -1, nullptr);
+  }
+
+  proc.initialize();
+  mockEng.clear();
+
+  uintptr_t deviceHandle = 0x1234;
+  std::vector<TouchpadContact> downContacts = {{0, 100, 100, 0.5f, 0.5f, true}};
+  proc.processTouchpadContacts(deviceHandle, downContacts);
+  std::vector<TouchpadContact> upContacts = {{0, 100, 100, 0.5f, 0.5f, false}};
+  proc.processTouchpadContacts(deviceHandle, upContacts);
+
+  EXPECT_EQ(mockEng.events.size(), 1u)
+      << "Sustain until retrigger: only Note On, no Note Off on release";
+  EXPECT_TRUE(mockEng.events[0].isNoteOn);
+}
+
+// Sustain until retrigger on touchpad: second finger down sends only Note On
+// (no Note Off)
+TEST_F(InputProcessorTest,
+       TouchpadSustainUntilRetrigger_ReTrigger_NoNoteOffBeforeSecondNoteOn) {
+  MockMidiEngine mockEng;
+  VoiceManager voiceMgr(mockEng, settingsMgr);
+  InputProcessor proc(voiceMgr, presetMgr, deviceMgr, scaleLib, midiEng,
+                      settingsMgr);
+  presetMgr.getLayersList().removeAllChildren(nullptr);
+  presetMgr.ensureStaticLayers();
+  settingsMgr.setMidiModeActive(true);
+
+  {
+    auto mappings = presetMgr.getMappingsListForLayer(0);
+    juce::ValueTree m("Mapping");
+    m.setProperty("inputAlias", "Touchpad", nullptr);
+    m.setProperty("inputTouchpadEvent", TouchpadEvent::Finger1Down, nullptr);
+    m.setProperty("type", "Note", nullptr);
+    m.setProperty("releaseBehavior", "Sustain until retrigger", nullptr);
+    m.setProperty("layerID", 0, nullptr);
+    m.setProperty("channel", 1, nullptr);
+    m.setProperty("data1", 60, nullptr);
+    m.setProperty("data2", 127, nullptr);
+    mappings.addChild(m, -1, nullptr);
+  }
+
+  proc.initialize();
+  mockEng.clear();
+
+  uintptr_t deviceHandle = 0x1234;
+  std::vector<TouchpadContact> down = {{0, 100, 100, 0.5f, 0.5f, true}};
+  std::vector<TouchpadContact> up = {{0, 100, 100, 0.5f, 0.5f, false}};
+
+  proc.processTouchpadContacts(deviceHandle, down);
+  ASSERT_EQ(mockEng.events.size(), 1u);
+  EXPECT_TRUE(mockEng.events[0].isNoteOn);
+
+  proc.processTouchpadContacts(deviceHandle, up);
+  EXPECT_EQ(mockEng.events.size(), 1u);
+
+  proc.processTouchpadContacts(deviceHandle, down); // Second down
+  ASSERT_EQ(mockEng.events.size(), 2u)
+      << "Re-trigger: only one extra Note On, no Note Off before it";
+  EXPECT_TRUE(mockEng.events[1].isNoteOn);
+  EXPECT_EQ(mockEng.events[1].note, 60);
+}
+
+// Finger 1 Up -> Note: trigger note when finger lifts (one-shot), no note off
+TEST_F(InputProcessorTest, TouchpadFinger1UpTriggersNoteOnOnly) {
+  MockMidiEngine mockEng;
+  VoiceManager voiceMgr(mockEng, settingsMgr);
+  InputProcessor proc(voiceMgr, presetMgr, deviceMgr, scaleLib, midiEng,
+                      settingsMgr);
+  presetMgr.getLayersList().removeAllChildren(nullptr);
+  presetMgr.ensureStaticLayers();
+  settingsMgr.setMidiModeActive(true);
+
+  {
+    auto mappings = presetMgr.getMappingsListForLayer(0);
+    juce::ValueTree m("Mapping");
+    m.setProperty("inputAlias", "Touchpad", nullptr);
+    m.setProperty("inputTouchpadEvent", TouchpadEvent::Finger1Up, nullptr);
+    m.setProperty("type", "Note", nullptr);
+    m.setProperty("releaseBehavior", "Sustain until retrigger", nullptr);
+    m.setProperty("layerID", 0, nullptr);
+    m.setProperty("channel", 1, nullptr);
+    m.setProperty("data1", 62, nullptr);
+    m.setProperty("data2", 127, nullptr);
+    mappings.addChild(m, -1, nullptr);
+  }
+
+  proc.initialize();
+  mockEng.clear();
+
+  uintptr_t deviceHandle = 0x1234;
+  // Frame 1: finger down (establishes prev.tip1 so frame 2 can detect
+  // finger1Up)
+  std::vector<TouchpadContact> downContacts = {{0, 100, 100, 0.5f, 0.5f, true}};
+  proc.processTouchpadContacts(deviceHandle, downContacts);
+  // Frame 2: finger up -> finger1Up true, triggers Note On for Finger 1 Up
+  // mapping
+  std::vector<TouchpadContact> upContacts = {{0, 100, 100, 0.5f, 0.5f, false}};
+  proc.processTouchpadContacts(deviceHandle, upContacts);
+
+  ASSERT_EQ(mockEng.events.size(), 1u)
+      << "Finger 1 Up -> Note: one Note On when finger lifts";
+  EXPECT_TRUE(mockEng.events[0].isNoteOn);
+  EXPECT_EQ(mockEng.events[0].note, 62);
 }
