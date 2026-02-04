@@ -2,19 +2,19 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "Debug OmniKey (CodeLLDB)",
+            "name": "Debug MIDIQy (CodeLLDB)",
             "type": "lldb",
             "request": "launch",
-            "program": "${workspaceFolder}/build/OmniKey_artefacts/Debug/OmniKey.exe",
+            "program": "${workspaceFolder}/build/MIDIQy_artefacts/Debug/MIDIQy.exe",
             "args": [],
             "cwd": "${workspaceFolder}",
             "preLaunchTask": "build-debug"
         },
         {
-            "name": "Run OmniKey",
+            "name": "Run MIDIQy",
             "type": "cppdbg",
             "request": "launch",
-            "program": "${workspaceFolder}/build/OmniKey_artefacts/Debug/OmniKey.exe",
+            "program": "${workspaceFolder}/build/MIDIQy_artefacts/Debug/MIDIQy.exe",
             "args": [],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}",
@@ -24,10 +24,10 @@
             "noDebug": true
         },
         {
-            "name": "Debug OmniKey (GDB)",
+            "name": "Debug MIDIQy (GDB)",
             "type": "cppdbg",
             "request": "launch",
-            "program": "${workspaceFolder}/build/OmniKey_artefacts/Debug/OmniKey.exe",
+            "program": "${workspaceFolder}/build/MIDIQy_artefacts/Debug/MIDIQy.exe",
             "args": [],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}",
@@ -45,10 +45,10 @@
             "preLaunchTask": "build-debug"
         },
         {
-            "name": "Debug OmniKey (VS Code - cppvsdbg)",
+            "name": "Debug MIDIQy (VS Code - cppvsdbg)",
             "type": "cppvsdbg",
             "request": "launch",
-            "program": "${workspaceFolder}/build/OmniKey_artefacts/Debug/OmniKey.exe",
+            "program": "${workspaceFolder}/build/MIDIQy_artefacts/Debug/MIDIQy.exe",
             "args": [],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}",

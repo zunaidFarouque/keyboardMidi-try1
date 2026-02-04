@@ -910,14 +910,33 @@ void MainComponent::timerCallback() {
     }
   }
 
-  // Main window refresh: no updates when minimized (enforced 30 FPS cap)
+  // Main window visibility: when minimized, stop all visualization timers (zero CPU)
   bool isMinimized = false;
   if (auto *top = getTopLevelComponent()) {
     if (auto *peer = top->getPeer())
       isMinimized = peer->isMinimised();
   }
-  if (isMinimized)
+
+  if (restoreCheckMode_) {
+    // Slow poll: only restart refresh timers when window is visible again
+    if (!isMinimized) {
+      restoreCheckMode_ = false;
+      stopTimer();
+      startTimer(settingsManager.getWindowRefreshIntervalMs());
+      if (visualizer)
+        visualizer->restartTimerWithInterval(
+            settingsManager.getWindowRefreshIntervalMs());
+    }
     return;
+  }
+  if (isMinimized) {
+    restoreCheckMode_ = true;
+    stopTimer();
+    if (visualizer)
+      visualizer->stopTimer();
+    startTimer(1000); // check once per second until restored
+    return;
+  }
 
   // 1. Swap Queue (Thread Safe)
   std::vector<PendingEvent> tempQueue;

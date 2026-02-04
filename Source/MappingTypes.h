@@ -33,7 +33,7 @@ enum class PolyphonyMode {
 
 // Command IDs for ActionType::Command (stored in MidiAction::data1)
 // In namespace to avoid clash with juce::CommandID
-namespace OmniKey {
+namespace MIDIQy {
 enum class CommandID : int {
   SustainMomentary = 0, // Press=On, Release=Off
   SustainToggle = 1,    // Press=Flip

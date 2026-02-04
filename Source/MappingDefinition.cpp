@@ -35,7 +35,7 @@ juce::String MappingDefinition::getTypeName(ActionType type) {
 }
 
 std::map<int, juce::String> MappingDefinition::getCommandOptions() {
-  using Cmd = OmniKey::CommandID;
+  using Cmd = MIDIQy::CommandID;
   return {
       {static_cast<int>(Cmd::SustainMomentary), "Hold to sustain"},
       {static_cast<int>(Cmd::SustainToggle), "Toggle sustain"},
@@ -517,8 +517,8 @@ InspectorSchema MappingDefinition::getSchema(const juce::ValueTree &mapping,
 
     cmdId = (int)mapping.getProperty("data1", 0);
     const int layerMomentary =
-        static_cast<int>(OmniKey::CommandID::LayerMomentary);
-    const int layerToggle = static_cast<int>(OmniKey::CommandID::LayerToggle);
+        static_cast<int>(MIDIQy::CommandID::LayerMomentary);
+    const int layerToggle = static_cast<int>(MIDIQy::CommandID::LayerToggle);
 
     if (isLayer || cmdId == layerMomentary || cmdId == layerToggle) {
       InspectorControl data2;
@@ -528,7 +528,7 @@ InspectorSchema MappingDefinition::getSchema(const juce::ValueTree &mapping,
       data2.options = getLayerOptions();
       schema.push_back(data2);
     }
-    const int latchToggle = static_cast<int>(OmniKey::CommandID::LatchToggle);
+    const int latchToggle = static_cast<int>(MIDIQy::CommandID::LatchToggle);
     if (cmdId == latchToggle) {
       InspectorControl releaseLatched;
       releaseLatched.propertyId = "releaseLatchedOnToggleOff";
@@ -536,8 +536,8 @@ InspectorSchema MappingDefinition::getSchema(const juce::ValueTree &mapping,
       releaseLatched.controlType = InspectorControl::Type::Toggle;
       schema.push_back(releaseLatched);
     }
-    const int panic = static_cast<int>(OmniKey::CommandID::Panic);
-    const int panicLatch = static_cast<int>(OmniKey::CommandID::PanicLatch);
+    const int panic = static_cast<int>(MIDIQy::CommandID::Panic);
+    const int panicLatch = static_cast<int>(MIDIQy::CommandID::PanicLatch);
     if (cmdId == panic || cmdId == panicLatch) {
       InspectorControl panicMode;
       panicMode.propertyId = "panicMode"; // Virtual: maps to data1=4, data2
@@ -548,9 +548,9 @@ InspectorSchema MappingDefinition::getSchema(const juce::ValueTree &mapping,
       panicMode.options[3] = "Panic chords";
       schema.push_back(panicMode);
     }
-    const int transpose = static_cast<int>(OmniKey::CommandID::Transpose);
+    const int transpose = static_cast<int>(MIDIQy::CommandID::Transpose);
     const int globalPitchDown =
-        static_cast<int>(OmniKey::CommandID::GlobalPitchDown);
+        static_cast<int>(MIDIQy::CommandID::GlobalPitchDown);
     if (cmdId == transpose || cmdId == globalPitchDown) {
       schema.push_back(
           createSeparator("Transpose", juce::Justification::centredLeft));

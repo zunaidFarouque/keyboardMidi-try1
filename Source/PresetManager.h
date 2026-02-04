@@ -31,7 +31,7 @@ public:
   void endTransaction();
 
 private:
-  juce::ValueTree rootNode{"OmniKeyPreset"};
+  juce::ValueTree rootNode{"MIDIQyPreset"};
   std::atomic<bool> isLoading{false};
 
   // Migration helper: Convert old flat structure to new hierarchy

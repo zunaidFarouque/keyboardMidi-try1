@@ -296,7 +296,7 @@ TEST_F(InputProcessorTest, HoldLayerAndPlayNote) {
                   juce::String::toHexString((juce::int64)0).toUpperCase(),
                   nullptr);
     m.setProperty("type", "Command", nullptr);
-    m.setProperty("data1", (int)OmniKey::CommandID::LayerMomentary, nullptr);
+    m.setProperty("data1", (int)MIDIQy::CommandID::LayerMomentary, nullptr);
     m.setProperty("data2", 1, nullptr); // Target Layer 1
     m.setProperty("layerID", 0, nullptr);
     mappings.addChild(m, -1, nullptr);
@@ -368,7 +368,7 @@ TEST_F(InputProcessorTest, DeviceSpecificLayerSwitching) {
         nullptr);
     m.setProperty("inputAlias", "TestDevice", nullptr);
     m.setProperty("type", "Command", nullptr);
-    m.setProperty("data1", (int)OmniKey::CommandID::LayerMomentary, nullptr);
+    m.setProperty("data1", (int)MIDIQy::CommandID::LayerMomentary, nullptr);
     m.setProperty("data2", 1, nullptr);
     m.setProperty("layerID", 0, nullptr);
     mappings.addChild(m, -1, nullptr);
@@ -446,7 +446,7 @@ TEST_F(InputProcessorTest, LayerToggleSwitching) {
                   juce::String::toHexString((juce::int64)0).toUpperCase(),
                   nullptr);
     m.setProperty("type", "Command", nullptr);
-    m.setProperty("data1", (int)OmniKey::CommandID::LayerToggle, nullptr);
+    m.setProperty("data1", (int)MIDIQy::CommandID::LayerToggle, nullptr);
     m.setProperty("data2", 1, nullptr);
     m.setProperty("layerID", 0, nullptr);
     mappings.addChild(m, -1, nullptr);
@@ -506,7 +506,7 @@ TEST_F(InputProcessorTest, MomentaryRefCountMultipleKeys) {
                     juce::String::toHexString((juce::int64)0).toUpperCase(),
                     nullptr);
       m.setProperty("type", "Command", nullptr);
-      m.setProperty("data1", (int)OmniKey::CommandID::LayerMomentary, nullptr);
+      m.setProperty("data1", (int)MIDIQy::CommandID::LayerMomentary, nullptr);
       m.setProperty("data2", 1, nullptr);
       m.setProperty("layerID", 0, nullptr);
       mappings.addChild(m, -1, nullptr);
@@ -560,7 +560,7 @@ TEST_F(InputProcessorTest, MomentaryChain_Handover_StaysInLayer2) {
                   juce::String::toHexString((juce::int64)0).toUpperCase(),
                   nullptr);
     m.setProperty("type", "Command", nullptr);
-    m.setProperty("data1", (int)OmniKey::CommandID::LayerMomentary, nullptr);
+    m.setProperty("data1", (int)MIDIQy::CommandID::LayerMomentary, nullptr);
     m.setProperty("data2", 1, nullptr);
     m.setProperty("layerID", 0, nullptr);
     mappings.addChild(m, -1, nullptr);
@@ -573,7 +573,7 @@ TEST_F(InputProcessorTest, MomentaryChain_Handover_StaysInLayer2) {
                   juce::String::toHexString((juce::int64)0).toUpperCase(),
                   nullptr);
     m.setProperty("type", "Command", nullptr);
-    m.setProperty("data1", (int)OmniKey::CommandID::LayerMomentary, nullptr);
+    m.setProperty("data1", (int)MIDIQy::CommandID::LayerMomentary, nullptr);
     m.setProperty("data2", 2, nullptr);
     m.setProperty("layerID", 1, nullptr);
     mappings.addChild(m, -1, nullptr);
@@ -600,7 +600,7 @@ TEST_F(InputProcessorTest, MomentaryChain_FreeFall_DropsToLayer0) {
                   juce::String::toHexString((juce::int64)0).toUpperCase(),
                   nullptr);
     m.setProperty("type", "Command", nullptr);
-    m.setProperty("data1", (int)OmniKey::CommandID::LayerMomentary, nullptr);
+    m.setProperty("data1", (int)MIDIQy::CommandID::LayerMomentary, nullptr);
     m.setProperty("data2", 1, nullptr);
     m.setProperty("layerID", 0, nullptr);
     mappings.addChild(m, -1, nullptr);
@@ -613,7 +613,7 @@ TEST_F(InputProcessorTest, MomentaryChain_FreeFall_DropsToLayer0) {
                   juce::String::toHexString((juce::int64)0).toUpperCase(),
                   nullptr);
     m.setProperty("type", "Command", nullptr);
-    m.setProperty("data1", (int)OmniKey::CommandID::LayerMomentary, nullptr);
+    m.setProperty("data1", (int)MIDIQy::CommandID::LayerMomentary, nullptr);
     m.setProperty("data2", 2, nullptr);
     m.setProperty("layerID", 1, nullptr);
     mappings.addChild(m, -1, nullptr);
@@ -655,7 +655,7 @@ TEST_F(InputProcessorTest, StudioModeOffIgnoresDeviceMappings) {
         nullptr);
     m.setProperty("inputAlias", "TestDevice", nullptr);
     m.setProperty("type", "Command", nullptr);
-    m.setProperty("data1", (int)OmniKey::CommandID::LayerMomentary, nullptr);
+    m.setProperty("data1", (int)MIDIQy::CommandID::LayerMomentary, nullptr);
     m.setProperty("data2", 1, nullptr);
     m.setProperty("layerID", 0, nullptr);
     mappings.addChild(m, -1, nullptr);
@@ -1094,7 +1094,7 @@ TEST_F(NoteTypeTest, MomentaryChain_PhantomKey_ReleaseDoesNotTriggerNote) {
                    juce::String::toHexString((juce::int64)0).toUpperCase(),
                    nullptr);
     m1.setProperty("type", "Command", nullptr);
-    m1.setProperty("data1", (int)OmniKey::CommandID::LayerMomentary, nullptr);
+    m1.setProperty("data1", (int)MIDIQy::CommandID::LayerMomentary, nullptr);
     m1.setProperty("data2", 1, nullptr);
     m1.setProperty("layerID", 0, nullptr);
     mappings.addChild(m1, -1, nullptr);
@@ -1119,7 +1119,7 @@ TEST_F(NoteTypeTest, MomentaryChain_PhantomKey_ReleaseDoesNotTriggerNote) {
                   juce::String::toHexString((juce::int64)0).toUpperCase(),
                   nullptr);
     m.setProperty("type", "Command", nullptr);
-    m.setProperty("data1", (int)OmniKey::CommandID::LayerMomentary, nullptr);
+    m.setProperty("data1", (int)MIDIQy::CommandID::LayerMomentary, nullptr);
     m.setProperty("data2", 2, nullptr);
     m.setProperty("layerID", 1, nullptr);
     mappings.addChild(m, -1, nullptr);
@@ -1420,7 +1420,7 @@ void addTransposeMapping(juce::ValueTree &mappings, int inputKey,
                 juce::String::toHexString((juce::int64)0).toUpperCase(),
                 nullptr);
   m.setProperty("type", "Command", nullptr);
-  m.setProperty("data1", static_cast<int>(OmniKey::CommandID::Transpose),
+  m.setProperty("data1", static_cast<int>(MIDIQy::CommandID::Transpose),
                 nullptr);
   m.setProperty("transposeModify", transposeModify, nullptr);
   m.setProperty("transposeSemitones", transposeSemitones, nullptr);
@@ -1523,7 +1523,7 @@ TEST_F(NoteTypeTest, LegacyGlobalPitchDown_DecreasesChromaticByOne) {
                 juce::String::toHexString((juce::int64)0).toUpperCase(),
                 nullptr);
   m.setProperty("type", "Command", nullptr);
-  m.setProperty("data1", static_cast<int>(OmniKey::CommandID::GlobalPitchDown),
+  m.setProperty("data1", static_cast<int>(MIDIQy::CommandID::GlobalPitchDown),
                 nullptr);
   m.setProperty("layerID", 0, nullptr);
   mappings.addChild(m, -1, nullptr);

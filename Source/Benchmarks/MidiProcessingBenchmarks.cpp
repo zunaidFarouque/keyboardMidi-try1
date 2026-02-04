@@ -189,7 +189,7 @@ BENCHMARK_REGISTER_F(MidiBenchmarkFixture, Layer_AllActive)
 // Layer momentary press + release cycle
 BENCHMARK_DEFINE_F(MidiBenchmarkFixture, Layer_MomentarySwitch)
 (benchmark::State &state) {
-  addCommandMapping(0, 81, static_cast<int>(OmniKey::CommandID::LayerMomentary),
+  addCommandMapping(0, 81, static_cast<int>(MIDIQy::CommandID::LayerMomentary),
                     1);
   proc.forceRebuildMappings();
 
@@ -205,7 +205,7 @@ BENCHMARK_REGISTER_F(MidiBenchmarkFixture, Layer_MomentarySwitch)
 // Layer toggle command
 BENCHMARK_DEFINE_F(MidiBenchmarkFixture, Layer_Toggle)
 (benchmark::State &state) {
-  addCommandMapping(0, 81, static_cast<int>(OmniKey::CommandID::LayerToggle),
+  addCommandMapping(0, 81, static_cast<int>(MIDIQy::CommandID::LayerToggle),
                     1);
   proc.forceRebuildMappings();
 
@@ -223,7 +223,7 @@ BENCHMARK_REGISTER_F(MidiBenchmarkFixture, Layer_Toggle)
 // Transpose command processing
 BENCHMARK_DEFINE_F(MidiBenchmarkFixture, Command_Transpose)
 (benchmark::State &state) {
-  addCommandMapping(0, 81, static_cast<int>(OmniKey::CommandID::Transpose), 0);
+  addCommandMapping(0, 81, static_cast<int>(MIDIQy::CommandID::Transpose), 0);
   proc.forceRebuildMappings();
 
   InputID input{0, 81};
@@ -242,7 +242,7 @@ BENCHMARK_DEFINE_F(MidiBenchmarkFixture, Command_Panic)
   for (int i = 0; i < 5; ++i) {
     addNoteMapping(0, 70 + i, 60 + i, 100, 1);
   }
-  addCommandMapping(0, 81, static_cast<int>(OmniKey::CommandID::Panic), 0);
+  addCommandMapping(0, 81, static_cast<int>(MIDIQy::CommandID::Panic), 0);
   proc.forceRebuildMappings();
   mockMidi.clear();
 
@@ -650,7 +650,7 @@ BENCHMARK_REGISTER_F(MidiBenchmarkFixture, Stress_PolyChords_10Keys)
 // Rapid layer toggling while playing notes
 BENCHMARK_DEFINE_F(MidiBenchmarkFixture, Stress_RapidLayerSwitch)
 (benchmark::State &state) {
-  addCommandMapping(0, 70, static_cast<int>(OmniKey::CommandID::LayerToggle),
+  addCommandMapping(0, 70, static_cast<int>(MIDIQy::CommandID::LayerToggle),
                     1);
   addNoteMapping(0, 81, 60, 100, 1);
   addNoteMapping(1, 81, 72, 100, 1); // Different note on layer 1

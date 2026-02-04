@@ -110,7 +110,7 @@ TEST(MappingDefinitionTest, SchemaGeneration) {
 TEST(MappingDefinitionTest, CommandContext) {
   juce::ValueTree mapping("Mapping");
   mapping.setProperty("type", "Command", nullptr);
-  mapping.setProperty("data1", (int)OmniKey::CommandID::LayerMomentary,
+  mapping.setProperty("data1", (int)MIDIQy::CommandID::LayerMomentary,
                       nullptr);
 
   InspectorSchema schema = MappingDefinition::getSchema(mapping);

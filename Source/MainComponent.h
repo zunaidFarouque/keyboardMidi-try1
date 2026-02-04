@@ -104,8 +104,9 @@ private:
   // 10. Quick Setup Wizard (Phase 9.6)
   QuickSetupWizard setupWizard;
 
-  // Main window refresh: capped at 30 FPS; no updates when minimized
+  // Main window refresh: capped at 30 FPS; timers stopped when minimized
   static constexpr int kMainWindowRefreshIntervalMs = 34; // 1000/30 rounded up
+  bool restoreCheckMode_ = false; // when true, timer runs at 1s to restart when visible
 
   // Async logging: Input thread pushes POD only; timer processes batches
   // (Phase 21.1)

@@ -1,7 +1,7 @@
 #include "SettingsManager.h"
 
 SettingsManager::SettingsManager() {
-  rootNode = juce::ValueTree("OmniKeySettings");
+  rootNode = juce::ValueTree("MIDIQySettings");
   rootNode.setProperty("pitchBendRange", 12, nullptr);
   rootNode.setProperty("midiModeActive", false, nullptr);
   rootNode.setProperty("toggleKeyCode", 0x91, nullptr);          // VK_SCROLL
@@ -173,7 +173,7 @@ void SettingsManager::loadFromXml(juce::File file) {
       rootNode = juce::ValueTree::fromXml(*xml);
       if (!rootNode.isValid()) {
         // If load failed, reset to defaults
-        rootNode = juce::ValueTree("OmniKeySettings");
+        rootNode = juce::ValueTree("MIDIQySettings");
         rootNode.setProperty("pitchBendRange", 12, nullptr);
         rootNode.setProperty("midiModeActive", false, nullptr);
         rootNode.setProperty("toggleKeyCode", 0x91, nullptr);

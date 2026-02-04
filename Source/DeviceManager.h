@@ -71,7 +71,7 @@ public:
   static juce::File getPortableDataDirectory();
 
 private:
-  juce::ValueTree globalConfig{"OmniKeyConfig"};
+  juce::ValueTree globalConfig{"MIDIQyConfig"};
 
   // Phase 46: live devices that are not assigned to any alias
   std::vector<uintptr_t> unassignedDevices;

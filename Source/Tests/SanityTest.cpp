@@ -8,7 +8,7 @@ TEST(SanityCheck, MathWorks) { EXPECT_EQ(1 + 1, 2); }
 
 // 2. Core Linkage Check (Dependency Test)
 TEST(SanityCheck, CanAccessCoreEnums) {
-  // Just verify we can use types defined in OmniKey_Core
+  // Just verify we can use types defined in MIDIQy_Core
   ActionType t = ActionType::Note;
   EXPECT_EQ(t, ActionType::Note);
 }

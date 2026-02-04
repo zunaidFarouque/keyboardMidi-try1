@@ -351,11 +351,11 @@ void DeviceManager::loadConfig() {
     if (auto xml = juce::parseXML(file)) {
       globalConfig = juce::ValueTree::fromXml(*xml);
       if (!globalConfig.isValid()) {
-        globalConfig = juce::ValueTree("OmniKeyConfig");
+        globalConfig = juce::ValueTree("MIDIQyConfig");
       }
     }
   } else {
-    globalConfig = juce::ValueTree("OmniKeyConfig");
+    globalConfig = juce::ValueTree("MIDIQyConfig");
   }
 
   rebuildAliasCache();

@@ -1,4 +1,4 @@
-# 🧠 OmniKey Architecture Codex
+# 🧠 MIDIQy Architecture Codex
 **Current Phase:** Phase 48 (Layer System & UI Polish completed).
 **Tech Stack:** C++20, JUCE 8, CMake, Win32 API.
 
@@ -20,7 +20,7 @@
 ### 2. Device Management (`DeviceManager`)
 *   **Aliases:** Maps specific Hardware IDs to Logical Names ("Laptop", "External").
 *   **Hygiene:** `validateConnectedDevices` removes unplugged hardware from memory to prevent "Zombie IDs".
-*   **Storage:** Saves to `%APPDATA%/OmniKey/OmniKeyConfig.xml`.
+*   **Storage:** Saves to `%APPDATA%/MIDIQy/MIDIQyConfig.xml`.
 
 ### 3. The Engine (`InputProcessor`)
 *   **Layer Stack:** 9 Static Layers (0=Base, 1-8=Overlay).

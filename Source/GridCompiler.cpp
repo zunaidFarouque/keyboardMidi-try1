@@ -137,7 +137,7 @@ juce::Colour getColorForType(ActionType type,
 
 // Human-readable name for a CommandID (fallbacks to numeric if unknown).
 juce::String getCommandLabel(int cmdId) {
-  using OmniKey::CommandID;
+  using MIDIQy::CommandID;
   switch (static_cast<CommandID>(cmdId)) {
   case CommandID::SustainMomentary:
     return "Sustain (Hold)";
@@ -185,10 +185,10 @@ juce::String makeLabelForAction(const MidiAction &action) {
   }
   case ActionType::Command: {
     juce::String base = getCommandLabel(action.data1);
-    if (action.data1 == static_cast<int>(OmniKey::CommandID::Panic) &&
+    if (action.data1 == static_cast<int>(MIDIQy::CommandID::Panic) &&
         action.data2 == 1)
       return "Panic (Latch)";
-    if (action.data1 == static_cast<int>(OmniKey::CommandID::Panic) &&
+    if (action.data1 == static_cast<int>(MIDIQy::CommandID::Panic) &&
         action.data2 == 2)
       return "Panic (Chords)";
     return base;
@@ -469,8 +469,8 @@ static bool isLayerCommand(const MidiAction &action) {
   if (action.type != ActionType::Command)
     return false;
   const int cmd = action.data1;
-  return (cmd == static_cast<int>(OmniKey::CommandID::LayerMomentary) ||
-          cmd == static_cast<int>(OmniKey::CommandID::LayerToggle));
+  return (cmd == static_cast<int>(MIDIQy::CommandID::LayerMomentary) ||
+          cmd == static_cast<int>(MIDIQy::CommandID::LayerToggle));
 }
 
 static bool isTouchpadEventBoolean(int eventId) {
@@ -759,22 +759,22 @@ void compileMappingsForLayer(
 
     // Latch Toggle: release latched notes when toggling off
     if (action.type == ActionType::Command &&
-        action.data1 == static_cast<int>(OmniKey::CommandID::LatchToggle)) {
+        action.data1 == static_cast<int>(MIDIQy::CommandID::LatchToggle)) {
       action.releaseLatchedOnLatchToggleOff =
           (bool)mapping.getProperty("releaseLatchedOnToggleOff", true);
     }
 
     // Transpose command: mode, modify, semitones (for set)
     if (action.type == ActionType::Command &&
-        (action.data1 == static_cast<int>(OmniKey::CommandID::Transpose) ||
+        (action.data1 == static_cast<int>(MIDIQy::CommandID::Transpose) ||
          action.data1 ==
-             static_cast<int>(OmniKey::CommandID::GlobalPitchDown))) {
+             static_cast<int>(MIDIQy::CommandID::GlobalPitchDown))) {
       juce::String modeStr =
           mapping.getProperty("transposeMode", "Global").toString();
       action.transposeLocal = modeStr.equalsIgnoreCase("Local");
       int modify = (int)mapping.getProperty("transposeModify", 0);
       if (action.data1 ==
-          static_cast<int>(OmniKey::CommandID::GlobalPitchDown)) {
+          static_cast<int>(MIDIQy::CommandID::GlobalPitchDown)) {
         modify = 1; // Legacy: down 1 semitone
       }
       action.transposeModify = juce::jlimit(0, 4, modify);

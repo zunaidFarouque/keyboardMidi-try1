@@ -1,9 +1,9 @@
 #include "MainComponent.h"
 #include <JuceHeader.h>
 
-class OmniKeyApplication : public juce::JUCEApplication {
+class MIDIQyApplication : public juce::JUCEApplication {
 public:
-  OmniKeyApplication() {}
+  MIDIQyApplication() {}
   const juce::String getApplicationName() override { return "MIDIQy"; }
   const juce::String getApplicationVersion() override { return "1.0.0"; }
   bool moreThanOneInstanceAllowed() override { return true; }
@@ -43,4 +43,4 @@ private:
   std::unique_ptr<MainWindow> mainWindow;
 };
 
-START_JUCE_APPLICATION(OmniKeyApplication)
+START_JUCE_APPLICATION(MIDIQyApplication)

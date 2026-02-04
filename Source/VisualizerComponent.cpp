@@ -989,7 +989,8 @@ void VisualizerComponent::restartTimerWithInterval(int intervalMs) {
 }
 
 void VisualizerComponent::timerCallback() {
-  // Main window refresh: no updates when minimized (enforced 30 FPS cap)
+  // Safeguard: timer is normally stopped when minimized (MainComponent); skip
+  // work if ever called while minimized
   if (auto *topLevel = getTopLevelComponent()) {
     if (auto *peer = topLevel->getPeer()) {
       if (peer->isMinimised())

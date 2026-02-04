@@ -262,7 +262,7 @@ TEST_F(GridCompilerTest, ZoneCompilesToChordPool) {
 // Key 10 on Layer 0 is the command; Layer 1 should show Empty for that key.
 TEST_F(GridCompilerTest, LayerCommandsAreNotInherited) {
   addCommandMapping(0, 10, 0,
-                    static_cast<int>(OmniKey::CommandID::LayerMomentary), 1);
+                    static_cast<int>(MIDIQy::CommandID::LayerMomentary), 1);
 
   auto context =
       GridCompiler::compile(presetMgr, deviceMgr, zoneMgr, settingsMgr);
@@ -276,7 +276,7 @@ TEST_F(GridCompilerTest, LayerCommandsAreNotInherited) {
 
 // Phase 53.5: LayerToggle must not be inherited (same filter as LayerMomentary)
 TEST_F(GridCompilerTest, LayerToggleNotInherited) {
-  addCommandMapping(0, 11, 0, static_cast<int>(OmniKey::CommandID::LayerToggle),
+  addCommandMapping(0, 11, 0, static_cast<int>(MIDIQy::CommandID::LayerToggle),
                     1);
 
   auto context =

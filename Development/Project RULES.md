@@ -37,7 +37,7 @@ We have successfully implemented Phases 1 through 4. The codebase is fully funct
 ### 4. CMake Management
 *   **Rule:** Every time you create a new `.cpp` file, you **must** provide the snippet to add it to `target_sources` in `CMakeLists.txt`.
 *   **Rule:** `NOMINMAX` and `WIN32_LEAN_AND_MEAN` are defined globally in CMake. **Do not** add them to `.cpp` files.
-*   **Rule:** Always ensure `juce_generate_juce_header(OmniKey)` is present.
+*   **Rule:** Always ensure `juce_generate_juce_header(MIDIQy)` is present.
 
 ### 5. Thread Safety
 *   **Rule:** The `InputProcessor` map is accessed by the **UI Thread** (writes) and the **Input Thread** (reads). You must maintain the `juce::ReadWriteLock` usage pattern established in Phase 4.

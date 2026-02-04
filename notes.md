@@ -1,4 +1,4 @@
-# 📝 OmniKey Project Architecture & Rules
+# 📝 MIDIQy Project Architecture & Rules
 
 **Context:** C++20, JUCE Framework, Windows 10/11 (Win32 API).
 **Current State:** Phase 1 Complete (Raw Input hooked successfully via `WM_INPUT`).
@@ -34,11 +34,11 @@
 ### CMakeLists.txt Configuration
 *   **Generator:** Visual Studio 17 2022 (or 18 2026).
 *   **Platform:** x64.
-*   **Required Command:** `juce_generate_juce_header(OmniKey)` must remain to generate `JuceHeader.h`.
+*   **Required Command:** `juce_generate_juce_header(MIDIQy)` must remain to generate `JuceHeader.h`.
 *   **Definitions:** `NOMINMAX` and `WIN32_LEAN_AND_MEAN` are defined globally in CMake. **Do not** add them manually to `.cpp` files to avoid redefinition warnings.
 
 ```cmake
-target_compile_definitions(OmniKey PRIVATE
+target_compile_definitions(MIDIQy PRIVATE
     NOMINMAX
     WIN32_LEAN_AND_MEAN
 )

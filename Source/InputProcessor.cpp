@@ -96,7 +96,7 @@ void InputProcessor::changeListenerCallback(juce::ChangeBroadcaster *source) {
 // otherwise default = OFF and clear sustain state
 static bool hasSustainInverseMapped(PresetManager &presetMgr) {
   const int sustainInverse =
-      static_cast<int>(OmniKey::CommandID::SustainInverse);
+      static_cast<int>(MIDIQy::CommandID::SustainInverse);
   for (int layer = 0; layer < 9; ++layer) {
     auto mappings = presetMgr.getMappingsListForLayer(layer);
     for (int i = 0; i < mappings.getNumChildren(); ++i) {
@@ -497,7 +497,7 @@ void InputProcessor::processEvent(InputID input, bool isDown) {
         // Key-up handling
         if (midiAction.type == ActionType::Command) {
           int cmd = midiAction.data1;
-          if (cmd == static_cast<int>(OmniKey::CommandID::LayerMomentary)) {
+          if (cmd == static_cast<int>(MIDIQy::CommandID::LayerMomentary)) {
             int target = juce::jlimit(0, 8, midiAction.data2);
             {
               juce::ScopedLock sl(stateLock);
@@ -507,9 +507,9 @@ void InputProcessor::processEvent(InputID input, bool isDown) {
             }
             return;
           }
-          if (cmd == static_cast<int>(OmniKey::CommandID::SustainMomentary))
+          if (cmd == static_cast<int>(MIDIQy::CommandID::SustainMomentary))
             voiceManager.setSustain(false);
-          else if (cmd == static_cast<int>(OmniKey::CommandID::SustainInverse))
+          else if (cmd == static_cast<int>(MIDIQy::CommandID::SustainInverse))
             voiceManager.setSustain(true);
         }
         if (midiAction.type == ActionType::Expression) {
@@ -580,7 +580,7 @@ void InputProcessor::processEvent(InputID input, bool isDown) {
       if (midiAction.type == ActionType::Command) {
         int cmd = midiAction.data1;
         int layerId = midiAction.data2;
-        if (cmd == static_cast<int>(OmniKey::CommandID::LayerMomentary)) {
+        if (cmd == static_cast<int>(MIDIQy::CommandID::LayerMomentary)) {
           int target = juce::jlimit(0, 8, midiAction.data2);
           {
             juce::ScopedLock sl(stateLock);
@@ -590,7 +590,7 @@ void InputProcessor::processEvent(InputID input, bool isDown) {
           }
           return;
         }
-        if (cmd == static_cast<int>(OmniKey::CommandID::LayerToggle)) {
+        if (cmd == static_cast<int>(MIDIQy::CommandID::LayerToggle)) {
           if (isDown) {
             int target = juce::jlimit(0, 8, layerId);
             {
@@ -603,19 +603,19 @@ void InputProcessor::processEvent(InputID input, bool isDown) {
           }
           return;
         }
-        if (cmd == static_cast<int>(OmniKey::CommandID::SustainMomentary))
+        if (cmd == static_cast<int>(MIDIQy::CommandID::SustainMomentary))
           voiceManager.setSustain(true);
-        else if (cmd == static_cast<int>(OmniKey::CommandID::SustainToggle))
+        else if (cmd == static_cast<int>(MIDIQy::CommandID::SustainToggle))
           voiceManager.setSustain(!voiceManager.isSustainActive());
-        else if (cmd == static_cast<int>(OmniKey::CommandID::SustainInverse))
+        else if (cmd == static_cast<int>(MIDIQy::CommandID::SustainInverse))
           voiceManager.setSustain(false);
-        else if (cmd == static_cast<int>(OmniKey::CommandID::LatchToggle)) {
+        else if (cmd == static_cast<int>(MIDIQy::CommandID::LatchToggle)) {
           bool wasActive = voiceManager.isLatchActive();
           voiceManager.setLatch(!wasActive);
           if (wasActive && !voiceManager.isLatchActive() &&
               midiAction.releaseLatchedOnLatchToggleOff)
             voiceManager.panicLatch();
-        } else if (cmd == static_cast<int>(OmniKey::CommandID::Panic)) {
+        } else if (cmd == static_cast<int>(MIDIQy::CommandID::Panic)) {
           if (midiAction.data2 == 1)
             voiceManager.panicLatch();
           else if (midiAction.data2 == 2) {
@@ -627,15 +627,15 @@ void InputProcessor::processEvent(InputID input, bool isDown) {
             }
           } else
             voiceManager.panic();
-        } else if (cmd == static_cast<int>(OmniKey::CommandID::PanicLatch)) {
+        } else if (cmd == static_cast<int>(MIDIQy::CommandID::PanicLatch)) {
           voiceManager.panicLatch(); // Backward compat: old Panic Latch mapping
-        } else if (cmd == static_cast<int>(OmniKey::CommandID::Transpose) ||
+        } else if (cmd == static_cast<int>(MIDIQy::CommandID::Transpose) ||
                    cmd ==
-                       static_cast<int>(OmniKey::CommandID::GlobalPitchDown)) {
+                       static_cast<int>(MIDIQy::CommandID::GlobalPitchDown)) {
           int chrom = zoneManager.getGlobalChromaticTranspose();
           int deg = zoneManager.getGlobalDegreeTranspose();
           int modify = midiAction.transposeModify;
-          if (cmd == static_cast<int>(OmniKey::CommandID::GlobalPitchDown))
+          if (cmd == static_cast<int>(MIDIQy::CommandID::GlobalPitchDown))
             modify = 1; // Legacy
           switch (modify) {
           case 0:
@@ -660,12 +660,12 @@ void InputProcessor::processEvent(InputID input, bool isDown) {
           zoneManager.setGlobalTranspose(chrom, deg);
           // transposeLocal: placeholder – local/zone selector not implemented
           // yet
-        } else if (cmd == static_cast<int>(OmniKey::CommandID::GlobalModeUp)) {
+        } else if (cmd == static_cast<int>(MIDIQy::CommandID::GlobalModeUp)) {
           int chrom = zoneManager.getGlobalChromaticTranspose();
           int deg = zoneManager.getGlobalDegreeTranspose();
           zoneManager.setGlobalTranspose(chrom, deg + 1);
         } else if (cmd ==
-                   static_cast<int>(OmniKey::CommandID::GlobalModeDown)) {
+                   static_cast<int>(MIDIQy::CommandID::GlobalModeDown)) {
           int chrom = zoneManager.getGlobalChromaticTranspose();
           int deg = zoneManager.getGlobalDegreeTranspose();
           zoneManager.setGlobalTranspose(chrom, deg - 1);
@@ -1493,13 +1493,13 @@ void InputProcessor::processTouchpadContacts(
           triggerManualNoteOn(touchpadInput, act, false);
       } else if (act.type == ActionType::Command && boolVal) {
         int cmd = act.data1;
-        if (cmd == static_cast<int>(OmniKey::CommandID::SustainMomentary))
+        if (cmd == static_cast<int>(MIDIQy::CommandID::SustainMomentary))
           voiceManager.setSustain(true);
-        else if (cmd == static_cast<int>(OmniKey::CommandID::SustainToggle))
+        else if (cmd == static_cast<int>(MIDIQy::CommandID::SustainToggle))
           voiceManager.setSustain(!voiceManager.isSustainActive());
-        else if (cmd == static_cast<int>(OmniKey::CommandID::Panic))
+        else if (cmd == static_cast<int>(MIDIQy::CommandID::Panic))
           voiceManager.panic();
-        else if (cmd == static_cast<int>(OmniKey::CommandID::PanicLatch))
+        else if (cmd == static_cast<int>(MIDIQy::CommandID::PanicLatch))
           voiceManager.panicLatch();
       }
       break;

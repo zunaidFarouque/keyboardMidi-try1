@@ -71,9 +71,9 @@ void StartupManager::initApp() {
   if (autoloadFile.existsAsFile()) {
     if (auto xml = juce::parseXML(autoloadFile)) {
       auto sessionTree = juce::ValueTree::fromXml(*xml);
-      if (sessionTree.isValid() && sessionTree.hasType("OmniKeySession")) {
+      if (sessionTree.isValid() && sessionTree.hasType("MIDIQySession")) {
         if (presetManager) {
-          auto presetNode = sessionTree.getChildWithName("OmniKeyPreset");
+          auto presetNode = sessionTree.getChildWithName("MIDIQyPreset");
           if (presetNode.isValid()) {
             auto &rootNode = presetManager->getRootNode();
             while (rootNode.getNumChildren() > 0) {
@@ -189,7 +189,7 @@ void StartupManager::performSave() {
   }
 
   // Construct master XML
-  juce::ValueTree sessionTree("OmniKeySession");
+  juce::ValueTree sessionTree("MIDIQySession");
 
   // Add PresetManager root
   if (presetManager) {
