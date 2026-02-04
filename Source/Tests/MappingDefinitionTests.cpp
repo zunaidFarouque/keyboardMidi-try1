@@ -207,6 +207,55 @@ TEST(MappingDefinitionTest, PitchBendHasBendSemitonesNoValueWhenOnOff) {
   EXPECT_FALSE(hasValueWhenOn) << "PitchBend should not have Value when On";
 }
 
+TEST(MappingDefinitionTest,
+     TouchpadContinuousPitchBendDisablesBendSemitonesSlider) {
+  juce::ValueTree mapping("Mapping");
+  mapping.setProperty("type", "Expression", nullptr);
+  mapping.setProperty("adsrTarget", "PitchBend", nullptr);
+  mapping.setProperty("inputAlias", "Touchpad", nullptr);
+  mapping.setProperty("inputTouchpadEvent", TouchpadEvent::Finger1X, nullptr);
+
+  const int pbRange = 12;
+  InspectorSchema schema = MappingDefinition::getSchema(mapping, pbRange);
+
+  const InspectorControl *bendCtrl = nullptr;
+  for (const auto &c : schema) {
+    if (c.propertyId == "data2") {
+      bendCtrl = &c;
+      break;
+    }
+  }
+  ASSERT_NE(bendCtrl, nullptr)
+      << "Touchpad Expression PitchBend should still expose Bend control";
+  EXPECT_FALSE(bendCtrl->isEnabled)
+      << "Bend (semitones) slider should be disabled for touchpad continuous "
+         "PitchBend Expression";
+}
+
+TEST(MappingDefinitionTest,
+     TouchpadContinuousSmartScaleDisablesScaleStepsSlider) {
+  juce::ValueTree mapping("Mapping");
+  mapping.setProperty("type", "Expression", nullptr);
+  mapping.setProperty("adsrTarget", "SmartScaleBend", nullptr);
+  mapping.setProperty("inputAlias", "Touchpad", nullptr);
+  mapping.setProperty("inputTouchpadEvent", TouchpadEvent::Finger1X, nullptr);
+
+  InspectorSchema schema = MappingDefinition::getSchema(mapping, 12);
+
+  const InspectorControl *stepsCtrl = nullptr;
+  for (const auto &c : schema) {
+    if (c.propertyId == "smartStepShift") {
+      stepsCtrl = &c;
+      break;
+    }
+  }
+  ASSERT_NE(stepsCtrl, nullptr)
+      << "Touchpad Expression SmartScaleBend should still expose Scale Steps";
+  EXPECT_FALSE(stepsCtrl->isEnabled)
+      << "Scale Steps slider should be disabled for touchpad continuous "
+         "SmartScaleBend Expression";
+}
+
 // SmartScaleBend uses Scale Steps only; no data2, no Value when On/Off
 TEST(MappingDefinitionTest, SmartScaleBendNoPeakSlider) {
   juce::ValueTree mapping("Mapping");

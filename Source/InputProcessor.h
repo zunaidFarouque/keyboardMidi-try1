@@ -161,6 +161,12 @@ private:
   // Track last triggered note for SmartScaleBend
   int lastTriggeredNote = 60; // Default to middle C
 
+  // Relative-mode pitch-pad state: per-gesture anchor and base X, keyed by
+  // (deviceHandle, layerId, eventId, channel) so multiple mappings for the same
+  // touchpad event do not interfere.
+  std::map<std::tuple<uintptr_t, int, int, int>, float> pitchPadRelativeAnchorT;
+  std::map<std::tuple<uintptr_t, int, int, int>, float> pitchPadRelativeBaseX;
+
   // Rhythm analyzer for adaptive glide (Phase 26.1)
   RhythmAnalyzer rhythmAnalyzer;
 

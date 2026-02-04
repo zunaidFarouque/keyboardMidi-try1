@@ -34,6 +34,7 @@ add_library(OmniKey_Core STATIC
     Source/GridCompiler.cpp
     Source/InputProcessor.cpp
     Source/MappingDefinition.cpp
+    Source/PitchPadUtilities.cpp
     Source/PresetManager.cpp
     Source/DeviceManager.cpp
     Source/ZoneManager.cpp
@@ -174,6 +175,7 @@ add_executable(OmniKey_Tests
     Source/Tests/ChordUtilitiesTests.cpp
     Source/Tests/ColourContrastTests.cpp
     Source/Tests/GridCompilerTests.cpp
+    Source/Tests/PitchPadUtilitiesTests.cpp
     Source/Tests/InputProcessorTests.cpp
     Source/Tests/MappingDefinitionTests.cpp
     Source/Tests/ZoneTests.cpp

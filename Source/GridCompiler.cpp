@@ -562,11 +562,43 @@ void compileMappingsForLayer(
           p.inputMin = (float)mapping.getProperty("touchpadInputMin", 0.0);
           p.inputMax = (float)mapping.getProperty("touchpadInputMax", 1.0);
           if (isPB || isSmartBend) {
+            // For pitch-based Expression targets, interpret the existing
+            // touchpadOutputMin/Max as discrete step bounds and also store them
+            // in a PitchPadConfig for shared runtime/visualizer use.
             p.outputMin = (int)mapping.getProperty("touchpadOutputMin", -1);
             p.outputMax = (int)mapping.getProperty("touchpadOutputMax", 3);
+
+            PitchPadConfig cfg;
+
+            juce::String modeStr =
+                mapping.getProperty("pitchPadMode", "Absolute").toString();
+            cfg.mode = modeStr.equalsIgnoreCase("Relative")
+                           ? PitchPadMode::Relative
+                           : PitchPadMode::Absolute;
+
+            juce::String startStr =
+                mapping.getProperty("pitchPadStart", "Center").toString();
+            if (startStr.equalsIgnoreCase("Left"))
+              cfg.start = PitchPadStart::Left;
+            else if (startStr.equalsIgnoreCase("Right"))
+              cfg.start = PitchPadStart::Right;
+            else if (startStr.equalsIgnoreCase("Custom"))
+              cfg.start = PitchPadStart::Custom;
+            else
+              cfg.start = PitchPadStart::Center;
+
+            cfg.customStartX =
+                (float)mapping.getProperty("pitchPadCustomStart", 0.5);
+            cfg.minStep = p.outputMin;
+            cfg.maxStep = p.outputMax;
+            cfg.restingSpacePercent =
+                (float)mapping.getProperty("pitchPadRestingPercent", 10.0);
+
+            p.pitchPadConfig = cfg;
           } else {
             p.outputMin = (int)mapping.getProperty("touchpadOutputMin", 0);
             p.outputMax = (int)mapping.getProperty("touchpadOutputMax", 127);
+            p.pitchPadConfig.reset();
           }
         }
         // Apply Expression adsr; valueWhenOn/Off only for CC

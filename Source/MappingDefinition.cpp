@@ -252,6 +252,11 @@ InspectorSchema MappingDefinition::getSchema(const juce::ValueTree &mapping,
       bend.max = static_cast<double>(pitchBendRange);
       bend.step = 1.0;
       bend.valueScaleRange = pitchBendRange;
+      // For touchpad continuous Expression mappings, the bend slider is not
+      // used (continuous pitch comes from the touchpad range/step config), so
+      // disable it in that specific case.
+      if (touchpad && !touchpadInputBool)
+        bend.isEnabled = false;
       schema.push_back(bend);
     }
     if (adsrTargetStr.equalsIgnoreCase("SmartScaleBend")) {
@@ -262,6 +267,11 @@ InspectorSchema MappingDefinition::getSchema(const juce::ValueTree &mapping,
       steps.min = -12.0;
       steps.max = 12.0;
       steps.step = 1.0;
+      // For touchpad continuous SmartScaleBend Expression mappings, the fixed
+      // step shift is not used (continuous mapping comes from the touchpad
+      // range/step config), so disable this slider in that specific case.
+      if (touchpad && !touchpadInputBool)
+        steps.isEnabled = false;
       schema.push_back(steps);
     }
 
@@ -389,11 +399,13 @@ InspectorSchema MappingDefinition::getSchema(const juce::ValueTree &mapping,
       inMax.widthWeight = 0.5f;
       inMax.sameLine = true;
       schema.push_back(inMax);
+
       const bool rangeIsSteps =
           adsrTargetStr.equalsIgnoreCase("PitchBend") ||
           adsrTargetStr.equalsIgnoreCase("SmartScaleBend");
       const double stepMax = rangeIsSteps ? 12.0 : 127.0;
       const double stepMin = rangeIsSteps ? -12.0 : 0.0;
+
       juce::String outLabel =
           rangeIsSteps ? "Output min (steps)" : "Output min";
       InspectorControl outMin;
@@ -406,6 +418,7 @@ InspectorSchema MappingDefinition::getSchema(const juce::ValueTree &mapping,
       outMin.widthWeight = 0.5f;
       outMin.sameLine = false;
       schema.push_back(outMin);
+
       InspectorControl outMax;
       outMax.propertyId = "touchpadOutputMax";
       outMax.label = rangeIsSteps ? "Output max (steps)" : "Output max";
@@ -416,6 +429,71 @@ InspectorSchema MappingDefinition::getSchema(const juce::ValueTree &mapping,
       outMax.widthWeight = 0.5f;
       outMax.sameLine = true;
       schema.push_back(outMax);
+
+      // Optional pitch-pad settings for pitch-based Expression targets on
+      // touchpad continuous events. These configure how discrete steps are
+      // arranged across the pad; the step range itself still comes from the
+      // Output min/max (steps) sliders above.
+      if (rangeIsSteps) {
+        schema.push_back(createSeparator("Touchpad: Pitch Pad",
+                                         juce::Justification::centredLeft));
+
+        InspectorControl padMode;
+        padMode.propertyId = "pitchPadMode";
+        padMode.label = "Mode";
+        padMode.controlType = InspectorControl::Type::ComboBox;
+        padMode.options[1] = "Absolute";
+        padMode.options[2] = "Relative";
+        schema.push_back(padMode);
+
+        InspectorControl padStart;
+        padStart.propertyId = "pitchPadStart";
+        padStart.label = "Start position";
+        padStart.controlType = InspectorControl::Type::ComboBox;
+        padStart.options[1] = "Left";
+        padStart.options[2] = "Center";
+        padStart.options[3] = "Right";
+        padStart.options[4] = "Custom";
+        schema.push_back(padStart);
+
+        juce::String startStr =
+            mapping.getProperty("pitchPadStart", "Center").toString();
+        bool showCustomStart = startStr.equalsIgnoreCase("Custom");
+        if (showCustomStart) {
+          InspectorControl padCustom;
+          padCustom.propertyId = "pitchPadCustomStart";
+          padCustom.label = "Custom start";
+          padCustom.controlType = InspectorControl::Type::Slider;
+          padCustom.min = 0.0;
+          padCustom.max = 1.0;
+          padCustom.step = 0.01;
+          padCustom.widthWeight = 0.5f;
+          schema.push_back(padCustom);
+        }
+
+        InspectorControl restPct;
+        restPct.propertyId = "pitchPadRestingPercent";
+        restPct.label = "Resting space % per step";
+        restPct.controlType = InspectorControl::Type::Slider;
+        restPct.min = 0.0;
+        restPct.max = 40.0;
+        restPct.step = 1.0;
+        restPct.widthWeight = 0.5f;
+        schema.push_back(restPct);
+
+        // If the effective step range is zero everywhere, add a warning label.
+        int outMinVal = (int)mapping.getProperty("touchpadOutputMin", 0);
+        int outMaxVal = (int)mapping.getProperty("touchpadOutputMax", 0);
+        if (outMinVal == outMaxVal) {
+          InspectorControl warn;
+          warn.propertyId = "touchpadPitchPadWarning";
+          warn.label = "Warning: effective pitch bend range across the "
+                       "touchpad is zero.";
+          warn.controlType = InspectorControl::Type::LabelOnly;
+          warn.widthWeight = 1.0f;
+          schema.push_back(warn);
+        }
+      }
     }
   } else if (typeStr.equalsIgnoreCase("Command")) {
     // Sustain: one control with Style dropdown when Sustain; Layer: same

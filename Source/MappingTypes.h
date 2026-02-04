@@ -236,6 +236,30 @@ struct KeyVisualSlot {
 using AudioGrid = std::array<KeyAudioSlot, 256>;
 using VisualGrid = std::array<KeyVisualSlot, 256>;
 
+// Touchpad pitch-pad configuration for Expression -> PitchBend/SmartScaleBend.
+// This is interpreted in "step space" where each integer step corresponds to
+// either a semitone (PitchBend) or a scale step offset (SmartScaleBend).
+enum class PitchPadMode { Absolute, Relative };
+
+enum class PitchPadStart { Left, Center, Right, Custom };
+
+struct PitchPadConfig {
+  PitchPadMode mode = PitchPadMode::Absolute;
+  PitchPadStart start = PitchPadStart::Center;
+
+  // Custom neutral position in [0,1] when start == Custom.
+  float customStartX = 0.5f;
+
+  // Inclusive step range, e.g. -2..+2.
+  int minStep = -2;
+  int maxStep = 2;
+
+  // Percentage of total pad width reserved as a resting band for each step.
+  // This is interpreted by helpers; runtime and visualizer share the same
+  // meaning, but callers are free to ignore it if they only care about steps.
+  float restingSpacePercent = 10.0f;
+};
+
 // Touchpad mapping conversion kind (input type -> output type)
 enum class TouchpadConversionKind {
   BoolToGate,       // Boolean input -> Note/Command (direct)
@@ -254,6 +278,12 @@ struct TouchpadConversionParams {
   int outputMax = 127;
   int valueWhenOn = 127;
   int valueWhenOff = 0;
+
+  // Optional per-mapping pitch-pad configuration for Expression mappings where
+  // the ADSR target is PitchBend or SmartScaleBend and conversionKind is
+  // ContinuousToRange. When not set, ContinuousToRange falls back to the
+  // legacy linear behaviour using outputMin/outputMax.
+  std::optional<PitchPadConfig> pitchPadConfig;
 };
 
 // One compiled touchpad mapping (alias "Touchpad", layer, event, action,

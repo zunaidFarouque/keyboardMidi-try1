@@ -120,6 +120,40 @@ void MappingInspector::rebuildUI() {
   else
     createKeyRow();
 
+  // Apply defaults for newly created touchpad Expression PitchBend/SmartScale
+  // mappings that haven't been edited yet.
+  if (selectedTrees.size() == 1) {
+    auto mapping = selectedTrees[0];
+    juce::String typeStr =
+        mapping.getProperty("type", "Note").toString().trim();
+    juce::String adsrTargetStr =
+        mapping.getProperty("adsrTarget", "CC").toString().trim();
+    const bool touchpad = mapping.getProperty("inputAlias", "")
+                              .toString()
+                              .trim()
+                              .equalsIgnoreCase("Touchpad");
+    const int touchpadEvent =
+        touchpad ? (int)mapping.getProperty("inputTouchpadEvent", 0) : 0;
+    const bool touchpadInputBool =
+        touchpad && (touchpadEvent == TouchpadEvent::Finger1Down ||
+                     touchpadEvent == TouchpadEvent::Finger1Up ||
+                     touchpadEvent == TouchpadEvent::Finger2Down ||
+                     touchpadEvent == TouchpadEvent::Finger2Up);
+    bool isPitchOrSmart = adsrTargetStr.equalsIgnoreCase("PitchBend") ||
+                          adsrTargetStr.equalsIgnoreCase("SmartScaleBend");
+    if (typeStr.equalsIgnoreCase("Expression") && touchpad &&
+        !touchpadInputBool && isPitchOrSmart) {
+      if (mapping.getProperty("touchpadInputMin").isVoid())
+        mapping.setProperty("touchpadInputMin", 0.0, &undoManager);
+      if (mapping.getProperty("touchpadInputMax").isVoid())
+        mapping.setProperty("touchpadInputMax", 1.0, &undoManager);
+      if (mapping.getProperty("touchpadOutputMin").isVoid())
+        mapping.setProperty("touchpadOutputMin", -2, &undoManager);
+      if (mapping.getProperty("touchpadOutputMax").isVoid())
+        mapping.setProperty("touchpadOutputMax", 2, &undoManager);
+    }
+  }
+
   int pbRange = settingsManager.getPitchBendRange();
   InspectorSchema schema =
       MappingDefinition::getSchema(selectedTrees[0], pbRange);
@@ -454,7 +488,8 @@ void MappingInspector::createControl(const InspectorControl &def,
           def.propertyId == "commandCategory" ||
           def.propertyId == "sustainStyle" || def.propertyId == "panicMode" ||
           def.propertyId == "layerStyle" || def.propertyId == "transposeMode" ||
-          def.propertyId == "transposeModify")
+          def.propertyId == "transposeModify" ||
+          def.propertyId == "pitchPadStart")
         juce::MessageManager::callAsync([this]() { rebuildUI(); });
     };
 

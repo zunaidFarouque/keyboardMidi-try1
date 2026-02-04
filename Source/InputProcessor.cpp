@@ -3,7 +3,9 @@
 #include "GridCompiler.h"
 #include "MappingTypes.h"
 #include "MidiEngine.h"
+#include "PitchPadUtilities.h"
 #include "ScaleLibrary.h"
+#include "ScaleUtilities.h"
 #include "SettingsManager.h"
 #include <algorithm>
 #include <array>
@@ -1524,16 +1526,27 @@ void InputProcessor::processTouchpadContacts(
     }
     case TouchpadConversionKind::ContinuousToRange:
       if (act.type == ActionType::Expression) {
-        float inRange = p.inputMax - p.inputMin;
-        float t =
-            (inRange > 0.0f) ? (continuousVal - p.inputMin) / inRange : 0.0f;
-        t = std::clamp(t, 0.0f, 1.0f);
-        int outVal =
-            p.outputMin +
-            static_cast<int>(std::round(t * (p.outputMax - p.outputMin)));
+        // Determine whether this continuous event is currently active based on
+        // the touch contact state.
+        bool eventActive = true;
+        switch (entry.eventId) {
+        case TouchpadEvent::Finger1X:
+        case TouchpadEvent::Finger1Y:
+        case TouchpadEvent::Finger1And2AvgX:
+        case TouchpadEvent::Finger1And2AvgY:
+          eventActive = tip1;
+          break;
+        case TouchpadEvent::Finger2X:
+        case TouchpadEvent::Finger2Y:
+          eventActive = tip2;
+          break;
+        case TouchpadEvent::Finger1And2Dist:
+          eventActive = tip1 && tip2;
+          break;
+        default:
+          break;
+        }
 
-        // Change-only sending: only send CC/PB when the quantized value changes
-        // for this (device, layer, eventId, channel, ccNumber/-1 for PB).
         const int ccNumberOrMinusOne =
             (act.adsrSettings.target == AdsrTarget::CC)
                 ? act.adsrSettings.ccNumber
@@ -1542,6 +1555,106 @@ void InputProcessor::processTouchpadContacts(
             std::make_tuple(deviceHandle, entry.layerId, entry.eventId,
                             act.channel, ccNumberOrMinusOne);
 
+        // If the event is no longer active and we previously sent a value, send
+        // the configured release value (for CC) or center pitch (for PB) when
+        // requested, then clear the last-value entry so this happens only once.
+        if (!eventActive) {
+          auto itLast = lastTouchpadContinuousValues.find(keyCont);
+          if (itLast != lastTouchpadContinuousValues.end()) {
+            if (act.sendReleaseValue) {
+              if (act.adsrSettings.target == AdsrTarget::CC) {
+                voiceManager.sendCC(act.channel, act.adsrSettings.ccNumber,
+                                    act.releaseValue);
+              } else if (act.adsrSettings.target == AdsrTarget::PitchBend ||
+                         act.adsrSettings.target ==
+                             AdsrTarget::SmartScaleBend) {
+                voiceManager.sendPitchBend(act.channel, 8192);
+              }
+            }
+            lastTouchpadContinuousValues.erase(itLast);
+          }
+          break;
+        }
+
+        float inRange = p.inputMax - p.inputMin;
+        float t =
+            (inRange > 0.0f) ? (continuousVal - p.inputMin) / inRange : 0.0f;
+        t = std::clamp(t, 0.0f, 1.0f);
+
+        int outVal =
+            p.outputMin +
+            static_cast<int>(std::round(t * (p.outputMax - p.outputMin)));
+
+        // If a pitch-pad config is present and this is a pitch-based target,
+        // use the shared pitch-pad layout to derive the discrete step from X
+        // instead of direct linear min/max mapping.
+        if (p.pitchPadConfig.has_value() &&
+            (act.adsrSettings.target == AdsrTarget::PitchBend ||
+             act.adsrSettings.target == AdsrTarget::SmartScaleBend)) {
+          const PitchPadConfig &cfg = *p.pitchPadConfig;
+          PitchPadLayout layout = buildPitchPadLayout(cfg);
+
+          // Base X determined by start position.
+          float baseX = 0.5f;
+          switch (cfg.start) {
+          case PitchPadStart::Left:
+            baseX = 0.0f;
+            break;
+          case PitchPadStart::Center:
+            baseX = 0.5f;
+            break;
+          case PitchPadStart::Right:
+            baseX = 1.0f;
+            break;
+          case PitchPadStart::Custom:
+            baseX = cfg.customStartX;
+            break;
+          }
+
+          float x = t;
+          auto relKey = std::make_tuple(deviceHandle, entry.layerId,
+                                        entry.eventId, act.channel);
+
+          if (cfg.mode == PitchPadMode::Relative) {
+            bool startGesture = false;
+            if (entry.eventId == TouchpadEvent::Finger1X ||
+                entry.eventId == TouchpadEvent::Finger1Y ||
+                entry.eventId == TouchpadEvent::Finger1And2Dist ||
+                entry.eventId == TouchpadEvent::Finger1And2AvgX ||
+                entry.eventId == TouchpadEvent::Finger1And2AvgY) {
+              startGesture = finger1Down;
+            } else if (entry.eventId == TouchpadEvent::Finger2X ||
+                       entry.eventId == TouchpadEvent::Finger2Y) {
+              startGesture = finger2Down;
+            }
+
+            if (startGesture) {
+              pitchPadRelativeAnchorT[relKey] = t;
+              pitchPadRelativeBaseX[relKey] = baseX;
+            }
+
+            auto itAnchor = pitchPadRelativeAnchorT.find(relKey);
+            auto itBase = pitchPadRelativeBaseX.find(relKey);
+            if (itAnchor != pitchPadRelativeAnchorT.end() &&
+                itBase != pitchPadRelativeBaseX.end()) {
+              float dx = t - itAnchor->second;
+              x = itBase->second + dx;
+            } else {
+              // Fallback: treat as offset from base around center.
+              x = baseX + (t - 0.5f);
+            }
+          } else {
+            // Absolute: use normalized coordinate directly.
+            x = t;
+          }
+
+          x = juce::jlimit(0.0f, 1.0f, x);
+          PitchSample sample = mapXToStep(layout, x);
+          outVal = sample.step;
+        }
+
+        // Change-only sending: only send CC/PB when the quantized value changes
+        // for this (device, layer, eventId, channel, ccNumber/-1 for PB).
         if (act.adsrSettings.target == AdsrTarget::CC) {
           outVal = juce::jlimit(0, 127, outVal);
           auto itLast = lastTouchpadContinuousValues.find(keyCont);
@@ -1552,11 +1665,31 @@ void InputProcessor::processTouchpadContacts(
           voiceManager.sendCC(act.channel, act.adsrSettings.ccNumber, outVal);
           lastTouchpadContinuousValues[keyCont] = outVal;
         } else {
-          int range = juce::jmax(1, settingsManager.getPitchBendRange());
-          outVal = juce::jlimit(-range, range, outVal);
-          double stepsPerSemitone = 8192.0 / static_cast<double>(range);
-          int pbVal = static_cast<int>(8192.0 + (outVal * stepsPerSemitone));
-          pbVal = juce::jlimit(0, 16383, pbVal);
+          // Pitch-based targets: interpret outVal as a discrete step offset.
+          int pbRange = juce::jmax(1, settingsManager.getPitchBendRange());
+
+          int pbVal = 8192;
+          if (act.adsrSettings.target == AdsrTarget::SmartScaleBend) {
+            // SmartScale: convert scale step offset -> PB using current note
+            // and global scale.
+            int currentNote = voiceManager.getCurrentPlayingNote(act.channel);
+            if (currentNote >= 0) {
+              std::vector<int> intervals =
+                  zoneManager.getGlobalScaleIntervals();
+              if (intervals.empty())
+                intervals = {0, 2, 4, 5, 7, 9, 11}; // Major fallback
+              int root = zoneManager.getGlobalRootNote();
+              pbVal = ScaleUtilities::smartStepOffsetToPitchBend(
+                  currentNote, root, intervals, outVal, pbRange);
+            }
+          } else {
+            // Standard PitchBend: treat outVal directly as semitone offset.
+            int clampedSteps = juce::jlimit(-pbRange, pbRange, outVal);
+            double stepsPerSemitone = 8192.0 / static_cast<double>(pbRange);
+            pbVal =
+                static_cast<int>(8192.0 + (clampedSteps * stepsPerSemitone));
+            pbVal = juce::jlimit(0, 16383, pbVal);
+          }
 
           auto itLast = lastTouchpadContinuousValues.find(keyCont);
           if (itLast != lastTouchpadContinuousValues.end() &&

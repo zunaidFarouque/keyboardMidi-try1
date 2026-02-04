@@ -64,12 +64,13 @@ public:
   // ChangeListener implementation (for SettingsManager PB range changes)
   void changeListenerCallback(juce::ChangeBroadcaster *source) override;
 
+  // Get current playing note for a channel (for Mono/Legato and SmartScale PB
+  // helpers). Returns -1 if no note is currently active on the channel.
+  int getCurrentPlayingNote(int channel) const;
+
 private:
   // Rebuild PB lookup table when SettingsManager changes
   void rebuildPbLookup();
-
-  // Get current playing note for a channel (for Mono/Legato)
-  int getCurrentPlayingNote(int channel) const;
 
   // Mono/Legato stack management
   void pushToMonoStack(int channel, int note, InputID source);
