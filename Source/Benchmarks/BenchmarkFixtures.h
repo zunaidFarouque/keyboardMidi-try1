@@ -172,4 +172,20 @@ public:
     zone->voicingMagnetSemitones = magnetSemitones;
     return zone;
   }
+
+  // Helper: Add a Touchpad Finger1Down -> Note mapping (for touchpad benchmarks)
+  void addTouchpadNoteMapping(int layer, int midiNote = 60, int channel = 1) {
+    deviceMgr.createAlias("Touchpad");
+    auto mappings = presetMgr.getMappingsListForLayer(layer);
+    juce::ValueTree m("Mapping");
+    m.setProperty("inputAlias", "Touchpad", nullptr);
+    m.setProperty("inputTouchpadEvent", (int)TouchpadEvent::Finger1Down,
+                  nullptr);
+    m.setProperty("type", "Note", nullptr);
+    m.setProperty("data1", midiNote, nullptr);
+    m.setProperty("data2", 127, nullptr);
+    m.setProperty("channel", channel, nullptr);
+    m.setProperty("layerID", layer, nullptr);
+    mappings.addChild(m, -1, nullptr);
+  }
 };

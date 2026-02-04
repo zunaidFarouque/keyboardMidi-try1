@@ -547,6 +547,55 @@ TEST_F(InputProcessorTest, MomentaryRefCountMultipleKeys) {
   EXPECT_EQ(proc.getHighestActiveLayerIndex(), 0);
 }
 
+// Layer inheritance (solo): runtime lookup uses compiled grids; solo layer 1
+// has no inherited key 81, so key 81 resolves from layer 0.
+TEST_F(InputProcessorTest, LayerInheritanceSolo_RuntimeLookup) {
+  int keyBase = 81;
+  int keySolo = 82;
+  // Layer 0: key 81 -> Note 50
+  {
+    auto mappings = presetMgr.getMappingsListForLayer(0);
+    juce::ValueTree m("Mapping");
+    m.setProperty("inputKey", keyBase, nullptr);
+    m.setProperty("deviceHash",
+                  juce::String::toHexString((juce::int64)0).toUpperCase(),
+                  nullptr);
+    m.setProperty("type", "Note", nullptr);
+    m.setProperty("data1", 50, nullptr);
+    m.setProperty("data2", 127, nullptr);
+    m.setProperty("layerID", 0, nullptr);
+    mappings.addChild(m, -1, nullptr);
+  }
+  // Layer 1: key 82 -> Note 60, solo layer (no inheritance)
+  {
+    auto mappings = presetMgr.getMappingsListForLayer(1);
+    juce::ValueTree m("Mapping");
+    m.setProperty("inputKey", keySolo, nullptr);
+    m.setProperty("deviceHash",
+                  juce::String::toHexString((juce::int64)0).toUpperCase(),
+                  nullptr);
+    m.setProperty("type", "Note", nullptr);
+    m.setProperty("data1", 60, nullptr);
+    m.setProperty("data2", 127, nullptr);
+    m.setProperty("layerID", 1, nullptr);
+    mappings.addChild(m, -1, nullptr);
+  }
+  presetMgr.getLayerNode(1).setProperty("soloLayer", true, nullptr);
+  presetMgr.getLayerNode(1).setProperty("isActive", true, nullptr);
+  proc.forceRebuildMappings();
+
+  // Both layer 0 and 1 active. Layer 1 grid has only key 82 (solo).
+  auto opt81 = proc.getMappingForInput(InputID{0, keyBase});
+  ASSERT_TRUE(opt81.has_value()) << "Key 81 should resolve from layer 0";
+  EXPECT_EQ(opt81->type, ActionType::Note);
+  EXPECT_EQ(opt81->data1, 50);
+
+  auto opt82 = proc.getMappingForInput(InputID{0, keySolo});
+  ASSERT_TRUE(opt82.has_value()) << "Key 82 should resolve from layer 1";
+  EXPECT_EQ(opt82->type, ActionType::Note);
+  EXPECT_EQ(opt82->data1, 60);
+}
+
 // Momentary layer chain: Handover – release A while holding B keeps Layer 2
 TEST_F(InputProcessorTest, MomentaryChain_Handover_StaysInLayer2) {
   int keyA = 10; // Layer 0 -> Momentary Layer 1

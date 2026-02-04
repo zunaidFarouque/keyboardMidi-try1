@@ -148,6 +148,9 @@ void PresetManager::ensureStaticLayers() {
       layer.setProperty("id", i, nullptr);
       layer.setProperty("name", i == 0 ? "Base" : "Layer " + juce::String(i),
                         nullptr);
+      layer.setProperty("soloLayer", false, nullptr);
+      layer.setProperty("passthruInheritance", false, nullptr);
+      layer.setProperty("privateToLayer", false, nullptr);
       juce::ValueTree mappings("Mappings");
       layer.addChild(mappings, -1, nullptr);
       layersList.addChild(layer, -1, nullptr);

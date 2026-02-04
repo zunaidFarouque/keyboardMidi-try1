@@ -6,17 +6,55 @@ LayerListPanel::LayerListPanel(PresetManager &pm) : presetManager(pm) {
   listBox.setColour(juce::ListBox::backgroundColourId, juce::Colour(0xff1a1a1a));
   addAndMakeVisible(listBox);
 
+  inheritanceLabel.setText("Layer inheritance", juce::dontSendNotification);
+  inheritanceLabel.setColour(juce::Label::textColourId, juce::Colours::grey);
+  addAndMakeVisible(inheritanceLabel);
+
+  soloLayerToggle.setButtonText("Solo layer");
+  soloLayerToggle.onClick = [this] {
+    auto layer = presetManager.getLayerNode(selectedLayerId);
+    if (layer.isValid()) {
+      layer.setProperty("soloLayer", soloLayerToggle.getToggleState(), nullptr);
+      presetManager.sendChangeMessage();
+    }
+  };
+  addAndMakeVisible(soloLayerToggle);
+
+  passthruToggle.setButtonText("Pass through below");
+  passthruToggle.onClick = [this] {
+    auto layer = presetManager.getLayerNode(selectedLayerId);
+    if (layer.isValid()) {
+      layer.setProperty("passthruInheritance", passthruToggle.getToggleState(),
+                        nullptr);
+      presetManager.sendChangeMessage();
+    }
+  };
+  addAndMakeVisible(passthruToggle);
+
+  privateToggle.setButtonText("Private to this layer");
+  privateToggle.onClick = [this] {
+    auto layer = presetManager.getLayerNode(selectedLayerId);
+    if (layer.isValid()) {
+      layer.setProperty("privateToLayer", privateToggle.getToggleState(),
+                        nullptr);
+      presetManager.sendChangeMessage();
+    }
+  };
+  addAndMakeVisible(privateToggle);
+
   // Listen to Layers list changes
   presetManager.getLayersList().addListener(this);
 
   // Select Layer 0 by default
   setSelectedLayer(0);
+  refreshInheritanceTogglesFromLayer();
 }
 
 void LayerListPanel::selectedRowsChanged(int lastRowSelected) {
   // Phase 41: row index = layer id (0..8)
   if (lastRowSelected >= 0 && lastRowSelected <= 8) {
     selectedLayerId = lastRowSelected;
+    refreshInheritanceTogglesFromLayer();
     if (onLayerSelected)
       onLayerSelected(lastRowSelected);
   }
@@ -30,7 +68,37 @@ void LayerListPanel::paint(juce::Graphics &g) {
   g.fillAll(juce::Colour(0xff1a1a1a));
 }
 
-void LayerListPanel::resized() { listBox.setBounds(getLocalBounds()); }
+void LayerListPanel::resized() {
+  auto r = getLocalBounds();
+  const int panelHeight = 92;
+  if (r.getHeight() > panelHeight) {
+    auto inheritanceArea = r.removeFromBottom(panelHeight);
+    listBox.setBounds(r);
+    const int pad = 4;
+    inheritanceArea = inheritanceArea.reduced(pad);
+    inheritanceLabel.setBounds(
+        inheritanceArea.removeFromTop(18).reduced(0, 2));
+    soloLayerToggle.setBounds(inheritanceArea.removeFromTop(22).reduced(0, 2));
+    passthruToggle.setBounds(inheritanceArea.removeFromTop(22).reduced(0, 2));
+    privateToggle.setBounds(inheritanceArea.removeFromTop(22).reduced(0, 2));
+  } else {
+    listBox.setBounds(r);
+  }
+}
+
+void LayerListPanel::refreshInheritanceTogglesFromLayer() {
+  auto layer = presetManager.getLayerNode(selectedLayerId);
+  if (!layer.isValid())
+    return;
+  soloLayerToggle.setToggleState(
+      (bool)layer.getProperty("soloLayer", false), juce::dontSendNotification);
+  passthruToggle.setToggleState(
+      (bool)layer.getProperty("passthruInheritance", false),
+      juce::dontSendNotification);
+  privateToggle.setToggleState(
+      (bool)layer.getProperty("privateToLayer", false),
+      juce::dontSendNotification);
+}
 
 int LayerListPanel::getNumRows() {
   // Phase 41: Static 9 layers (0=Base, 1-8=Overlays)
@@ -107,8 +175,16 @@ void LayerListPanel::valueTreeChildRemoved(
 
 void LayerListPanel::valueTreePropertyChanged(
     juce::ValueTree &tree, const juce::Identifier &property) {
-  if (tree.hasType("Layer") && property == juce::Identifier("name")) {
-    listBox.repaint();
+  if (tree.hasType("Layer")) {
+    if (property == juce::Identifier("name")) {
+      listBox.repaint();
+    } else if (property == juce::Identifier("soloLayer") ||
+               property == juce::Identifier("passthruInheritance") ||
+               property == juce::Identifier("privateToLayer")) {
+      int id = (int)tree.getProperty("id", -1);
+      if (id == selectedLayerId)
+        refreshInheritanceTogglesFromLayer();
+    }
   }
 }
 

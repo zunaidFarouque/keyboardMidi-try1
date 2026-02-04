@@ -40,6 +40,14 @@ private:
   juce::ListBox listBox;
   int selectedLayerId = 0;
 
+  // Layer inheritance toggles (for selected layer)
+  juce::Label inheritanceLabel;
+  juce::ToggleButton soloLayerToggle;
+  juce::ToggleButton passthruToggle;
+  juce::ToggleButton privateToggle;
+
+  void refreshInheritanceTogglesFromLayer();
+
   // Helper: Get layer node at row index
   juce::ValueTree getLayerAtRow(int row);
 

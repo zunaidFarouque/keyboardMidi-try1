@@ -59,6 +59,41 @@ bool isGenericShift(int keyCode) { return keyCode == 0x10; }   // VK_SHIFT
 bool isGenericControl(int keyCode) { return keyCode == 0x11; } // VK_CONTROL
 bool isGenericAlt(int keyCode) { return keyCode == 0x12; }     // VK_MENU
 
+// Layer inheritance: mark key (and generic modifier expansion) as written by
+// this layer for "private to layer" stripping when building the next layer.
+static void markKeyWritten(int keyCode, std::vector<bool> *keysWrittenOut) {
+  if (!keysWrittenOut || keyCode < 0 || keyCode >= (int)keysWrittenOut->size())
+    return;
+  (*keysWrittenOut)[(size_t)keyCode] = true;
+  if (isGenericShift(keyCode)) {
+    (*keysWrittenOut)[(size_t)InputTypes::Key_LShift] = true;
+    (*keysWrittenOut)[(size_t)InputTypes::Key_RShift] = true;
+  } else if (isGenericControl(keyCode)) {
+    (*keysWrittenOut)[(size_t)InputTypes::Key_LControl] = true;
+    (*keysWrittenOut)[(size_t)InputTypes::Key_RControl] = true;
+  } else if (isGenericAlt(keyCode)) {
+    (*keysWrittenOut)[(size_t)InputTypes::Key_LAlt] = true;
+    (*keysWrittenOut)[(size_t)InputTypes::Key_RAlt] = true;
+  }
+}
+
+// Clear audio and visual slots for keys where keysToClear[k] is true (used for
+// "private to layer" so higher layers do not inherit those keys).
+static void clearSlotsForKeys(AudioGrid &aGrid, VisualGrid &vGrid,
+                              const std::vector<bool> &keysToClear) {
+  const int n = static_cast<int>(std::min(keysToClear.size(), aGrid.size()));
+  for (int k = 0; k < n; ++k) {
+    if (!keysToClear[(size_t)k])
+      continue;
+    aGrid[(size_t)k].isActive = false;
+    aGrid[(size_t)k].chordIndex = -1;
+    vGrid[(size_t)k].state = VisualState::Empty;
+    vGrid[(size_t)k].displayColor = juce::Colours::transparentBlack;
+    vGrid[(size_t)k].label.clear();
+    vGrid[(size_t)k].sourceName.clear();
+  }
+}
+
 // Create a fresh AudioGrid with all slots inactive.
 std::shared_ptr<AudioGrid> makeAudioGrid() {
   auto grid = std::make_shared<AudioGrid>();
@@ -380,13 +415,15 @@ static void applyNoteOptionsFromMapping(juce::ValueTree mapping,
 }
 
 // Phase 51.4 / 53.5: Apply zones for a single layer. targetState = Active or
-// Inherited for device Pass 2.
+// Inherited for device Pass 2. keysWrittenOut: if non-null, mark keys written
+// by this layer (for "private to layer" inheritance stripping).
 void compileZonesForLayer(VisualGrid &vGrid, AudioGrid &aGrid,
                           ZoneManager &zoneMgr, DeviceManager &deviceMgr,
                           uintptr_t aliasHash, int layerId,
                           std::vector<bool> &touchedKeys,
                           std::vector<std::vector<MidiAction>> &chordPool,
-                          VisualState targetState) {
+                          VisualState targetState,
+                          std::vector<bool> *keysWrittenOut = nullptr) {
   const int globalChrom = zoneMgr.getGlobalChromaticTranspose();
   const int globalDeg = zoneMgr.getGlobalDegreeTranspose();
   const auto zones = zoneMgr.getZones();
@@ -451,6 +488,7 @@ void compileZonesForLayer(VisualGrid &vGrid, AudioGrid &aGrid,
 
       writeAudioSlot(aGrid, keyCode, rootAction);
       aGrid[(size_t)keyCode].chordIndex = chordIndex;
+      markKeyWritten(keyCode, keysWrittenOut);
     }
   }
 }
@@ -483,12 +521,15 @@ static bool isTouchpadEventBoolean(int eventId) {
 // Phase 51.4 / 53.5: Apply manual mappings for a single layer. targetState for
 // device Pass 2 (Inherited vs Active). If touchpadMappingsOut is non-null,
 // Touchpad mappings are appended there instead of writing to the grid.
+// keysWrittenOut: if non-null, mark keys written by this layer (for "private
+// to layer" inheritance stripping).
 void compileMappingsForLayer(
     VisualGrid &vGrid, AudioGrid &aGrid, PresetManager &presetMgr,
     DeviceManager &deviceMgr, ZoneManager &zoneMgr,
     SettingsManager &settingsMgr, uintptr_t aliasHash, int layerId,
     std::vector<bool> &touchedKeys, VisualState targetState,
-    std::vector<TouchpadMappingEntry> *touchpadMappingsOut) {
+    std::vector<TouchpadMappingEntry> *touchpadMappingsOut,
+    std::vector<bool> *keysWrittenOut = nullptr) {
   auto mappingsNode = presetMgr.getMappingsListForLayer(layerId);
   if (!mappingsNode.isValid())
     return;
@@ -792,8 +833,10 @@ void compileMappingsForLayer(
     applyVisualWithModifiers(vGrid, inputKey, color, label, sourceName,
                              &touchedKeys, targetState);
 
-    if (vGrid[(size_t)inputKey].state != VisualState::Conflict)
+    if (vGrid[(size_t)inputKey].state != VisualState::Conflict) {
       writeAudioSlot(aGrid, inputKey, action);
+      markKeyWritten(inputKey, keysWrittenOut);
+    }
   }
 }
 
@@ -820,32 +863,68 @@ GridCompiler::compile(PresetManager &presetMgr, DeviceManager &deviceMgr,
 
   // 3. Define Helper Lambda "applyLayerToGrid"
   // Phase 53.5: targetState = Active for current layer, Inherited for lower
-  // layer (device Pass 2).
+  // layer (device Pass 2). keysWrittenOut: optional, record keys written by
+  // this layer for "private to layer" stripping.
   auto applyLayerToGrid = [&](VisualGrid &vGrid, AudioGrid &aGrid, int layerId,
                               uintptr_t aliasHash,
-                              VisualState targetState = VisualState::Active) {
+                              VisualState targetState = VisualState::Active,
+                              std::vector<bool> *keysWrittenOut = nullptr) {
     std::vector<bool> touchedKeys(256, false);
 
     compileZonesForLayer(vGrid, aGrid, zoneMgr, deviceMgr, aliasHash, layerId,
-                         touchedKeys, context->chordPool, targetState);
+                         touchedKeys, context->chordPool, targetState,
+                         keysWrittenOut);
 
     compileMappingsForLayer(vGrid, aGrid, presetMgr, deviceMgr, zoneMgr,
                             settingsMgr, aliasHash, layerId, touchedKeys,
-                            targetState, nullptr);
+                            targetState, nullptr, keysWrittenOut);
   };
 
   // 3. PASS 1: Compile Global Stack (Vertical) – Hash 0 only
+  // Layer inheritance: soloLayer, passthruInheritance, privateToLayer.
   const uintptr_t globalHash = 0;
   context->visualLookup[globalHash].resize(9);
 
+  std::array<int, 9> effectiveBaseIndex{};
+  std::array<std::vector<bool>, 9> keysWrittenByLayer;
+  for (size_t i = 0; i < 9; ++i)
+    keysWrittenByLayer[i].resize(256, false);
+
   for (int L = 0; L < 9; ++L) {
+    auto layerNode = presetMgr.getLayerNode(L);
+    const bool soloLayer =
+        layerNode.isValid() && (bool)layerNode.getProperty("soloLayer", false);
+    const bool passthruInheritance =
+        layerNode.isValid() &&
+        (bool)layerNode.getProperty("passthruInheritance", false);
+    const bool privateToLayer =
+        layerNode.isValid() &&
+        (bool)layerNode.getProperty("privateToLayer", false);
+
     auto vGrid = std::make_shared<VisualGrid>();
     auto aGrid = std::make_shared<AudioGrid>();
 
-    // INHERITANCE: Copy from layer below, then mark as Inherited
-    if (L > 0) {
-      *vGrid = *context->visualLookup[globalHash][(size_t)(L - 1)];
-      *aGrid = *context->globalGrids[(size_t)(L - 1)];
+    if (L == 0) {
+      *vGrid = *makeVisualGrid();
+      *aGrid = *makeAudioGrid();
+      effectiveBaseIndex[0] = 0;
+    } else if (soloLayer) {
+      // Solo layer: start from empty (only this layer's content).
+      *vGrid = *makeVisualGrid();
+      *aGrid = *makeAudioGrid();
+    } else {
+      const int baseIdx = effectiveBaseIndex[(size_t)(L - 1)];
+      *vGrid = *context->visualLookup[globalHash][(size_t)baseIdx];
+      *aGrid = *context->globalGrids[(size_t)baseIdx];
+
+      // If layer L-1 has "private to layer", clear slots it wrote so we don't
+      // inherit them.
+      layerNode = presetMgr.getLayerNode(L - 1);
+      const bool prevPrivate =
+          layerNode.isValid() &&
+          (bool)layerNode.getProperty("privateToLayer", false);
+      if (prevPrivate)
+        clearSlotsForKeys(*aGrid, *vGrid, keysWrittenByLayer[(size_t)(L - 1)]);
 
       for (auto &slot : *vGrid) {
         if (slot.state != VisualState::Empty) {
@@ -855,7 +934,6 @@ GridCompiler::compile(PresetManager &presetMgr, DeviceManager &deviceMgr,
         }
       }
 
-      // Phase 53.5: Filter out Layer Commands – they must not be inherited.
       for (size_t keyCode = 0; keyCode < 256; ++keyCode) {
         const auto &aSlot = (*aGrid)[keyCode];
         if (aSlot.isActive && isLayerCommand(aSlot.action)) {
@@ -869,7 +947,16 @@ GridCompiler::compile(PresetManager &presetMgr, DeviceManager &deviceMgr,
       }
     }
 
-    applyLayerToGrid(*vGrid, *aGrid, L, globalHash, VisualState::Active);
+    std::fill(keysWrittenByLayer[(size_t)L].begin(),
+              keysWrittenByLayer[(size_t)L].end(), false);
+    applyLayerToGrid(*vGrid, *aGrid, L, globalHash, VisualState::Active,
+                     &keysWrittenByLayer[(size_t)L]);
+
+    if (soloLayer || passthruInheritance)
+      effectiveBaseIndex[(size_t)L] = L > 0 ? effectiveBaseIndex[(size_t)(L - 1)]
+                                            : 0;
+    else
+      effectiveBaseIndex[(size_t)L] = L;
 
     context->visualLookup[globalHash][(size_t)L] = vGrid;
     context->globalGrids[(size_t)L] = aGrid;

@@ -79,6 +79,38 @@ protected:
     // Zone is already added to manager by createDefaultZone
   }
 
+  // Helper to add a zone that compiles to a chord (for inheritance tests).
+  void addZoneWithChord(int layerId, int keyCode, uintptr_t targetHash) {
+    auto zone = std::make_shared<Zone>();
+    zone->name = "Triad Zone L" + juce::String(layerId);
+    zone->layerID = layerId;
+    zone->targetAliasHash = targetHash;
+    zone->inputKeyCodes = {keyCode};
+    zone->chordType = ChordUtilities::ChordType::Triad;
+    zone->scaleName = "Major";
+    zone->rootNote = 60;
+    zone->instrumentMode = Zone::InstrumentMode::Piano;
+    zone->pianoVoicingStyle = Zone::PianoVoicingStyle::Close;
+    zoneMgr.addZone(zone);
+  }
+
+  // Helper to set layer inheritance flags (solo, passthru, private)
+  void setLayerSolo(int layerId, bool value = true) {
+    auto layer = presetMgr.getLayerNode(layerId);
+    if (layer.isValid())
+      layer.setProperty("soloLayer", value, nullptr);
+  }
+  void setLayerPassthru(int layerId, bool value = true) {
+    auto layer = presetMgr.getLayerNode(layerId);
+    if (layer.isValid())
+      layer.setProperty("passthruInheritance", value, nullptr);
+  }
+  void setLayerPrivate(int layerId, bool value = true) {
+    auto layer = presetMgr.getLayerNode(layerId);
+    if (layer.isValid())
+      layer.setProperty("privateToLayer", value, nullptr);
+  }
+
   // Helper to add a Touchpad mapping (inputAlias "Touchpad")
   void addTouchpadMapping(int layerId, int eventId,
                           const juce::String &typeStr = "Note",
@@ -287,6 +319,213 @@ TEST_F(GridCompilerTest, LayerToggleNotInherited) {
 
   auto l1 = context->visualLookup[0][1];
   EXPECT_EQ((*l1)[11].state, VisualState::Empty);
+}
+
+// Layer inheritance: Solo layer – layer shows only its own content, no inherit.
+TEST_F(GridCompilerTest, LayerInheritanceSoloLayer) {
+  addMapping(0, 81, 0); // Base: key 81
+  addMapping(1, 82, 0); // Layer 1: key 82
+  setLayerSolo(1);
+
+  auto context =
+      GridCompiler::compile(presetMgr, deviceMgr, zoneMgr, settingsMgr);
+
+  auto l0 = context->visualLookup[0][0];
+  EXPECT_EQ((*l0)[81].state, VisualState::Active);
+
+  auto l1 = context->visualLookup[0][1];
+  EXPECT_EQ((*l1)[81].state, VisualState::Empty); // not inherited
+  EXPECT_EQ((*l1)[82].state, VisualState::Active);
+
+  auto l0Audio = context->globalGrids[0];
+  auto l1Audio = context->globalGrids[1];
+  EXPECT_TRUE((*l0Audio)[81].isActive);
+  EXPECT_FALSE((*l1Audio)[81].isActive);
+  EXPECT_TRUE((*l1Audio)[82].isActive);
+}
+
+// Layer inheritance: Passthru – next layer inherits from below this layer.
+TEST_F(GridCompilerTest, LayerInheritancePassthru) {
+  addMapping(0, 81, 0); // Layer 0: key 81
+  addMapping(1, 82, 0); // Layer 1: key 82
+  setLayerPassthru(1);
+  addMapping(2, 83, 0); // Layer 2: key 83
+
+  auto context =
+      GridCompiler::compile(presetMgr, deviceMgr, zoneMgr, settingsMgr);
+
+  auto l2 = context->visualLookup[0][2];
+  EXPECT_EQ((*l2)[81].state, VisualState::Inherited); // from layer 0
+  EXPECT_EQ((*l2)[82].state, VisualState::Empty);    // layer 1 not in base
+  EXPECT_EQ((*l2)[83].state, VisualState::Active);
+
+  auto l2Audio = context->globalGrids[2];
+  EXPECT_TRUE((*l2Audio)[81].isActive);
+  EXPECT_FALSE((*l2Audio)[82].isActive);
+  EXPECT_TRUE((*l2Audio)[83].isActive);
+}
+
+// Layer inheritance: Private to layer – higher layers do not inherit this layer.
+TEST_F(GridCompilerTest, LayerInheritancePrivateToLayer) {
+  addMapping(0, 81, 0); // Layer 0: key 81
+  addMapping(1, 82, 0); // Layer 1: key 82
+  setLayerPrivate(1);
+  addMapping(2, 83, 0); // Layer 2: key 83
+
+  auto context =
+      GridCompiler::compile(presetMgr, deviceMgr, zoneMgr, settingsMgr);
+
+  auto l1 = context->visualLookup[0][1];
+  EXPECT_EQ((*l1)[81].state, VisualState::Inherited);
+  EXPECT_EQ((*l1)[82].state, VisualState::Active);
+
+  auto l2 = context->visualLookup[0][2];
+  EXPECT_EQ((*l2)[81].state, VisualState::Inherited); // from layer 0
+  EXPECT_EQ((*l2)[82].state, VisualState::Empty);    // layer 1 private
+  EXPECT_EQ((*l2)[83].state, VisualState::Active);
+
+  auto l2Audio = context->globalGrids[2];
+  EXPECT_TRUE((*l2Audio)[81].isActive);
+  EXPECT_FALSE((*l2Audio)[82].isActive);
+  EXPECT_TRUE((*l2Audio)[83].isActive);
+}
+
+// Layer inheritance: Default (no flags) unchanged – layer 1 still inherits.
+TEST_F(GridCompilerTest, LayerInheritanceDefaultUnchanged) {
+  addMapping(0, 81, 0);
+  addMapping(1, 82, 0);
+  // no solo/passthru/private set
+
+  auto context =
+      GridCompiler::compile(presetMgr, deviceMgr, zoneMgr, settingsMgr);
+
+  auto l1 = context->visualLookup[0][1];
+  EXPECT_EQ((*l1)[81].state, VisualState::Inherited);
+  EXPECT_EQ((*l1)[82].state, VisualState::Active);
+}
+
+// Layer inheritance: Combined solo + passthru – layer 1 is solo and passthru;
+// layer 2 inherits from layer 0 (not from layer 1).
+TEST_F(GridCompilerTest, LayerInheritanceSoloPlusPassthru) {
+  addMapping(0, 81, 0);
+  addMapping(1, 82, 0);
+  setLayerSolo(1);
+  setLayerPassthru(1);
+  addMapping(2, 83, 0);
+
+  auto context =
+      GridCompiler::compile(presetMgr, deviceMgr, zoneMgr, settingsMgr);
+
+  auto l1 = context->visualLookup[0][1];
+  EXPECT_EQ((*l1)[81].state, VisualState::Empty);
+  EXPECT_EQ((*l1)[82].state, VisualState::Active);
+
+  auto l2 = context->visualLookup[0][2];
+  EXPECT_EQ((*l2)[81].state, VisualState::Inherited); // from L0
+  EXPECT_EQ((*l2)[82].state, VisualState::Empty);   // L1 passthru
+  EXPECT_EQ((*l2)[83].state, VisualState::Active);
+}
+
+// Layer inheritance: Private + passthru – layer 1 private and passthru; L2
+// inherits from L0 only (passthru), so L2 never sees L1's key anyway.
+TEST_F(GridCompilerTest, LayerInheritancePrivatePlusPassthru) {
+  addMapping(0, 81, 0);
+  addMapping(1, 82, 0);
+  setLayerPrivate(1);
+  setLayerPassthru(1);
+  addMapping(2, 83, 0);
+
+  auto context =
+      GridCompiler::compile(presetMgr, deviceMgr, zoneMgr, settingsMgr);
+
+  auto l2 = context->visualLookup[0][2];
+  EXPECT_EQ((*l2)[81].state, VisualState::Inherited);
+  EXPECT_EQ((*l2)[82].state, VisualState::Empty);
+  EXPECT_EQ((*l2)[83].state, VisualState::Active);
+}
+
+// Layer inheritance with zones: Solo layer – zone on L0 (key 81), zone on L1
+// (key 82); L1 solo so L1 grid has only key 82.
+TEST_F(GridCompilerTest, LayerInheritanceSolo_WithZone) {
+  addZoneWithChord(0, 81, 0);
+  addZoneWithChord(1, 82, 0);
+  setLayerSolo(1);
+
+  auto context =
+      GridCompiler::compile(presetMgr, deviceMgr, zoneMgr, settingsMgr);
+
+  auto l0 = context->visualLookup[0][0];
+  auto l1 = context->visualLookup[0][1];
+  EXPECT_EQ((*l0)[81].state, VisualState::Active);
+  EXPECT_EQ((*l1)[81].state, VisualState::Empty);
+  EXPECT_EQ((*l1)[82].state, VisualState::Active);
+
+  auto l1Audio = context->globalGrids[1];
+  EXPECT_FALSE((*l1Audio)[81].isActive);
+  EXPECT_TRUE((*l1Audio)[82].isActive);
+}
+
+// Layer inheritance with zones: Private – zone on L1 (key 82); L2 does not
+// inherit key 82.
+TEST_F(GridCompilerTest, LayerInheritancePrivate_WithZone) {
+  addZoneWithChord(0, 81, 0);
+  addZoneWithChord(1, 82, 0);
+  setLayerPrivate(1);
+  addMapping(2, 83, 0);
+
+  auto context =
+      GridCompiler::compile(presetMgr, deviceMgr, zoneMgr, settingsMgr);
+
+  auto l2 = context->visualLookup[0][2];
+  EXPECT_EQ((*l2)[81].state, VisualState::Inherited);
+  EXPECT_EQ((*l2)[82].state, VisualState::Empty);
+  EXPECT_EQ((*l2)[83].state, VisualState::Active);
+
+  auto l2Audio = context->globalGrids[2];
+  EXPECT_TRUE((*l2Audio)[81].isActive);
+  EXPECT_FALSE((*l2Audio)[82].isActive);
+  EXPECT_TRUE((*l2Audio)[83].isActive);
+}
+
+// Layer inheritance with zones: Passthru – zone on L1 (key 82); L2 inherits
+// from L0 only, so key 82 empty on L2.
+TEST_F(GridCompilerTest, LayerInheritancePassthru_WithZone) {
+  addZoneWithChord(0, 81, 0);
+  addZoneWithChord(1, 82, 0);
+  setLayerPassthru(1);
+  addMapping(2, 83, 0);
+
+  auto context =
+      GridCompiler::compile(presetMgr, deviceMgr, zoneMgr, settingsMgr);
+
+  auto l2 = context->visualLookup[0][2];
+  EXPECT_EQ((*l2)[81].state, VisualState::Inherited);
+  EXPECT_EQ((*l2)[82].state, VisualState::Empty);
+  EXPECT_EQ((*l2)[83].state, VisualState::Active);
+}
+
+// Layer inheritance: Serialization – save and load preset preserves
+// soloLayer, passthruInheritance, privateToLayer on layer nodes.
+TEST_F(GridCompilerTest, LayerInheritanceProperties_SerializeRoundTrip) {
+  presetMgr.ensureStaticLayers();
+  auto layer1 = presetMgr.getLayerNode(1);
+  ASSERT_TRUE(layer1.isValid());
+  layer1.setProperty("soloLayer", true, nullptr);
+  layer1.setProperty("passthruInheritance", true, nullptr);
+  layer1.setProperty("privateToLayer", true, nullptr);
+
+  juce::File file = juce::File::getSpecialLocation(
+                        juce::File::tempDirectory)
+                        .getNonexistentChildFile("midiqy_layer_", ".xml", false);
+  presetMgr.saveToFile(file);
+  presetMgr.loadFromFile(file);
+  file.deleteFile();
+
+  auto loaded = presetMgr.getLayerNode(1);
+  ASSERT_TRUE(loaded.isValid());
+  EXPECT_TRUE((bool)loaded.getProperty("soloLayer", false));
+  EXPECT_TRUE((bool)loaded.getProperty("passthruInheritance", false));
+  EXPECT_TRUE((bool)loaded.getProperty("privateToLayer", false));
 }
 
 // Phase 53.4: Device view vertical inheritance – Layer 0 mapping on device

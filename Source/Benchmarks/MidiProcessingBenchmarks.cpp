@@ -2,6 +2,8 @@
 // Uses Google Benchmark to measure latency and throughput of various MIDI paths
 
 #include "BenchmarkFixtures.h"
+#include "../GridCompiler.h"
+#include "../TouchpadTypes.h"
 
 // =============================================================================
 // Category 1: Manual Mapping Tests
@@ -720,4 +722,203 @@ BENCHMARK_DEFINE_F(MidiBenchmarkFixture, Stress_ADSREnvelopes_20)
   }
 }
 BENCHMARK_REGISTER_F(MidiBenchmarkFixture, Stress_ADSREnvelopes_20)
+    ->Unit(benchmark::kMicrosecond);
+
+// =============================================================================
+// Category 8: Hot Path - GridCompiler and ZoneManager
+// =============================================================================
+
+// Full grid compile: 9 layers, 20 mappings, 5 zones (realistic preset)
+BENCHMARK_DEFINE_F(MidiBenchmarkFixture, HotPath_GridCompiler_FullRebuild)
+(benchmark::State &state) {
+  for (int layer = 0; layer < 9; ++layer) {
+    for (int k = 0; k < 3; ++k) {
+      addNoteMapping(layer, 70 + layer * 2 + k, 60 + k, 100, 1);
+    }
+  }
+  addNoteMapping(0, 81, 60, 100, 1);
+  addNoteMapping(0, 82, 62, 100, 1);
+  std::vector<std::shared_ptr<Zone>> zonesToRemove;
+  for (int i = 0; i < 5; ++i) {
+    std::vector<int> keys = {81 + i * 2, 82 + i * 2};
+    auto z = createZone("Z" + juce::String(i), 0, keys,
+                        ChordUtilities::ChordType::Triad, PolyphonyMode::Poly);
+    proc.getZoneManager().addZone(z);
+    zonesToRemove.push_back(z);
+  }
+  proc.forceRebuildMappings();
+  mockMidi.clear();
+
+  for (auto _ : state) {
+    (void)GridCompiler::compile(presetMgr, deviceMgr, proc.getZoneManager(),
+                                settingsMgr);
+  }
+  for (auto &z : zonesToRemove) {
+    proc.getZoneManager().removeZone(z);
+  }
+}
+BENCHMARK_REGISTER_F(MidiBenchmarkFixture, HotPath_GridCompiler_FullRebuild)
+    ->Unit(benchmark::kMicrosecond);
+
+// ZoneManager: add 5 zones (each triggers rebuildLookupTable)
+BENCHMARK_DEFINE_F(MidiBenchmarkFixture, HotPath_ZoneManager_AddFiveZones)
+(benchmark::State &state) {
+  for (auto _ : state) {
+    std::vector<std::shared_ptr<Zone>> zones;
+    for (int i = 0; i < 5; ++i) {
+      std::vector<int> keys = {81 + i, 82 + i, 83 + i};
+      auto z = createZone("BmZ" + juce::String(i), 0, keys,
+                          ChordUtilities::ChordType::Triad, PolyphonyMode::Poly);
+      proc.getZoneManager().addZone(z);
+      zones.push_back(z);
+    }
+    for (auto &z : zones) {
+      proc.getZoneManager().removeZone(z);
+    }
+  }
+}
+BENCHMARK_REGISTER_F(MidiBenchmarkFixture, HotPath_ZoneManager_AddFiveZones)
+    ->Unit(benchmark::kMicrosecond);
+
+// =============================================================================
+// Category 9: Strum, Portamento/Legato, Rhythm path, Touchpad
+// =============================================================================
+
+// Zone with Strum mode: buffer + trigger path
+BENCHMARK_DEFINE_F(MidiBenchmarkFixture, Feature_Zone_Strum_Trigger)
+(benchmark::State &state) {
+  auto zone = createZone("StrumZone", 0, {81, 87, 69},
+                         ChordUtilities::ChordType::Triad, PolyphonyMode::Poly);
+  zone->playMode = Zone::PlayMode::Strum;
+  zone->strumSpeedMs = 50;
+  proc.getZoneManager().addZone(zone);
+  proc.forceRebuildMappings();
+  mockMidi.clear();
+
+  InputID input{0, 81};
+  for (auto _ : state) {
+    proc.processEvent(input, true);
+    proc.processEvent(input, false);
+    mockMidi.clear();
+  }
+  proc.getZoneManager().removeZone(zone);
+}
+BENCHMARK_REGISTER_F(MidiBenchmarkFixture, Feature_Zone_Strum_Trigger)
+    ->Unit(benchmark::kMicrosecond);
+
+// Legato zone with adaptive glide (RhythmAnalyzer path)
+BENCHMARK_DEFINE_F(MidiBenchmarkFixture, Feature_Zone_Legato_AdaptiveGlide)
+(benchmark::State &state) {
+  auto zone = createZone("LegatoAdaptive", 0, {81, 87, 69},
+                         ChordUtilities::ChordType::None, PolyphonyMode::Legato);
+  zone->glideTimeMs = 50;
+  zone->isAdaptiveGlide = true;
+  zone->maxGlideTimeMs = 200;
+  proc.getZoneManager().addZone(zone);
+  proc.forceRebuildMappings();
+  mockMidi.clear();
+
+  InputID input{0, 81};
+  for (auto _ : state) {
+    proc.processEvent(input, true);
+    proc.processEvent(input, false);
+    mockMidi.clear();
+  }
+  proc.getZoneManager().removeZone(zone);
+}
+BENCHMARK_REGISTER_F(MidiBenchmarkFixture, Feature_Zone_Legato_AdaptiveGlide)
+    ->Unit(benchmark::kMicrosecond);
+
+// Touchpad: processTouchpadContacts (Finger1Down -> Note)
+BENCHMARK_DEFINE_F(MidiBenchmarkFixture, Feature_Touchpad_FingerDownUp)
+(benchmark::State &state) {
+  addTouchpadNoteMapping(0, 60, 1);
+  proc.forceRebuildMappings();
+  mockMidi.clear();
+
+  uintptr_t deviceHandle = 0x9000;
+  std::vector<TouchpadContact> downContacts = {
+      {0, 100, 100, 0.5f, 0.5f, true}};
+  std::vector<TouchpadContact> upContacts = {
+      {0, 100, 100, 0.5f, 0.5f, false}};
+
+  for (auto _ : state) {
+    proc.processTouchpadContacts(deviceHandle, downContacts);
+    proc.processTouchpadContacts(deviceHandle, upContacts);
+    mockMidi.clear();
+  }
+}
+BENCHMARK_REGISTER_F(MidiBenchmarkFixture, Feature_Touchpad_FingerDownUp)
+    ->Unit(benchmark::kMicrosecond);
+
+// Axis/pitch-pad path: handleAxisEvent (scroll or pointer)
+BENCHMARK_DEFINE_F(MidiBenchmarkFixture, Feature_HandleAxisEvent)
+(benchmark::State &state) {
+  // Expression CC on ScrollUp (InputTypes::ScrollUp) - if no mapping, still exercises path
+  addExpressionCCMapping(0, InputTypes::ScrollUp, 1, 1, false);
+  proc.forceRebuildMappings();
+  mockMidi.clear();
+
+  uintptr_t deviceHandle = 0;
+  for (auto _ : state) {
+    proc.handleAxisEvent(deviceHandle, InputTypes::ScrollUp, 1.0f);
+    proc.handleAxisEvent(deviceHandle, InputTypes::ScrollUp, 0.0f);
+    mockMidi.clear();
+  }
+}
+BENCHMARK_REGISTER_F(MidiBenchmarkFixture, Feature_HandleAxisEvent)
+    ->Unit(benchmark::kMicrosecond);
+
+// =============================================================================
+// Category 10: Stress - Many zones, layer search
+// =============================================================================
+
+// 15 zones, each with 3 keys; one processEvent (worst-case zone lookup)
+BENCHMARK_DEFINE_F(MidiBenchmarkFixture, Stress_ManyZones_15)
+(benchmark::State &state) {
+  std::vector<std::shared_ptr<Zone>> zones;
+  for (int i = 0; i < 15; ++i) {
+    std::vector<int> keys = {70 + i * 2, 71 + i * 2, 72 + i * 2};
+    auto z = createZone("StressZ" + juce::String(i), 0, keys,
+                        ChordUtilities::ChordType::None, PolyphonyMode::Poly);
+    proc.getZoneManager().addZone(z);
+    zones.push_back(z);
+  }
+  proc.forceRebuildMappings();
+  mockMidi.clear();
+
+  InputID input{0, 70};
+  for (auto _ : state) {
+    proc.processEvent(input, true);
+    proc.processEvent(input, false);
+    mockMidi.clear();
+  }
+  for (auto &z : zones) {
+    proc.getZoneManager().removeZone(z);
+  }
+}
+BENCHMARK_REGISTER_F(MidiBenchmarkFixture, Stress_ManyZones_15)
+    ->Unit(benchmark::kMicrosecond);
+
+// Layer search: 9 layers with note on layer 8, toggle all on (already in Layer_AllActive; this one emphasizes compile + one hit)
+BENCHMARK_DEFINE_F(MidiBenchmarkFixture, Stress_LayerSearch_AllNineActive)
+(benchmark::State &state) {
+  for (int layer = 1; layer < 9; ++layer) {
+    auto layerNode = presetMgr.getLayerNode(layer);
+    if (layerNode.isValid()) {
+      layerNode.setProperty("isActive", true, nullptr);
+    }
+  }
+  addNoteMapping(8, 81, 72, 100, 1);
+  proc.forceRebuildMappings();
+  mockMidi.clear();
+
+  InputID input{0, 81};
+  for (auto _ : state) {
+    proc.processEvent(input, true);
+    proc.processEvent(input, false);
+    mockMidi.clear();
+  }
+}
+BENCHMARK_REGISTER_F(MidiBenchmarkFixture, Stress_LayerSearch_AllNineActive)
     ->Unit(benchmark::kMicrosecond);
