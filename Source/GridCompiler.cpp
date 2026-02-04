@@ -614,8 +614,10 @@ void compileMappingsForLayer(
         else
           entry.action.adsrSettings.target = AdsrTarget::CC;
 
+        // Custom ADSR envelope is not supported for PitchBend/SmartScaleBend
         entry.action.adsrSettings.useCustomEnvelope =
-            (bool)mapping.getProperty("useCustomEnvelope", false);
+            (bool)mapping.getProperty("useCustomEnvelope", false) && !isPB &&
+            !isSmartBend;
         if (!entry.action.adsrSettings.useCustomEnvelope) {
           entry.action.adsrSettings.attackMs = 0;
           entry.action.adsrSettings.decayMs = 0;
@@ -708,7 +710,12 @@ void compileMappingsForLayer(
       else
         action.adsrSettings.target = AdsrTarget::CC;
 
-      action.adsrSettings.useCustomEnvelope = useCustomEnvelope;
+      // Custom ADSR envelope is not supported for PitchBend/SmartScaleBend
+      bool isPB = action.adsrSettings.target == AdsrTarget::PitchBend;
+      bool isSmartBend =
+          action.adsrSettings.target == AdsrTarget::SmartScaleBend;
+      action.adsrSettings.useCustomEnvelope =
+          useCustomEnvelope && !isPB && !isSmartBend;
 
       if (!useCustomEnvelope) {
         action.adsrSettings.attackMs = 0;

@@ -260,19 +260,19 @@ InspectorSchema MappingDefinition::getSchema(const juce::ValueTree &mapping,
       }
     }
     if (adsrTargetStr.equalsIgnoreCase("SmartScaleBend")) {
-      InspectorControl steps;
-      steps.propertyId = "smartStepShift";
-      steps.label = "Scale Steps";
-      steps.controlType = InspectorControl::Type::Slider;
-      steps.min = -12.0;
-      steps.max = 12.0;
-      steps.step = 1.0;
       // For touchpad continuous SmartScaleBend Expression mappings, the fixed
       // step shift is not used (continuous mapping comes from the touchpad
-      // range/step config), so disable this slider in that specific case.
-      if (touchpad && !touchpadInputBool)
-        steps.isEnabled = false;
-      schema.push_back(steps);
+      // range/step config), so hide this slider completely in that case.
+      if (!(touchpad && !touchpadInputBool)) {
+        InspectorControl steps;
+        steps.propertyId = "smartStepShift";
+        steps.label = "Scale Steps";
+        steps.controlType = InspectorControl::Type::Slider;
+        steps.min = -12.0;
+        steps.max = 12.0;
+        steps.step = 1.0;
+        schema.push_back(steps);
+      }
     }
 
     // Value when On / Value when Off: CC only. PitchBend/SmartScaleBend use
@@ -307,10 +307,13 @@ InspectorSchema MappingDefinition::getSchema(const juce::ValueTree &mapping,
     useEnv.label = "Use Custom ADSR Curve";
     useEnv.controlType = InspectorControl::Type::Toggle;
     useEnv.widthWeight = 1.0f;
+    // Disable custom envelope for PitchBend and SmartScaleBend (not supported)
+    useEnv.isEnabled = !isPitchOrSmart;
     schema.push_back(useEnv);
 
     // 3. Conditional Branch
-    if (useCustomEnvelope) {
+    // Only show ADSR sliders if custom envelope is enabled AND not pitch bend
+    if (useCustomEnvelope && !isPitchOrSmart) {
       auto addAdsrSlider = [&schema](const juce::String &propId,
                                      const juce::String &lbl, double maxVal) {
         InspectorControl c;

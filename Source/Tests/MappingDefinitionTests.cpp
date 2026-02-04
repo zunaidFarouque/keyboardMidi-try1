@@ -230,8 +230,7 @@ TEST(MappingDefinitionTest,
          "(semitones) slider at all";
 }
 
-TEST(MappingDefinitionTest,
-     TouchpadContinuousSmartScaleDisablesScaleStepsSlider) {
+TEST(MappingDefinitionTest, TouchpadContinuousSmartScaleHidesScaleStepsSlider) {
   juce::ValueTree mapping("Mapping");
   mapping.setProperty("type", "Expression", nullptr);
   mapping.setProperty("adsrTarget", "SmartScaleBend", nullptr);
@@ -247,11 +246,9 @@ TEST(MappingDefinitionTest,
       break;
     }
   }
-  ASSERT_NE(stepsCtrl, nullptr)
-      << "Touchpad Expression SmartScaleBend should still expose Scale Steps";
-  EXPECT_FALSE(stepsCtrl->isEnabled)
-      << "Scale Steps slider should be disabled for touchpad continuous "
-         "SmartScaleBend Expression";
+  EXPECT_EQ(stepsCtrl, nullptr)
+      << "Touchpad continuous SmartScaleBend should not show Scale Steps "
+         "slider; range is defined by Output min/max (smart scale distance)";
 }
 
 // SmartScaleBend uses Scale Steps only; no data2, no Value when On/Off

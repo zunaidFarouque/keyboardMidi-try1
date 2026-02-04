@@ -1662,27 +1662,30 @@ void InputProcessor::processTouchpadContacts(
           lastTouchpadContinuousValues[keyCont] = ccVal;
         } else {
           // Pitch-based targets: interpret the (possibly fractional) step
-          // offset and convert to a PB value. Allow extrapolation beyond
-          // configured range up to global PB range.
+          // offset and convert to a PB value.
           int pbRange = juce::jmax(1, settingsManager.getPitchBendRange());
-          // Clamp to global PB range, not just configured output range, to
-          // allow extrapolation.
-          float clampedOffset =
-              juce::jlimit(static_cast<float>(-pbRange),
-                           static_cast<float>(pbRange), stepOffset);
-
           int pbVal = 8192;
+
           if (act.adsrSettings.target == AdsrTarget::SmartScaleBend) {
+            // SmartScaleBend: stepOffset is SMART SCALE DISTANCE (scale steps).
+            // Same semantics as keyboard SmartScaleBend: e.g. C major, press C,
+            // bend down 1 = B, bend down 2 = A; bend up 1 = D, bend up 2 = E.
+            // Do not clamp stepOffset by semitone range; pass scale steps
+            // through. smartStepOffsetToPitchBend clips the final PB to
+            // [0,16383] and respects global PB range.
             int currentNote = voiceManager.getCurrentPlayingNote(act.channel);
-            if (currentNote >= 0) {
+            if (currentNote < 0) {
+              currentNote = lastTriggeredNote;
+            }
+            if (currentNote >= 0 && currentNote < 128) {
               std::vector<int> intervals =
                   zoneManager.getGlobalScaleIntervals();
               if (intervals.empty())
                 intervals = {0, 2, 4, 5, 7, 9, 11}; // Major fallback
               int root = zoneManager.getGlobalRootNote();
 
-              float baseStep = std::floor(clampedOffset);
-              float frac = clampedOffset - baseStep;
+              float baseStep = std::floor(stepOffset);
+              float frac = stepOffset - baseStep;
               int s0 = static_cast<int>(baseStep);
               int s1 = (frac >= 0.0f) ? s0 + 1 : s0 - 1;
               int pb0 = ScaleUtilities::smartStepOffsetToPitchBend(
@@ -1696,15 +1699,15 @@ void InputProcessor::processTouchpadContacts(
                   juce::jlimit(0, 16383, static_cast<int>(std::round(blended)));
             }
           } else {
-            // Standard PitchBend: treat the clamped offset directly as a
-            // semitone offset.
-            float clampedSteps =
+            // Standard PitchBend: stepOffset is in semitones. Clamp to global
+            // PB range and allow extrapolation up to that range.
+            float clampedOffset =
                 juce::jlimit(static_cast<float>(-pbRange),
-                             static_cast<float>(pbRange), clampedOffset);
+                             static_cast<float>(pbRange), stepOffset);
             double stepsPerSemitone = 8192.0 / static_cast<double>(pbRange);
             pbVal = static_cast<int>(std::round(
                 8192.0 +
-                (static_cast<double>(clampedSteps) * stepsPerSemitone)));
+                (static_cast<double>(clampedOffset) * stepsPerSemitone)));
             pbVal = juce::jlimit(0, 16383, pbVal);
           }
 

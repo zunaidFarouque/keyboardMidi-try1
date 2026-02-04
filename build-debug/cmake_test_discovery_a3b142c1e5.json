@@ -623,19 +623,19 @@
           "line": 211
         },
         {
-          "name": "TouchpadContinuousSmartScaleDisablesScaleStepsSlider",
+          "name": "TouchpadContinuousSmartScaleHidesScaleStepsSlider",
           "file": "D:\\_installed\\VScode repos\\AI\\Cursor\\keyboardMidi-try1\\Source\\Tests\\MappingDefinitionTests.cpp",
           "line": 234
         },
         {
           "name": "SmartScaleBendNoPeakSlider",
           "file": "D:\\_installed\\VScode repos\\AI\\Cursor\\keyboardMidi-try1\\Source\\Tests\\MappingDefinitionTests.cpp",
-          "line": 258
+          "line": 256
         },
         {
           "name": "CCCompactDependentLayout",
           "file": "D:\\_installed\\VScode repos\\AI\\Cursor\\keyboardMidi-try1\\Source\\Tests\\MappingDefinitionTests.cpp",
-          "line": 277
+          "line": 275
         }
       ]
     },
