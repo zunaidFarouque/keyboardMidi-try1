@@ -1,1 +1,0 @@
-D:\_installed\VScode repos\AI\Cursor\keyboardMidi-try1\build-debug\OmniKey_rc_lib.dir\Debug\OmniKey_rc_lib.lib
