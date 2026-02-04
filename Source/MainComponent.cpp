@@ -253,6 +253,12 @@ MainComponent::MainComponent()
         return;
       }
 
+      // Show mini window so it's available for cursor clip (even if main window
+      // is open)
+      if (miniWindow) {
+        miniWindow->setVisible(true);
+      }
+
       // Lock cursor to mini window (with margin to avoid resize handles)
       // Cursor remains visible
       if (miniWindow && miniWindow->getPeer()) {
@@ -260,10 +266,12 @@ MainComponent::MainComponent()
         if (hwnd != nullptr) {
           RECT rect;
           if (GetWindowRect(static_cast<HWND>(hwnd), &rect)) {
-            // Add margin (25 pixels) to avoid resize handles near edges
+            // Add margin to avoid resize handles near edges (40px from top,
+            // 25px elsewhere)
             const int margin = 25;
+            const int marginTop = 40;
             rect.left += margin;
-            rect.top += margin;
+            rect.top += marginTop;
             rect.right -= margin;
             rect.bottom -= margin;
             ClipCursor(&rect);
@@ -538,6 +546,12 @@ void MainComponent::handleRawKeyEvent(uintptr_t deviceHandle, int keyCode,
         return;
       }
 
+      // Show mini window so it's available for cursor clip (even if main window
+      // is open)
+      if (miniWindow) {
+        miniWindow->setVisible(true);
+      }
+
       // Lock cursor to mini window (with margin to avoid resize handles)
       // Cursor remains visible
       if (miniWindow && miniWindow->getPeer()) {
@@ -545,10 +559,12 @@ void MainComponent::handleRawKeyEvent(uintptr_t deviceHandle, int keyCode,
         if (hwnd != nullptr) {
           RECT rect;
           if (GetWindowRect(static_cast<HWND>(hwnd), &rect)) {
-            // Add margin (25 pixels) to avoid resize handles near edges
+            // Add margin to avoid resize handles near edges (40px from top,
+            // 25px elsewhere)
             const int margin = 25;
+            const int marginTop = 40;
             rect.left += margin;
-            rect.top += margin;
+            rect.top += marginTop;
             rect.right -= margin;
             rect.bottom -= margin;
             ClipCursor(&rect);

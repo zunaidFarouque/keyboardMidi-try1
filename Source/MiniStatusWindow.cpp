@@ -9,7 +9,9 @@ MiniStatusWindow::MiniStatusWindow(SettingsManager &settingsMgr)
   statusLabel.setText(
       "MIDI Mode is ON. Press " +
           RawInputManager::getKeyName(settingsManager.getToggleKey()) +
-          " or Close to stop.",
+          " or Close to stop. Press " +
+          RawInputManager::getKeyName(settingsManager.getPerformanceModeKey()) +
+          " to unlock cursor.",
       juce::dontSendNotification);
   statusLabel.setJustificationType(juce::Justification::centred);
   statusLabel.setColour(juce::Label::textColourId, juce::Colours::white);
