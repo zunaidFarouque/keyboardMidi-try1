@@ -133,6 +133,9 @@ private:
   static constexpr int kMidiRefreshItemId = 0x7FFF;
   void refreshMidiDeviceList(bool triggerConnection = true);
 
+  // Update performance mode button text based on state and shortcut key
+  void updatePerformanceModeButtonText();
+
   // ChangeListener implementation
   void changeListenerCallback(juce::ChangeBroadcaster *source) override;
 

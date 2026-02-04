@@ -1012,6 +1012,19 @@ int InputProcessor::getHighestActiveLayerIndex() const {
   return 0;
 }
 
+std::optional<float>
+InputProcessor::getPitchPadRelativeAnchorNormX(uintptr_t deviceHandle,
+                                               int layerId, int eventId) const {
+  juce::ScopedLock lock(anchorLock);
+  for (const auto &pair : pitchPadRelativeAnchorT) {
+    const auto &key = pair.first;
+    if (std::get<0>(key) == deviceHandle && std::get<1>(key) == layerId &&
+        std::get<2>(key) == eventId)
+      return pair.second;
+  }
+  return std::nullopt;
+}
+
 bool InputProcessor::hasManualMappingForKey(int keyCode) {
   std::array<bool, 9> activeLayersSnapshot{};
   {
@@ -1341,6 +1354,15 @@ bool InputProcessor::hasPointerMappings() {
   if (!ctx)
     return false;
 
+  // Check for touchpad mappings (Finger1X, Finger1Y, etc.)
+  for (const auto &entry : ctx->touchpadMappings) {
+    if (activeLayersSnapshot[(size_t)entry.layerId]) {
+      // Found at least one touchpad mapping in an active layer
+      return true;
+    }
+  }
+
+  // Also check for legacy PointerX/PointerY mappings in grids
   for (int i = 8; i >= 0; --i) {
     if (!activeLayersSnapshot[(size_t)i])
       continue;
@@ -1615,22 +1637,30 @@ void InputProcessor::processTouchpadContacts(
 
             if (startGesture) {
               // Store anchor X position and the absolute step it maps to.
-              pitchPadRelativeAnchorT[relKey] = t;
-              float anchorXClamped = juce::jlimit(0.0f, 1.0f, t);
-              PitchSample anchorSample = mapXToStep(layout, anchorXClamped);
-              pitchPadRelativeAnchorStep[relKey] = anchorSample.step;
+              {
+                juce::ScopedLock al(anchorLock);
+                pitchPadRelativeAnchorT[relKey] = t;
+                float anchorXClamped = juce::jlimit(0.0f, 1.0f, t);
+                PitchSample anchorSample = mapXToStep(layout, anchorXClamped);
+                pitchPadRelativeAnchorStep[relKey] = anchorSample.step;
+              }
             }
 
-            auto itAnchorStep = pitchPadRelativeAnchorStep.find(relKey);
-            if (itAnchorStep != pitchPadRelativeAnchorStep.end()) {
+            float anchorStepVal = 0.0f;
+            bool hasAnchor = false;
+            {
+              juce::ScopedLock al(anchorLock);
+              auto itAnchorStep = pitchPadRelativeAnchorStep.find(relKey);
+              if (itAnchorStep != pitchPadRelativeAnchorStep.end()) {
+                anchorStepVal = itAnchorStep->second;
+                hasAnchor = true;
+              }
+            }
+            if (hasAnchor) {
               float xClamped = juce::jlimit(0.0f, 1.0f, t);
               PitchSample sample = mapXToStep(layout, xClamped);
-              // Step offset is just the difference between current and anchor
-              // steps, so the anchor maps to 0 and everything else follows the
-              // same layout as Absolute.
-              stepOffset = sample.step - itAnchorStep->second;
+              stepOffset = sample.step - anchorStepVal;
             } else {
-              // Fallback: no anchor yet, treat as zero offset.
               stepOffset = 0.0f;
             }
           } else {

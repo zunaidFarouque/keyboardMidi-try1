@@ -82,6 +82,8 @@ private:
   // paint)
   std::vector<TouchpadContact> lastTouchpadContacts;
   mutable juce::CriticalSection contactsLock;
+  // Device handle of last touchpad contact source (for relative anchor lookup)
+  std::atomic<uintptr_t> lastTouchpadDeviceHandle{0};
 
   // Phase 50.9: Async Dynamic View (mailbox-style atomics)
   std::atomic<uintptr_t> lastInputDeviceHandle{0}; // Written by Input Thread

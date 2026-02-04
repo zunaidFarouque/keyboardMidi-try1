@@ -238,7 +238,7 @@ MainComponent::MainComponent()
   };
 
   addAndMakeVisible(performanceModeButton);
-  performanceModeButton.setButtonText("Performance Mode");
+  updatePerformanceModeButtonText();
   performanceModeButton.setClickingTogglesState(true);
   performanceModeButton.onClick = [this] {
     bool enabled = performanceModeButton.getToggleState();
@@ -253,23 +253,28 @@ MainComponent::MainComponent()
         return;
       }
 
-      // Lock cursor: hide and clip to window
-      ::ShowCursor(FALSE);
-      if (auto *peer = getPeer()) {
-        void *hwnd = peer->getNativeHandle();
+      // Lock cursor to mini window (with margin to avoid resize handles)
+      // Cursor remains visible
+      if (miniWindow && miniWindow->getPeer()) {
+        void *hwnd = miniWindow->getPeer()->getNativeHandle();
         if (hwnd != nullptr) {
           RECT rect;
           if (GetWindowRect(static_cast<HWND>(hwnd), &rect)) {
+            // Add margin (25 pixels) to avoid resize handles near edges
+            const int margin = 25;
+            rect.left += margin;
+            rect.top += margin;
+            rect.right -= margin;
+            rect.bottom -= margin;
             ClipCursor(&rect);
           }
         }
       }
-      performanceModeButton.setButtonText("Unlock Cursor (Esc)");
+      updatePerformanceModeButtonText();
     } else {
-      // Unlock cursor: show and release clip
-      ::ShowCursor(TRUE);
+      // Unlock cursor: release clip
       ClipCursor(nullptr);
-      performanceModeButton.setButtonText("Performance Mode");
+      updatePerformanceModeButtonText();
     }
   };
 
@@ -356,7 +361,6 @@ MainComponent::~MainComponent() {
 
   // 7. Ensure cursor is unlocked on exit
   if (performanceModeButton.getToggleState()) {
-    ::ShowCursor(TRUE);
     ClipCursor(nullptr);
   }
 }
@@ -464,6 +468,17 @@ juce::ApplicationCommandTarget *MainComponent::getNextCommandTarget() {
   return nullptr;
 }
 
+void MainComponent::updatePerformanceModeButtonText() {
+  int perfKey = settingsManager.getPerformanceModeKey();
+  juce::String keyName = RawInputManager::getKeyName(perfKey);
+  if (performanceModeButton.getToggleState()) {
+    performanceModeButton.setButtonText("Performance Mode ON (" + keyName +
+                                        ")");
+  } else {
+    performanceModeButton.setButtonText("Performance Mode (" + keyName + ")");
+  }
+}
+
 void MainComponent::changeListenerCallback(juce::ChangeBroadcaster *source) {
   if (source == &settingsManager) {
     // Handle MIDI mode changes
@@ -505,13 +520,56 @@ void MainComponent::handleRawKeyEvent(uintptr_t deviceHandle, int keyCode,
     return; // Don't process this key for MIDI
   }
 
+  // Check for Performance Mode shortcut key
+  if (isDown && keyCode == settingsManager.getPerformanceModeKey()) {
+    bool currentState = performanceModeButton.getToggleState();
+    performanceModeButton.setToggleState(!currentState,
+                                         juce::dontSendNotification);
+    // Trigger the onClick handler logic
+    bool enabled = !currentState;
+    if (enabled) {
+      // Smart Locking: Only lock if preset has pointer mappings
+      if (!inputProcessor.hasPointerMappings()) {
+        performanceModeButton.setToggleState(false, juce::dontSendNotification);
+        juce::AlertWindow::showMessageBoxAsync(
+            juce::AlertWindow::WarningIcon, "Performance Mode",
+            "No Trackpad mappings found in this preset.\n\n"
+            "Add Trackpad X or Y mappings to use Performance Mode.");
+        return;
+      }
+
+      // Lock cursor to mini window (with margin to avoid resize handles)
+      // Cursor remains visible
+      if (miniWindow && miniWindow->getPeer()) {
+        void *hwnd = miniWindow->getPeer()->getNativeHandle();
+        if (hwnd != nullptr) {
+          RECT rect;
+          if (GetWindowRect(static_cast<HWND>(hwnd), &rect)) {
+            // Add margin (25 pixels) to avoid resize handles near edges
+            const int margin = 25;
+            rect.left += margin;
+            rect.top += margin;
+            rect.right -= margin;
+            rect.bottom -= margin;
+            ClipCursor(&rect);
+          }
+        }
+      }
+      updatePerformanceModeButtonText();
+    } else {
+      // Unlock cursor: release clip
+      ClipCursor(nullptr);
+      updatePerformanceModeButtonText();
+    }
+    return; // Don't process this key for MIDI
+  }
+
   // Safety: Check for Escape key to unlock cursor
   if (isDown && keyCode == VK_ESCAPE &&
       performanceModeButton.getToggleState()) {
     performanceModeButton.setToggleState(false, juce::dontSendNotification);
-    ::ShowCursor(TRUE);
     ClipCursor(nullptr);
-    performanceModeButton.setButtonText("Performance Mode");
+    updatePerformanceModeButtonText();
     return;
   }
 
@@ -825,7 +883,9 @@ void MainComponent::timerCallback() {
         if (hwnd != nullptr) {
           rawInputManager->initialize(hwnd, &settingsManager);
           isInputInitialized = true;
-          deviceManager.validateConnectedDevices(); // Scan devices and re-assign Touchpad alias if needed
+          deviceManager
+              .validateConnectedDevices(); // Scan devices and re-assign
+                                           // Touchpad alias if needed
           if (logComponent)
             logComponent->addEntry(
                 "--- SYSTEM: Raw Input Hooked Successfully ---");

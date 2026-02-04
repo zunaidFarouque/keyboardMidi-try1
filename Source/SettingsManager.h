@@ -20,6 +20,10 @@ public:
   int getToggleKey() const;
   void setToggleKey(int vkCode);
 
+  // Performance Mode shortcut key
+  int getPerformanceModeKey() const;
+  void setPerformanceModeKey(int vkCode);
+
   // Last MIDI Device
   juce::String getLastMidiDevice() const;
   void setLastMidiDevice(const juce::String &name);
@@ -32,6 +36,12 @@ public:
   bool isCapWindowRefresh30Fps() const;
   void setCapWindowRefresh30Fps(bool cap);
   int getWindowRefreshIntervalMs() const;
+
+  // Visualizer: opacity for X and Y touchpad overlays (0.0–1.0)
+  float getVisualizerXOpacity() const;
+  void setVisualizerXOpacity(float alpha);
+  float getVisualizerYOpacity() const;
+  void setVisualizerYOpacity(float alpha);
 
   // Mapping type colors (Phase 37)
   juce::Colour getTypeColor(ActionType type) const;

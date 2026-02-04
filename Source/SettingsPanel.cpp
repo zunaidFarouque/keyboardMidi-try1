@@ -34,6 +34,37 @@ SettingsPanel::SettingsPanel(SettingsManager &settingsMgr, MidiEngine &midiEng,
     settingsManager.setPitchBendRange(value);
   };
 
+  // Visualizer settings: X/Y opacity (0–100%)
+  addAndMakeVisible(visualizerGroup);
+  visXOpacityLabel.setText("Touchpad X bands opacity:",
+                           juce::dontSendNotification);
+  visYOpacityLabel.setText("Touchpad Y bands opacity:",
+                           juce::dontSendNotification);
+  addAndMakeVisible(visXOpacityLabel);
+  addAndMakeVisible(visXOpacitySlider);
+  addAndMakeVisible(visYOpacityLabel);
+  addAndMakeVisible(visYOpacitySlider);
+
+  visXOpacitySlider.setRange(0.0, 100.0, 1.0);
+  visYOpacitySlider.setRange(0.0, 100.0, 1.0);
+  visXOpacitySlider.setSliderStyle(juce::Slider::LinearHorizontal);
+  visYOpacitySlider.setSliderStyle(juce::Slider::LinearHorizontal);
+  visXOpacitySlider.setTextValueSuffix(" %");
+  visYOpacitySlider.setTextValueSuffix(" %");
+  visXOpacitySlider.setValue(settingsManager.getVisualizerXOpacity() * 100.0,
+                             juce::dontSendNotification);
+  visYOpacitySlider.setValue(settingsManager.getVisualizerYOpacity() * 100.0,
+                             juce::dontSendNotification);
+
+  visXOpacitySlider.onValueChange = [this] {
+    float v = static_cast<float>(visXOpacitySlider.getValue() / 100.0);
+    settingsManager.setVisualizerXOpacity(v);
+  };
+  visYOpacitySlider.onValueChange = [this] {
+    float v = static_cast<float>(visYOpacitySlider.getValue() / 100.0);
+    settingsManager.setVisualizerYOpacity(v);
+  };
+
   // Setup Send RPN Button (Phase 25.2)
   addAndMakeVisible(sendRpnButton);
   sendRpnButton.setButtonText("Sync Range to Synth");
@@ -98,6 +129,42 @@ SettingsPanel::SettingsPanel(SettingsManager &settingsMgr, MidiEngine &midiEng,
         }));
   };
 
+  // Setup Performance Mode Key Label and Button
+  performanceModeKeyLabel.setText("Performance Mode Shortcut:",
+                                  juce::dontSendNotification);
+  performanceModeKeyLabel.attachToComponent(&performanceModeKeyButton, true);
+  addAndMakeVisible(performanceModeKeyLabel);
+  addAndMakeVisible(performanceModeKeyButton);
+  updatePerformanceModeKeyButtonText();
+  performanceModeKeyButton.onClick = [this] {
+    if (!isLearningPerformanceModeKey) {
+      // Enter learn mode
+      isLearningPerformanceModeKey = true;
+      performanceModeKeyButton.setButtonText("Press any key...");
+      rawInputManager.addListener(this);
+    } else {
+      // Cancel learn mode
+      isLearningPerformanceModeKey = false;
+      rawInputManager.removeListener(this);
+      updatePerformanceModeKeyButtonText();
+    }
+  };
+
+  // Setup Reset Performance Mode Key Button
+  addAndMakeVisible(resetPerformanceModeKeyButton);
+  resetPerformanceModeKeyButton.setButtonText("Reset");
+  resetPerformanceModeKeyButton.onClick = [this] {
+    juce::AlertWindow::showOkCancelBox(
+        juce::AlertWindow::QuestionIcon, "Reset Performance Mode Key",
+        "Reset the Performance Mode shortcut to F11?", "Yes", "Cancel", this,
+        juce::ModalCallbackFunction::create([this](int result) {
+          if (result == 1) {                             // OK button
+            settingsManager.setPerformanceModeKey(0x7A); // VK_F11
+            updatePerformanceModeKeyButtonText();
+          }
+        }));
+  };
+
   // Setup Studio Mode Toggle
   studioModeToggle.setButtonText("Studio Mode (Multi-Device Support)");
   studioModeToggle.setToggleState(settingsManager.isStudioMode(),
@@ -120,7 +187,7 @@ SettingsPanel::SettingsPanel(SettingsManager &settingsMgr, MidiEngine &midiEng,
 
 SettingsPanel::~SettingsPanel() {
   settingsManager.removeChangeListener(this);
-  if (isLearningToggleKey) {
+  if (isLearningToggleKey || isLearningPerformanceModeKey) {
     rawInputManager.removeListener(this);
   }
 }
@@ -132,6 +199,10 @@ void SettingsPanel::changeListenerCallback(juce::ChangeBroadcaster *source) {
                                     juce::dontSendNotification);
     capRefresh30FpsToggle.setToggleState(
         settingsManager.isCapWindowRefresh30Fps(), juce::dontSendNotification);
+    visXOpacitySlider.setValue(settingsManager.getVisualizerXOpacity() * 100.0,
+                               juce::dontSendNotification);
+    visYOpacitySlider.setValue(settingsManager.getVisualizerYOpacity() * 100.0,
+                               juce::dontSendNotification);
   }
 }
 
@@ -183,15 +254,26 @@ void SettingsPanel::launchColourSelectorForType(ActionType type,
 
 void SettingsPanel::handleRawKeyEvent(uintptr_t deviceHandle, int keyCode,
                                       bool isDown) {
-  if (!isLearningToggleKey || !isDown) {
+  if (!isDown)
+    return;
+
+  if (isLearningToggleKey) {
+    // Learn the toggle key
+    settingsManager.setToggleKey(keyCode);
+    isLearningToggleKey = false;
+    rawInputManager.removeListener(this);
+    updateToggleKeyButtonText();
     return;
   }
 
-  // Learn the key
-  settingsManager.setToggleKey(keyCode);
-  isLearningToggleKey = false;
-  rawInputManager.removeListener(this);
-  updateToggleKeyButtonText();
+  if (isLearningPerformanceModeKey) {
+    // Learn the performance mode key
+    settingsManager.setPerformanceModeKey(keyCode);
+    isLearningPerformanceModeKey = false;
+    rawInputManager.removeListener(this);
+    updatePerformanceModeKeyButtonText();
+    return;
+  }
 }
 
 void SettingsPanel::handleAxisEvent(uintptr_t deviceHandle, int inputCode,
@@ -203,6 +285,12 @@ void SettingsPanel::updateToggleKeyButtonText() {
   int toggleKey = settingsManager.getToggleKey();
   juce::String keyName = RawInputManager::getKeyName(toggleKey);
   toggleKeyButton.setButtonText("Toggle Key: " + keyName);
+}
+
+void SettingsPanel::updatePerformanceModeKeyButtonText() {
+  int perfKey = settingsManager.getPerformanceModeKey();
+  juce::String keyName = RawInputManager::getKeyName(perfKey);
+  performanceModeKeyButton.setButtonText("Shortcut: " + keyName);
 }
 
 void SettingsPanel::paint(juce::Graphics &g) {
@@ -233,6 +321,14 @@ void SettingsPanel::resized() {
                                  resetButtonWidth, controlHeight);
   y += controlHeight + spacing;
 
+  // Performance Mode Key row: button and reset button side by side
+  performanceModeKeyButton.setBounds(leftMargin, y, toggleKeyButtonWidth,
+                                     controlHeight);
+  resetPerformanceModeKeyButton.setBounds(leftMargin + toggleKeyButtonWidth +
+                                              spacing,
+                                          y, resetButtonWidth, controlHeight);
+  y += controlHeight + spacing;
+
   // Studio Mode Toggle
   studioModeToggle.setBounds(leftMargin, y, width, controlHeight);
   y += controlHeight + spacing;
@@ -240,6 +336,24 @@ void SettingsPanel::resized() {
   // Cap window refresh at 30 FPS
   capRefresh30FpsToggle.setBounds(leftMargin, y, width, controlHeight);
   y += controlHeight + spacing;
+
+  // Visualizer group (X/Y opacity sliders)
+  int visGroupHeight = controlHeight * 2 + spacing * 3 + 28;
+  visualizerGroup.setBounds(area.getX(), y, area.getWidth(), visGroupHeight);
+  int visInnerX = area.getX() + 10;
+  int visInnerY = y + 24;
+  int visInnerW = area.getWidth() - 20;
+
+  int visLabelW = 200;
+  int visSliderW = visInnerW - visLabelW;
+  visXOpacityLabel.setBounds(visInnerX, visInnerY, visLabelW, controlHeight);
+  visXOpacitySlider.setBounds(visInnerX + visLabelW, visInnerY, visSliderW,
+                              controlHeight);
+  visInnerY += controlHeight + spacing;
+  visYOpacityLabel.setBounds(visInnerX, visInnerY, visLabelW, controlHeight);
+  visYOpacitySlider.setBounds(visInnerX + visLabelW, visInnerY, visSliderW,
+                              controlHeight);
+  y += visGroupHeight + spacing;
 
   // Mapping Colors group (panel coordinates)
   int groupHeight = controlHeight + spacing + 28;

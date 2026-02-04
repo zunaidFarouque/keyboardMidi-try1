@@ -9,6 +9,7 @@
 #include "VoiceManager.h"
 #include "ZoneManager.h"
 #include <JuceHeader.h>
+#include <optional>
 #include <set>
 #include <unordered_map>
 #include <vector>
@@ -78,6 +79,12 @@ public:
 
   // Phase 50.9: Get highest active layer index (for Dynamic View following)
   int getHighestActiveLayerIndex() const;
+
+  // Thread-safe: return relative pitch-pad anchor X (normalized [0,1]) for the
+  // given device/layer/event if set; nullopt if no touch has occurred yet.
+  std::optional<float> getPitchPadRelativeAnchorNormX(uintptr_t deviceHandle,
+                                                      int layerId,
+                                                      int eventId) const;
 
   // True if any manual mapping exists for this keyCode (for conflict highlight
   // in visualizer)
@@ -163,7 +170,8 @@ private:
 
   // Relative-mode pitch-pad state: per-gesture anchor X and anchor step, keyed
   // by (deviceHandle, layerId, eventId, channel) so multiple mappings for the
-  // same touchpad event do not interfere.
+  // same touchpad event do not interfere. Protected by anchorLock.
+  mutable juce::CriticalSection anchorLock;
   std::map<std::tuple<uintptr_t, int, int, int>, float> pitchPadRelativeAnchorT;
   std::map<std::tuple<uintptr_t, int, int, int>, float>
       pitchPadRelativeAnchorStep;

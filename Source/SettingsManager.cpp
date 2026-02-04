@@ -4,12 +4,17 @@ SettingsManager::SettingsManager() {
   rootNode = juce::ValueTree("OmniKeySettings");
   rootNode.setProperty("pitchBendRange", 12, nullptr);
   rootNode.setProperty("midiModeActive", false, nullptr);
-  rootNode.setProperty("toggleKeyCode", 0x91, nullptr); // VK_SCROLL
+  rootNode.setProperty("toggleKeyCode", 0x91, nullptr);          // VK_SCROLL
+  rootNode.setProperty("performanceModeKeyCode", 0x7A, nullptr); // VK_F11
   rootNode.setProperty("lastMidiDevice", "", nullptr);
   rootNode.setProperty("studioMode", false,
                        nullptr); // Default: Studio Mode OFF
   rootNode.setProperty("capWindowRefresh30Fps", true,
                        nullptr); // Default: cap at 30 FPS
+  // Visualizer opacity defaults: semi-transparent overlays so X/Y can be
+  // layered.
+  rootNode.setProperty("visualizerXOpacity", 0.45, nullptr);
+  rootNode.setProperty("visualizerYOpacity", 0.45, nullptr);
   rootNode.addListener(this);
 }
 
@@ -42,6 +47,15 @@ void SettingsManager::setToggleKey(int vkCode) {
   sendChangeMessage();
 }
 
+int SettingsManager::getPerformanceModeKey() const {
+  return rootNode.getProperty("performanceModeKeyCode", 0x7A); // VK_F11 default
+}
+
+void SettingsManager::setPerformanceModeKey(int vkCode) {
+  rootNode.setProperty("performanceModeKeyCode", vkCode, nullptr);
+  sendChangeMessage();
+}
+
 juce::String SettingsManager::getLastMidiDevice() const {
   return rootNode.getProperty("lastMidiDevice", "").toString();
 }
@@ -71,6 +85,28 @@ void SettingsManager::setCapWindowRefresh30Fps(bool cap) {
 
 int SettingsManager::getWindowRefreshIntervalMs() const {
   return isCapWindowRefresh30Fps() ? 34 : 16; // 30 FPS cap vs ~60 FPS
+}
+
+float SettingsManager::getVisualizerXOpacity() const {
+  double v = rootNode.getProperty("visualizerXOpacity", 0.45);
+  return juce::jlimit(0.0, 1.0, v);
+}
+
+void SettingsManager::setVisualizerXOpacity(float alpha) {
+  double v = juce::jlimit(0.0f, 1.0f, alpha);
+  rootNode.setProperty("visualizerXOpacity", v, nullptr);
+  sendChangeMessage();
+}
+
+float SettingsManager::getVisualizerYOpacity() const {
+  double v = rootNode.getProperty("visualizerYOpacity", 0.45);
+  return juce::jlimit(0.0, 1.0, v);
+}
+
+void SettingsManager::setVisualizerYOpacity(float alpha) {
+  double v = juce::jlimit(0.0f, 1.0f, alpha);
+  rootNode.setProperty("visualizerYOpacity", v, nullptr);
+  sendChangeMessage();
 }
 
 juce::String SettingsManager::getTypePropertyName(ActionType type) const {
@@ -141,9 +177,12 @@ void SettingsManager::loadFromXml(juce::File file) {
         rootNode.setProperty("pitchBendRange", 12, nullptr);
         rootNode.setProperty("midiModeActive", false, nullptr);
         rootNode.setProperty("toggleKeyCode", 0x91, nullptr);
+        rootNode.setProperty("performanceModeKeyCode", 0x7A, nullptr);
         rootNode.setProperty("lastMidiDevice", "", nullptr);
         rootNode.setProperty("studioMode", false, nullptr);
         rootNode.setProperty("capWindowRefresh30Fps", true, nullptr);
+        rootNode.setProperty("visualizerXOpacity", 0.45, nullptr);
+        rootNode.setProperty("visualizerYOpacity", 0.45, nullptr);
       } else {
         // Phase 43: Validate (sanitize) – prevent divide-by-zero from bad saved
         // data
@@ -151,6 +190,11 @@ void SettingsManager::loadFromXml(juce::File file) {
         if (pb < 1) {
           rootNode.setProperty("pitchBendRange", 12, nullptr);
         }
+        // Ensure new visualizer properties exist even for older settings files.
+        if (!rootNode.hasProperty("visualizerXOpacity"))
+          rootNode.setProperty("visualizerXOpacity", 0.45, nullptr);
+        if (!rootNode.hasProperty("visualizerYOpacity"))
+          rootNode.setProperty("visualizerYOpacity", 0.45, nullptr);
       }
       rootNode.addListener(this);
       sendChangeMessage();

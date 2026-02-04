@@ -33,12 +33,24 @@ private:
   RawInputManager &rawInputManager;
   juce::Slider pbRangeSlider;
   juce::Label pbRangeLabel;
+  // Visualizer opacity controls
+  juce::GroupComponent visualizerGroup{"Visualizer", "Visualizer"};
+  juce::Slider visXOpacitySlider;
+  juce::Label visXOpacityLabel;
+  juce::Slider visYOpacitySlider;
+  juce::Label visYOpacityLabel;
   juce::TextButton
       sendRpnButton; // Button to send RPN to all channels (Phase 25.2)
   juce::Label toggleKeyLabel;
   juce::TextButton toggleKeyButton;      // Button to set toggle key
   juce::TextButton resetToggleKeyButton; // Button to reset toggle key to F12
   bool isLearningToggleKey = false;
+
+  juce::Label performanceModeKeyLabel;
+  juce::TextButton
+      performanceModeKeyButton; // Button to set performance mode key
+  juce::TextButton resetPerformanceModeKeyButton; // Button to reset to F11
+  bool isLearningPerformanceModeKey = false;
 
   juce::ToggleButton studioModeToggle; // Studio Mode (Multi-Device Support)
   juce::ToggleButton capRefresh30FpsToggle; // Cap window refresh at 30 FPS
@@ -47,6 +59,7 @@ private:
   std::array<juce::TextButton, 3> typeColorButtons;
 
   void updateToggleKeyButtonText();
+  void updatePerformanceModeKeyButtonText();
   void refreshTypeColorButtons();
   void launchColourSelectorForType(ActionType type, juce::TextButton *button);
 

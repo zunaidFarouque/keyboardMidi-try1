@@ -2,16 +2,27 @@
 #include "ColourContrast.h"
 #include "InputProcessor.h"
 #include "KeyboardLayoutUtils.h"
+#include "MappingTypes.h"
+#include "PitchPadUtilities.h"
 #include "PresetManager.h"
 #include "RawInputManager.h"
 #include "SettingsManager.h"
 #include "VoiceManager.h"
 #include <JuceHeader.h>
 #include <algorithm>
+#include <optional>
 
 // Main window refresh cap: 30 FPS (must match
 // MainComponent::kMainWindowRefreshIntervalMs)
 static constexpr int kMainWindowRefreshIntervalMs = 34;
+
+// Reserved width for touchpad panel on the LEFT of the keyboard (avoids
+// overlap with other UI). 5:4 touchpad rectangle fits inside.
+static constexpr float kTouchpadPanelLeftWidth = 180.0f;
+static constexpr float kTouchpadPanelMargin = 16.0f;
+// Touchpad rectangle aspect ratio: width:height = 3:2
+static constexpr float kTouchpadAspectW = 3.0f;
+static constexpr float kTouchpadAspectH = 2.0f;
 
 // Helper to convert alias name to hash (same as in InputProcessor)
 static uintptr_t aliasNameToHash(const juce::String &aliasName) {
@@ -199,8 +210,14 @@ void VisualizerComponent::refreshCache() {
     float unitsTall = 7.3f;
     float headerHeight = 30.0f;
     float availableHeight = static_cast<float>(height) - headerHeight;
+    // Reserve LEFT side for touchpad panel (no overlap with keyboard/other UI)
+    float availableForKeyboard = static_cast<float>(width) -
+                                 kTouchpadPanelLeftWidth -
+                                 (2.0f * kTouchpadPanelMargin);
 
-    float scaleX = static_cast<float>(width) / unitsWide;
+    float scaleX = (availableForKeyboard > 0.0f)
+                       ? (availableForKeyboard / unitsWide)
+                       : (static_cast<float>(width) / unitsWide);
     float scaleY =
         (availableHeight > 0.0f) ? (availableHeight / unitsTall) : scaleX;
     float keySize = std::min(scaleX, scaleY) * 0.9f;
@@ -213,7 +230,11 @@ void VisualizerComponent::refreshCache() {
     startY = juce::jlimit(minStartY, maxStartY, startY);
 
     float totalWidth = unitsWide * keySize;
-    float startX = (static_cast<float>(width) - totalWidth) / 2.0f;
+    // Keyboard starts after the left touchpad panel
+    float startX = kTouchpadPanelLeftWidth + kTouchpadPanelMargin +
+                   (availableForKeyboard > totalWidth
+                        ? (availableForKeyboard - totalWidth) * 0.5f
+                        : 0.0f);
 
     // --- 2. Iterate Keys (Draw Static State Only) ---
     // Acquire baked visual grid from InputProcessor (Phase 50.6).
@@ -422,8 +443,13 @@ void VisualizerComponent::paint(juce::Graphics &g) {
   float unitsTall = 7.3f;
   float headerHeight = 30.0f;
   float availableHeight = static_cast<float>(getHeight()) - headerHeight;
+  float availableForKeyboard = static_cast<float>(getWidth()) -
+                               kTouchpadPanelLeftWidth -
+                               (2.0f * kTouchpadPanelMargin);
 
-  float scaleX = static_cast<float>(getWidth()) / unitsWide;
+  float scaleX = (availableForKeyboard > 0.0f)
+                     ? (availableForKeyboard / unitsWide)
+                     : (static_cast<float>(getWidth()) / unitsWide);
   float scaleY =
       (availableHeight > 0.0f) ? (availableHeight / unitsTall) : scaleX;
   float keySize = std::min(scaleX, scaleY) * 0.9f;
@@ -436,7 +462,10 @@ void VisualizerComponent::paint(juce::Graphics &g) {
   startY = juce::jlimit(minStartY, maxStartY, startY);
 
   float totalWidth = unitsWide * keySize;
-  float startX = (static_cast<float>(getWidth()) - totalWidth) / 2.0f;
+  float startX = kTouchpadPanelLeftWidth + kTouchpadPanelMargin +
+                 (availableForKeyboard > totalWidth
+                      ? (availableForKeyboard - totalWidth) * 0.5f
+                      : 0.0f);
 
   // Snapshot active keys under lock (RawInput may come from OS thread)
   std::set<int> activeKeysSnapshot;
@@ -512,22 +541,235 @@ void VisualizerComponent::paint(juce::Graphics &g) {
     g.drawText(labelText, keyBounds, juce::Justification::centred, false);
   }
 
-  // Touchpad contact panel (right of keyboard)
-  float keyboardRightEdge = startX + totalWidth;
-  float panelLeft = keyboardRightEdge + 16.0f;
-  float panelWidth = static_cast<float>(getWidth()) - panelLeft - 16.0f;
+  // Touchpad panel on the LEFT (no overlap with keyboard). 5:4 rectangle,
+  // X and Y bands from same buildPitchPadLayout() as runtime (resting space
+  // slider drives layout).
+  float panelLeft = kTouchpadPanelMargin;
+  float panelWidth = kTouchpadPanelLeftWidth - (2.0f * kTouchpadPanelMargin);
   float panelTop = headerHeight + 8.0f;
   float panelBottom = static_cast<float>(getHeight()) - 8.0f;
-  if (panelWidth > 100.0f && panelBottom > panelTop) {
+  if (panelWidth > 40.0f && panelBottom > panelTop) {
     std::vector<TouchpadContact> contactsSnapshot;
     {
       juce::ScopedLock lock(contactsLock);
       contactsSnapshot = lastTouchpadContacts;
     }
+
+    // Find pitch-pad configs and Y CC range per axis (same compiled context as
+    // MIDI/runtime). Also capture control labels (e.g. "PitchBend", "CC1").
+    std::optional<PitchPadConfig> configX;
+    std::optional<PitchPadConfig> configY;
+    std::optional<std::pair<float, float>> yCcInputRange; // inputMin, inputMax
+    juce::String xControlLabel;
+    juce::String yControlLabel;
+    if (inputProcessor) {
+      std::shared_ptr<const CompiledMapContext> ctx =
+          inputProcessor->getContext();
+      if (ctx) {
+        for (const auto &entry : ctx->touchpadMappings) {
+          if (entry.layerId != currentVisualizedLayer)
+            continue;
+          if (entry.eventId == TouchpadEvent::Finger1X &&
+              entry.conversionParams.pitchPadConfig.has_value()) {
+            configX = entry.conversionParams.pitchPadConfig;
+            auto target = entry.action.adsrSettings.target;
+            if (target == AdsrTarget::PitchBend ||
+                target == AdsrTarget::SmartScaleBend) {
+              xControlLabel = "PitchBend";
+            } else if (target == AdsrTarget::CC) {
+              xControlLabel =
+                  "CC" + juce::String(entry.action.adsrSettings.ccNumber);
+            }
+          } else if (entry.eventId == TouchpadEvent::Finger1Y) {
+            auto target = entry.action.adsrSettings.target;
+            if (entry.conversionParams.pitchPadConfig.has_value()) {
+              configY = entry.conversionParams.pitchPadConfig;
+              if (target == AdsrTarget::PitchBend ||
+                  target == AdsrTarget::SmartScaleBend) {
+                yControlLabel = "PitchBend";
+              } else if (target == AdsrTarget::CC) {
+                yControlLabel =
+                    "CC" + juce::String(entry.action.adsrSettings.ccNumber);
+              }
+            } else if (entry.conversionKind ==
+                           TouchpadConversionKind::ContinuousToRange &&
+                       target == AdsrTarget::CC) {
+              yCcInputRange = {entry.conversionParams.inputMin,
+                               entry.conversionParams.inputMax};
+              yControlLabel =
+                  "CC" + juce::String(entry.action.adsrSettings.ccNumber);
+            }
+          }
+        }
+      }
+    }
+
+    // Relative X: anchor as center when config is Relative and anchor is set
+    std::optional<float> anchorNormX;
+    if (configX && configX->mode == PitchPadMode::Relative && inputProcessor)
+      anchorNormX = inputProcessor->getPitchPadRelativeAnchorNormX(
+          lastTouchpadDeviceHandle.load(std::memory_order_acquire),
+          currentVisualizedLayer, TouchpadEvent::Finger1X);
+
+    // 3:2 touchpad rectangle
+    float rectW = panelWidth;
+    float rectH = rectW * (kTouchpadAspectH / kTouchpadAspectW);
+    if (rectH > panelBottom - panelTop - 30.0f) {
+      rectH = juce::jmax(20.0f, panelBottom - panelTop - 30.0f);
+      rectW = rectH * (kTouchpadAspectW / kTouchpadAspectH);
+    }
+    float rectX = panelLeft + (panelWidth - rectW) * 0.5f;
+    float rectY = panelTop;
+    juce::Rectangle<float> touchpadRect(rectX, rectY, rectW, rectH);
+
+    g.setColour(juce::Colour(0xff2a2a2a));
+    g.fillRoundedRectangle(touchpadRect, 4.0f);
+    g.setColour(juce::Colours::darkgrey);
+    g.drawRoundedRectangle(touchpadRect, 4.0f, 1.0f);
+
+    // Axis colours: X = blue-ish greys, Y = green/amber greys. Opacity is
+    // user-adjustable via Settings -> Visualizer.
+    float xOpacity =
+        settingsManager ? settingsManager->getVisualizerXOpacity() : 0.45f;
+    float yOpacity =
+        settingsManager ? settingsManager->getVisualizerYOpacity() : 0.45f;
+    xOpacity = juce::jlimit(0.0f, 1.0f, xOpacity);
+    yOpacity = juce::jlimit(0.0f, 1.0f, yOpacity);
+
+    const juce::Colour xRestCol =
+        juce::Colour(0xff404055).withAlpha(xOpacity); // resting bands
+    const juce::Colour xTransCol =
+        juce::Colour(0xff353550).withAlpha(xOpacity); // transition bands
+    const juce::Colour yRestCol =
+        juce::Colour(0xff455040).withAlpha(yOpacity); // resting bands
+    const juce::Colour yTransCol =
+        juce::Colour(0xff354035).withAlpha(yOpacity); // transition bands
+    const juce::Colour yCcInactiveCol =
+        juce::Colour(0xff353535).withAlpha(yOpacity); // outside CC range
+    const juce::Colour yCcActiveCol =
+        juce::Colour(0xff405538)
+            .withAlpha(
+                juce::jlimit(0.0f, 1.0f, yOpacity + 0.1f)); // active CC range
+
+    // X-axis bands (horizontal): absolute or shifted by relative anchor
+    if (configX) {
+      PitchPadLayout layoutX = buildPitchPadLayout(*configX);
+      float offset = 0.0f;
+      if (anchorNormX && configX->mode == PitchPadMode::Relative) {
+        float zeroX = 0.5f;
+        for (const auto &b : layoutX.bands) {
+          if (b.step == static_cast<int>(configX->zeroStep)) {
+            zeroX = (b.xStart + b.xEnd) * 0.5f;
+            break;
+          }
+        }
+        offset = *anchorNormX - zeroX;
+      }
+      for (const auto &band : layoutX.bands) {
+        float xStart = juce::jlimit(0.0f, 1.0f, band.xStart + offset);
+        float xEnd = juce::jlimit(0.0f, 1.0f, band.xEnd + offset);
+        if (xEnd <= xStart)
+          continue;
+        float bx = touchpadRect.getX() + xStart * touchpadRect.getWidth();
+        float bw = (xEnd - xStart) * touchpadRect.getWidth();
+        if (bw > 0.5f) {
+          g.setColour(band.isRest ? xRestCol : xTransCol);
+          g.fillRect(bx, touchpadRect.getY(), bw, touchpadRect.getHeight());
+        }
+      }
+    }
+    // Y-axis: pitch-pad bands or CC input range (inputMin–inputMax = active)
+    if (configY) {
+      PitchPadLayout layoutY = buildPitchPadLayout(*configY);
+      for (const auto &band : layoutY.bands) {
+        float by = touchpadRect.getY() + band.xStart * touchpadRect.getHeight();
+        float bh = (band.xEnd - band.xStart) * touchpadRect.getHeight();
+        if (bh > 0.5f) {
+          g.setColour(band.isRest ? yRestCol : yTransCol);
+          g.fillRect(touchpadRect.getX(), by, touchpadRect.getWidth(), bh);
+        }
+      }
+    } else if (yCcInputRange) {
+      float imin = juce::jlimit(0.0f, 1.0f, yCcInputRange->first);
+      float imax = juce::jlimit(0.0f, 1.0f, yCcInputRange->second);
+      float baseY = touchpadRect.getY();
+      float h = touchpadRect.getHeight();
+      // Below inputMin (top in screen coords: Y increases down)
+      if (imin > 0.0f) {
+        g.setColour(yCcInactiveCol);
+        g.fillRect(touchpadRect.getX(), baseY, touchpadRect.getWidth(),
+                   imin * h);
+      }
+      // Active strip inputMin..inputMax
+      if (imax > imin) {
+        g.setColour(yCcActiveCol);
+        g.fillRect(touchpadRect.getX(), baseY + imin * h,
+                   touchpadRect.getWidth(), (imax - imin) * h);
+      }
+      // Above inputMax
+      if (imax < 1.0f) {
+        g.setColour(yCcInactiveCol);
+        g.fillRect(touchpadRect.getX(), baseY + imax * h,
+                   touchpadRect.getWidth(), (1.0f - imax) * h);
+      }
+    }
+
+    // Axis labels:
+    //  - X on the RIGHT: "[control]   X" (e.g. "PitchBend   X")
+    //  - Y along the vertical axis, rotated 90°: "[control]   Y" (e.g. "CC1 Y")
+    g.setColour(juce::Colours::lightgrey);
+    g.setFont(10.0f);
+    juce::String xLabel =
+        xControlLabel.isNotEmpty() ? (xControlLabel + "   X") : "X";
+    juce::String yLabel =
+        yControlLabel.isNotEmpty() ? (yControlLabel + "   Y") : "Y";
+
+    // X label: right side of the rectangle
+    g.drawText(xLabel, touchpadRect.getX(), touchpadRect.getBottom() - 14.0f,
+               touchpadRect.getWidth(), 12, juce::Justification::centredRight,
+               false);
+
+    // Y label: rotated 90 degrees, centered along left edge
+    {
+      juce::Graphics::ScopedSaveState save(g);
+      float cx = touchpadRect.getX() + 6.0f;
+      float cy = touchpadRect.getCentreY();
+      g.addTransform(juce::AffineTransform::rotation(
+          -juce::MathConstants<float>::halfPi, cx, cy));
+      // After rotation, draw a small horizontal label centered at (cx, cy).
+      g.drawText(yLabel, static_cast<int>(cx - 40.0f),
+                 static_cast<int>(cy - 6.0f), 80, 12,
+                 juce::Justification::centred, false);
+    }
+    // Touch points (X, Y) in 2D – one per finger, each a different colour
+    static const juce::Colour fingerColours[] = {
+        juce::Colours::lime,   // finger 1
+        juce::Colours::cyan,   // finger 2
+        juce::Colours::orange, // finger 3
+        juce::Colours::magenta // finger 4+
+    };
+    const int numColours =
+        static_cast<int>(sizeof(fingerColours) / sizeof(fingerColours[0]));
+    for (size_t i = 0; i < contactsSnapshot.size(); ++i) {
+      const auto &c = contactsSnapshot[i];
+      if (!c.tipDown)
+        continue;
+      float nx = juce::jlimit(0.0f, 1.0f, c.normX);
+      float ny = juce::jlimit(0.0f, 1.0f, c.normY);
+      float px = touchpadRect.getX() + nx * touchpadRect.getWidth();
+      float py = touchpadRect.getY() + ny * touchpadRect.getHeight();
+      juce::Colour col = fingerColours[static_cast<size_t>(i) %
+                                       static_cast<size_t>(numColours)];
+      g.setColour(col);
+      g.fillEllipse(px - 5.0f, py - 5.0f, 10.0f, 10.0f);
+      g.setColour(col.contrasting(0.5f));
+      g.drawEllipse(px - 5.0f, py - 5.0f, 10.0f, 10.0f, 1.0f);
+    }
+
+    float y = touchpadRect.getBottom() + 6.0f;
+    float lineHeight = 16.0f;
     g.setColour(juce::Colours::white);
-    g.setFont(11.0f);
-    float lineHeight = 18.0f;
-    float y = panelTop;
+    g.setFont(10.0f);
     juce::String title =
         contactsSnapshot.empty() ? "Touchpad: (no contacts)" : "Touchpad:";
     g.drawText(title, panelLeft, y, panelWidth, lineHeight,
@@ -536,13 +778,12 @@ void VisualizerComponent::paint(juce::Graphics &g) {
     for (size_t i = 0;
          i < contactsSnapshot.size() && y + lineHeight <= panelBottom; ++i) {
       const auto &c = contactsSnapshot[i];
-      juce::String line =
-          "Touch point " + juce::String(static_cast<int>(i) + 1) + ": ";
+      juce::String line = "Pt" + juce::String(static_cast<int>(i) + 1) + ": ";
       if (c.tipDown)
-        line += "[X: " + juce::String(c.normX, 2) +
-                "] [Y: " + juce::String(c.normY, 2) + "]";
+        line +=
+            "X=" + juce::String(c.normX, 2) + " Y=" + juce::String(c.normY, 2);
       else
-        line += "[X: -] [Y: -]";
+        line += "X=- Y=-";
       g.drawText(line, panelLeft, y, panelWidth, lineHeight,
                  juce::Justification::centredLeft, false);
       y += lineHeight;
@@ -637,7 +878,7 @@ void VisualizerComponent::handleAxisEvent(uintptr_t deviceHandle, int inputCode,
 
 void VisualizerComponent::handleTouchpadContacts(
     uintptr_t deviceHandle, const std::vector<TouchpadContact> &contacts) {
-  (void)deviceHandle;
+  lastTouchpadDeviceHandle.store(deviceHandle, std::memory_order_release);
   juce::ScopedLock lock(contactsLock);
   lastTouchpadContacts = contacts;
   needsRepaint.store(true, std::memory_order_release);
