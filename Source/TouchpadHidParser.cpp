@@ -21,6 +21,8 @@ struct ContactBuilder {
   bool hasId = false;
   bool hasX = false;
   bool hasY = false;
+  bool tipDown = true;
+  bool hasTipDown = false;
 };
 
 float normalizeFromLogical(int value, LONG logicalMin, LONG logicalMax) {
@@ -116,6 +118,7 @@ parseOneReport(PCHAR report, ULONG reportLen, PHIDP_PREPARSED_DATA preparsed,
   const HIDP_VALUE_CAPS *capContactId = nullptr;
   const HIDP_VALUE_CAPS *capX = nullptr;
   const HIDP_VALUE_CAPS *capY = nullptr;
+  const HIDP_VALUE_CAPS *capTip = nullptr;
   for (const auto &cap : orderedCaps) {
     if (cap.LinkCollection == 0 && isUsage(cap, 0x0D, 0x54))
       continue;
@@ -126,17 +129,21 @@ parseOneReport(PCHAR report, ULONG reportLen, PHIDP_PREPARSED_DATA preparsed,
         capX = &cap;
       else if (isUsage(cap, 0x01, 0x31))
         capY = &cap;
+      else if (isUsage(cap, 0x0D, 0x42))
+        capTip = &cap;
     }
   }
 
   if (capContactId || capX || capY) {
-    std::vector<ULONG> ids, xs, ys;
+    std::vector<ULONG> ids, xs, ys, tips;
     if (capContactId)
       ids = getUsageValueArray(*capContactId, preparsed, report, reportLen);
     if (capX)
       xs = getUsageValueArray(*capX, preparsed, report, reportLen);
     if (capY)
       ys = getUsageValueArray(*capY, preparsed, report, reportLen);
+    if (capTip && capTip->ReportCount > 1)
+      tips = getUsageValueArray(*capTip, preparsed, report, reportLen);
     size_t n = std::max({ids.size(), xs.size(), ys.size()});
     if (contactCount > 0 && n > contactCount)
       n = contactCount;
@@ -149,7 +156,10 @@ parseOneReport(PCHAR report, ULONG reportLen, PHIDP_PREPARSED_DATA preparsed,
         nx = normalizeFromLogical(xval, capX->LogicalMin, capX->LogicalMax);
       if (capY && i < ys.size())
         ny = normalizeFromLogical(yval, capY->LogicalMin, capY->LogicalMax);
-      result.push_back(TouchpadContact{cid, xval, yval, nx, ny});
+      bool tipDown = true;
+      if (i < tips.size())
+        tipDown = (tips[i] != 0);
+      result.push_back(TouchpadContact{cid, xval, yval, nx, ny, tipDown});
     }
     return result;
   }
@@ -185,6 +195,33 @@ parseOneReport(PCHAR report, ULONG reportLen, PHIDP_PREPARSED_DATA preparsed,
       builder.normY =
           normalizeFromLogical(builder.y, cap.LogicalMin, cap.LogicalMax);
       builder.hasY = true;
+    } else if (isUsage(cap, 0x0D, 0x42)) {
+      builder.tipDown = (value != 0);
+      builder.hasTipDown = true;
+    }
+  }
+
+  // Tip Switch (0x42) as button: read per link collection if not already set
+  // from value caps
+  const ULONG kMaxButtonUsages = 32;
+  std::vector<USAGE_AND_PAGE> usageList(kMaxButtonUsages);
+  for (auto &entry : contacts) {
+    if (entry.second.hasTipDown)
+      continue;
+    USHORT linkCollection = entry.first;
+    ULONG usageLength = static_cast<ULONG>(usageList.size());
+    if (HidP_GetUsagesEx(HidP_Input, linkCollection, usageList.data(),
+                         &usageLength, preparsed, report,
+                         reportLen) == HIDP_STATUS_SUCCESS) {
+      bool tipSet = false;
+      for (ULONG u = 0; u < usageLength; ++u) {
+        if (usageList[u].UsagePage == 0x0D && usageList[u].Usage == 0x42) {
+          tipSet = true;
+          break;
+        }
+      }
+      entry.second.tipDown = tipSet;
+      entry.second.hasTipDown = true;
     }
   }
 
@@ -194,8 +231,9 @@ parseOneReport(PCHAR report, ULONG reportLen, PHIDP_PREPARSED_DATA preparsed,
         (builder.hasX && builder.hasY)) {
       int cid =
           builder.hasId ? builder.contactId : static_cast<int>(entry.first);
+      bool tipDown = builder.hasTipDown ? builder.tipDown : true;
       result.push_back(TouchpadContact{cid, builder.x, builder.y, builder.normX,
-                                       builder.normY});
+                                       builder.normY, tipDown});
       if (contactCount > 0 && result.size() >= contactCount)
         break;
     }

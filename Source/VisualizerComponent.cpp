@@ -532,10 +532,13 @@ void VisualizerComponent::paint(juce::Graphics &g) {
     for (size_t i = 0;
          i < contactsSnapshot.size() && y + lineHeight <= panelBottom; ++i) {
       const auto &c = contactsSnapshot[i];
-      juce::String line = "Touch point " +
-                          juce::String(static_cast<int>(i) + 1) +
-                          ": [X: " + juce::String(c.normX, 2) +
-                          "] [Y: " + juce::String(c.normY, 2) + "]";
+      juce::String line =
+          "Touch point " + juce::String(static_cast<int>(i) + 1) + ": ";
+      if (c.tipDown)
+        line += "[X: " + juce::String(c.normX, 2) +
+                "] [Y: " + juce::String(c.normY, 2) + "]";
+      else
+        line += "[X: -] [Y: -]";
       g.drawText(line, panelLeft, y, panelWidth, lineHeight,
                  juce::Justification::centredLeft, false);
       y += lineHeight;

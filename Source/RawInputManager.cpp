@@ -389,8 +389,6 @@ int64_t __stdcall RawInputManager::rawInputWndProc(void *hwnd, unsigned int msg,
                   globalManagerInstance->touchpadContactsByDevice[handle];
               if (contacts.empty()) {
                 acc.clear();
-              } else if (contacts.size() >= 2) {
-                acc = contacts;
               } else {
                 for (const auto &c : contacts) {
                   auto it = std::find_if(acc.begin(), acc.end(),
@@ -401,6 +399,16 @@ int64_t __stdcall RawInputManager::rawInputWndProc(void *hwnd, unsigned int msg,
                     *it = c;
                   else
                     acc.push_back(c);
+                }
+                // Mark contacts that disappeared from the report as lifted
+                for (auto &a : acc) {
+                  bool inReport =
+                      std::any_of(contacts.begin(), contacts.end(),
+                                  [&a](const TouchpadContact &c) {
+                                    return c.contactId == a.contactId;
+                                  });
+                  if (!inReport)
+                    a.tipDown = false;
                 }
               }
               auto contactsCopy = acc;
