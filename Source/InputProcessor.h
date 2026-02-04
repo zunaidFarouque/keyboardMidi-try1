@@ -153,6 +153,11 @@ private:
   // Current CC values for relative inputs (scroll)
   std::unordered_map<InputID, float> currentCCValues;
 
+  // Touchpad continuous CC/PB: last sent value per (device, layer, eventId,
+  // channel, ccNumber/-1 for PB) to avoid spamming identical values when held.
+  std::map<std::tuple<uintptr_t, int, int, int, int>, int>
+      lastTouchpadContinuousValues;
+
   // Track last triggered note for SmartScaleBend
   int lastTriggeredNote = 60; // Default to middle C
 
@@ -169,6 +174,8 @@ private:
   // Continuous->Note: track whether note is currently "on" per (device,
   // layerId, eventId) to send note off
   std::set<std::tuple<uintptr_t, int, int>> touchpadNoteOnSent;
+  // Touchpad BoolToCC Expression: active envelopes to release when finger lifts
+  std::set<std::tuple<uintptr_t, int, int>> touchpadExpressionActive;
 
   // ValueTree Callbacks
   void valueTreeChildAdded(juce::ValueTree &parentTree,

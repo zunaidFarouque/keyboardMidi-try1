@@ -1,17 +1,10 @@
-release mode "Nothing" and "latch" doing exact same thing...
-"Nothing" should not send the opposite thing is previous thing is in the state.
+pitch modulation/any modulation could have some resting place...
+in the resting place the value wont change.
+useful when bending pitch and pausing at specific pitch, if can pause at perfect position, it sounds good. thats tough, but with the help of resting spaces, it is easier.
 
-example:
-intended behaviour for "Nothing"
-```
-finger 1 down -> midi C5 note on
-finger 1 up -> [no midi data sent because "Nothing is chosen"]
-finger 1 down -> midi C5 note off and immediately then note on.
-```
+ANNNNNNNNNNNNDDDD
 
-it is both for touchpad and the keys's intended behaviour... so please properly fix it.
-also rename it- "Nothing" -> "Sustain until retrigger".
-
+pitch bend is not working properly
 
 ---
 

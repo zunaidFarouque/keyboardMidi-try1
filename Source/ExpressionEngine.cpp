@@ -33,7 +33,7 @@ void ExpressionEngine::triggerEnvelope(InputID source, int channel,
     if (isPitchBendTarget(settings.target)) {
       midiEngine.sendPitchBend(channel, peakValue);
     } else {
-      midiEngine.sendCC(channel, settings.ccNumber, peakValue);
+      midiEngine.sendCC(channel, settings.ccNumber, settings.valueWhenOn);
     }
     return;
   }
@@ -53,16 +53,25 @@ void ExpressionEngine::triggerEnvelope(InputID source, int channel,
                                        }),
                         activeEnvelopes.end());
 
-  // Create new envelope
+  // Create new envelope: ADSR goes value when off -> value when on -> sustain
+  // -> value when off
   ActiveEnvelope env;
   env.source = source;
   env.channel = channel;
   env.settings = settings;
   env.peakValue = peakValue;
+  if (settings.target == AdsrTarget::SmartScaleBend ||
+      settings.target == AdsrTarget::PitchBend) {
+    env.valueWhenOn = peakValue; // 0-16383 (from lookup or semitones)
+    env.valueWhenOff = 8192;     // neutral
+  } else {
+    env.valueWhenOn = settings.valueWhenOn; // 0-127
+    env.valueWhenOff = settings.valueWhenOff;
+  }
   env.stage = Stage::Attack;
   env.currentLevel = 0.0;
   env.stageProgress = 0.0;
-  env.lastSentValue = -1; // Initialize to -1 so first value (0) is always sent
+  env.lastSentValue = -1; // Initialize to -1 so first value is always sent
   env.isDormant = false;
 
   if (isPitchBendTarget(settings.target)) {
@@ -83,8 +92,8 @@ void ExpressionEngine::triggerEnvelope(InputID source, int channel,
     // Dynamic handoff: start from current physical pitch
     env.dynamicStartValue = currentPitchBendValues[channel];
   } else {
-    // CC envelopes start from zero
-    env.dynamicStartValue = 0;
+    // CC: start at value when off
+    env.dynamicStartValue = settings.valueWhenOff;
   }
 
   // Calculate step size for Attack: from 0.0 to 1.0 in attackMs
@@ -172,13 +181,14 @@ void ExpressionEngine::releaseEnvelope(InputID source) {
       return;
     }
 
-    // Stack empty: let this envelope release back to center (8192)
+    // Stack empty: let this envelope release to value when off
     env.isDormant = false;
     env.stage = Stage::Release;
     env.lastSentValue = -1;
-    env.dynamicStartValue = 8192;
-    env.peakValue =
-        currentPitchBendValues[env.channel]; // start of release path
+    env.dynamicStartValue = (env.settings.target == AdsrTarget::SmartScaleBend)
+                                ? 8192
+                                : env.valueWhenOff;
+    env.peakValue = currentPitchBendValues[env.channel];
     env.currentLevel = 1.0;
     env.stageProgress = 0.0;
 
@@ -266,17 +276,16 @@ void ExpressionEngine::processOneTick() {
     }
 
     const bool isPB = isPitchBendTarget(env.settings.target);
+    const bool isSmartBend =
+        (env.settings.target == AdsrTarget::SmartScaleBend);
 
-    // Dynamic start logic (Phase 23.7): output = start + (level * (peak -
-    // start))
-    int startValue = env.dynamicStartValue;
-    if (startValue < 0)
-      startValue = isPB ? 8192 : 0;
-
-    int peak = env.peakValue;
-    double range = static_cast<double>(peak - startValue);
-    int outputVal = static_cast<int>(static_cast<double>(startValue) +
-                                     (env.currentLevel * range));
+    // ADSR: output = valueWhenOff + level * (valueWhenOn - valueWhenOff)
+    // For CC: valueWhenOn/Off are 0–127. For PitchBend/SmartScaleBend they are
+    // already 0–16383 (no extra scaling).
+    int outputVal = env.valueWhenOff +
+                    static_cast<int>(env.currentLevel *
+                                     static_cast<double>(env.valueWhenOn -
+                                                         env.valueWhenOff));
 
     // Clamp to valid ranges
     if (isPB) {

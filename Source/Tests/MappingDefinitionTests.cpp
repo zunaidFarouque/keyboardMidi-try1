@@ -158,34 +158,56 @@ TEST(MappingDefinitionTest, LayerUnifiedUI) {
   }
 }
 
-// Phase 55.2 / 56.1: Expression PitchBend -> data2 (Peak) in semitones
-// (-pitchBendRange to +pitchBendRange)
+// CC Expression uses Value when On / Value when Off (no data2 peak slider)
 TEST(MappingDefinitionTest, EnvelopeContext) {
   juce::ValueTree mapping("Mapping");
   mapping.setProperty("type", "Expression", nullptr);
   mapping.setProperty("useCustomEnvelope", true, nullptr);
+  mapping.setProperty("adsrTarget", "CC", nullptr);
+
+  InspectorSchema schema = MappingDefinition::getSchema(mapping, 12);
+
+  const InspectorControl *valOn = nullptr;
+  const InspectorControl *valOff = nullptr;
+  for (const auto &c : schema) {
+    if (c.propertyId == "touchpadValueWhenOn")
+      valOn = &c;
+    if (c.propertyId == "touchpadValueWhenOff")
+      valOff = &c;
+  }
+  ASSERT_NE(valOn, nullptr) << "CC Expression should have Value when On";
+  ASSERT_NE(valOff, nullptr) << "CC Expression should have Value when Off";
+  EXPECT_DOUBLE_EQ(valOn->min, 0.0);
+  EXPECT_DOUBLE_EQ(valOn->max, 127.0);
+}
+
+// PitchBend Expression uses Bend (semitones) = data2; no Value when On/Off
+TEST(MappingDefinitionTest, PitchBendHasBendSemitonesNoValueWhenOnOff) {
+  juce::ValueTree mapping("Mapping");
+  mapping.setProperty("type", "Expression", nullptr);
   mapping.setProperty("adsrTarget", "PitchBend", nullptr);
 
   const int pbRange = 12;
   InspectorSchema schema = MappingDefinition::getSchema(mapping, pbRange);
 
-  const InspectorControl *data2Control = nullptr;
+  const InspectorControl *data2Ctrl = nullptr;
   for (const auto &c : schema) {
     if (c.propertyId == "data2") {
-      data2Control = &c;
+      data2Ctrl = &c;
       break;
     }
   }
-  ASSERT_NE(data2Control, nullptr) << "Schema should have a 'data2' control";
-  EXPECT_DOUBLE_EQ(data2Control->min, -static_cast<double>(pbRange))
-      << "PitchBend peak should be in semitones (min -range)";
-  EXPECT_DOUBLE_EQ(data2Control->max, static_cast<double>(pbRange))
-      << "PitchBend peak should be in semitones (max +range)";
-  EXPECT_EQ(data2Control->valueScaleRange, pbRange)
-      << "PitchBend peak should use valueScaleRange for raw<->semitones";
+  ASSERT_NE(data2Ctrl, nullptr) << "PitchBend should have Bend (semitones)";
+  EXPECT_DOUBLE_EQ(data2Ctrl->min, -static_cast<double>(pbRange));
+  EXPECT_DOUBLE_EQ(data2Ctrl->max, static_cast<double>(pbRange));
+  bool hasValueWhenOn = false;
+  for (const auto &c : schema)
+    if (c.propertyId == "touchpadValueWhenOn")
+      hasValueWhenOn = true;
+  EXPECT_FALSE(hasValueWhenOn) << "PitchBend should not have Value when On";
 }
 
-// SmartScaleBend has no peak (data2) slider; peak is scale-derived
+// SmartScaleBend uses Scale Steps only; no data2, no Value when On/Off
 TEST(MappingDefinitionTest, SmartScaleBendNoPeakSlider) {
   juce::ValueTree mapping("Mapping");
   mapping.setProperty("type", "Expression", nullptr);
@@ -193,9 +215,14 @@ TEST(MappingDefinitionTest, SmartScaleBendNoPeakSlider) {
 
   InspectorSchema schema = MappingDefinition::getSchema(mapping, 12);
 
-  for (const auto &c : schema)
+  for (const auto &c : schema) {
     EXPECT_NE(c.propertyId, "data2")
-        << "SmartScaleBend should not have a Peak Value (data2) control";
+        << "SmartScaleBend uses Scale Steps only, not data2";
+    EXPECT_NE(c.propertyId, "touchpadValueWhenOn")
+        << "SmartScaleBend should not have Value when On";
+    EXPECT_NE(c.propertyId, "touchpadValueWhenOff")
+        << "SmartScaleBend should not have Value when Off";
+  }
 }
 
 // Phase 55.7 / 56.1: Expression (simple) with compact dependent layout -

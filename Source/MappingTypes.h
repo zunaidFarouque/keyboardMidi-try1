@@ -100,6 +100,9 @@ struct AdsrSettings {
   int ccNumber = 1;                   // CC number (if target is CC)
   bool useCustomEnvelope =
       false; // Phase 56.1: false = fast path (simple CC/PB)
+  int valueWhenOn =
+      127; // Expression value at peak (attack end); 0-127 CC, scaled for PB
+  int valueWhenOff = 0; // Expression value at rest and release end
 
   // Legacy compatibility: isPitchBend maps to target
   bool isPitchBend() const {

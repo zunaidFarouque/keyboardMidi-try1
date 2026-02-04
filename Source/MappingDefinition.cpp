@@ -243,6 +243,17 @@ InspectorSchema MappingDefinition::getSchema(const juce::ValueTree &mapping,
       data1.step = 1.0;
       schema.push_back(data1);
     }
+    if (adsrTargetStr.equalsIgnoreCase("PitchBend")) {
+      InspectorControl bend;
+      bend.propertyId = "data2";
+      bend.label = "Bend (semitones)";
+      bend.controlType = InspectorControl::Type::Slider;
+      bend.min = -static_cast<double>(pitchBendRange);
+      bend.max = static_cast<double>(pitchBendRange);
+      bend.step = 1.0;
+      bend.valueScaleRange = pitchBendRange;
+      schema.push_back(bend);
+    }
     if (adsrTargetStr.equalsIgnoreCase("SmartScaleBend")) {
       InspectorControl steps;
       steps.propertyId = "smartStepShift";
@@ -254,26 +265,28 @@ InspectorSchema MappingDefinition::getSchema(const juce::ValueTree &mapping,
       schema.push_back(steps);
     }
 
-    // Peak value: for PitchBend use semitones (-global PB range to +range);
-    // for CC use 0–127; for SmartScaleBend no peak slider (peak is
-    // scale-derived).
-    if (!adsrTargetStr.equalsIgnoreCase("SmartScaleBend")) {
-      InspectorControl peak;
-      peak.propertyId = "data2";
-      peak.label = adsrTargetStr.equalsIgnoreCase("PitchBend")
-                       ? "Peak (semitones)"
-                       : "Peak Value";
-      peak.controlType = InspectorControl::Type::Slider;
-      if (adsrTargetStr.equalsIgnoreCase("PitchBend")) {
-        peak.min = -static_cast<double>(pitchBendRange);
-        peak.max = static_cast<double>(pitchBendRange);
-        peak.valueScaleRange = pitchBendRange;
-      } else {
-        peak.min = 0.0;
-        peak.max = 127.0;
-      }
-      peak.step = 1.0;
-      schema.push_back(peak);
+    // Value when On / Value when Off: CC only. PitchBend/SmartScaleBend use
+    // Bend (semitones) / Scale Steps and return to neutral.
+    if (adsrTargetStr.equalsIgnoreCase("CC") &&
+        !(touchpad && touchpadInputBool)) {
+      schema.push_back(createSeparator("Expression: Value when On / Off",
+                                       juce::Justification::centredLeft));
+      InspectorControl valOn;
+      valOn.propertyId = "touchpadValueWhenOn";
+      valOn.label = "Value when On";
+      valOn.controlType = InspectorControl::Type::Slider;
+      valOn.min = 0.0;
+      valOn.max = 127.0;
+      valOn.step = 1.0;
+      schema.push_back(valOn);
+      InspectorControl valOff;
+      valOff.propertyId = "touchpadValueWhenOff";
+      valOff.label = "Value when Off";
+      valOff.controlType = InspectorControl::Type::Slider;
+      valOff.min = 0.0;
+      valOff.max = 127.0;
+      valOff.step = 1.0;
+      schema.push_back(valOff);
     }
 
     // 2. Mode Selection
@@ -330,7 +343,10 @@ InspectorSchema MappingDefinition::getSchema(const juce::ValueTree &mapping,
       }
     }
 
-    if (touchpad && touchpadInputBool) {
+    // Touchpad boolean: Value when On/Off only for CC. PitchBend/SmartScaleBend
+    // use Bend (semitones) / Scale Steps and return to neutral (no value
+    // sliders).
+    if (touchpad && touchpadInputBool && adsrTargetStr.equalsIgnoreCase("CC")) {
       schema.push_back(createSeparator("Touchpad: Boolean to Expression",
                                        juce::Justification::centredLeft));
       InspectorControl valOn;
@@ -373,22 +389,29 @@ InspectorSchema MappingDefinition::getSchema(const juce::ValueTree &mapping,
       inMax.widthWeight = 0.5f;
       inMax.sameLine = true;
       schema.push_back(inMax);
+      const bool rangeIsSteps =
+          adsrTargetStr.equalsIgnoreCase("PitchBend") ||
+          adsrTargetStr.equalsIgnoreCase("SmartScaleBend");
+      const double stepMax = rangeIsSteps ? 12.0 : 127.0;
+      const double stepMin = rangeIsSteps ? -12.0 : 0.0;
+      juce::String outLabel =
+          rangeIsSteps ? "Output min (steps)" : "Output min";
       InspectorControl outMin;
       outMin.propertyId = "touchpadOutputMin";
-      outMin.label = "Output min";
+      outMin.label = outLabel;
       outMin.controlType = InspectorControl::Type::Slider;
-      outMin.min = 0.0;
-      outMin.max = 127.0;
+      outMin.min = stepMin;
+      outMin.max = stepMax;
       outMin.step = 1.0;
       outMin.widthWeight = 0.5f;
       outMin.sameLine = false;
       schema.push_back(outMin);
       InspectorControl outMax;
       outMax.propertyId = "touchpadOutputMax";
-      outMax.label = "Output max";
+      outMax.label = rangeIsSteps ? "Output max (steps)" : "Output max";
       outMax.controlType = InspectorControl::Type::Slider;
-      outMax.min = 0.0;
-      outMax.max = 127.0;
+      outMax.min = stepMin;
+      outMax.max = stepMax;
       outMax.step = 1.0;
       outMax.widthWeight = 0.5f;
       outMax.sameLine = true;

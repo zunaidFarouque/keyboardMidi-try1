@@ -542,16 +542,74 @@ void compileMappingsForLayer(
           p.triggerAbove = (triggerId == 2);
         }
       } else if (typeStr.equalsIgnoreCase("Expression")) {
+        juce::String adsrTargetStr =
+            mapping.getProperty("adsrTarget", "CC").toString().trim();
+        const bool isCC = adsrTargetStr.equalsIgnoreCase("CC");
+        const bool isPB = adsrTargetStr.equalsIgnoreCase("PitchBend");
+        const bool isSmartBend =
+            adsrTargetStr.equalsIgnoreCase("SmartScaleBend");
+
         if (inputBool) {
           entry.conversionKind = TouchpadConversionKind::BoolToCC;
-          p.valueWhenOn = (int)mapping.getProperty("touchpadValueWhenOn", 127);
-          p.valueWhenOff = (int)mapping.getProperty("touchpadValueWhenOff", 0);
+          if (isCC) {
+            p.valueWhenOn =
+                (int)mapping.getProperty("touchpadValueWhenOn", 127);
+            p.valueWhenOff =
+                (int)mapping.getProperty("touchpadValueWhenOff", 0);
+          }
         } else {
           entry.conversionKind = TouchpadConversionKind::ContinuousToRange;
           p.inputMin = (float)mapping.getProperty("touchpadInputMin", 0.0);
           p.inputMax = (float)mapping.getProperty("touchpadInputMax", 1.0);
-          p.outputMin = (int)mapping.getProperty("touchpadOutputMin", 0);
-          p.outputMax = (int)mapping.getProperty("touchpadOutputMax", 127);
+          if (isPB || isSmartBend) {
+            p.outputMin = (int)mapping.getProperty("touchpadOutputMin", -1);
+            p.outputMax = (int)mapping.getProperty("touchpadOutputMax", 3);
+          } else {
+            p.outputMin = (int)mapping.getProperty("touchpadOutputMin", 0);
+            p.outputMax = (int)mapping.getProperty("touchpadOutputMax", 127);
+          }
+        }
+        // Apply Expression adsr; valueWhenOn/Off only for CC
+        if (isPB)
+          entry.action.adsrSettings.target = AdsrTarget::PitchBend;
+        else if (isSmartBend)
+          entry.action.adsrSettings.target = AdsrTarget::SmartScaleBend;
+        else
+          entry.action.adsrSettings.target = AdsrTarget::CC;
+        entry.action.adsrSettings.useCustomEnvelope =
+            (bool)mapping.getProperty("useCustomEnvelope", false);
+        if (!entry.action.adsrSettings.useCustomEnvelope) {
+          entry.action.adsrSettings.attackMs = 0;
+          entry.action.adsrSettings.decayMs = 0;
+          entry.action.adsrSettings.sustainLevel = 1.0f;
+          entry.action.adsrSettings.releaseMs = 0;
+        } else {
+          entry.action.adsrSettings.attackMs =
+              (int)mapping.getProperty("adsrAttack", 10);
+          entry.action.adsrSettings.decayMs =
+              (int)mapping.getProperty("adsrDecay", 10);
+          entry.action.adsrSettings.sustainLevel =
+              (float)mapping.getProperty("adsrSustain", 0.7);
+          entry.action.adsrSettings.releaseMs =
+              (int)mapping.getProperty("adsrRelease", 100);
+        }
+        if (entry.action.adsrSettings.target == AdsrTarget::CC) {
+          entry.action.adsrSettings.ccNumber =
+              (int)mapping.getProperty("data1", 1);
+          entry.action.adsrSettings.valueWhenOn =
+              (int)mapping.getProperty("touchpadValueWhenOn", 127);
+          entry.action.adsrSettings.valueWhenOff =
+              (int)mapping.getProperty("touchpadValueWhenOff", 0);
+          entry.action.data2 = entry.action.adsrSettings.valueWhenOn;
+        } else if (entry.action.adsrSettings.target ==
+                   AdsrTarget::SmartScaleBend) {
+          buildSmartBendLookup(entry.action, mapping, zoneMgr, settingsMgr);
+          entry.action.data2 = 8192;
+        } else {
+          const int pbRange = settingsMgr.getPitchBendRange();
+          int semitones = (int)mapping.getProperty("data2", 0);
+          entry.action.data2 = juce::jlimit(-juce::jmax(1, pbRange),
+                                            juce::jmax(1, pbRange), semitones);
         }
       } else {
         entry.conversionKind = TouchpadConversionKind::BoolToGate;
@@ -622,17 +680,27 @@ void compileMappingsForLayer(
 
       if (action.adsrSettings.target == AdsrTarget::CC) {
         action.adsrSettings.ccNumber = (int)mapping.getProperty("data1", 1);
+        action.adsrSettings.valueWhenOn =
+            (int)mapping.getProperty("touchpadValueWhenOn", 127);
+        action.adsrSettings.valueWhenOff =
+            (int)mapping.getProperty("touchpadValueWhenOff", 0);
+        action.data2 = action.adsrSettings.valueWhenOn;
+      } else if (action.adsrSettings.target == AdsrTarget::PitchBend) {
+        // Bend (semitones); envelope uses this and returns to neutral (8192)
+        const int pbRange = settingsMgr.getPitchBendRange();
+        int semitones = (int)mapping.getProperty("data2", 0);
+        action.data2 = juce::jlimit(-juce::jmax(1, pbRange),
+                                    juce::jmax(1, pbRange), semitones);
+      } else if (action.adsrSettings.target == AdsrTarget::SmartScaleBend) {
+        buildSmartBendLookup(action, mapping, zoneMgr, settingsMgr);
+        action.data2 = 8192; // peak from lookup per note
       }
-      action.data2 = (int)mapping.getProperty("data2", 127);
       bool defaultResetPitch =
           (action.adsrSettings.target == AdsrTarget::PitchBend ||
            action.adsrSettings.target == AdsrTarget::SmartScaleBend);
       action.sendReleaseValue =
           (bool)mapping.getProperty("sendReleaseValue", defaultResetPitch);
       action.releaseValue = (int)mapping.getProperty("releaseValue", 0);
-
-      if (action.adsrSettings.target == AdsrTarget::SmartScaleBend)
-        buildSmartBendLookup(action, mapping, zoneMgr, settingsMgr);
     }
 
     // Latch Toggle: release latched notes when toggling off

@@ -329,8 +329,9 @@ TEST_F(GridCompilerTest, ExpressionSimpleCcProducesFastPathAdsr) {
   m.setProperty("type", "Expression", nullptr);
   m.setProperty("useCustomEnvelope", false, nullptr);
   m.setProperty("adsrTarget", "CC", nullptr);
-  m.setProperty("data1", 7, nullptr);  // CC number
-  m.setProperty("data2", 64, nullptr); // Peak value
+  m.setProperty("data1", 7, nullptr); // CC number
+  m.setProperty("touchpadValueWhenOn", 64, nullptr);
+  m.setProperty("touchpadValueWhenOff", 0, nullptr);
   m.setProperty("layerID", 0, nullptr);
   mappings.addChild(m, -1, nullptr);
 
@@ -342,6 +343,8 @@ TEST_F(GridCompilerTest, ExpressionSimpleCcProducesFastPathAdsr) {
   ASSERT_TRUE(slot.isActive);
   EXPECT_EQ(slot.action.type, ActionType::Expression);
   EXPECT_EQ(slot.action.adsrSettings.ccNumber, 7);
+  EXPECT_EQ(slot.action.adsrSettings.valueWhenOn, 64);
+  EXPECT_EQ(slot.action.adsrSettings.valueWhenOff, 0);
   EXPECT_EQ(slot.action.data2, 64);
   EXPECT_EQ(slot.action.adsrSettings.attackMs, 0);
   EXPECT_EQ(slot.action.adsrSettings.decayMs, 0);
@@ -366,7 +369,8 @@ TEST_F(GridCompilerTest, ExpressionCustomEnvelopeReadsAdsr) {
   m.setProperty("adsrSustain", 0.6f, nullptr);
   m.setProperty("adsrRelease", 200, nullptr);
   m.setProperty("data1", 1, nullptr);
-  m.setProperty("data2", 127, nullptr);
+  m.setProperty("touchpadValueWhenOn", 127, nullptr);
+  m.setProperty("touchpadValueWhenOff", 0, nullptr);
   m.setProperty("layerID", 0, nullptr);
   mappings.addChild(m, -1, nullptr);
 
@@ -377,13 +381,42 @@ TEST_F(GridCompilerTest, ExpressionCustomEnvelopeReadsAdsr) {
 
   ASSERT_TRUE(slot.isActive);
   EXPECT_EQ(slot.action.type, ActionType::Expression);
+  EXPECT_EQ(slot.action.adsrSettings.valueWhenOn, 127);
+  EXPECT_EQ(slot.action.adsrSettings.valueWhenOff, 0);
   EXPECT_EQ(slot.action.adsrSettings.attackMs, 100);
   EXPECT_EQ(slot.action.adsrSettings.decayMs, 50);
   EXPECT_FLOAT_EQ(slot.action.adsrSettings.sustainLevel, 0.6f);
   EXPECT_EQ(slot.action.adsrSettings.releaseMs, 200);
 }
 
-// Phase 56.1: Expression with adsrTarget=PitchBend -> label "Expr: PB"
+// Expression: value when on/off compiled from touchpadValueWhenOn/Off (keyboard
+// and touchpad)
+TEST_F(GridCompilerTest, ExpressionValueWhenOnOffCompiled) {
+  auto mappings = presetMgr.getMappingsListForLayer(0);
+  juce::ValueTree m("Mapping");
+  m.setProperty("inputKey", 53, nullptr);
+  m.setProperty("deviceHash",
+                juce::String::toHexString((juce::int64)0).toUpperCase(),
+                nullptr);
+  m.setProperty("type", "Expression", nullptr);
+  m.setProperty("adsrTarget", "CC", nullptr);
+  m.setProperty("data1", 11, nullptr);
+  m.setProperty("touchpadValueWhenOn", 100, nullptr);
+  m.setProperty("touchpadValueWhenOff", 20, nullptr);
+  m.setProperty("layerID", 0, nullptr);
+  mappings.addChild(m, -1, nullptr);
+
+  auto context =
+      GridCompiler::compile(presetMgr, deviceMgr, zoneMgr, settingsMgr);
+  const auto &slot = (*context->globalGrids[0])[53];
+
+  EXPECT_EQ(slot.action.adsrSettings.valueWhenOn, 100);
+  EXPECT_EQ(slot.action.adsrSettings.valueWhenOff, 20);
+  EXPECT_EQ(slot.action.data2, 100);
+}
+
+// Phase 56.1: Expression with adsrTarget=PitchBend uses Bend (semitones) =
+// data2
 TEST_F(GridCompilerTest, ExpressionPitchBendCompilesCorrectly) {
   auto mappings = presetMgr.getMappingsListForLayer(0);
   juce::ValueTree m("Mapping");
@@ -394,7 +427,7 @@ TEST_F(GridCompilerTest, ExpressionPitchBendCompilesCorrectly) {
   m.setProperty("type", "Expression", nullptr);
   m.setProperty("useCustomEnvelope", false, nullptr);
   m.setProperty("adsrTarget", "PitchBend", nullptr);
-  m.setProperty("data2", 16383, nullptr);
+  m.setProperty("data2", 2, nullptr); // Bend +2 semitones
   m.setProperty("layerID", 0, nullptr);
   mappings.addChild(m, -1, nullptr);
 
@@ -406,6 +439,7 @@ TEST_F(GridCompilerTest, ExpressionPitchBendCompilesCorrectly) {
   auto audioGrid = context->globalGrids[0];
   const auto &slot = (*audioGrid)[52];
   EXPECT_EQ(slot.action.adsrSettings.target, AdsrTarget::PitchBend);
+  EXPECT_EQ(slot.action.data2, 2);
 }
 
 TEST_F(GridCompilerTest, NoteReleaseBehaviorCompiles) {

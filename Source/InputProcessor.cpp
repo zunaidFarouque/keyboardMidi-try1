@@ -555,7 +555,14 @@ void InputProcessor::processEvent(InputID input, bool isDown) {
       // Key-down handling
       if (midiAction.type == ActionType::Expression) {
         int peakValue = midiAction.data2;
-        if (midiAction.adsrSettings.target == AdsrTarget::SmartScaleBend) {
+        if (midiAction.adsrSettings.target == AdsrTarget::PitchBend) {
+          int range = juce::jmax(1, settingsManager.getPitchBendRange());
+          double stepsPerSemitone = 8192.0 / static_cast<double>(range);
+          peakValue =
+              static_cast<int>(8192.0 + (midiAction.data2 * stepsPerSemitone));
+          peakValue = juce::jlimit(0, 16383, peakValue);
+        } else if (midiAction.adsrSettings.target ==
+                   AdsrTarget::SmartScaleBend) {
           if (!midiAction.smartBendLookup.empty() && lastTriggeredNote >= 0 &&
               lastTriggeredNote < 128) {
             peakValue = midiAction.smartBendLookup[lastTriggeredNote];
@@ -1474,8 +1481,30 @@ void InputProcessor::processTouchpadContacts(
       break;
     case TouchpadConversionKind::BoolToCC:
       if (act.type == ActionType::Expression) {
-        int val = boolVal ? p.valueWhenOn : p.valueWhenOff;
-        voiceManager.sendCC(act.channel, act.adsrSettings.ccNumber, val);
+        if (boolVal) {
+          InputID touchpadExprInput{deviceHandle,
+                                    static_cast<int>(entry.eventId)};
+          int peakValue;
+          if (act.adsrSettings.target == AdsrTarget::CC) {
+            peakValue = act.adsrSettings.valueWhenOn;
+          } else if (act.adsrSettings.target == AdsrTarget::PitchBend) {
+            int range = juce::jmax(1, settingsManager.getPitchBendRange());
+            double stepsPerSemitone = 8192.0 / static_cast<double>(range);
+            peakValue =
+                static_cast<int>(8192.0 + (act.data2 * stepsPerSemitone));
+            peakValue = juce::jlimit(0, 16383, peakValue);
+          } else {
+            if (!act.smartBendLookup.empty() && lastTriggeredNote >= 0 &&
+                lastTriggeredNote < 128)
+              peakValue = act.smartBendLookup[lastTriggeredNote];
+            else
+              peakValue = 8192;
+          }
+          expressionEngine.triggerEnvelope(touchpadExprInput, act.channel,
+                                           act.adsrSettings, peakValue);
+          touchpadExpressionActive.insert(
+              std::make_tuple(deviceHandle, entry.layerId, entry.eventId));
+        }
       }
       break;
     case TouchpadConversionKind::ContinuousToGate: {
@@ -1502,10 +1531,60 @@ void InputProcessor::processTouchpadContacts(
         int outVal =
             p.outputMin +
             static_cast<int>(std::round(t * (p.outputMax - p.outputMin)));
-        outVal = juce::jlimit(0, 127, outVal);
-        voiceManager.sendCC(act.channel, act.adsrSettings.ccNumber, outVal);
+
+        // Change-only sending: only send CC/PB when the quantized value changes
+        // for this (device, layer, eventId, channel, ccNumber/-1 for PB).
+        const int ccNumberOrMinusOne =
+            (act.adsrSettings.target == AdsrTarget::CC)
+                ? act.adsrSettings.ccNumber
+                : -1;
+        auto keyCont =
+            std::make_tuple(deviceHandle, entry.layerId, entry.eventId,
+                            act.channel, ccNumberOrMinusOne);
+
+        if (act.adsrSettings.target == AdsrTarget::CC) {
+          outVal = juce::jlimit(0, 127, outVal);
+          auto itLast = lastTouchpadContinuousValues.find(keyCont);
+          if (itLast != lastTouchpadContinuousValues.end() &&
+              itLast->second == outVal) {
+            break; // No CC change – skip send
+          }
+          voiceManager.sendCC(act.channel, act.adsrSettings.ccNumber, outVal);
+          lastTouchpadContinuousValues[keyCont] = outVal;
+        } else {
+          int range = juce::jmax(1, settingsManager.getPitchBendRange());
+          outVal = juce::jlimit(-range, range, outVal);
+          double stepsPerSemitone = 8192.0 / static_cast<double>(range);
+          int pbVal = static_cast<int>(8192.0 + (outVal * stepsPerSemitone));
+          pbVal = juce::jlimit(0, 16383, pbVal);
+
+          auto itLast = lastTouchpadContinuousValues.find(keyCont);
+          if (itLast != lastTouchpadContinuousValues.end() &&
+              itLast->second == pbVal) {
+            break; // No PB change – skip send
+          }
+          voiceManager.sendPitchBend(act.channel, pbVal);
+          lastTouchpadContinuousValues[keyCont] = pbVal;
+        }
       }
       break;
+    }
+  }
+
+  // Release touchpad Expression envelopes when finger is no longer active
+  for (auto it = touchpadExpressionActive.begin();
+       it != touchpadExpressionActive.end();) {
+    uintptr_t dev = std::get<0>(*it);
+    int evId = std::get<2>(*it);
+    bool fingerActive = (evId == TouchpadEvent::Finger1Down && tip1) ||
+                        (evId == TouchpadEvent::Finger1Up && !tip1) ||
+                        (evId == TouchpadEvent::Finger2Down && tip2) ||
+                        (evId == TouchpadEvent::Finger2Up && !tip2);
+    if (!fingerActive) {
+      expressionEngine.releaseEnvelope(InputID{dev, evId});
+      it = touchpadExpressionActive.erase(it);
+    } else {
+      ++it;
     }
   }
 

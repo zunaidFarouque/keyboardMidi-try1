@@ -31,7 +31,9 @@ private:
     InputID source;
     int channel;
     AdsrSettings settings;
-    int peakValue; // Target value (e.g., 127 for CC, 16383 for Pitch Bend)
+    int valueWhenOn = 127; // Peak of envelope (0-127; scaled for PB in output)
+    int valueWhenOff = 0;  // Rest and release end
+    int peakValue; // Kept for SmartScaleBend (per-note peak from lookup)
     int dynamicStartValue = -1; // Value at Level 0.0 (Phase 23.7)
     bool isDormant =
         false; // If true, envelope exists but does not send MIDI (Phase 23.7)
