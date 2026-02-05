@@ -35,10 +35,13 @@ public:
   void sendNoteOff(int channel, int note) override {
     events.push_back({channel, note, 0.0f, false});
   }
-  void sendPitchBend(int channel, int value) {
+  void sendPitchBend(int channel, int value) override {
     pitchEvents.push_back({channel, value});
   }
-  void clear() { events.clear(); }
+  void clear() {
+    events.clear();
+    pitchEvents.clear();
+  }
 };
 
 class InputProcessorTest : public ::testing::Test {
@@ -1762,4 +1765,258 @@ TEST_F(InputProcessorTest, TouchpadFinger1UpTriggersNoteOnOnly) {
       << "Finger 1 Up -> Note: one Note On when finger lifts";
   EXPECT_TRUE(mockEng.events[0].isNoteOn);
   EXPECT_EQ(mockEng.events[0].note, 62);
+}
+
+// --- Disabled mapping: not executed (not in compiled context) ---
+TEST_F(InputProcessorTest, DisabledMappingNotExecuted) {
+  auto mappings = presetMgr.getMappingsListForLayer(0);
+  juce::ValueTree m("Mapping");
+  m.setProperty("inputKey", 50, nullptr);
+  m.setProperty("deviceHash",
+                juce::String::toHexString((juce::int64)0).toUpperCase(),
+                nullptr);
+  m.setProperty("type", "Note", nullptr);
+  m.setProperty("data1", 60, nullptr);
+  m.setProperty("data2", 127, nullptr);
+  m.setProperty("layerID", 0, nullptr);
+  m.setProperty("enabled", false, nullptr);
+  mappings.addChild(m, -1, nullptr);
+
+  proc.initialize();
+  MockMidiEngine mockEng;
+  VoiceManager voiceMgr(mockEng, settingsMgr);
+  InputProcessor proc2(voiceMgr, presetMgr, deviceMgr, scaleLib, mockEng,
+                      settingsMgr);
+  proc2.initialize();
+
+  proc2.processEvent(InputID{0, 50}, true);
+  proc2.processEvent(InputID{0, 50}, false);
+  EXPECT_TRUE(mockEng.events.empty())
+      << "Disabled mapping should not produce any MIDI";
+}
+
+// --- Global Mode Up: increases degree transpose ---
+TEST_F(InputProcessorTest, GlobalModeUpIncreasesDegreeTranspose) {
+  auto mappings = presetMgr.getMappingsListForLayer(0);
+  juce::ValueTree m("Mapping");
+  m.setProperty("inputKey", 60, nullptr);
+  m.setProperty("deviceHash",
+                juce::String::toHexString((juce::int64)0).toUpperCase(),
+                nullptr);
+  m.setProperty("type", "Command", nullptr);
+  m.setProperty("data1", (int)MIDIQy::CommandID::GlobalModeUp, nullptr);
+  m.setProperty("data2", 0, nullptr);
+  m.setProperty("layerID", 0, nullptr);
+  mappings.addChild(m, -1, nullptr);
+
+  proc.initialize();
+  EXPECT_EQ(proc.getZoneManager().getGlobalDegreeTranspose(), 0);
+  proc.processEvent(InputID{0, 60}, true);
+  EXPECT_EQ(proc.getZoneManager().getGlobalDegreeTranspose(), 1);
+  proc.processEvent(InputID{0, 60}, false);
+  proc.processEvent(InputID{0, 60}, true);
+  EXPECT_EQ(proc.getZoneManager().getGlobalDegreeTranspose(), 2);
+}
+
+// --- Touchpad continuous-to-note: threshold and triggerAbove affect runtime ---
+TEST_F(InputProcessorTest, TouchpadContinuousToGate_ThresholdAndTriggerAbove_AffectsNoteOnOff) {
+  MockMidiEngine mockEng;
+  VoiceManager voiceMgr(mockEng, settingsMgr);
+  InputProcessor proc(voiceMgr, presetMgr, deviceMgr, scaleLib, midiEng, settingsMgr);
+  presetMgr.getLayersList().removeAllChildren(nullptr);
+  presetMgr.ensureStaticLayers();
+  settingsMgr.setMidiModeActive(true);
+
+  // Finger1X -> Note, threshold 0.5, trigger Above (id 2): note on when normX >= 0.5, off when < 0.5
+  {
+    auto mappings = presetMgr.getMappingsListForLayer(0);
+    juce::ValueTree m("Mapping");
+    m.setProperty("inputAlias", "Touchpad", nullptr);
+    m.setProperty("inputTouchpadEvent", TouchpadEvent::Finger1X, nullptr);
+    m.setProperty("type", "Note", nullptr);
+    m.setProperty("layerID", 0, nullptr);
+    m.setProperty("releaseBehavior", "Send Note Off", nullptr);
+    m.setProperty("channel", 1, nullptr);
+    m.setProperty("data1", 60, nullptr);
+    m.setProperty("data2", 127, nullptr);
+    m.setProperty("touchpadThreshold", 0.5, nullptr);
+    m.setProperty("touchpadTriggerAbove", 2, nullptr); // 2 = Above threshold
+    mappings.addChild(m, -1, nullptr);
+  }
+
+  proc.initialize();
+  mockEng.clear();
+  uintptr_t deviceHandle = 0xABCD;
+
+  // Below threshold (0.3): no note yet
+  std::vector<TouchpadContact> below = {{0, 0, 0, 0.3f, 0.5f, true}};
+  proc.processTouchpadContacts(deviceHandle, below);
+  EXPECT_EQ(mockEng.events.size(), 0u) << "Below threshold should not trigger note";
+
+  // Above threshold (0.6): note on
+  std::vector<TouchpadContact> above = {{0, 0, 0, 0.6f, 0.5f, true}};
+  proc.processTouchpadContacts(deviceHandle, above);
+  ASSERT_GE(mockEng.events.size(), 1u);
+  EXPECT_TRUE(mockEng.events[0].isNoteOn);
+  EXPECT_EQ(mockEng.events[0].note, 60);
+
+  // Back below threshold (0.3): note off
+  proc.processTouchpadContacts(deviceHandle, below);
+  ASSERT_EQ(mockEng.events.size(), 2u);
+  EXPECT_FALSE(mockEng.events[1].isNoteOn);
+  EXPECT_EQ(mockEng.events[1].note, 60);
+}
+
+// --- Studio mode ON: device-specific mapping is used when that device is active ---
+TEST_F(InputProcessorTest, StudioModeOn_UsesDeviceSpecificMapping) {
+  settingsMgr.setStudioMode(true);
+
+  uintptr_t devHash = 0x54321;
+  deviceMgr.createAlias("StudioDevice");
+  deviceMgr.assignHardware("StudioDevice", devHash);
+  uintptr_t aliasHash =
+      static_cast<uintptr_t>(std::hash<juce::String>{}("StudioDevice"));
+
+  int keyLayer = 11;
+  int keyNote = 21;
+
+  // Device-specific: Layer 0 Key 11 -> Momentary Layer 1
+  {
+    auto mappings = presetMgr.getMappingsListForLayer(0);
+    juce::ValueTree m("Mapping");
+    m.setProperty("inputKey", keyLayer, nullptr);
+    m.setProperty(
+        "deviceHash",
+        juce::String::toHexString((juce::int64)aliasHash).toUpperCase(),
+        nullptr);
+    m.setProperty("inputAlias", "StudioDevice", nullptr);
+    m.setProperty("type", "Command", nullptr);
+    m.setProperty("data1", (int)MIDIQy::CommandID::LayerMomentary, nullptr);
+    m.setProperty("data2", 1, nullptr);
+    m.setProperty("layerID", 0, nullptr);
+    mappings.addChild(m, -1, nullptr);
+  }
+
+  // Layer 1: Key 21 -> Note 62 (device-specific)
+  {
+    auto mappings = presetMgr.getMappingsListForLayer(1);
+    juce::ValueTree m("Mapping");
+    m.setProperty("inputKey", keyNote, nullptr);
+    m.setProperty(
+        "deviceHash",
+        juce::String::toHexString((juce::int64)aliasHash).toUpperCase(),
+        nullptr);
+    m.setProperty("inputAlias", "StudioDevice", nullptr);
+    m.setProperty("type", "Note", nullptr);
+    m.setProperty("data1", 62, nullptr);
+    m.setProperty("data2", 127, nullptr);
+    m.setProperty("layerID", 1, nullptr);
+    mappings.addChild(m, -1, nullptr);
+  }
+
+  proc.forceRebuildMappings();
+
+  // Send layer key with device handle – Studio Mode ON so device is used
+  InputID idLayer{devHash, keyLayer};
+  proc.processEvent(idLayer, true);
+  EXPECT_EQ(proc.getHighestActiveLayerIndex(), 1)
+      << "Studio mode ON: device-specific layer command should activate Layer 1";
+
+  // Note key on same device should find mapping
+  auto actionOpt = proc.getMappingForInput(InputID{devHash, keyNote});
+  ASSERT_TRUE(actionOpt.has_value())
+      << "Studio mode ON: device-specific note should be found";
+  EXPECT_EQ(actionOpt->data1, 62);
+}
+
+// --- Pitch bend range: sent PB value respects configured range ---
+TEST_F(InputProcessorTest, PitchBendRangeAffectsSentPitchBend) {
+  MockMidiEngine mockEng;
+  VoiceManager voiceMgr(mockEng, settingsMgr);
+  InputProcessor proc(voiceMgr, presetMgr, deviceMgr, scaleLib, mockEng, settingsMgr);
+  presetMgr.getLayersList().removeAllChildren(nullptr);
+  presetMgr.ensureStaticLayers();
+  settingsMgr.setMidiModeActive(true);
+  settingsMgr.setPitchBendRange(2); // ±2 semitones
+
+  auto mappings = presetMgr.getMappingsListForLayer(0);
+  juce::ValueTree m("Mapping");
+  m.setProperty("inputAlias", "Touchpad", nullptr);
+  m.setProperty("inputTouchpadEvent", TouchpadEvent::Finger1X, nullptr);
+  m.setProperty("type", "Expression", nullptr);
+  m.setProperty("adsrTarget", "PitchBend", nullptr);
+  m.setProperty("channel", 1, nullptr);
+  m.setProperty("layerID", 0, nullptr);
+  m.setProperty("touchpadInputMin", 0.0, nullptr);
+  m.setProperty("touchpadInputMax", 1.0, nullptr);
+  m.setProperty("touchpadOutputMin", -2, nullptr);
+  m.setProperty("touchpadOutputMax", 2, nullptr);
+  m.setProperty("pitchPadMode", "Absolute", nullptr);
+  mappings.addChild(m, -1, nullptr);
+
+  proc.forceRebuildMappings();
+  mockEng.clear();
+
+  uintptr_t dev = 0x9999;
+  // X=1.0 -> max bend +2 semitones; with range 2, PB value should be 16383
+  std::vector<TouchpadContact> maxBend = {{0, 0, 0, 1.0f, 0.5f, true}};
+  proc.processTouchpadContacts(dev, maxBend);
+
+  ASSERT_FALSE(mockEng.pitchEvents.empty())
+      << "Pitch bend should be sent when touchpad drives Expression PitchBend";
+  int sentVal = mockEng.pitchEvents.back().value;
+  // Range 2: +2 semitones = 8192 + 2*(8192/2) = 16384 -> clamp 16383
+  EXPECT_GE(sentVal, 16380) << "Sent PB value for +2 semitones (range 2) should be ~16383";
+  EXPECT_LE(sentVal, 16383);
+}
+
+// --- Global Mode Down: decreases degree transpose ---
+TEST_F(InputProcessorTest, GlobalModeDownDecreasesDegreeTranspose) {
+  proc.getZoneManager().setGlobalTranspose(0, 3);
+  auto mappings = presetMgr.getMappingsListForLayer(0);
+  juce::ValueTree m("Mapping");
+  m.setProperty("inputKey", 61, nullptr);
+  m.setProperty("deviceHash",
+                juce::String::toHexString((juce::int64)0).toUpperCase(),
+                nullptr);
+  m.setProperty("type", "Command", nullptr);
+  m.setProperty("data1", (int)MIDIQy::CommandID::GlobalModeDown, nullptr);
+  m.setProperty("data2", 0, nullptr);
+  m.setProperty("layerID", 0, nullptr);
+  mappings.addChild(m, -1, nullptr);
+
+  proc.initialize();
+  EXPECT_EQ(proc.getZoneManager().getGlobalDegreeTranspose(), 3);
+  proc.processEvent(InputID{0, 61}, true);
+  EXPECT_EQ(proc.getZoneManager().getGlobalDegreeTranspose(), 2);
+  proc.processEvent(InputID{0, 61}, false);
+  proc.processEvent(InputID{0, 61}, true);
+  EXPECT_EQ(proc.getZoneManager().getGlobalDegreeTranspose(), 1);
+}
+
+// --- Settings: MIDI mode off -> key events produce no MIDI ---
+TEST_F(InputProcessorTest, MidiModeOff_KeyEventsProduceNoMidi) {
+  settingsMgr.setMidiModeActive(false);
+  auto mappings = presetMgr.getMappingsListForLayer(0);
+  juce::ValueTree m("Mapping");
+  m.setProperty("inputKey", 50, nullptr);
+  m.setProperty("deviceHash",
+                juce::String::toHexString((juce::int64)0).toUpperCase(),
+                nullptr);
+  m.setProperty("type", "Note", nullptr);
+  m.setProperty("data1", 60, nullptr);
+  m.setProperty("data2", 127, nullptr);
+  m.setProperty("layerID", 0, nullptr);
+  mappings.addChild(m, -1, nullptr);
+
+  MockMidiEngine mockEng;
+  VoiceManager voiceMgr(mockEng, settingsMgr);
+  InputProcessor proc2(voiceMgr, presetMgr, deviceMgr, scaleLib, mockEng,
+                      settingsMgr);
+  proc2.initialize();
+
+  proc2.processEvent(InputID{0, 50}, true);
+  proc2.processEvent(InputID{0, 50}, false);
+  EXPECT_TRUE(mockEng.events.empty())
+      << "When MIDI mode is off, key events should not produce MIDI";
 }

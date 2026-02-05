@@ -335,6 +335,31 @@ TEST_F(GridCompilerTest, ZoneCompilesToChordPool) {
   EXPECT_EQ(chord.size(), 3u); // Triad = 3 notes
 }
 
+// Zone useGlobalRoot: when true, rebuildZoneCache uses global root
+TEST_F(GridCompilerTest, ZoneUseGlobalRoot_UsesGlobalRootWhenCompiling) {
+  scaleLib.loadDefaults();
+  zoneMgr.setGlobalRoot(48); // G3
+  auto zone = std::make_shared<Zone>();
+  zone->name = "GlobalRoot Zone";
+  zone->layerID = 0;
+  zone->targetAliasHash = 0;
+  zone->inputKeyCodes = {81}; // Q
+  zone->chordType = ChordUtilities::ChordType::None;
+  zone->scaleName = "Major";
+  zone->rootNote = 60;        // Ignored when useGlobalRoot true
+  zone->useGlobalRoot = true;
+  zone->globalRootOctaveOffset = 0;
+  zone->layoutStrategy = Zone::LayoutStrategy::Linear;
+  zoneMgr.addZone(zone);      // addZone calls rebuildZoneCache with root 48
+
+  auto zones = zoneMgr.getZones();
+  ASSERT_EQ(zones.size(), 1u);
+  auto notesOpt = zones[0]->getNotesForKey(81, 0, 0);
+  ASSERT_TRUE(notesOpt.has_value() && !notesOpt->empty());
+  EXPECT_EQ((*notesOpt)[0].pitch, 48)
+      << "useGlobalRoot true: getNotesForKey should use global root 48";
+}
+
 // Phase 53.4: Layer Commands (e.g. LayerMomentary) must not be inherited.
 // Key 10 on Layer 0 is the command; Layer 1 should show Empty for that key.
 TEST_F(GridCompilerTest, LayerCommandsAreNotInherited) {
@@ -795,6 +820,44 @@ TEST_F(GridCompilerTest, ExpressionPitchBendCompilesCorrectly) {
   EXPECT_EQ(slot.action.data2, 2);
 }
 
+// Settings: pitch bend range affects compiled Expression PitchBend data2 clamp
+TEST_F(GridCompilerTest, SettingsPitchBendRangeAffectsExpressionBend) {
+  settingsMgr.setPitchBendRange(6); // ±6 semitones
+  auto mappings = presetMgr.getMappingsListForLayer(0);
+  juce::ValueTree m("Mapping");
+  m.setProperty("inputKey", 53, nullptr);
+  m.setProperty("deviceHash",
+                juce::String::toHexString((juce::int64)0).toUpperCase(),
+                nullptr);
+  m.setProperty("type", "Expression", nullptr);
+  m.setProperty("adsrTarget", "PitchBend", nullptr);
+  m.setProperty("data2", 4, nullptr);
+  m.setProperty("layerID", 0, nullptr);
+  mappings.addChild(m, -1, nullptr);
+
+  auto context =
+      GridCompiler::compile(presetMgr, deviceMgr, zoneMgr, settingsMgr);
+  const auto &slot = (*context->globalGrids[0])[53];
+  EXPECT_EQ(slot.action.adsrSettings.target, AdsrTarget::PitchBend);
+  EXPECT_EQ(slot.action.data2, 4);
+
+  presetMgr.getMappingsListForLayer(0).removeChild(0, nullptr);
+  juce::ValueTree m2("Mapping");
+  m2.setProperty("inputKey", 54, nullptr);
+  m2.setProperty("deviceHash",
+                 juce::String::toHexString((juce::int64)0).toUpperCase(),
+                 nullptr);
+  m2.setProperty("type", "Expression", nullptr);
+  m2.setProperty("adsrTarget", "PitchBend", nullptr);
+  m2.setProperty("data2", 12, nullptr); // +12, should clamp to 6
+  m2.setProperty("layerID", 0, nullptr);
+  presetMgr.getMappingsListForLayer(0).addChild(m2, -1, nullptr);
+  auto ctx2 =
+      GridCompiler::compile(presetMgr, deviceMgr, zoneMgr, settingsMgr);
+  EXPECT_EQ((*ctx2->globalGrids[0])[54].action.data2, 6)
+      << "Bend semitones should be clamped to pitch bend range 6";
+}
+
 TEST_F(GridCompilerTest, NoteReleaseBehaviorCompiles) {
   auto addAndCheck = [this](const char *rbStr, NoteReleaseBehavior expected) {
     presetMgr.getMappingsListForLayer(0).removeAllChildren(nullptr);
@@ -1010,4 +1073,120 @@ TEST_F(GridCompilerTest, TouchpadPitchPadHonoursResetPitchFlag) {
   EXPECT_FALSE(entry.action.sendReleaseValue)
       << "sendReleaseValue should reflect mapping property for touchpad "
          "expression PB";
+}
+
+// --- Disabled mapping: not compiled into grid ---
+TEST_F(GridCompilerTest, DisabledMappingNotCompiled) {
+  auto mappings = presetMgr.getMappingsListForLayer(0);
+  juce::ValueTree m("Mapping");
+  m.setProperty("inputKey", 50, nullptr);
+  m.setProperty("deviceHash",
+                juce::String::toHexString((juce::int64)0).toUpperCase(),
+                nullptr);
+  m.setProperty("type", "Note", nullptr);
+  m.setProperty("data1", 60, nullptr);
+  m.setProperty("data2", 127, nullptr);
+  m.setProperty("layerID", 0, nullptr);
+  m.setProperty("enabled", false, nullptr);
+  mappings.addChild(m, -1, nullptr);
+
+  auto context =
+      GridCompiler::compile(presetMgr, deviceMgr, zoneMgr, settingsMgr);
+  auto grid = context->globalGrids[0];
+  EXPECT_FALSE((*grid)[50].isActive)
+      << "Disabled mapping should not appear in compiled grid";
+}
+
+// --- Disabled touchpad mapping: not in touchpadMappings ---
+TEST_F(GridCompilerTest, DisabledTouchpadMappingNotInContext) {
+  auto mappings = presetMgr.getMappingsListForLayer(0);
+  juce::ValueTree m("Mapping");
+  m.setProperty("inputAlias", "Touchpad", nullptr);
+  m.setProperty("inputTouchpadEvent", TouchpadEvent::Finger1Down, nullptr);
+  m.setProperty("type", "Note", nullptr);
+  m.setProperty("layerID", 0, nullptr);
+  m.setProperty("channel", 1, nullptr);
+  m.setProperty("data1", 60, nullptr);
+  m.setProperty("data2", 127, nullptr);
+  m.setProperty("enabled", false, nullptr);
+  mappings.addChild(m, -1, nullptr);
+
+  auto context =
+      GridCompiler::compile(presetMgr, deviceMgr, zoneMgr, settingsMgr);
+  EXPECT_EQ(context->touchpadMappings.size(), 0u)
+      << "Disabled touchpad mapping should not be in context";
+}
+
+// --- Transpose command: transposeModify and transposeSemitones compiled ---
+TEST_F(GridCompilerTest, TransposeCommandCompilesModifyAndSemitones) {
+  auto mappings = presetMgr.getMappingsListForLayer(0);
+  juce::ValueTree m("Mapping");
+  m.setProperty("inputKey", 55, nullptr);
+  m.setProperty("deviceHash",
+                juce::String::toHexString((juce::int64)0).toUpperCase(),
+                nullptr);
+  m.setProperty("type", "Command", nullptr);
+  m.setProperty("data1", (int)MIDIQy::CommandID::Transpose, nullptr);
+  m.setProperty("data2", 0, nullptr);
+  m.setProperty("transposeMode", "Global", nullptr);
+  m.setProperty("transposeModify", 4, nullptr); // Set
+  m.setProperty("transposeSemitones", -5, nullptr);
+  m.setProperty("layerID", 0, nullptr);
+  mappings.addChild(m, -1, nullptr);
+
+  auto context =
+      GridCompiler::compile(presetMgr, deviceMgr, zoneMgr, settingsMgr);
+  auto grid = context->globalGrids[0];
+  ASSERT_TRUE((*grid)[55].isActive);
+  const auto &action = (*grid)[55].action;
+  EXPECT_EQ(action.type, ActionType::Command);
+  EXPECT_EQ(action.data1, static_cast<int>(MIDIQy::CommandID::Transpose));
+  EXPECT_EQ(action.transposeModify, 4);
+  EXPECT_EQ(action.transposeSemitones, -5);
+}
+
+// --- Panic command: data2 (panic mode) compiled ---
+TEST_F(GridCompilerTest, PanicCommandCompilesData2) {
+  auto mappings = presetMgr.getMappingsListForLayer(0);
+  juce::ValueTree m("Mapping");
+  m.setProperty("inputKey", 56, nullptr);
+  m.setProperty("deviceHash",
+                juce::String::toHexString((juce::int64)0).toUpperCase(),
+                nullptr);
+  m.setProperty("type", "Command", nullptr);
+  m.setProperty("data1", (int)MIDIQy::CommandID::Panic, nullptr);
+  m.setProperty("data2", 2, nullptr); // Panic latched only
+  m.setProperty("layerID", 0, nullptr);
+  mappings.addChild(m, -1, nullptr);
+
+  auto context =
+      GridCompiler::compile(presetMgr, deviceMgr, zoneMgr, settingsMgr);
+  auto grid = context->globalGrids[0];
+  ASSERT_TRUE((*grid)[56].isActive);
+  const auto &action = (*grid)[56].action;
+  EXPECT_EQ(action.type, ActionType::Command);
+  EXPECT_EQ(action.data1, static_cast<int>(MIDIQy::CommandID::Panic));
+  EXPECT_EQ(action.data2, 2);
+}
+
+// --- Latch Toggle: releaseLatchedOnLatchToggleOff compiled ---
+TEST_F(GridCompilerTest, LatchToggleReleaseLatchedCompiled) {
+  auto mappings = presetMgr.getMappingsListForLayer(0);
+  juce::ValueTree m("Mapping");
+  m.setProperty("inputKey", 57, nullptr);
+  m.setProperty("deviceHash",
+                juce::String::toHexString((juce::int64)0).toUpperCase(),
+                nullptr);
+  m.setProperty("type", "Command", nullptr);
+  m.setProperty("data1", (int)MIDIQy::CommandID::LatchToggle, nullptr);
+  m.setProperty("data2", 0, nullptr);
+  m.setProperty("releaseLatchedOnToggleOff", false, nullptr);
+  m.setProperty("layerID", 0, nullptr);
+  mappings.addChild(m, -1, nullptr);
+
+  auto context =
+      GridCompiler::compile(presetMgr, deviceMgr, zoneMgr, settingsMgr);
+  auto grid = context->globalGrids[0];
+  ASSERT_TRUE((*grid)[57].isActive);
+  EXPECT_FALSE((*grid)[57].action.releaseLatchedOnLatchToggleOff);
 }

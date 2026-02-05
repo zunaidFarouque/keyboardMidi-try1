@@ -34,6 +34,7 @@ add_library(MIDIQy_Core STATIC
     Source/GridCompiler.cpp
     Source/InputProcessor.cpp
     Source/MappingDefinition.cpp
+    Source/MappingInspectorLogic.cpp
     Source/PitchPadUtilities.cpp
     Source/PresetManager.cpp
     Source/DeviceManager.cpp
@@ -56,6 +57,8 @@ add_library(MIDIQy_Core STATIC
     Source/MidiNoteUtilities.cpp
     Source/KeyboardLayoutUtils.cpp
     Source/ColourContrast.cpp
+    Source/ZoneDefinition.cpp
+    Source/ZonePropertiesLogic.cpp
 )
 
 # 3a. Link Libraries to Core
@@ -128,7 +131,6 @@ target_sources(MIDIQy PRIVATE
     Source/LogComponent.cpp
     Source/DeviceSetupComponent.cpp
     Source/MappingInspector.cpp
-    Source/ZoneDefinition.cpp
     Source/DetachableContainer.cpp
     Source/KeyChipList.cpp
     Source/MiniStatusWindow.cpp
@@ -180,6 +182,8 @@ add_executable(MIDIQy_Tests
     Source/Tests/PitchPadUtilitiesTests.cpp
     Source/Tests/InputProcessorTests.cpp
     Source/Tests/MappingDefinitionTests.cpp
+    Source/Tests/MappingInspectorLogicTests.cpp
+    Source/Tests/ZonePropertiesLogicTests.cpp
     Source/Tests/ZoneTests.cpp
 )
 

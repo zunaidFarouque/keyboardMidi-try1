@@ -313,3 +313,322 @@ TEST(MappingDefinitionTest, CCCompactDependentLayout) {
   EXPECT_EQ(releaseValControl->enabledConditionProperty, "sendReleaseValue")
       << "Slider should be dependent on sendReleaseValue property";
 }
+
+// --- Enabled toggle and isMappingEnabled ---
+TEST(MappingDefinitionTest, SchemaHasEnabledToggle) {
+  juce::ValueTree mapping("Mapping");
+  mapping.setProperty("type", "Note", nullptr);
+  InspectorSchema schema = MappingDefinition::getSchema(mapping);
+  bool hasEnabled = false;
+  for (const auto &c : schema)
+    if (c.propertyId == "enabled" && c.label == "Enabled") {
+      hasEnabled = true;
+      break;
+    }
+  EXPECT_TRUE(hasEnabled) << "Schema should have Enabled toggle";
+}
+
+TEST(MappingDefinitionTest, IsMappingEnabledDefaultTrue) {
+  juce::ValueTree mapping("Mapping");
+  EXPECT_TRUE(MappingDefinition::isMappingEnabled(mapping));
+}
+
+TEST(MappingDefinitionTest, IsMappingEnabledFalseWhenSet) {
+  juce::ValueTree mapping("Mapping");
+  mapping.setProperty("enabled", false, nullptr);
+  EXPECT_FALSE(MappingDefinition::isMappingEnabled(mapping));
+}
+
+TEST(MappingDefinitionTest, IsMappingEnabledTrueWhenSet) {
+  juce::ValueTree mapping("Mapping");
+  mapping.setProperty("enabled", true, nullptr);
+  EXPECT_TRUE(MappingDefinition::isMappingEnabled(mapping));
+}
+
+// --- Keyboard Note: followTranspose in schema ---
+TEST(MappingDefinitionTest, KeyboardNoteHasFollowTranspose) {
+  juce::ValueTree mapping("Mapping");
+  mapping.setProperty("type", "Note", nullptr);
+  InspectorSchema schema = MappingDefinition::getSchema(mapping);
+  bool hasFollowTranspose = false;
+  for (const auto &c : schema)
+    if (c.propertyId == "followTranspose") {
+      hasFollowTranspose = true;
+      break;
+    }
+  EXPECT_TRUE(hasFollowTranspose)
+      << "Keyboard Note schema should have followTranspose";
+}
+
+// --- Keyboard Note: releaseBehaviour has all 3 options when not touchpad Up ---
+TEST(MappingDefinitionTest, KeyboardNoteReleaseBehaviorHasAllThreeOptions) {
+  juce::ValueTree mapping("Mapping");
+  mapping.setProperty("type", "Note", nullptr);
+  InspectorSchema schema = MappingDefinition::getSchema(mapping);
+  const InspectorControl *releaseCtrl = nullptr;
+  for (const auto &c : schema)
+    if (c.propertyId == "releaseBehavior") {
+      releaseCtrl = &c;
+      break;
+    }
+  ASSERT_NE(releaseCtrl, nullptr);
+  EXPECT_NE(releaseCtrl->options.find(1), releaseCtrl->options.end())
+      << "Send Note Off (1)";
+  EXPECT_NE(releaseCtrl->options.find(2), releaseCtrl->options.end())
+      << "Sustain until retrigger (2)";
+  EXPECT_NE(releaseCtrl->options.find(3), releaseCtrl->options.end())
+      << "Always Latch (3)";
+}
+
+// --- Touchpad continuous Note: threshold + trigger above/below ---
+TEST(MappingDefinitionTest, TouchpadContinuousNoteHasThresholdAndTrigger) {
+  juce::ValueTree mapping("Mapping");
+  mapping.setProperty("inputAlias", "Touchpad", nullptr);
+  mapping.setProperty("inputTouchpadEvent", TouchpadEvent::Finger1X, nullptr);
+  mapping.setProperty("type", "Note", nullptr);
+  InspectorSchema schema = MappingDefinition::getSchema(mapping);
+  bool hasThreshold = false;
+  bool hasTrigger = false;
+  for (const auto &c : schema) {
+    if (c.propertyId == "touchpadThreshold")
+      hasThreshold = true;
+    if (c.propertyId == "touchpadTriggerAbove")
+      hasTrigger = true;
+  }
+  EXPECT_TRUE(hasThreshold)
+      << "Touchpad continuous Note should have threshold control";
+  EXPECT_TRUE(hasTrigger)
+      << "Touchpad continuous Note should have trigger above/below control";
+}
+
+// --- Expression: Use Custom Envelope true + CC -> ADSR sliders ---
+TEST(MappingDefinitionTest, ExpressionCCCustomEnvelopeShowsAdsrSliders) {
+  juce::ValueTree mapping("Mapping");
+  mapping.setProperty("type", "Expression", nullptr);
+  mapping.setProperty("adsrTarget", "CC", nullptr);
+  mapping.setProperty("useCustomEnvelope", true, nullptr);
+  InspectorSchema schema = MappingDefinition::getSchema(mapping);
+  bool hasAttack = false, hasDecay = false, hasSustain = false, hasRelease = false;
+  for (const auto &c : schema) {
+    if (c.propertyId == "adsrAttack") hasAttack = true;
+    if (c.propertyId == "adsrDecay") hasDecay = true;
+    if (c.propertyId == "adsrSustain") hasSustain = true;
+    if (c.propertyId == "adsrRelease") hasRelease = true;
+  }
+  EXPECT_TRUE(hasAttack) << "CC with custom envelope should have Attack";
+  EXPECT_TRUE(hasDecay) << "CC with custom envelope should have Decay";
+  EXPECT_TRUE(hasSustain) << "CC with custom envelope should have Sustain";
+  EXPECT_TRUE(hasRelease) << "CC with custom envelope should have Release";
+}
+
+// --- Expression: PitchBend/SmartScaleBend -> custom envelope disabled in schema ---
+TEST(MappingDefinitionTest, ExpressionPitchBendDisablesCustomEnvelopeControl) {
+  juce::ValueTree mapping("Mapping");
+  mapping.setProperty("type", "Expression", nullptr);
+  mapping.setProperty("adsrTarget", "PitchBend", nullptr);
+  InspectorSchema schema = MappingDefinition::getSchema(mapping);
+  const InspectorControl *useEnvCtrl = nullptr;
+  for (const auto &c : schema)
+    if (c.propertyId == "useCustomEnvelope") {
+      useEnvCtrl = &c;
+      break;
+    }
+  ASSERT_NE(useEnvCtrl, nullptr);
+  EXPECT_FALSE(useEnvCtrl->isEnabled)
+      << "PitchBend target should disable Use Custom ADSR control";
+}
+
+TEST(MappingDefinitionTest, ExpressionSmartScaleBendDisablesCustomEnvelopeControl) {
+  juce::ValueTree mapping("Mapping");
+  mapping.setProperty("type", "Expression", nullptr);
+  mapping.setProperty("adsrTarget", "SmartScaleBend", nullptr);
+  InspectorSchema schema = MappingDefinition::getSchema(mapping);
+  const InspectorControl *useEnvCtrl = nullptr;
+  for (const auto &c : schema)
+    if (c.propertyId == "useCustomEnvelope") {
+      useEnvCtrl = &c;
+      break;
+    }
+  ASSERT_NE(useEnvCtrl, nullptr);
+  EXPECT_FALSE(useEnvCtrl->isEnabled)
+      << "SmartScaleBend target should disable Use Custom ADSR control";
+}
+
+// --- Expression: Touchpad boolean + CC -> value when on/off ---
+TEST(MappingDefinitionTest, ExpressionTouchpadBooleanCCHasValueWhenOnOff) {
+  juce::ValueTree mapping("Mapping");
+  mapping.setProperty("type", "Expression", nullptr);
+  mapping.setProperty("adsrTarget", "CC", nullptr);
+  mapping.setProperty("inputAlias", "Touchpad", nullptr);
+  mapping.setProperty("inputTouchpadEvent", TouchpadEvent::Finger1Down, nullptr);
+  InspectorSchema schema = MappingDefinition::getSchema(mapping);
+  bool hasValOn = false, hasValOff = false;
+  for (const auto &c : schema) {
+    if (c.propertyId == "touchpadValueWhenOn") hasValOn = true;
+    if (c.propertyId == "touchpadValueWhenOff") hasValOff = true;
+  }
+  EXPECT_TRUE(hasValOn) << "Touchpad boolean CC Expression should have Value when On";
+  EXPECT_TRUE(hasValOff) << "Touchpad boolean CC Expression should have Value when Off";
+}
+
+// --- Expression: Touchpad continuous + pitch -> pitch pad and zero range warning ---
+TEST(MappingDefinitionTest, TouchpadContinuousPitchBendHasPitchPadControls) {
+  juce::ValueTree mapping("Mapping");
+  mapping.setProperty("type", "Expression", nullptr);
+  mapping.setProperty("adsrTarget", "PitchBend", nullptr);
+  mapping.setProperty("inputAlias", "Touchpad", nullptr);
+  mapping.setProperty("inputTouchpadEvent", TouchpadEvent::Finger1X, nullptr);
+  mapping.setProperty("touchpadOutputMin", -2, nullptr);
+  mapping.setProperty("touchpadOutputMax", 2, nullptr);
+  InspectorSchema schema = MappingDefinition::getSchema(mapping);
+  bool hasMode = false, hasResting = false;
+  for (const auto &c : schema) {
+    if (c.propertyId == "pitchPadMode") hasMode = true;
+    if (c.propertyId == "pitchPadRestingPercent") hasResting = true;
+  }
+  EXPECT_TRUE(hasMode) << "Touchpad continuous PitchBend should have Pitch Pad Mode";
+  EXPECT_TRUE(hasResting) << "Touchpad continuous PitchBend should have resting %";
+}
+
+TEST(MappingDefinitionTest, TouchpadPitchPadZeroRangeShowsWarning) {
+  juce::ValueTree mapping("Mapping");
+  mapping.setProperty("type", "Expression", nullptr);
+  mapping.setProperty("adsrTarget", "PitchBend", nullptr);
+  mapping.setProperty("inputAlias", "Touchpad", nullptr);
+  mapping.setProperty("inputTouchpadEvent", TouchpadEvent::Finger1X, nullptr);
+  mapping.setProperty("touchpadOutputMin", 0, nullptr);
+  mapping.setProperty("touchpadOutputMax", 0, nullptr);
+  InspectorSchema schema = MappingDefinition::getSchema(mapping);
+  bool hasWarning = false;
+  for (const auto &c : schema)
+    if (c.propertyId == "touchpadPitchPadWarning") {
+      hasWarning = true;
+      break;
+    }
+  EXPECT_TRUE(hasWarning)
+      << "Zero effective pitch range should show warning label";
+}
+
+// --- Command: Sustain -> commandCategory and sustainStyle ---
+TEST(MappingDefinitionTest, SustainCommandHasCategoryAndStyle) {
+  juce::ValueTree mapping("Mapping");
+  mapping.setProperty("type", "Command", nullptr);
+  mapping.setProperty("data1", (int)MIDIQy::CommandID::SustainMomentary, nullptr);
+  InspectorSchema schema = MappingDefinition::getSchema(mapping);
+  const InspectorControl *cmdCtrl = nullptr;
+  const InspectorControl *styleCtrl = nullptr;
+  for (const auto &c : schema) {
+    if (c.propertyId == "commandCategory") cmdCtrl = &c;
+    if (c.propertyId == "sustainStyle") styleCtrl = &c;
+  }
+  ASSERT_NE(cmdCtrl, nullptr);
+  EXPECT_EQ(cmdCtrl->label, "Sustain");
+  ASSERT_NE(styleCtrl, nullptr);
+  EXPECT_EQ(styleCtrl->options.size(), 3u)
+      << "Sustain style: Hold, Toggle, Default on hold to not sustain";
+}
+
+// --- Command: Latch Toggle -> releaseLatchedOnToggleOff ---
+TEST(MappingDefinitionTest, LatchToggleHasReleaseLatchedControl) {
+  juce::ValueTree mapping("Mapping");
+  mapping.setProperty("type", "Command", nullptr);
+  mapping.setProperty("data1", (int)MIDIQy::CommandID::LatchToggle, nullptr);
+  InspectorSchema schema = MappingDefinition::getSchema(mapping);
+  bool hasReleaseLatched = false;
+  for (const auto &c : schema)
+    if (c.propertyId == "releaseLatchedOnToggleOff") {
+      hasReleaseLatched = true;
+      break;
+    }
+  EXPECT_TRUE(hasReleaseLatched)
+      << "Latch Toggle should have Release latched when toggling off";
+}
+
+// --- Command: Panic -> panicMode ---
+TEST(MappingDefinitionTest, PanicCommandHasPanicMode) {
+  juce::ValueTree mapping("Mapping");
+  mapping.setProperty("type", "Command", nullptr);
+  mapping.setProperty("data1", (int)MIDIQy::CommandID::Panic, nullptr);
+  InspectorSchema schema = MappingDefinition::getSchema(mapping);
+  const InspectorControl *panicModeCtrl = nullptr;
+  for (const auto &c : schema)
+    if (c.propertyId == "panicMode") {
+      panicModeCtrl = &c;
+      break;
+    }
+  ASSERT_NE(panicModeCtrl, nullptr);
+  EXPECT_EQ(panicModeCtrl->label, "Mode");
+  EXPECT_NE(panicModeCtrl->options.find(1), panicModeCtrl->options.end());
+  EXPECT_NE(panicModeCtrl->options.find(2), panicModeCtrl->options.end());
+  EXPECT_NE(panicModeCtrl->options.find(3), panicModeCtrl->options.end());
+}
+
+// --- Command: Transpose -> mode, modify, semitones when Set, Local placeholder ---
+TEST(MappingDefinitionTest, TransposeCommandHasModeModifySemitones) {
+  juce::ValueTree mapping("Mapping");
+  mapping.setProperty("type", "Command", nullptr);
+  mapping.setProperty("data1", (int)MIDIQy::CommandID::Transpose, nullptr);
+  mapping.setProperty("transposeModify", 4, nullptr); // Set
+  InspectorSchema schema = MappingDefinition::getSchema(mapping);
+  bool hasMode = false, hasModify = false, hasSemitones = false;
+  for (const auto &c : schema) {
+    if (c.propertyId == "transposeMode") hasMode = true;
+    if (c.propertyId == "transposeModify") hasModify = true;
+    if (c.propertyId == "transposeSemitones") hasSemitones = true;
+  }
+  EXPECT_TRUE(hasMode) << "Transpose should have Mode (Global/Local)";
+  EXPECT_TRUE(hasModify) << "Transpose should have Modify";
+  EXPECT_TRUE(hasSemitones) << "Transpose Set should show Semitones slider";
+}
+
+TEST(MappingDefinitionTest, TransposeLocalShowsZonePlaceholder) {
+  juce::ValueTree mapping("Mapping");
+  mapping.setProperty("type", "Command", nullptr);
+  mapping.setProperty("data1", (int)MIDIQy::CommandID::Transpose, nullptr);
+  mapping.setProperty("transposeMode", "Local", nullptr);
+  InspectorSchema schema = MappingDefinition::getSchema(mapping);
+  bool hasPlaceholder = false;
+  for (const auto &c : schema)
+    if (c.propertyId == "transposeZonesPlaceholder") {
+      hasPlaceholder = true;
+      break;
+    }
+  EXPECT_TRUE(hasPlaceholder)
+      << "Transpose Local should show Affected zones placeholder";
+}
+
+// --- Command: Global Mode Up/Down -> no extra controls (just Command dropdown) ---
+TEST(MappingDefinitionTest, GlobalModeUpHasNoExtraControls) {
+  juce::ValueTree mapping("Mapping");
+  mapping.setProperty("type", "Command", nullptr);
+  mapping.setProperty("data1", (int)MIDIQy::CommandID::GlobalModeUp, nullptr);
+  InspectorSchema schema = MappingDefinition::getSchema(mapping);
+  // Should have commandCategory/data1 as "Command" and no data2, no style, etc.
+  size_t controlCount = 0;
+  for (const auto &c : schema)
+    if (c.propertyId == "data1" || c.propertyId == "commandCategory")
+      controlCount++;
+  EXPECT_GE(controlCount, 1u);
+  bool hasData2 = false;
+  for (const auto &c : schema)
+    if (c.propertyId == "data2") hasData2 = true;
+  EXPECT_FALSE(hasData2) << "Global Mode Up should not have Target Layer (data2)";
+}
+
+TEST(MappingDefinitionTest, GlobalModeDownHasNoExtraControls) {
+  juce::ValueTree mapping("Mapping");
+  mapping.setProperty("type", "Command", nullptr);
+  mapping.setProperty("data1", (int)MIDIQy::CommandID::GlobalModeDown, nullptr);
+  InspectorSchema schema = MappingDefinition::getSchema(mapping);
+  bool hasData2 = false;
+  for (const auto &c : schema)
+    if (c.propertyId == "data2") hasData2 = true;
+  EXPECT_FALSE(hasData2) << "Global Mode Down should not have Target Layer (data2)";
+}
+
+// --- getTypeName for all ActionTypes ---
+TEST(MappingDefinitionTest, GetTypeNameAllTypes) {
+  EXPECT_EQ(MappingDefinition::getTypeName(ActionType::Note), "Note");
+  EXPECT_EQ(MappingDefinition::getTypeName(ActionType::Expression), "Expression");
+  EXPECT_EQ(MappingDefinition::getTypeName(ActionType::Command), "Command");
+}

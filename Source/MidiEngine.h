@@ -19,7 +19,7 @@ public:
   virtual void sendNoteOn(int channel, int note, float velocity);
   virtual void sendNoteOff(int channel, int note);
   void sendCC(int channel, int controller, int value);
-  void sendPitchBend(int channel, int value); // Value: 0-16383 (center = 8192)
+  virtual void sendPitchBend(int channel, int value); // Value: 0-16383 (center = 8192)
 
   // All Notes Off (CC 123) on all 16 channels
   void allNotesOff();

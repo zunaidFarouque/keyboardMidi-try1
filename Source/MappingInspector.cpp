@@ -1,4 +1,5 @@
 #include "MappingInspector.h"
+#include "MappingInspectorLogic.h"
 #include "DeviceManager.h"
 #include "KeyNameUtilities.h"
 #include "MappingTypes.h"
@@ -430,70 +431,15 @@ void MappingInspector::createControl(const InspectorControl &def,
     }
 
     juce::ComboBox *cbPtr = cb.get();
-    cb->onChange = [this, propId, def, cbPtr]() {
+    cb->onChange = [this, def, cbPtr]() {
       if (selectedTrees.empty())
         return;
       undoManager.beginNewTransaction("Change " + def.label);
-      // Only command-type virtual props write to data1; transpose writes to its
-      // own props
-      juce::Identifier actualProp =
-          (def.propertyId == "commandCategory" ||
-           def.propertyId == "sustainStyle" || def.propertyId == "panicMode" ||
-           def.propertyId == "layerStyle")
-              ? juce::Identifier("data1")
-              : propId;
-      juce::var valueToSet;
-      if (def.propertyId == "type" || def.propertyId == "adsrTarget" ||
-          def.propertyId == "releaseBehavior" ||
-          def.propertyId == "pitchPadMode") {
-        int id = cbPtr->getSelectedId();
-        auto it = def.options.find(id);
-        valueToSet =
-            (it != def.options.end()) ? juce::var(it->second) : juce::var();
-      } else if (def.propertyId == "commandCategory") {
-        int id = cbPtr->getSelectedId();
-        valueToSet = (id == 100)   ? juce::var(0)
-                     : (id == 110) ? juce::var(10) // Layer -> data1=10 (Hold)
-                                   : juce::var(id);
-      } else if (def.propertyId == "panicMode") {
-        // Virtual: 1=Panic all (data2=0), 2=Panic latched only (data2=1),
-        // 3=Panic chords (data2=2)
-        int id = cbPtr->getSelectedId();
-        int mode = (id == 2) ? 1 : (id == 3) ? 2 : 0;
-        for (auto &tree : selectedTrees) {
-          if (tree.isValid()) {
-            tree.setProperty("data1", 4,
-                             &undoManager); // Panic (migrate from 5)
-            tree.setProperty("data2", mode, &undoManager);
-          }
-        }
-        juce::MessageManager::callAsync([this]() { rebuildUI(); });
-        return; // Already set properties
-      } else if (def.propertyId == "sustainStyle") {
-        // Virtual: combo ids 1,2,3 -> data1 0,1,2
-        int id = cbPtr->getSelectedId();
-        valueToSet = juce::var((id >= 1 && id <= 3) ? (id - 1) : 0);
-      } else if (def.propertyId == "layerStyle") {
-        // Virtual: combo ids 1,2 -> data1 10,11 (Hold to switch, Toggle layer)
-        int id = cbPtr->getSelectedId();
-        valueToSet = juce::var((id == 2) ? 11 : 10);
-      } else if (def.propertyId == "transposeMode") {
-        int id = cbPtr->getSelectedId();
-        valueToSet = juce::var(id == 2 ? "Local" : "Global");
-      } else if (def.propertyId == "transposeModify") {
-        int id = cbPtr->getSelectedId();
-        valueToSet = juce::var((id >= 1 && id <= 5) ? (id - 1) : 0);
-      } else if (def.propertyId == "data1" &&
-                 (def.options.count(100) > 0 || def.options.count(110) > 0)) {
-        // Command dropdown with Sustain (100) or Layer (110)
-        int id = cbPtr->getSelectedId();
-        valueToSet = juce::var((id == 100) ? 0 : (id == 110) ? 10 : id);
-      } else {
-        valueToSet = cbPtr->getSelectedId();
-      }
+      int id = cbPtr->getSelectedId();
       for (auto &tree : selectedTrees) {
         if (tree.isValid())
-          tree.setProperty(actualProp, valueToSet, &undoManager);
+          MappingInspectorLogic::applyComboSelectionToMapping(tree, def, id,
+                                                              &undoManager);
       }
       if (def.propertyId == "type" || def.propertyId == "data1" ||
           def.propertyId == "commandCategory" ||
