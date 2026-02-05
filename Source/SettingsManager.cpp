@@ -18,6 +18,7 @@ SettingsManager::SettingsManager() {
   rootNode.setProperty("delayMidiEnabled", false, nullptr);
   rootNode.setProperty("delayMidiSeconds", 1, nullptr);
   rootNode.addListener(this);
+  updateCachedMidiModeActive();
 }
 
 SettingsManager::~SettingsManager() { rootNode.removeListener(this); }
@@ -42,11 +43,16 @@ void SettingsManager::setPitchBendRange(int range) {
 }
 
 bool SettingsManager::isMidiModeActive() const {
-  return rootNode.getProperty("midiModeActive", false);
+  return cachedMidiModeActive;
+}
+
+void SettingsManager::updateCachedMidiModeActive() {
+  cachedMidiModeActive = rootNode.getProperty("midiModeActive", false);
 }
 
 void SettingsManager::setMidiModeActive(bool active) {
   rootNode.setProperty("midiModeActive", active, nullptr);
+  updateCachedMidiModeActive();
   sendChangeMessage();
 }
 
@@ -236,6 +242,7 @@ void SettingsManager::loadFromXml(juce::File file) {
       }
       rootNode.addListener(this);
       updateCachedStepsPerSemitone();
+      updateCachedMidiModeActive();
       sendChangeMessage();
     }
   }
@@ -244,6 +251,7 @@ void SettingsManager::loadFromXml(juce::File file) {
 void SettingsManager::valueTreePropertyChanged(
     juce::ValueTree &tree, const juce::Identifier &property) {
   if (tree == rootNode) {
+    updateCachedMidiModeActive();
     sendChangeMessage();
   }
 }

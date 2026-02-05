@@ -26,6 +26,7 @@ bool isPrecisionTouchpadHandle(HANDLE deviceHandle) {
 DeviceManager::DeviceManager() {
   loadConfig();
   rebuildAliasCache();
+  rebuildHardwareToAliasCache();
 }
 
 DeviceManager::~DeviceManager() { saveConfig(); }
@@ -41,6 +42,7 @@ void DeviceManager::createAlias(const juce::String &name) {
   sendChangeMessage();
   saveConfig();
   rebuildAliasCache();
+  rebuildHardwareToAliasCache();
 }
 
 void DeviceManager::assignHardware(const juce::String &aliasName,
@@ -70,6 +72,7 @@ void DeviceManager::assignHardware(const juce::String &aliasName,
 
   sendChangeMessage();
   saveConfig();
+  rebuildHardwareToAliasCache();
 }
 
 void DeviceManager::removeHardware(const juce::String &aliasName,
@@ -88,6 +91,7 @@ void DeviceManager::removeHardware(const juce::String &aliasName,
         aliasNode.removeChild(hardwareNode, nullptr);
         sendChangeMessage();
         saveConfig();
+        rebuildHardwareToAliasCache();
         return;
       }
     }
@@ -116,6 +120,7 @@ void DeviceManager::deleteAlias(const juce::String &aliasName) {
       sendChangeMessage();
       saveConfig();
       rebuildAliasCache();
+      rebuildHardwareToAliasCache();
       return;
     }
   }
@@ -221,6 +226,7 @@ void DeviceManager::renameAlias(const juce::String &oldNameIn,
 
   // Phase 46.3: keep reverse lookup cache in sync
   rebuildAliasCache();
+  rebuildHardwareToAliasCache();
 
   // 4. Notify & Save
   sendChangeMessage();
@@ -281,23 +287,30 @@ DeviceManager::getAliasesForHardware(uintptr_t hardwareId) const {
 }
 
 juce::String DeviceManager::getAliasForHardware(uintptr_t hardwareId) const {
+  auto it = hardwareToAliasCache.find(hardwareId);
+  if (it != hardwareToAliasCache.end())
+    return it->second;
+  return "Unassigned";
+}
+
+void DeviceManager::rebuildHardwareToAliasCache() const {
+  hardwareToAliasCache.clear();
+
   for (int i = 0; i < globalConfig.getNumChildren(); ++i) {
     auto aliasNode = globalConfig.getChild(i);
-    if (aliasNode.hasType("Alias")) {
-      for (int j = 0; j < aliasNode.getNumChildren(); ++j) {
-        auto hardwareNode = aliasNode.getChild(j);
-        if (hardwareNode.hasType("Hardware")) {
-          uintptr_t id = static_cast<uintptr_t>(
-              hardwareNode.getProperty("id").toString().getHexValue64());
-          if (id == hardwareId) {
-            return aliasNode.getProperty("name").toString();
-          }
-        }
+    if (!aliasNode.hasType("Alias"))
+      continue;
+
+    juce::String aliasName = aliasNode.getProperty("name").toString();
+    for (int j = 0; j < aliasNode.getNumChildren(); ++j) {
+      auto hardwareNode = aliasNode.getChild(j);
+      if (hardwareNode.hasType("Hardware")) {
+        uintptr_t id = static_cast<uintptr_t>(
+            hardwareNode.getProperty("id").toString().getHexValue64());
+        hardwareToAliasCache[id] = aliasName;
       }
     }
   }
-
-  return "Unassigned";
 }
 
 juce::StringArray DeviceManager::getAllAliases() const {
@@ -359,6 +372,7 @@ void DeviceManager::loadConfig() {
   }
 
   rebuildAliasCache();
+  rebuildHardwareToAliasCache();
 }
 
 void DeviceManager::rebuildAliasCache() {
@@ -548,13 +562,12 @@ void DeviceManager::validateConnectedDevices() {
     }
   }
 
-  // Step 7: If changes were made, send change message and save
-  // Always notify UI: the unassignedDevices list can change even if no dead
-  // devices were removed.
-  sendChangeMessage();
-
-  if (changesMade)
+  // Step 7: If changes were made, rebuild caches, send change message and save
+  if (changesMade) {
+    rebuildHardwareToAliasCache();
     saveConfig();
+  }
+  sendChangeMessage();
 }
 
 juce::File DeviceManager::getPortableDataDirectory() {

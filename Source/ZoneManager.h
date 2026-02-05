@@ -89,6 +89,6 @@ private:
   juce::String globalScaleName = "Major";
   int globalRootNote = 60;
 
-  // Phase 49: lookup tables per layer (0..8)
-  std::vector<std::unordered_map<InputID, Zone *>> layerLookupTables;
+  // Phase 49: lookup tables per layer (0..8) — store shared_ptr for O(1) getZoneForInput
+  std::vector<std::unordered_map<InputID, std::shared_ptr<Zone>>> layerLookupTables;
 };

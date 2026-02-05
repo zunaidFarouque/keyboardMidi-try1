@@ -224,10 +224,12 @@ int64_t __stdcall RawInputManager::rawInputWndProc(void *hwnd, unsigned int msg,
                             : (code == RIM_INPUTSINK ? "BACKGROUND" : "OTHER");
 
     // Only log if it is BACKGROUND to prove it works (avoid flooding)
+#if JUCE_DEBUG
     if (code == RIM_INPUTSINK) {
       DBG("RawInputManager: Received BACKGROUND Event! (wParam=" +
           juce::String((int)wParam) + ", code=" + juce::String(code) + ")");
     }
+#endif
 
     // Focus Guard: If MIDI mode is active, steal focus when key is pressed
     if (globalManagerInstance && globalManagerInstance->settingsManager) {

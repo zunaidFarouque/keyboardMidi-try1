@@ -56,6 +56,8 @@ MainComponent::MainComponent()
 
   // Listen to SettingsManager for MIDI mode changes
   settingsManager.addChangeListener(this);
+  deviceManager.addChangeListener(this);
+  rebuildTouchpadHandleCache();
 
   // Setup Command Manager for Undo/Redo
   commandManager.registerAllCommandsForTarget(this);
@@ -365,6 +367,7 @@ MainComponent::~MainComponent() {
 
   // 6. Remove listeners
   settingsManager.removeChangeListener(this);
+  deviceManager.removeChangeListener(this);
 
   // 7. Ensure cursor is unlocked on exit
   if (performanceModeButton.getToggleState()) {
@@ -374,6 +377,9 @@ MainComponent::~MainComponent() {
 
 // --- LOGGING LOGIC (Phase 52.3: Grid-based; Phase 54.2: Studio Mode) ---
 void MainComponent::logEvent(uintptr_t device, int keyCode, bool isDown) {
+  if (!logComponent || !logComponent->isShowing())
+    return;
+
   // 1. Determine Effective Device (match InputProcessor logic)
   uintptr_t effectiveDevice = device;
   if (!settingsManager.isStudioMode())
@@ -516,6 +522,8 @@ void MainComponent::changeListenerCallback(juce::ChangeBroadcaster *source) {
     if (visualizer)
       visualizer->restartTimerWithInterval(
           settingsManager.getWindowRefreshIntervalMs());
+  } else if (source == &deviceManager) {
+    rebuildTouchpadHandleCache();
   }
 }
 
@@ -618,43 +626,47 @@ void MainComponent::handleRawKeyEvent(uintptr_t deviceHandle, int keyCode,
 
 void MainComponent::handleAxisEvent(uintptr_t deviceHandle, int inputCode,
                                     float value) {
-  // Log axis events with value information
-  juce::String devStr =
-      "Dev: " +
-      juce::String::toHexString((juce::int64)deviceHandle).toUpperCase();
-  juce::String keyName = KeyNameUtilities::getKeyName(inputCode);
-  juce::String keyInfo =
-      "(" + juce::String::toHexString(inputCode).toUpperCase() + ") " + keyName;
-  keyInfo = keyInfo.paddedRight(' ', 20);
+  if (logComponent && logComponent->isShowing()) {
+    juce::String devStr =
+        "Dev: " +
+        juce::String::toHexString((juce::int64)deviceHandle).toUpperCase();
+    juce::String keyName = KeyNameUtilities::getKeyName(inputCode);
+    juce::String keyInfo =
+        "(" + juce::String::toHexString(inputCode).toUpperCase() + ") " + keyName;
+    keyInfo = keyInfo.paddedRight(' ', 20);
 
-  juce::String logLine =
-      devStr + " | VAL  | " + keyInfo + " | val: " + juce::String(value, 3);
+    juce::String logLine =
+        devStr + " | VAL  | " + keyInfo + " | val: " + juce::String(value, 3);
 
-  // Check for MIDI mapping
-  InputID id = {deviceHandle, inputCode};
-  auto actionOpt = inputProcessor.getMappingForInput(id);
-  if (actionOpt.has_value()) {
-    const auto &action = *actionOpt;
-    if (action.type == ActionType::Expression &&
-        action.adsrSettings.target == AdsrTarget::CC) {
-      logLine += " -> [MIDI] CC " + juce::String(action.adsrSettings.ccNumber) +
-                 " | ch: " + juce::String(action.channel);
+    InputID id = {deviceHandle, inputCode};
+    auto actionOpt = inputProcessor.getMappingForInput(id);
+    if (actionOpt.has_value()) {
+      const auto &action = *actionOpt;
+      if (action.type == ActionType::Expression &&
+          action.adsrSettings.target == AdsrTarget::CC) {
+        logLine += " -> [MIDI] CC " + juce::String(action.adsrSettings.ccNumber) +
+                   " | ch: " + juce::String(action.channel);
+      }
     }
+
+    logComponent->addEntry(logLine);
   }
 
-  if (logComponent)
-    logComponent->addEntry(logLine);
-
-  // Forward axis events to InputProcessor
   inputProcessor.handleAxisEvent(deviceHandle, inputCode, value);
 }
 
 void MainComponent::handleTouchpadContacts(
     uintptr_t deviceHandle, const std::vector<TouchpadContact> &contacts) {
-  juce::String aliasName = deviceManager.getAliasForHardware(deviceHandle);
-  if (!aliasName.trim().equalsIgnoreCase("Touchpad"))
+  if (cachedTouchpadHandles.count(deviceHandle) == 0)
     return;
   inputProcessor.processTouchpadContacts(deviceHandle, contacts);
+}
+
+void MainComponent::rebuildTouchpadHandleCache() {
+  cachedTouchpadHandles.clear();
+  auto ids = deviceManager.getHardwareForAlias("Touchpad");
+  for (int i = 0; i < ids.size(); ++i)
+    cachedTouchpadHandles.insert(ids[i]);
 }
 
 juce::String MainComponent::getNoteName(int noteNumber) {

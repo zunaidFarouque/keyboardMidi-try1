@@ -17,6 +17,7 @@
 #include "ZoneEditorComponent.h"
 
 #include <JuceHeader.h>
+#include <unordered_set>
 #include <vector>
 
 class MainComponent : public juce::Component,
@@ -136,6 +137,10 @@ private:
 
   // Update performance mode button text based on state and shortcut key
   void updatePerformanceModeButtonText();
+
+  // Touchpad alias cache (O(1) handleTouchpadContacts filter)
+  std::unordered_set<uintptr_t> cachedTouchpadHandles;
+  void rebuildTouchpadHandleCache();
 
   // ChangeListener implementation
   void changeListenerCallback(juce::ChangeBroadcaster *source) override;

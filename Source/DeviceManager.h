@@ -1,6 +1,7 @@
 #pragma once
 #include <JuceHeader.h>
 #include <map>
+#include <unordered_map>
 #include <vector>
 
 class DeviceManager : public juce::ChangeBroadcaster {
@@ -79,6 +80,10 @@ private:
   // Phase 46.3: reliable reverse lookup (alias hash -> name)
   std::map<uintptr_t, juce::String> aliasNameCache;
   void rebuildAliasCache();
+
+  // Live performance: hardware ID -> alias name (O(1) getAliasForHardware)
+  mutable std::unordered_map<uintptr_t, juce::String> hardwareToAliasCache;
+  void rebuildHardwareToAliasCache() const;
 
   // Helper to find or create alias node
   juce::ValueTree findOrCreateAliasNode(const juce::String &aliasName);

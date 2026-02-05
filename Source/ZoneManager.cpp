@@ -36,7 +36,7 @@ void ZoneManager::rebuildLookupTable() {
     for (int keyCode : keyCodes) {
       InputID id{zone->targetAliasHash, keyCode};
       // Overwrites previous entries, giving priority to later zones
-      layerLookupTables[(size_t)layerId][id] = zone.get();
+      layerLookupTables[(size_t)layerId][id] = zone;
     }
   }
 }
@@ -137,9 +137,8 @@ std::optional<MidiAction> ZoneManager::handleInput(InputID input,
   if (it == table.end())
     return std::nullopt;
 
-  Zone *zone = it->second;
-  return zone->processKey(input, globalChromaticTranspose,
-                          globalDegreeTranspose);
+  return it->second->processKey(input, globalChromaticTranspose,
+                                globalDegreeTranspose);
 }
 
 std::pair<std::optional<MidiAction>, juce::String>
@@ -155,7 +154,7 @@ ZoneManager::handleInputWithName(InputID input, int layerIndex) {
     return {std::nullopt, ""};
   }
 
-  Zone *zone = it->second;
+  auto zone = it->second;
   auto action =
       zone->processKey(input, globalChromaticTranspose, globalDegreeTranspose);
   if (action.has_value()) {
@@ -209,9 +208,8 @@ ZoneManager::simulateInput(int keyCode, uintptr_t aliasHash, int layerIndex) {
   if (it == table.end())
     return std::nullopt;
 
-  Zone *zone = it->second;
-  return zone->processKey(input, globalChromaticTranspose,
-                          globalDegreeTranspose);
+  return it->second->processKey(input, globalChromaticTranspose,
+                                globalDegreeTranspose);
 }
 
 std::shared_ptr<Zone> ZoneManager::getZoneForInput(InputID input,
@@ -226,16 +224,7 @@ std::shared_ptr<Zone> ZoneManager::getZoneForInput(InputID input,
   if (it == table.end())
     return nullptr;
 
-  Zone *zone = it->second;
-
-  // Find the shared_ptr in zones vector
-  for (const auto &zonePtr : zones) {
-    if (zonePtr.get() == zone) {
-      return zonePtr;
-    }
-  }
-
-  return nullptr;
+  return it->second;
 }
 
 std::optional<juce::Colour> ZoneManager::getZoneColorForKey(int keyCode,

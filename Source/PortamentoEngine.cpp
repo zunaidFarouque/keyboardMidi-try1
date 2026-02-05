@@ -26,12 +26,13 @@ void PortamentoEngine::startGlide(int startVal, int endVal, int durationMs, int 
     midiEngine.sendPitchBend(midiChannel, static_cast<int>(currentPbValue));
     lastSentValue = static_cast<int>(currentPbValue);
   } else {
-    // Calculate steps needed
+    // Calculate steps needed (use reciprocal to avoid division in hot path)
     double totalSteps = durationMs / timerIntervalMs;
     if (totalSteps <= 0.0) {
       totalSteps = 1.0;
     }
-    step = (targetPbValue - currentPbValue) / totalSteps;
+    double invTotalSteps = 1.0 / totalSteps;
+    step = (targetPbValue - currentPbValue) * invTotalSteps;
   }
 }
 
