@@ -117,16 +117,22 @@ public:
 
   // Play-time: O(1) lookup + O(k) transpose. Returns final MIDI chord notes
   // (with ghost flags) or nullopt if not in zone.
+  // scaleIntervals: when non-null and non-empty, degree transpose is applied
+  // (shift by scale degrees); otherwise only chromatic transpose is applied.
   std::optional<std::vector<ChordUtilities::ChordNote>>
-  getNotesForKey(int keyCode, int globalChromTrans, int globalDegTrans);
+  getNotesForKey(int keyCode, int globalChromTrans, int globalDegTrans,
+                 const std::vector<int> *scaleIntervals = nullptr);
 
   // Get display label for a key (note name or Roman numeral)
   juce::String getKeyLabel(int keyCode) const;
 
   // Process a key input and return MIDI action if this zone matches
   // Note: Returns first note of chord for backward compatibility
+  // scaleIntervals: when non-null, used for degree transpose in getNotesForKey
   std::optional<MidiAction> processKey(InputID input, int globalChromTrans,
-                                       int globalDegTrans);
+                                       int globalDegTrans,
+                                       const std::vector<int> *scaleIntervals =
+                                           nullptr);
 
   // Remove a key from inputKeyCodes
   void removeKey(int keyCode);

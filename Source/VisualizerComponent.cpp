@@ -6,6 +6,7 @@
 #include "PitchPadUtilities.h"
 #include "PresetManager.h"
 #include "RawInputManager.h"
+#include "ScaleLibrary.h"
 #include "SettingsManager.h"
 #include "VoiceManager.h"
 #include <JuceHeader.h>
@@ -32,6 +33,30 @@ static uintptr_t aliasNameToHash(const juce::String &aliasName) {
   return static_cast<uintptr_t>(std::hash<juce::String>{}(aliasName));
 }
 
+// Draggable bar to resize the global panel; collapse when dragged too far left
+namespace {
+class GlobalPanelResizerBar : public juce::Component {
+public:
+  std::function<void(float)> onWidthChange;
+
+  void mouseDrag(const juce::MouseEvent &e) override {
+    if (auto *p = getParentComponent(); p && onWidthChange) {
+      int x = e.getEventRelativeTo(p).getPosition().getX();
+      float w = (float)(p->getWidth() - x - getWidth());
+      onWidthChange(w);
+    }
+  }
+
+  void paint(juce::Graphics &g) override {
+    g.fillAll(juce::Colour(0xff2a2a2a));
+    g.setColour(juce::Colours::darkgrey);
+    int cx = getWidth() / 2;
+    for (int i = -1; i <= 1; ++i)
+      g.fillRect(cx - 1 + i * 3, 8, 2, getHeight() - 16);
+  }
+};
+} // namespace
+
 juce::Colour
 VisualizerComponent::getTextColorForKeyFill(juce::Colour keyFillColor) {
   return ColourContrast::getTextColorForKeyFill(keyFillColor);
@@ -42,11 +67,30 @@ VisualizerComponent::VisualizerComponent(ZoneManager *zoneMgr,
                                          const VoiceManager &voiceMgr,
                                          SettingsManager *settingsMgr,
                                          PresetManager *presetMgr,
-                                         InputProcessor *inputProc)
+                                         InputProcessor *inputProc,
+                                         ScaleLibrary *scaleLib)
     : zoneManager(zoneMgr), deviceManager(deviceMgr), voiceManager(voiceMgr),
       settingsManager(settingsMgr), presetManager(presetMgr),
-      inputProcessor(inputProc) {
+      inputProcessor(inputProc), scaleLibrary(scaleLib),
+      globalPanel(zoneMgr, scaleLib) {
   // Phase 42: Listeners moved to initialize() – no addListener here
+
+  addAndMakeVisible(globalPanel);
+
+  globalPanelResizerBar = std::make_unique<GlobalPanelResizerBar>();
+  auto *resizer = static_cast<GlobalPanelResizerBar *>(globalPanelResizerBar.get());
+  resizer->setMouseCursor(juce::MouseCursor::LeftRightResizeCursor);
+  resizer->onWidthChange = [this](float w) { setGlobalPanelWidthFromResizer(w); };
+  addAndMakeVisible(*globalPanelResizerBar);
+
+  addAndMakeVisible(expandPanelButton);
+  expandPanelButton.setButtonText("<");
+  expandPanelButton.setTooltip("Show global controls (Root, Scale, Transpose)");
+  expandPanelButton.onClick = [this] {
+    globalPanelCollapsed_ = false;
+    globalPanelWidth_ = kGlobalPanelDefaultWidth;
+    resized();
+  };
 
   // Setup View Selector (Phase 39)
   addAndMakeVisible(viewSelector);
@@ -55,9 +99,10 @@ VisualizerComponent::VisualizerComponent(ZoneManager *zoneMgr,
   // Ensure selector is on top to receive mouse events
   viewSelector.toFront(false);
 
-  // Phase 50.9.1: Follow Input toggle
+  // Phase 50.9.1: Follow Input toggle (always visible; layer system works regardless of Studio Mode)
   addAndMakeVisible(followButton);
   followButton.setClickingTogglesState(true);
+  followButton.setTooltip("When on, the visualizer follows the layer currently being triggered by input.");
   followButton.onClick = [this] {
     followInputEnabled.store(followButton.getToggleState(),
                              std::memory_order_release);
@@ -154,6 +199,10 @@ void VisualizerComponent::refreshCache() {
 
   int width = getWidth();
   int height = getHeight();
+  // Content area: left (touchpad) + center (keyboard); right is global panel
+  int contentWidth = width - static_cast<int>(getEffectiveRightPanelWidth());
+  if (contentWidth < 0)
+    contentWidth = 0;
 
   if (width <= 0 || height <= 0) {
     cacheValid = false;
@@ -170,8 +219,8 @@ void VisualizerComponent::refreshCache() {
 
     g.fillAll(juce::Colour(0xff111111)); // Background
 
-    // --- 0. Header Bar (Transpose left, Sustain right) ---
-    auto bounds = juce::Rectangle<int>(0, 0, width, height);
+    // --- 0. Header Bar (Transpose left, Sustain right) - only over content area ---
+    auto bounds = juce::Rectangle<int>(0, 0, contentWidth, height);
     auto headerRect = bounds.removeFromTop(30);
     g.setColour(juce::Colour(0xff222222));
     g.fillRect(headerRect);
@@ -179,17 +228,13 @@ void VisualizerComponent::refreshCache() {
     g.setColour(juce::Colours::white);
     g.setFont(12.0f);
 
-    // TRANSPOSE (left)
+    // TRANSPOSE (left) – pitch only
     if (zoneManager) {
       int chrom = zoneManager->getGlobalChromaticTranspose();
-      int deg = zoneManager->getGlobalDegreeTranspose();
       juce::String chromStr =
           (chrom >= 0) ? ("+" + juce::String(chrom)) : juce::String(chrom);
-      juce::String degStr =
-          (deg >= 0) ? ("+" + juce::String(deg)) : juce::String(deg);
-      juce::String transposeText =
-          "TRANSPOSE: [Pitch: " + chromStr + "] [Scale: " + degStr + "]";
-      g.drawText(transposeText, 8, 0, 280, headerRect.getHeight(),
+      juce::String transposeText = "Transpose: " + chromStr + " st";
+      g.drawText(transposeText, 8, 0, 200, headerRect.getHeight(),
                  juce::Justification::centredLeft, false);
     }
 
@@ -210,14 +255,14 @@ void VisualizerComponent::refreshCache() {
     float unitsTall = 7.3f;
     float headerHeight = 30.0f;
     float availableHeight = static_cast<float>(height) - headerHeight;
-    // Reserve LEFT side for touchpad panel (no overlap with keyboard/other UI)
-    float availableForKeyboard = static_cast<float>(width) -
+    // Reserve LEFT for touchpad, RIGHT for global panel; center = keyboard
+    float availableForKeyboard = static_cast<float>(contentWidth) -
                                  kTouchpadPanelLeftWidth -
                                  (2.0f * kTouchpadPanelMargin);
 
     float scaleX = (availableForKeyboard > 0.0f)
                        ? (availableForKeyboard / unitsWide)
-                       : (static_cast<float>(width) / unitsWide);
+                       : (static_cast<float>(contentWidth) / unitsWide);
     float scaleY =
         (availableHeight > 0.0f) ? (availableHeight / unitsTall) : scaleX;
     float keySize = std::min(scaleX, scaleY) * 0.9f;
@@ -439,17 +484,20 @@ void VisualizerComponent::paint(juce::Graphics &g) {
       settingsManager && !settingsManager->isMidiModeActive();
 
   // --- Calculate Dynamic Scale (Same as refreshCache) ---
+  int contentW = getWidth() - static_cast<int>(getEffectiveRightPanelWidth());
+  if (contentW < 0)
+    contentW = 0;
   float unitsWide = 23.0f;
   float unitsTall = 7.3f;
   float headerHeight = 30.0f;
   float availableHeight = static_cast<float>(getHeight()) - headerHeight;
-  float availableForKeyboard = static_cast<float>(getWidth()) -
+  float availableForKeyboard = static_cast<float>(contentW) -
                                kTouchpadPanelLeftWidth -
                                (2.0f * kTouchpadPanelMargin);
 
   float scaleX = (availableForKeyboard > 0.0f)
                      ? (availableForKeyboard / unitsWide)
-                     : (static_cast<float>(getWidth()) / unitsWide);
+                     : (static_cast<float>(contentW) / unitsWide);
   float scaleY =
       (availableHeight > 0.0f) ? (availableHeight / unitsTall) : scaleX;
   float keySize = std::min(scaleX, scaleY) * 0.9f;
@@ -809,31 +857,85 @@ void VisualizerComponent::paint(juce::Graphics &g) {
   }
 }
 
+float VisualizerComponent::getEffectiveRightPanelWidth() const {
+  if (globalPanelCollapsed_)
+    return kExpandTabWidth;
+  return static_cast<float>(kResizerBarWidth) + globalPanelWidth_;
+}
+
+void VisualizerComponent::setGlobalPanelWidthFromResizer(float newWidth) {
+  if (newWidth < kGlobalPanelMinWidth) {
+    globalPanelCollapsed_ = true;
+    globalPanelWidth_ = kGlobalPanelDefaultWidth; // restore default when re-expanded
+  } else {
+    globalPanelCollapsed_ = false;
+    globalPanelWidth_ = juce::jlimit(60.0f, 500.0f, newWidth);
+  }
+  resized();
+}
+
+void VisualizerComponent::updateGlobalPanelLayout(int w, int h) {
+  float effectiveRight = getEffectiveRightPanelWidth();
+  int effRight = static_cast<int>(effectiveRight);
+
+  if (globalPanelCollapsed_) {
+    expandPanelButton.setBounds(w - static_cast<int>(kExpandTabWidth), 0,
+                               static_cast<int>(kExpandTabWidth), h);
+    expandPanelButton.setVisible(true);
+    if (globalPanelResizerBar) {
+      globalPanelResizerBar->setBounds(0, 0, 0, 0);
+      globalPanelResizerBar->setVisible(false);
+    }
+    globalPanel.setBounds(0, 0, 0, 0);
+    globalPanel.setVisible(false);
+    expandPanelButton.toFront(false);
+  } else {
+    expandPanelButton.setBounds(0, 0, 0, 0);
+    expandPanelButton.setVisible(false);
+    int panelW = static_cast<int>(globalPanelWidth_);
+    if (globalPanelResizerBar) {
+      globalPanelResizerBar->setBounds(w - panelW - kResizerBarWidth, 0,
+                                       kResizerBarWidth, h);
+      globalPanelResizerBar->setVisible(true);
+    }
+    globalPanel.setBounds(w - panelW, 0, panelW, h);
+    globalPanel.setVisible(true);
+    globalPanelResizerBar->toFront(false);
+    globalPanel.toFront(false);
+  }
+}
+
 void VisualizerComponent::resized() {
-  // Position View Selector (Phase 39) - Below status bar
+  int w = getWidth();
+  int h = getHeight();
+  float effectiveRight = getEffectiveRightPanelWidth();
+  int effRight = static_cast<int>(effectiveRight);
+
+  updateGlobalPanelLayout(w, h);
+
+  // Position Follow Input button (always visible) and View Selector (when Studio Mode)
+  int headerHeight = 30;   // Status bar height
+  int selectorHeight = 25;
+  int margin = 10;
+  int selectorY = headerHeight + margin;
+  int buttonWidth = 110;
+  int buttonHeight = selectorHeight;
+
   if (viewSelector.isVisible()) {
-    int headerHeight = 30; // Status bar height
     int selectorWidth = 200;
-    int selectorHeight = 25;
-    int margin = 10;
-    int selectorY = headerHeight + margin; // Position below status bar
-    int buttonWidth = 110;
-    int buttonHeight = selectorHeight;
-
-    // Place follow button to the left of the view selector
-    int selectorX = getWidth() - selectorWidth - margin;
+    int selectorX = w - effRight - selectorWidth - margin;
     int buttonX = selectorX - buttonWidth - 8;
-
     followButton.setBounds(buttonX, selectorY, buttonWidth, buttonHeight);
     viewSelector.setBounds(selectorX, selectorY, selectorWidth, selectorHeight);
   } else {
-    // If the selector is hidden (Studio Mode off), hide follow button too.
-    followButton.setBounds(0, 0, 0, 0);
+    // Follow Input only: place button left of right panel
+    int buttonX = w - effRight - buttonWidth - margin;
+    followButton.setBounds(buttonX, selectorY, buttonWidth, buttonHeight);
   }
 
-  cacheValid = false; // Invalidate cache on resize
+  cacheValid = false;
   needsRepaint = true;
-  repaint(); // Resize needs immediate repaint
+  repaint();
 }
 
 void VisualizerComponent::updateFollowButtonAppearance() {

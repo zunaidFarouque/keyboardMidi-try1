@@ -33,7 +33,7 @@ MainComponent::MainComponent()
   logComponent = std::make_unique<LogComponent>();
   visualizer = std::make_unique<VisualizerComponent>(
       &inputProcessor.getZoneManager(), &deviceManager, voiceManager,
-      &settingsManager, &presetManager, &inputProcessor);
+      &settingsManager, &presetManager, &inputProcessor, &scaleLibrary);
   mappingEditor = std::make_unique<MappingEditorComponent>(
       presetManager, *rawInputManager, deviceManager, settingsManager);
   zoneEditor = std::make_unique<ZoneEditorComponent>(
@@ -198,7 +198,9 @@ MainComponent::MainComponent()
   mainTabs.addTab("Mappings", juce::Colour(0xff2a2a2a), mappingEditor.get(),
                   false);
   mainTabs.addTab("Zones", juce::Colour(0xff2a2a2a), zoneEditor.get(), false);
-  mainTabs.addTab("Settings", juce::Colour(0xff2a2a2a), settingsPanel.get(),
+  settingsViewport.setViewedComponent(settingsPanel.get(), false);
+  settingsViewport.setScrollBarsShown(true, false); // vertical scrollbar only
+  mainTabs.addTab("Settings", juce::Colour(0xff2a2a2a), &settingsViewport,
                   false);
 
   // --- Add Containers ---
@@ -335,6 +337,10 @@ MainComponent::MainComponent()
                                                bool hidden) { resized(); };
   logContainer.onVisibilityChanged = [this](DetachableContainer *container,
                                             bool hidden) { resized(); };
+
+  // Enable tooltips app-wide (required for setTooltip() on any component to show)
+  tooltipWindow = std::make_unique<juce::TooltipWindow>(this, 500);
+  addChildComponent(tooltipWindow.get());
 }
 
 MainComponent::~MainComponent() {
@@ -898,6 +904,13 @@ void MainComponent::resized() {
         horizontalComponents.getRawDataPointer(), horizontalComponents.size(),
         bottomArea.getX(), bottomArea.getY(), bottomArea.getWidth(),
         bottomArea.getHeight(), false, true);
+  }
+
+  // Viewport does not resize its viewed component: set settings panel size so it paints and scrolls
+  if (settingsPanel && settingsViewport.getViewedComponent() == settingsPanel.get()) {
+    int w = settingsViewport.getWidth();
+    if (w > 0)
+      settingsPanel->setSize(w, 520);
   }
 }
 

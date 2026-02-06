@@ -199,6 +199,18 @@ juce::String getCommandLabel(int cmdId) {
     return "Layer (Hold)";
   case CommandID::LayerToggle:
     return "Layer (Toggle)";
+  case CommandID::GlobalRootUp:
+    return "Root +1";
+  case CommandID::GlobalRootDown:
+    return "Root -1";
+  case CommandID::GlobalRootSet:
+    return "Root Set";
+  case CommandID::GlobalScaleNext:
+    return "Scale Next";
+  case CommandID::GlobalScalePrev:
+    return "Scale Prev";
+  case CommandID::GlobalScaleSet:
+    return "Scale Set";
   default:
     break;
   }
@@ -440,12 +452,14 @@ void compileZonesForLayer(VisualGrid &vGrid, AudioGrid &aGrid,
     if (zone->targetAliasHash != aliasHash)
       continue;
 
+    std::vector<int> zoneIntervals = zoneMgr.getScaleIntervalsForZone(zone.get());
     const auto &keyCodes = zone->getInputKeyCodes();
     for (int keyCode : keyCodes) {
       if (keyCode < 0 || keyCode > 0xFF)
         continue;
 
-      auto chordOpt = zone->getNotesForKey(keyCode, globalChrom, globalDeg);
+      auto chordOpt = zone->getNotesForKey(keyCode, globalChrom, globalDeg,
+                                           &zoneIntervals);
       if (!chordOpt.has_value() || chordOpt->empty()) {
         // Zone covers this key but has no notes (e.g. cache not built yet).
         // Claim the key for conflict detection (Mapping + Zone = Conflict).
@@ -830,6 +844,27 @@ void compileMappingsForLayer(
           juce::jlimit(-48, 48, action.transposeSemitones);
     }
 
+    // Global root / scale commands
+    if (action.type == ActionType::Command) {
+      const int cmd = action.data1;
+      if (cmd == static_cast<int>(MIDIQy::CommandID::GlobalRootUp) ||
+          cmd == static_cast<int>(MIDIQy::CommandID::GlobalRootDown) ||
+          cmd == static_cast<int>(MIDIQy::CommandID::GlobalRootSet)) {
+        int rm = (int)mapping.getProperty("rootModify", 0);
+        action.rootModify = juce::jlimit(0, 2, rm);
+        action.rootNote =
+            juce::jlimit(0, 127, (int)mapping.getProperty("rootNote", 60));
+      }
+      if (cmd == static_cast<int>(MIDIQy::CommandID::GlobalScaleNext) ||
+          cmd == static_cast<int>(MIDIQy::CommandID::GlobalScalePrev) ||
+          cmd == static_cast<int>(MIDIQy::CommandID::GlobalScaleSet)) {
+        int sm = (int)mapping.getProperty("scaleModify", 0);
+        action.scaleModify = juce::jlimit(0, 2, sm);
+        action.scaleIndex =
+            juce::jmax(0, (int)mapping.getProperty("scaleIndex", 0));
+      }
+    }
+
     juce::Colour color = getColorForType(action.type, settingsMgr);
     juce::String label = makeLabelForAction(action);
     juce::String sourceName =
@@ -1043,12 +1078,14 @@ void GridCompiler::compileZones(CompiledMapContext &context,
       continue;
     const uintptr_t targetAliasHash = zone->targetAliasHash;
 
+    std::vector<int> zoneIntervals = zoneMgr.getScaleIntervalsForZone(zone.get());
     const auto &keyCodes = zone->getInputKeyCodes();
     for (int keyCode : keyCodes) {
       if (keyCode < 0 || keyCode > 0xFF)
         continue;
 
-      auto chordOpt = zone->getNotesForKey(keyCode, globalChrom, globalDeg);
+      auto chordOpt = zone->getNotesForKey(keyCode, globalChrom, globalDeg,
+                                           &zoneIntervals);
       if (!chordOpt.has_value())
         continue;
 

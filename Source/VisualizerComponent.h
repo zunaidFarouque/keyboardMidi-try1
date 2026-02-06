@@ -2,16 +2,20 @@
 // Phase 52.2: Renders from InputProcessor::getContext() VisualGrid only (no
 // findZoneForKey / isKeyInAnyZone / simulateInput). juce::Timer drives refresh.
 #include "DeviceManager.h"
+#include "GlobalPerformancePanel.h"
 #include "RawInputManager.h"
 #include "TouchpadTypes.h"
 #include "ZoneManager.h"
 #include <JuceHeader.h>
 #include <atomic>
+#include <functional>
+#include <memory>
 #include <set>
 #include <vector>
 
 class InputProcessor;
 class PresetManager;
+class ScaleLibrary;
 class SettingsManager;
 class VoiceManager;
 
@@ -25,7 +29,8 @@ public:
                       const VoiceManager &voiceMgr,
                       SettingsManager *settingsMgr,
                       PresetManager *presetMgr = nullptr,
-                      InputProcessor *inputProc = nullptr);
+                      InputProcessor *inputProc = nullptr,
+                      ScaleLibrary *scaleLib = nullptr);
   ~VisualizerComponent() override;
 
   // Phase 42: Two-stage init – call after object graph is built
@@ -74,6 +79,20 @@ private:
   SettingsManager *settingsManager;
   PresetManager *presetManager;
   InputProcessor *inputProcessor;
+  ScaleLibrary *scaleLibrary;
+  GlobalPerformancePanel globalPanel;
+  std::unique_ptr<juce::Component> globalPanelResizerBar;
+  juce::TextButton expandPanelButton;
+  float globalPanelWidth_ = 300.0f;
+  bool globalPanelCollapsed_ = false;
+  static constexpr float kGlobalPanelDefaultWidth = 300.0f;
+  static constexpr float kGlobalPanelMinWidth = 24.0f;
+  static constexpr float kExpandTabWidth = 22.0f;
+  static constexpr int kResizerBarWidth = 6;
+  float getEffectiveRightPanelWidth() const;
+  void setGlobalPanelWidthFromResizer(float newWidth);
+  void updateGlobalPanelLayout(int w, int h);
+
   int currentVisualizedLayer = 0; // Phase 45.3: which layer we are inspecting
   std::set<int> activeKeys;
   mutable juce::CriticalSection keyStateLock;

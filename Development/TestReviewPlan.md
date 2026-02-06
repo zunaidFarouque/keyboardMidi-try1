@@ -33,7 +33,7 @@ You don’t need to follow the order strictly, but it’s arranged from **most d
   - `Source/MappingDefinition.cpp` (schema, option IDs)
 
 - **Checklist**
-  - [ ] **Type / adsrTarget / pitchPadMode**
+  - [x] **Type / adsrTarget / pitchPadMode**
     - Tests: `ApplyType_*`, `ApplyAdsrTarget_*`, `ApplyPitchPadMode_*`
     - Verify that using option text (`\"Note\"`, `\"Expression\"`, `\"PitchBend\"`, `\"SmartScaleBend\"`, `\"Absolute\"`, `\"Relative\"`) matches how the rest of the system expects these properties.
   - [ ] **Command virtual props**

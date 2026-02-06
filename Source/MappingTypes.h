@@ -46,7 +46,13 @@ enum class CommandID : int {
   GlobalModeUp = 8,     // Degree +1
   GlobalModeDown = 9,   // Degree -1
   LayerMomentary = 10,  // Press=layer on, Release=layer off (data2 = layer ID)
-  LayerToggle = 11      // Press=flip layer active (data2 = layer ID)
+  LayerToggle = 11,     // Press=flip layer active (data2 = layer ID)
+  GlobalRootUp = 12,    // Root +1 semitone
+  GlobalRootDown = 13,  // Root -1 semitone
+  GlobalRootSet = 14,   // Set root (rootNote in action)
+  GlobalScaleNext = 15, // Next scale in library
+  GlobalScalePrev = 16, // Previous scale in library
+  GlobalScaleSet = 17   // Set scale by index (scaleIndex in action)
 };
 }
 
@@ -138,6 +144,14 @@ struct MidiAction {
   bool transposeLocal = false; // true = local (affected zones; placeholder)
   int transposeModify = 0;     // 0=up1, 1=down1, 2=up12, 3=down12, 4=set
   int transposeSemitones = 0;  // for set: -12..+12 (or wider)
+
+  // Global root: 0=up1, 1=down1, 2=set
+  int rootModify = 0;
+  int rootNote = 60; // for set (0-127)
+
+  // Global scale: 0=next, 1=prev, 2=set
+  int scaleModify = 0;
+  int scaleIndex = 0; // for set (0-based index in scale library)
 };
 
 // Represents a unique input source (device + key)

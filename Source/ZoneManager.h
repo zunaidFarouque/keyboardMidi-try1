@@ -71,6 +71,9 @@ public:
   // Intervals for global scale (for SmartScaleBend compilation)
   std::vector<int> getGlobalScaleIntervals() const;
 
+  // Intervals for a zone (global or local scale per zone flags)
+  std::vector<int> getScaleIntervalsForZone(const Zone *zone) const;
+
   // Rebuild the lookup table (call when zones or their keys change)
   void rebuildLookupTable();
 

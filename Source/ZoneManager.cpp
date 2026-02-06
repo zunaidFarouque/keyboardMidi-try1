@@ -12,6 +12,14 @@ std::vector<int> ZoneManager::getGlobalScaleIntervals() const {
   return scaleLibrary.getIntervals(globalScaleName);
 }
 
+std::vector<int> ZoneManager::getScaleIntervalsForZone(const Zone *zone) const {
+  if (!zone)
+    return getGlobalScaleIntervals();
+  if (zone->usesGlobalScale())
+    return getGlobalScaleIntervals();
+  return scaleLibrary.getIntervals(zone->scaleName);
+}
+
 void ZoneManager::rebuildZoneCache(Zone *zone) {
   std::vector<int> intervals = zone->usesGlobalScale()
                                    ? scaleLibrary.getIntervals(globalScaleName)
@@ -137,8 +145,9 @@ std::optional<MidiAction> ZoneManager::handleInput(InputID input,
   if (it == table.end())
     return std::nullopt;
 
+  std::vector<int> intervals = getScaleIntervalsForZone(it->second.get());
   return it->second->processKey(input, globalChromaticTranspose,
-                                globalDegreeTranspose);
+                                globalDegreeTranspose, &intervals);
 }
 
 std::pair<std::optional<MidiAction>, juce::String>
@@ -155,8 +164,9 @@ ZoneManager::handleInputWithName(InputID input, int layerIndex) {
   }
 
   auto zone = it->second;
-  auto action =
-      zone->processKey(input, globalChromaticTranspose, globalDegreeTranspose);
+  std::vector<int> intervals = getScaleIntervalsForZone(zone.get());
+  auto action = zone->processKey(input, globalChromaticTranspose,
+                                 globalDegreeTranspose, &intervals);
   if (action.has_value()) {
     return {action, zone->name};
   }
@@ -208,8 +218,9 @@ ZoneManager::simulateInput(int keyCode, uintptr_t aliasHash, int layerIndex) {
   if (it == table.end())
     return std::nullopt;
 
+  std::vector<int> intervals = getScaleIntervalsForZone(it->second.get());
   return it->second->processKey(input, globalChromaticTranspose,
-                                globalDegreeTranspose);
+                                globalDegreeTranspose, &intervals);
 }
 
 std::shared_ptr<Zone> ZoneManager::getZoneForInput(InputID input,

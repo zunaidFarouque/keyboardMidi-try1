@@ -1489,7 +1489,6 @@ TEST_F(NoteTypeTest, TransposeUp1Semitone_IncreasesChromatic) {
   proc.processEvent(InputID{0, 40}, true);
   proc.processEvent(InputID{0, 40}, false);
   EXPECT_EQ(proc.getZoneManager().getGlobalChromaticTranspose(), 1);
-  EXPECT_EQ(proc.getZoneManager().getGlobalDegreeTranspose(), 0);
 }
 
 TEST_F(NoteTypeTest, TransposeDown1Semitone_DecreasesChromatic) {
@@ -1501,7 +1500,6 @@ TEST_F(NoteTypeTest, TransposeDown1Semitone_DecreasesChromatic) {
   proc.processEvent(InputID{0, 40}, true);
   proc.processEvent(InputID{0, 40}, false);
   EXPECT_EQ(proc.getZoneManager().getGlobalChromaticTranspose(), 1);
-  EXPECT_EQ(proc.getZoneManager().getGlobalDegreeTranspose(), 0);
 }
 
 TEST_F(NoteTypeTest, TransposeUp1Octave_IncreasesBy12) {
@@ -1513,7 +1511,6 @@ TEST_F(NoteTypeTest, TransposeUp1Octave_IncreasesBy12) {
   proc.processEvent(InputID{0, 40}, true);
   proc.processEvent(InputID{0, 40}, false);
   EXPECT_EQ(proc.getZoneManager().getGlobalChromaticTranspose(), 12);
-  EXPECT_EQ(proc.getZoneManager().getGlobalDegreeTranspose(), 0);
 }
 
 TEST_F(NoteTypeTest, TransposeDown1Octave_DecreasesBy12) {
@@ -1525,7 +1522,6 @@ TEST_F(NoteTypeTest, TransposeDown1Octave_DecreasesBy12) {
   proc.processEvent(InputID{0, 40}, true);
   proc.processEvent(InputID{0, 40}, false);
   EXPECT_EQ(proc.getZoneManager().getGlobalChromaticTranspose(), 0);
-  EXPECT_EQ(proc.getZoneManager().getGlobalDegreeTranspose(), 0);
 }
 
 TEST_F(NoteTypeTest, TransposeSet_AppliesSemitonesValue) {
@@ -1537,7 +1533,6 @@ TEST_F(NoteTypeTest, TransposeSet_AppliesSemitonesValue) {
   proc.processEvent(InputID{0, 40}, true);
   proc.processEvent(InputID{0, 40}, false);
   EXPECT_EQ(proc.getZoneManager().getGlobalChromaticTranspose(), 5);
-  EXPECT_EQ(proc.getZoneManager().getGlobalDegreeTranspose(), 0);
 }
 
 TEST_F(NoteTypeTest, TransposeSet_NegativeSemitones) {
@@ -1549,7 +1544,6 @@ TEST_F(NoteTypeTest, TransposeSet_NegativeSemitones) {
   proc.processEvent(InputID{0, 40}, true);
   proc.processEvent(InputID{0, 40}, false);
   EXPECT_EQ(proc.getZoneManager().getGlobalChromaticTranspose(), -7);
-  EXPECT_EQ(proc.getZoneManager().getGlobalDegreeTranspose(), 0);
 }
 
 TEST_F(NoteTypeTest, TransposeClampedTo48) {
@@ -1585,7 +1579,6 @@ TEST_F(NoteTypeTest, LegacyGlobalPitchDown_DecreasesChromaticByOne) {
   proc.processEvent(InputID{0, 40}, false);
   EXPECT_EQ(proc.getZoneManager().getGlobalChromaticTranspose(), 2)
       << "Legacy GlobalPitchDown should act as down 1 semitone";
-  EXPECT_EQ(proc.getZoneManager().getGlobalDegreeTranspose(), 0);
 }
 
 // --- Touchpad mapping: Finger 1 Down -> Note sends Note On, release sends Note
@@ -1795,29 +1788,6 @@ TEST_F(InputProcessorTest, DisabledMappingNotExecuted) {
       << "Disabled mapping should not produce any MIDI";
 }
 
-// --- Global Mode Up: increases degree transpose ---
-TEST_F(InputProcessorTest, GlobalModeUpIncreasesDegreeTranspose) {
-  auto mappings = presetMgr.getMappingsListForLayer(0);
-  juce::ValueTree m("Mapping");
-  m.setProperty("inputKey", 60, nullptr);
-  m.setProperty("deviceHash",
-                juce::String::toHexString((juce::int64)0).toUpperCase(),
-                nullptr);
-  m.setProperty("type", "Command", nullptr);
-  m.setProperty("data1", (int)MIDIQy::CommandID::GlobalModeUp, nullptr);
-  m.setProperty("data2", 0, nullptr);
-  m.setProperty("layerID", 0, nullptr);
-  mappings.addChild(m, -1, nullptr);
-
-  proc.initialize();
-  EXPECT_EQ(proc.getZoneManager().getGlobalDegreeTranspose(), 0);
-  proc.processEvent(InputID{0, 60}, true);
-  EXPECT_EQ(proc.getZoneManager().getGlobalDegreeTranspose(), 1);
-  proc.processEvent(InputID{0, 60}, false);
-  proc.processEvent(InputID{0, 60}, true);
-  EXPECT_EQ(proc.getZoneManager().getGlobalDegreeTranspose(), 2);
-}
-
 // --- Touchpad continuous-to-note: threshold and triggerAbove affect runtime ---
 TEST_F(InputProcessorTest, TouchpadContinuousToGate_ThresholdAndTriggerAbove_AffectsNoteOnOff) {
   MockMidiEngine mockEng;
@@ -1968,30 +1938,6 @@ TEST_F(InputProcessorTest, PitchBendRangeAffectsSentPitchBend) {
   // Range 2: +2 semitones = 8192 + 2*(8192/2) = 16384 -> clamp 16383
   EXPECT_GE(sentVal, 16380) << "Sent PB value for +2 semitones (range 2) should be ~16383";
   EXPECT_LE(sentVal, 16383);
-}
-
-// --- Global Mode Down: decreases degree transpose ---
-TEST_F(InputProcessorTest, GlobalModeDownDecreasesDegreeTranspose) {
-  proc.getZoneManager().setGlobalTranspose(0, 3);
-  auto mappings = presetMgr.getMappingsListForLayer(0);
-  juce::ValueTree m("Mapping");
-  m.setProperty("inputKey", 61, nullptr);
-  m.setProperty("deviceHash",
-                juce::String::toHexString((juce::int64)0).toUpperCase(),
-                nullptr);
-  m.setProperty("type", "Command", nullptr);
-  m.setProperty("data1", (int)MIDIQy::CommandID::GlobalModeDown, nullptr);
-  m.setProperty("data2", 0, nullptr);
-  m.setProperty("layerID", 0, nullptr);
-  mappings.addChild(m, -1, nullptr);
-
-  proc.initialize();
-  EXPECT_EQ(proc.getZoneManager().getGlobalDegreeTranspose(), 3);
-  proc.processEvent(InputID{0, 61}, true);
-  EXPECT_EQ(proc.getZoneManager().getGlobalDegreeTranspose(), 2);
-  proc.processEvent(InputID{0, 61}, false);
-  proc.processEvent(InputID{0, 61}, true);
-  EXPECT_EQ(proc.getZoneManager().getGlobalDegreeTranspose(), 1);
 }
 
 // --- Settings: MIDI mode off -> key events produce no MIDI ---

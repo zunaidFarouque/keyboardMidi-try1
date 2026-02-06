@@ -1,7 +1,6 @@
 #pragma once
 #include "ZoneListPanel.h"
 #include "ZonePropertiesPanel.h"
-#include "GlobalPerformancePanel.h"
 #include "ZoneManager.h"
 #include "DeviceManager.h"
 #include "RawInputManager.h"
@@ -25,7 +24,6 @@ private:
   // 2. Content Components (Must live longer than containers)
   ZoneListPanel listPanel;
   ZonePropertiesPanel propertiesPanel;
-  GlobalPerformancePanel globalPanel;
 
   // 3. Containers (Must die first)
   juce::Viewport propertiesViewport;

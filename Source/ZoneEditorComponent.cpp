@@ -6,10 +6,8 @@ ZoneEditorComponent::ZoneEditorComponent(ZoneManager *zoneMgr, DeviceManager *de
       rawInputManager(rawInputMgr),
       listPanel(zoneMgr),
       propertiesPanel(zoneMgr, deviceMgr, rawInputMgr, scaleLib),
-      globalPanel(zoneMgr),
       resizerBar(&horizontalLayout, 1, true) { // Item index 1, vertical bar
   
-  addAndMakeVisible(globalPanel);
   addAndMakeVisible(listPanel);
   
   // Setup viewport for properties panel
@@ -55,10 +53,6 @@ void ZoneEditorComponent::paint(juce::Graphics &g) {
 
 void ZoneEditorComponent::resized() {
   auto area = getLocalBounds().reduced(4);
-
-  // Global panel at top
-  globalPanel.setBounds(area.removeFromTop(50));
-  area.removeFromTop(4);
 
   // Use StretchableLayoutManager for horizontal split: List | Bar | Properties
   juce::Component* horizontalComps[] = { &listPanel, &resizerBar, &propertiesViewport };

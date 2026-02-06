@@ -80,6 +80,11 @@ SettingsPanel::SettingsPanel(SettingsManager &settingsMgr, MidiEngine &midiEng,
     juce::MessageManager::callAsync(
         [this] { sendRpnButton.setButtonText("Sync Range to Synth"); });
   };
+  sendRpnButton.setTooltip(
+      "Some VST plugins and synths rely on RPN (Registered Parameter Number) "
+      "messages for pitch bend range. This button sends the current pitch bend "
+      "range setting as RPN data to all 16 MIDI channels, so your synth will "
+      "use the same range.");
 
   // Mapping Colors (Phase 37)
   addAndMakeVisible(mappingColorsGroup);
@@ -206,6 +211,13 @@ SettingsPanel::SettingsPanel(SettingsManager &settingsMgr, MidiEngine &midiEng,
   delayMidiSlider.setValue(settingsManager.getDelayMidiSeconds(),
                            juce::dontSendNotification);
   delayMidiSlider.setEnabled(settingsManager.isDelayMidiEnabled());
+  delayMidiLabel.setTooltip(
+      "Useful when mapping MIDI in other software (e.g. DAW or MIDI learn): "
+      "press a key here, then within the delay time select the target control "
+      "in the other app; the MIDI message is sent after the delay so the "
+      "listener can capture it for mapping.");
+  delayMidiCheckbox.setTooltip(delayMidiLabel.getTooltip());
+  delayMidiSlider.setTooltip(delayMidiLabel.getTooltip());
   delayMidiSlider.onValueChange = [this] {
     int value = static_cast<int>(delayMidiSlider.getValue());
     settingsManager.setDelayMidiSeconds(value);
@@ -329,7 +341,28 @@ void SettingsPanel::paint(juce::Graphics &g) {
   g.fillAll(juce::Colour(0xff2a2a2a));
 }
 
+void SettingsPanel::parentSizeChanged() {
+  // When inside a Viewport, ensure we have a size so we paint (viewport doesn't resize its viewed component)
+  if (auto *vp = dynamic_cast<juce::Viewport *>(getParentComponent())) {
+    int w = vp->getWidth();
+    if (w > 0)
+      setSize(w, 520);
+  }
+}
+
 void SettingsPanel::resized() {
+  // When inside a Viewport, use viewport width and set height to content height so scrollbar appears
+  int panelW = getWidth();
+  if (auto *vp = dynamic_cast<juce::Viewport *>(getParentComponent())) {
+    panelW = vp->getWidth();
+    int controlHeight = 25;
+    int spacing = 10;
+    int visGroupHeight = controlHeight * 2 + spacing * 3 + 28;
+    int groupHeight = controlHeight + spacing + 28;
+    int contentH = 10 + (controlHeight + spacing) * 7 + visGroupHeight + spacing + groupHeight + 24;
+    setSize(panelW, contentH);
+  }
+
   auto area = getLocalBounds().reduced(10);
   int labelWidth = 200;
   int controlHeight = 25;

@@ -251,36 +251,54 @@ void Zone::rebuildCache(const std::vector<int> &scaleIntervals,
 }
 
 // Play-time: O(1) hash lookup + O(k) transpose apply (k = chord size, typically
-// 3–5). Chords are pre-compiled in rebuildCache; no ChordUtilities or
-// ScaleUtilities here.
+// 3–5). When scaleIntervals provided and degree transpose non-zero, applies
+// scale-degree shift via ScaleUtilities.
 std::optional<std::vector<ChordUtilities::ChordNote>>
-Zone::getNotesForKey(int keyCode, int globalChromTrans, int globalDegTrans) {
+Zone::getNotesForKey(int keyCode, int globalChromTrans, int globalDegTrans,
+                    const std::vector<int> *scaleIntervals) {
   auto it = keyToChordCache.find(keyCode);
   if (it == keyToChordCache.end())
     return std::nullopt;
 
   const std::vector<ChordUtilities::ChordNote> &relativeChordNotes = it->second;
   int effChromTrans = ignoreGlobalTranspose ? 0 : globalChromTrans;
+  int effDegTrans = ignoreGlobalTranspose ? 0 : globalDegTrans;
+  bool applyDegreeTranspose = (scaleIntervals != nullptr &&
+                              !scaleIntervals->empty() && effDegTrans != 0);
 
   std::vector<ChordUtilities::ChordNote> finalChordNotes;
   finalChordNotes.reserve(relativeChordNotes.size());
   for (const auto &cn : relativeChordNotes) {
-    int finalNote =
-        cacheEffectiveRoot + cn.pitch + chromaticOffset + effChromTrans;
-    finalChordNotes.emplace_back(juce::jlimit(0, 127, finalNote), cn.isGhost);
+    int finalNote;
+    if (applyDegreeTranspose) {
+      int baseNote =
+          cacheEffectiveRoot + cn.pitch + chromaticOffset;
+      int degree = ScaleUtilities::findScaleDegree(
+          baseNote, cacheEffectiveRoot, *scaleIntervals);
+      int newDegree = degree + effDegTrans;
+      int noteInScale =
+          ScaleUtilities::calculateMidiNote(cacheEffectiveRoot,
+                                            *scaleIntervals, newDegree);
+      finalNote = juce::jlimit(0, 127, noteInScale + effChromTrans);
+    } else {
+      finalNote = cacheEffectiveRoot + cn.pitch + chromaticOffset + effChromTrans;
+      finalNote = juce::jlimit(0, 127, finalNote);
+    }
+    finalChordNotes.emplace_back(finalNote, cn.isGhost);
   }
   return finalChordNotes;
 }
 
 std::optional<MidiAction> Zone::processKey(InputID input, int globalChromTrans,
-                                           int globalDegTrans) {
+                                           int globalDegTrans,
+                                           const std::vector<int> *scaleIntervals) {
   // Check 1: Does input.deviceHandle match targetAliasHash?
   if (input.deviceHandle != targetAliasHash)
     return std::nullopt;
 
   // Get chord notes for this key
-  auto chordNotes =
-      getNotesForKey(input.keyCode, globalChromTrans, globalDegTrans);
+  auto chordNotes = getNotesForKey(input.keyCode, globalChromTrans,
+                                   globalDegTrans, scaleIntervals);
   if (!chordNotes.has_value() || chordNotes->empty())
     return std::nullopt;
 

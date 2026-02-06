@@ -672,6 +672,46 @@ void InputProcessor::processEvent(InputID input, bool isDown) {
           int chrom = zoneManager.getGlobalChromaticTranspose();
           int deg = zoneManager.getGlobalDegreeTranspose();
           zoneManager.setGlobalTranspose(chrom, deg - 1);
+        } else if (cmd ==
+                   static_cast<int>(MIDIQy::CommandID::GlobalRootUp)) {
+          int root = zoneManager.getGlobalRootNote();
+          zoneManager.setGlobalRoot(juce::jlimit(0, 127, root + 1));
+        } else if (cmd ==
+                   static_cast<int>(MIDIQy::CommandID::GlobalRootDown)) {
+          int root = zoneManager.getGlobalRootNote();
+          zoneManager.setGlobalRoot(juce::jlimit(0, 127, root - 1));
+        } else if (cmd ==
+                   static_cast<int>(MIDIQy::CommandID::GlobalRootSet)) {
+          zoneManager.setGlobalRoot(
+              juce::jlimit(0, 127, midiAction.rootNote));
+        } else if (cmd ==
+                   static_cast<int>(MIDIQy::CommandID::GlobalScaleNext)) {
+          juce::StringArray names = scaleLibrary.getScaleNames();
+          if (!names.isEmpty()) {
+            juce::String current = zoneManager.getGlobalScaleName();
+            int idx = names.indexOf(current);
+            if (idx < 0)
+              idx = 0;
+            idx = (idx + 1) % names.size();
+            zoneManager.setGlobalScale(names[idx]);
+          }
+        } else if (cmd ==
+                   static_cast<int>(MIDIQy::CommandID::GlobalScalePrev)) {
+          juce::StringArray names = scaleLibrary.getScaleNames();
+          if (!names.isEmpty()) {
+            juce::String current = zoneManager.getGlobalScaleName();
+            int idx = names.indexOf(current);
+            if (idx < 0)
+              idx = 0;
+            idx = (idx + names.size() - 1) % names.size();
+            zoneManager.setGlobalScale(names[idx]);
+          }
+        } else if (cmd ==
+                   static_cast<int>(MIDIQy::CommandID::GlobalScaleSet)) {
+          juce::StringArray names = scaleLibrary.getScaleNames();
+          int idx = juce::jlimit(0, names.size() - 1, midiAction.scaleIndex);
+          if (idx >= 0 && idx < names.size())
+            zoneManager.setGlobalScale(names[idx]);
         }
         return;
       }

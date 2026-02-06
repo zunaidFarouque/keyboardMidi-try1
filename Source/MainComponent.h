@@ -79,6 +79,8 @@ private:
   std::unique_ptr<SettingsPanel> settingsPanel;
   std::unique_ptr<LogComponent> logComponent;
 
+  juce::Viewport settingsViewport; // Wraps settings panel for scrolling
+
   // 6. Containers / Wrappers (Must die first)
   juce::TabbedComponent mainTabs;
   juce::Component layoutPlaceholder; // placeholder when visualizer/log are null
@@ -104,6 +106,9 @@ private:
 
   // 10. Quick Setup Wizard (Phase 9.6)
   QuickSetupWizard setupWizard;
+
+  // Tooltips: one app-wide TooltipWindow so setTooltip() on any component works
+  std::unique_ptr<juce::TooltipWindow> tooltipWindow;
 
   // Main window refresh: capped at 30 FPS; timers stopped when minimized
   static constexpr int kMainWindowRefreshIntervalMs = 34; // 1000/30 rounded up

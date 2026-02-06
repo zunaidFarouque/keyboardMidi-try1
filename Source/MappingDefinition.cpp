@@ -46,6 +46,12 @@ std::map<int, juce::String> MappingDefinition::getCommandOptions() {
       {static_cast<int>(Cmd::Transpose), "Transpose"},
       {static_cast<int>(Cmd::GlobalModeUp), "Global Mode Up"},
       {static_cast<int>(Cmd::GlobalModeDown), "Global Mode Down"},
+      {static_cast<int>(Cmd::GlobalRootUp), "Global Root +1"},
+      {static_cast<int>(Cmd::GlobalRootDown), "Global Root -1"},
+      {static_cast<int>(Cmd::GlobalRootSet), "Global Root Set"},
+      {static_cast<int>(Cmd::GlobalScaleNext), "Global Scale Next"},
+      {static_cast<int>(Cmd::GlobalScalePrev), "Global Scale Prev"},
+      {static_cast<int>(Cmd::GlobalScaleSet), "Global Scale Set"},
       {static_cast<int>(Cmd::LayerMomentary), "Layer Momentary"},
       {static_cast<int>(Cmd::LayerToggle), "Layer Toggle"},
   };
@@ -505,6 +511,12 @@ InspectorSchema MappingDefinition::getSchema(const juce::ValueTree &mapping,
     cmdCtrl.options[6] = "Transpose";
     cmdCtrl.options[8] = "Global Mode Up";
     cmdCtrl.options[9] = "Global Mode Down";
+    cmdCtrl.options[12] = "Global Root +1";
+    cmdCtrl.options[13] = "Global Root -1";
+    cmdCtrl.options[14] = "Global Root Set";
+    cmdCtrl.options[15] = "Global Scale Next";
+    cmdCtrl.options[16] = "Global Scale Prev";
+    cmdCtrl.options[17] = "Global Scale Set";
     cmdCtrl.options[kLayerCategoryId] = "Layer";
     schema.push_back(cmdCtrl);
 
@@ -613,6 +625,44 @@ InspectorSchema MappingDefinition::getSchema(const juce::ValueTree &mapping,
         zoneNote.label = "(Zone selector – coming soon)";
         zoneNote.controlType = InspectorControl::Type::LabelOnly;
         schema.push_back(zoneNote);
+      }
+    }
+
+    const int globalRootSet = static_cast<int>(MIDIQy::CommandID::GlobalRootSet);
+    const int globalScaleSet =
+        static_cast<int>(MIDIQy::CommandID::GlobalScaleSet);
+    if (cmdId == static_cast<int>(MIDIQy::CommandID::GlobalRootUp) ||
+        cmdId == static_cast<int>(MIDIQy::CommandID::GlobalRootDown) ||
+        cmdId == globalRootSet) {
+      schema.push_back(
+          createSeparator("Global Root", juce::Justification::centredLeft));
+      if (cmdId == globalRootSet) {
+        InspectorControl rootNoteCtrl;
+        rootNoteCtrl.propertyId = "rootNote";
+        rootNoteCtrl.label = "Root note (0-127)";
+        rootNoteCtrl.controlType = InspectorControl::Type::Slider;
+        rootNoteCtrl.min = 0.0;
+        rootNoteCtrl.max = 127.0;
+        rootNoteCtrl.step = 1.0;
+        rootNoteCtrl.valueFormat = InspectorControl::Format::Integer;
+        schema.push_back(rootNoteCtrl);
+      }
+    }
+    if (cmdId == static_cast<int>(MIDIQy::CommandID::GlobalScaleNext) ||
+        cmdId == static_cast<int>(MIDIQy::CommandID::GlobalScalePrev) ||
+        cmdId == globalScaleSet) {
+      schema.push_back(
+          createSeparator("Global Scale", juce::Justification::centredLeft));
+      if (cmdId == globalScaleSet) {
+        InspectorControl scaleIndexCtrl;
+        scaleIndexCtrl.propertyId = "scaleIndex";
+        scaleIndexCtrl.label = "Scale index (0-based)";
+        scaleIndexCtrl.controlType = InspectorControl::Type::Slider;
+        scaleIndexCtrl.min = 0.0;
+        scaleIndexCtrl.max = 63.0;
+        scaleIndexCtrl.step = 1.0;
+        scaleIndexCtrl.valueFormat = InspectorControl::Format::Integer;
+        schema.push_back(scaleIndexCtrl);
       }
     }
   }
