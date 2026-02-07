@@ -120,7 +120,7 @@ void TouchpadMixerEditorComponent::setStrip(int index,
 juce::var TouchpadMixerEditorComponent::getConfigValue(
     const juce::String &propertyId) const {
   if (propertyId == "type")
-    return juce::var(currentConfig.type == TouchpadType::Mixer ? 1 : 1);
+    return juce::var(currentConfig.type == TouchpadType::DrumPad ? 2 : 1);
   if (propertyId == "name")
     return juce::var(juce::String(currentConfig.name));
   if (propertyId == "layerId")
@@ -152,6 +152,24 @@ juce::var TouchpadMixerEditorComponent::getConfigValue(
                                                                            : 1);
   if (propertyId == "muteButtonsEnabled")
     return juce::var(currentConfig.muteButtonsEnabled);
+  if (propertyId == "drumPadRows")
+    return juce::var(currentConfig.drumPadRows);
+  if (propertyId == "drumPadColumns")
+    return juce::var(currentConfig.drumPadColumns);
+  if (propertyId == "drumPadMidiNoteStart")
+    return juce::var(currentConfig.drumPadMidiNoteStart);
+  if (propertyId == "drumPadBaseVelocity")
+    return juce::var(currentConfig.drumPadBaseVelocity);
+  if (propertyId == "drumPadVelocityRandom")
+    return juce::var(currentConfig.drumPadVelocityRandom);
+  if (propertyId == "drumPadDeadZoneLeft")
+    return juce::var(static_cast<double>(currentConfig.drumPadDeadZoneLeft));
+  if (propertyId == "drumPadDeadZoneRight")
+    return juce::var(static_cast<double>(currentConfig.drumPadDeadZoneRight));
+  if (propertyId == "drumPadDeadZoneTop")
+    return juce::var(static_cast<double>(currentConfig.drumPadDeadZoneTop));
+  if (propertyId == "drumPadDeadZoneBottom")
+    return juce::var(static_cast<double>(currentConfig.drumPadDeadZoneBottom));
   return juce::var();
 }
 
@@ -161,9 +179,13 @@ void TouchpadMixerEditorComponent::applyConfigValue(
     return;
   if (propertyId == "type") {
     int id = static_cast<int>(value);
-    if (id == 1)
+    if (id == 2)
+      currentConfig.type = TouchpadType::DrumPad;
+    else
       currentConfig.type = TouchpadType::Mixer;
-    // id 2 "More coming soon..." is disabled
+    manager->updateStrip(selectedIndex, currentConfig);
+    rebuildUI();
+    return;
   } else if (propertyId == "name")
     currentConfig.name = value.toString().toStdString();
   else if (propertyId == "layerId")
@@ -197,6 +219,31 @@ void TouchpadMixerEditorComponent::applyConfigValue(
                                  : TouchpadMixerLockFree::Lock;
   else if (propertyId == "muteButtonsEnabled")
     currentConfig.muteButtonsEnabled = static_cast<bool>(value);
+  else if (propertyId == "drumPadRows")
+    currentConfig.drumPadRows = juce::jlimit(1, 8, static_cast<int>(value));
+  else if (propertyId == "drumPadColumns")
+    currentConfig.drumPadColumns = juce::jlimit(1, 16, static_cast<int>(value));
+  else if (propertyId == "drumPadMidiNoteStart")
+    currentConfig.drumPadMidiNoteStart =
+        juce::jlimit(0, 127, static_cast<int>(value));
+  else if (propertyId == "drumPadBaseVelocity")
+    currentConfig.drumPadBaseVelocity =
+        juce::jlimit(1, 127, static_cast<int>(value));
+  else if (propertyId == "drumPadVelocityRandom")
+    currentConfig.drumPadVelocityRandom =
+        juce::jlimit(0, 127, static_cast<int>(value));
+  else if (propertyId == "drumPadDeadZoneLeft")
+    currentConfig.drumPadDeadZoneLeft =
+        static_cast<float>(juce::jlimit(0.0, 0.5, static_cast<double>(value)));
+  else if (propertyId == "drumPadDeadZoneRight")
+    currentConfig.drumPadDeadZoneRight =
+        static_cast<float>(juce::jlimit(0.0, 0.5, static_cast<double>(value)));
+  else if (propertyId == "drumPadDeadZoneTop")
+    currentConfig.drumPadDeadZoneTop =
+        static_cast<float>(juce::jlimit(0.0, 0.5, static_cast<double>(value)));
+  else if (propertyId == "drumPadDeadZoneBottom")
+    currentConfig.drumPadDeadZoneBottom =
+        static_cast<float>(juce::jlimit(0.0, 0.5, static_cast<double>(value)));
   else
     return;
   manager->updateStrip(selectedIndex, currentConfig);
@@ -263,7 +310,7 @@ void TouchpadMixerEditorComponent::createControl(
     for (const auto &p : def.options)
       cb->addItem(p.second, p.first);
     if (propId == "type")
-      cb->setItemEnabled(2, false); // "More coming soon..." disabled
+      ; // Both Mixer and Drum Pad are enabled
     int id = static_cast<int>(currentVal);
     if (id > 0)
       cb->setSelectedId(id, juce::dontSendNotification);
@@ -331,7 +378,8 @@ void TouchpadMixerEditorComponent::rebuildUI() {
     return;
   }
 
-  InspectorSchema schema = TouchpadMixerDefinition::getSchema();
+  InspectorSchema schema =
+      TouchpadMixerDefinition::getSchema(currentConfig.type);
   for (const auto &def : schema) {
     if (def.controlType == InspectorControl::Type::Separator) {
       UiRow row;

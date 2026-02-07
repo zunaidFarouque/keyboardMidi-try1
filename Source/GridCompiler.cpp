@@ -903,35 +903,64 @@ std::shared_ptr<CompiledMapContext> GridCompiler::compile(
                             &context->touchpadMappings);
   }
 
-  // 2b. Collect touchpad mixer strips (CC-only faders per strip)
+  // 2b. Collect touchpad mixer and drum pad strips
   for (const auto &cfg : touchpadMixerMgr.getStrips()) {
-    if (cfg.type != TouchpadType::Mixer)
-      continue;
-    TouchpadMixerEntry entry;
-    entry.layerId = juce::jlimit(0, 8, cfg.layerId);
-    entry.numFaders = juce::jlimit(1, 32, cfg.numFaders);
-    entry.ccStart = juce::jlimit(0, 127, cfg.ccStart);
-    entry.midiChannel = juce::jlimit(1, 16, cfg.midiChannel);
-    entry.inputMin = cfg.inputMin;
-    entry.inputMax = cfg.inputMax;
-    float r = entry.inputMax - entry.inputMin;
-    entry.invInputRange = (r > 0.0f) ? (1.0f / r) : 0.0f;
-    entry.outputMin = juce::jlimit(0, 127, cfg.outputMin);
-    entry.outputMax = juce::jlimit(0, 127, cfg.outputMax);
-    entry.quickPrecision = cfg.quickPrecision;
-    entry.absRel = cfg.absRel;
-    entry.lockFree = cfg.lockFree;
-    entry.muteButtonsEnabled = cfg.muteButtonsEnabled;
-    entry.modeFlags =
-        (cfg.quickPrecision == TouchpadMixerQuickPrecision::Quick
-             ? kMixerModeUseFinger1
-             : 0) |
-        (cfg.lockFree == TouchpadMixerLockFree::Lock ? kMixerModeLock : 0) |
-        (cfg.absRel == TouchpadMixerAbsRel::Relative ? kMixerModeRelative : 0) |
-        (cfg.muteButtonsEnabled ? kMixerModeMuteButtons : 0);
-    entry.effectiveYScale =
-        cfg.muteButtonsEnabled ? (1.0f / kMuteButtonRegionTop) : 1.0f;
-    context->touchpadMixerStrips.push_back(entry);
+    if (cfg.type == TouchpadType::Mixer) {
+      TouchpadMixerEntry entry;
+      entry.layerId = juce::jlimit(0, 8, cfg.layerId);
+      entry.numFaders = juce::jlimit(1, 32, cfg.numFaders);
+      entry.ccStart = juce::jlimit(0, 127, cfg.ccStart);
+      entry.midiChannel = juce::jlimit(1, 16, cfg.midiChannel);
+      entry.inputMin = cfg.inputMin;
+      entry.inputMax = cfg.inputMax;
+      float r = entry.inputMax - entry.inputMin;
+      entry.invInputRange = (r > 0.0f) ? (1.0f / r) : 0.0f;
+      entry.outputMin = juce::jlimit(0, 127, cfg.outputMin);
+      entry.outputMax = juce::jlimit(0, 127, cfg.outputMax);
+      entry.quickPrecision = cfg.quickPrecision;
+      entry.absRel = cfg.absRel;
+      entry.lockFree = cfg.lockFree;
+      entry.muteButtonsEnabled = cfg.muteButtonsEnabled;
+      entry.modeFlags =
+          (cfg.quickPrecision == TouchpadMixerQuickPrecision::Quick
+               ? kMixerModeUseFinger1
+               : 0) |
+          (cfg.lockFree == TouchpadMixerLockFree::Lock ? kMixerModeLock : 0) |
+          (cfg.absRel == TouchpadMixerAbsRel::Relative ? kMixerModeRelative : 0) |
+          (cfg.muteButtonsEnabled ? kMixerModeMuteButtons : 0);
+      entry.effectiveYScale =
+          cfg.muteButtonsEnabled ? (1.0f / kMuteButtonRegionTop) : 1.0f;
+      context->touchpadMixerStrips.push_back(entry);
+      context->touchpadStripOrder.push_back(
+          {TouchpadType::Mixer, context->touchpadMixerStrips.size() - 1});
+    } else if (cfg.type == TouchpadType::DrumPad) {
+      TouchpadDrumPadEntry dpEntry;
+      dpEntry.layerId = juce::jlimit(0, 8, cfg.layerId);
+      dpEntry.rows = juce::jlimit(1, 8, cfg.drumPadRows);
+      dpEntry.columns = juce::jlimit(1, 16, cfg.drumPadColumns);
+      dpEntry.numPads = dpEntry.rows * dpEntry.columns;
+      dpEntry.midiNoteStart = juce::jlimit(0, 127, cfg.drumPadMidiNoteStart);
+      dpEntry.midiChannel = juce::jlimit(1, 16, cfg.midiChannel);
+      dpEntry.baseVelocity = juce::jlimit(1, 127, cfg.drumPadBaseVelocity);
+      dpEntry.velocityRandom =
+          juce::jlimit(0, 127, cfg.drumPadVelocityRandom);
+      dpEntry.deadZoneLeft =
+          juce::jlimit(0.0f, 0.5f, cfg.drumPadDeadZoneLeft);
+      dpEntry.deadZoneRight =
+          juce::jlimit(0.0f, 0.5f, cfg.drumPadDeadZoneRight);
+      dpEntry.deadZoneTop = juce::jlimit(0.0f, 0.5f, cfg.drumPadDeadZoneTop);
+      dpEntry.deadZoneBottom =
+          juce::jlimit(0.0f, 0.5f, cfg.drumPadDeadZoneBottom);
+      float activeW = 1.0f - dpEntry.deadZoneLeft - dpEntry.deadZoneRight;
+      float activeH = 1.0f - dpEntry.deadZoneTop - dpEntry.deadZoneBottom;
+      dpEntry.invActiveWidth =
+          (activeW > 1e-6f) ? (1.0f / activeW) : 1.0f;
+      dpEntry.invActiveHeight =
+          (activeH > 1e-6f) ? (1.0f / activeH) : 1.0f;
+      context->touchpadDrumPadStrips.push_back(dpEntry);
+      context->touchpadStripOrder.push_back(
+          {TouchpadType::DrumPad, context->touchpadDrumPadStrips.size() - 1});
+    }
   }
 
   // 3. Define Helper Lambda "applyLayerToGrid"

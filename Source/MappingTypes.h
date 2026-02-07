@@ -362,6 +362,17 @@ struct CompiledContext {
   // 4. Touchpad mixer strips (N faders per strip, CC only); applied by
   // InputProcessor
   std::vector<TouchpadMixerEntry> touchpadMixerStrips;
+
+  // 5. Touchpad drum pad strips (grid of note pads); applied by InputProcessor
+  std::vector<TouchpadDrumPadEntry> touchpadDrumPadStrips;
+
+  // Maps list index (from TouchpadMixerManager.getStrips) to (type, index in
+  // that type's vector). Used by visualizer for overlay selection.
+  struct TouchpadStripRef {
+    TouchpadType type = TouchpadType::Mixer;
+    size_t index = 0;
+  };
+  std::vector<TouchpadStripRef> touchpadStripOrder;
 };
 
 // Backward-compatible alias used in development docs/prompts.

@@ -3,6 +3,7 @@
 #include "InputProcessor.h"
 #include "KeyboardLayoutUtils.h"
 #include "MappingTypes.h"
+#include "MidiNoteUtilities.h"
 #include "PitchPadUtilities.h"
 #include "PresetManager.h"
 #include "RawInputManager.h"
@@ -826,21 +827,26 @@ void VisualizerComponent::paint(juce::Graphics &g) {
       g.drawEllipse(px - 5.0f, py - 5.0f, 10.0f, 10.0f, 1.0f);
     }
 
-    // Touchpad mixer overlay: when we have a selected strip and we're
-    // viewing its layer, show the strip (fader columns + values) always.
+    // Touchpad strip overlay: when we have a selected strip and we're
+    // viewing its layer, show Mixer or Drum Pad overlay.
     if (inputProcessor && selectedTouchpadMixerStripIndex_ >= 0 &&
         currentVisualizedLayer == selectedTouchpadMixerLayerId_) {
       std::shared_ptr<const CompiledMapContext> ctx =
           inputProcessor->getContext();
       if (ctx) {
-        uintptr_t dev =
-            lastTouchpadDeviceHandle.load(std::memory_order_acquire);
-        size_t stripIdx = static_cast<size_t>(selectedTouchpadMixerStripIndex_);
-        if (stripIdx < ctx->touchpadMixerStrips.size()) {
-          const auto &strip = ctx->touchpadMixerStrips[stripIdx];
-          if (strip.layerId == currentVisualizedLayer && strip.numFaders > 0) {
+        size_t listIdx =
+            static_cast<size_t>(selectedTouchpadMixerStripIndex_);
+        if (listIdx < ctx->touchpadStripOrder.size()) {
+          const auto &ref = ctx->touchpadStripOrder[listIdx];
+          if (ref.type == TouchpadType::Mixer &&
+              ref.index < ctx->touchpadMixerStrips.size()) {
+            const auto &strip = ctx->touchpadMixerStrips[ref.index];
+            if (strip.layerId == currentVisualizedLayer &&
+                strip.numFaders > 0) {
+            uintptr_t dev =
+                lastTouchpadDeviceHandle.load(std::memory_order_acquire);
             auto state = inputProcessor->getTouchpadMixerStripState(
-                dev, static_cast<int>(stripIdx), strip.numFaders);
+                dev, static_cast<int>(ref.index), strip.numFaders);
             const auto &displayValues = state.displayValues;
             const auto &muted = state.muted;
             const int N = strip.numFaders;
@@ -949,6 +955,78 @@ void VisualizerComponent::paint(juce::Graphics &g) {
                        touchpadRect.getX(), touchpadRect.getBottom() + 2.0f,
                        touchpadRect.getWidth(), 10,
                        juce::Justification::centredLeft, false);
+            }
+          } else if (ref.type == TouchpadType::DrumPad &&
+                     ref.index < ctx->touchpadDrumPadStrips.size()) {
+            const auto &strip = ctx->touchpadDrumPadStrips[ref.index];
+            if (strip.layerId == currentVisualizedLayer && strip.numPads > 0) {
+              const int R = strip.rows;
+              const int C = strip.columns;
+              const float inL = strip.deadZoneLeft;
+              const float inR = strip.deadZoneRight;
+              const float inT = strip.deadZoneTop;
+              const float inB = strip.deadZoneBottom;
+              const float activeW = 1.0f - inL - inR;
+              const float activeH = 1.0f - inT - inB;
+              const float padW = activeW / static_cast<float>(C);
+              const float padH = activeH / static_cast<float>(R);
+              if (inL > 0.0f || inR > 0.0f || inT > 0.0f || inB > 0.0f) {
+                g.setColour(juce::Colour(0xff383838).withAlpha(0.75f));
+                if (inL > 0.0f)
+                  g.fillRect(touchpadRect.getX(), touchpadRect.getY(),
+                             inL * touchpadRect.getWidth(),
+                             touchpadRect.getHeight());
+                if (inR > 0.0f)
+                  g.fillRect(touchpadRect.getRight() -
+                                 inR * touchpadRect.getWidth(),
+                             touchpadRect.getY(),
+                             inR * touchpadRect.getWidth(),
+                             touchpadRect.getHeight());
+                if (inT > 0.0f)
+                  g.fillRect(touchpadRect.getX(), touchpadRect.getY(),
+                             touchpadRect.getWidth(),
+                             inT * touchpadRect.getHeight());
+                if (inB > 0.0f)
+                  g.fillRect(touchpadRect.getX(),
+                             touchpadRect.getBottom() -
+                                 inB * touchpadRect.getHeight(),
+                             touchpadRect.getWidth(),
+                             inB * touchpadRect.getHeight());
+              }
+              for (int row = 0; row < R; ++row) {
+                for (int col = 0; col < C; ++col) {
+                  float x =
+                      touchpadRect.getX() + inL * touchpadRect.getWidth() +
+                      static_cast<float>(col) * padW * touchpadRect.getWidth();
+                  float y =
+                      touchpadRect.getY() + inT * touchpadRect.getHeight() +
+                      static_cast<float>(row) * padH * touchpadRect.getHeight();
+                  float cw = padW * touchpadRect.getWidth();
+                  float ch = padH * touchpadRect.getHeight();
+                  g.setColour(juce::Colour(0xff405060).withAlpha(0.6f));
+                  g.fillRect(x + 1.0f, y + 1.0f, cw - 2.0f, ch - 2.0f);
+                  g.setColour(juce::Colours::lightgrey.withAlpha(0.5f));
+                  g.drawRect(x, y, cw, ch, 0.5f);
+                  int note = strip.midiNoteStart + row * C + col;
+                  note = juce::jlimit(0, 127, note);
+                  g.setColour(juce::Colours::white);
+                  g.setFont(juce::jmin(9.0f, cw * 0.4f));
+                  g.drawText(MidiNoteUtilities::getMidiNoteName(note), x, y,
+                             cw, ch, juce::Justification::centred, false);
+                }
+              }
+              int lastNote =
+                  juce::jlimit(0, 127, strip.midiNoteStart + strip.numPads - 1);
+              g.setColour(juce::Colours::white);
+              g.setFont(9.0f);
+              g.drawText(
+                  "Drum Pad: " +
+                      MidiNoteUtilities::getMidiNoteName(strip.midiNoteStart) +
+                      "-" + MidiNoteUtilities::getMidiNoteName(lastNote),
+                  touchpadRect.getX(), touchpadRect.getBottom() + 2.0f,
+                  touchpadRect.getWidth(), 10,
+                  juce::Justification::centredLeft, false);
+            }
           }
         }
       }

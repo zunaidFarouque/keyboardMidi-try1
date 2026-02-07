@@ -141,6 +141,7 @@ void InputProcessor::rebuildGrid() {
     touchpadMixerMuteState.clear();
     lastTouchpadMixerCCValues.clear();
     touchpadMixerValueBeforeMute.clear();
+    drumPadActiveNotes.clear();
   }
   // Phase 53.7: Layer state under stateLock only
   {
@@ -1503,7 +1504,9 @@ bool InputProcessor::hasPointerMappings() {
 
 bool InputProcessor::hasTouchpadMixerStrips() const {
   juce::ScopedReadLock rl(mapLock);
-  return activeContext && !activeContext->touchpadMixerStrips.empty();
+  return activeContext &&
+         (!activeContext->touchpadMixerStrips.empty() ||
+          !activeContext->touchpadDrumPadStrips.empty());
 }
 
 void InputProcessor::processTouchpadContacts(
@@ -2041,6 +2044,75 @@ void InputProcessor::processTouchpadContacts(
       if (now - last >= 16) { // ~60 Hz throttle
         lastMixerChangeNotifyMs.store(now, std::memory_order_relaxed);
         sendChangeMessage();
+      }
+    }
+  }
+
+  // Drum pad strips: grid -> Note On/Off per contact
+  if (!ctx->touchpadDrumPadStrips.empty()) {
+    juce::ScopedWriteLock wl(mixerStateLock);
+    for (size_t stripIdx = 0; stripIdx < ctx->touchpadDrumPadStrips.size();
+         ++stripIdx) {
+      const auto &strip = ctx->touchpadDrumPadStrips[stripIdx];
+      if (!activeLayersSnapshot[(size_t)strip.layerId] || strip.numPads <= 0)
+        continue;
+      for (const auto &c : contacts) {
+        if (!c.tipDown)
+          continue;
+        float nx = c.normX;
+        float ny = c.normY;
+        float ax = (nx - strip.deadZoneLeft) * strip.invActiveWidth;
+        float ay = (ny - strip.deadZoneTop) * strip.invActiveHeight;
+        if (ax < 0.0f || ax >= 1.0f || ay < 0.0f || ay >= 1.0f)
+          continue;
+        int col = static_cast<int>(ax * static_cast<float>(strip.columns));
+        int row = static_cast<int>(ay * static_cast<float>(strip.rows));
+        col = juce::jlimit(0, strip.columns - 1, col);
+        row = juce::jlimit(0, strip.rows - 1, row);
+        int padIndex = row * strip.columns + col;
+        int midiNote = strip.midiNoteStart + padIndex;
+        midiNote = juce::jlimit(0, 127, midiNote);
+        auto key = std::make_tuple(deviceHandle, static_cast<int>(stripIdx),
+                                   c.contactId);
+        if (drumPadActiveNotes.find(key) != drumPadActiveNotes.end())
+          continue;
+        MidiAction act{};
+        act.type = ActionType::Note;
+        act.channel = strip.midiChannel;
+        act.data1 = midiNote;
+        act.data2 = strip.baseVelocity;
+        act.velocityRandom = strip.velocityRandom;
+        act.releaseBehavior = NoteReleaseBehavior::SendNoteOff;
+        int keyCode = static_cast<int>((stripIdx << 8) | (c.contactId & 0xFF));
+        InputID drumPadInput{deviceHandle, keyCode};
+        triggerManualNoteOn(drumPadInput, act, true);
+        drumPadActiveNotes[key] = drumPadInput;
+      }
+      for (auto it = drumPadActiveNotes.begin();
+           it != drumPadActiveNotes.end();) {
+        uintptr_t kDev = std::get<0>(it->first);
+        int kStrip = std::get<1>(it->first);
+        int kContact = std::get<2>(it->first);
+        if (kDev != deviceHandle || kStrip != static_cast<int>(stripIdx)) {
+          ++it;
+          continue;
+        }
+        bool stillDown = false;
+        for (const auto &c : contacts) {
+          if (c.contactId == kContact && c.tipDown) {
+            stillDown = true;
+            break;
+          }
+        }
+        if (!stillDown) {
+          MidiAction act{};
+          act.type = ActionType::Note;
+          act.releaseBehavior = NoteReleaseBehavior::SendNoteOff;
+          triggerManualNoteRelease(it->second, act);
+          it = drumPadActiveNotes.erase(it);
+        } else {
+          ++it;
+        }
       }
     }
   }

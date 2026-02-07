@@ -2,10 +2,10 @@
 
 namespace {
 constexpr int kTypeMixerId = 1;
-constexpr int kTypeMoreComingId = 2;
+constexpr int kTypeDrumPadId = 2;
 } // namespace
 
-InspectorSchema TouchpadMixerDefinition::getSchema() {
+InspectorSchema TouchpadMixerDefinition::getSchema(TouchpadType type) {
   InspectorSchema schema;
 
   InspectorControl typeCtrl;
@@ -13,7 +13,7 @@ InspectorSchema TouchpadMixerDefinition::getSchema() {
   typeCtrl.label = "Type";
   typeCtrl.controlType = InspectorControl::Type::ComboBox;
   typeCtrl.options[kTypeMixerId] = "Mixer";
-  typeCtrl.options[kTypeMoreComingId] = "More coming soon...";
+  typeCtrl.options[kTypeDrumPadId] = "Drum Pad / Launcher";
   schema.push_back(typeCtrl);
 
   InspectorControl nameCtrl;
@@ -34,7 +34,119 @@ InspectorSchema TouchpadMixerDefinition::getSchema() {
   schema.push_back(
       MappingDefinition::createSeparator("", juce::Justification::centred));
 
-  // Interaction matrix: each on its own row
+  if (type == TouchpadType::DrumPad) {
+    // Drum Pad controls
+    InspectorControl rowsCtrl;
+    rowsCtrl.propertyId = "drumPadRows";
+    rowsCtrl.label = "Rows";
+    rowsCtrl.controlType = InspectorControl::Type::Slider;
+    rowsCtrl.min = 1.0;
+    rowsCtrl.max = 8.0;
+    rowsCtrl.step = 1.0;
+    rowsCtrl.valueFormat = InspectorControl::Format::Integer;
+    schema.push_back(rowsCtrl);
+
+    InspectorControl colsCtrl;
+    colsCtrl.propertyId = "drumPadColumns";
+    colsCtrl.label = "Columns";
+    colsCtrl.controlType = InspectorControl::Type::Slider;
+    colsCtrl.min = 1.0;
+    colsCtrl.max = 16.0;
+    colsCtrl.step = 1.0;
+    colsCtrl.valueFormat = InspectorControl::Format::Integer;
+    schema.push_back(colsCtrl);
+
+    InspectorControl noteStartCtrl;
+    noteStartCtrl.propertyId = "drumPadMidiNoteStart";
+    noteStartCtrl.label = "MIDI note start";
+    noteStartCtrl.controlType = InspectorControl::Type::Slider;
+    noteStartCtrl.min = 0.0;
+    noteStartCtrl.max = 127.0;
+    noteStartCtrl.step = 1.0;
+    noteStartCtrl.valueFormat = InspectorControl::Format::NoteName;
+    schema.push_back(noteStartCtrl);
+
+    InspectorControl baseVelCtrl;
+    baseVelCtrl.propertyId = "drumPadBaseVelocity";
+    baseVelCtrl.label = "Base velocity";
+    baseVelCtrl.controlType = InspectorControl::Type::Slider;
+    baseVelCtrl.min = 1.0;
+    baseVelCtrl.max = 127.0;
+    baseVelCtrl.step = 1.0;
+    baseVelCtrl.valueFormat = InspectorControl::Format::Integer;
+    schema.push_back(baseVelCtrl);
+
+    InspectorControl velRandCtrl;
+    velRandCtrl.propertyId = "drumPadVelocityRandom";
+    velRandCtrl.label = "Velocity random";
+    velRandCtrl.controlType = InspectorControl::Type::Slider;
+    velRandCtrl.min = 0.0;
+    velRandCtrl.max = 127.0;
+    velRandCtrl.step = 1.0;
+    velRandCtrl.valueFormat = InspectorControl::Format::Integer;
+    schema.push_back(velRandCtrl);
+
+    schema.push_back(
+        MappingDefinition::createSeparator("Dead zones", juce::Justification::centredLeft));
+
+    InspectorControl dzLeft;
+    dzLeft.propertyId = "drumPadDeadZoneLeft";
+    dzLeft.label = "Dead zone left";
+    dzLeft.controlType = InspectorControl::Type::Slider;
+    dzLeft.min = 0.0;
+    dzLeft.max = 0.5;
+    dzLeft.step = 0.01;
+    dzLeft.sameLine = false;
+    dzLeft.widthWeight = 0.5f;
+    schema.push_back(dzLeft);
+
+    InspectorControl dzRight;
+    dzRight.propertyId = "drumPadDeadZoneRight";
+    dzRight.label = "Dead zone right";
+    dzRight.controlType = InspectorControl::Type::Slider;
+    dzRight.min = 0.0;
+    dzRight.max = 0.5;
+    dzRight.step = 0.01;
+    dzRight.sameLine = true;
+    dzRight.widthWeight = 0.5f;
+    schema.push_back(dzRight);
+
+    InspectorControl dzTop;
+    dzTop.propertyId = "drumPadDeadZoneTop";
+    dzTop.label = "Dead zone top";
+    dzTop.controlType = InspectorControl::Type::Slider;
+    dzTop.min = 0.0;
+    dzTop.max = 0.5;
+    dzTop.step = 0.01;
+    dzTop.sameLine = false;
+    dzTop.widthWeight = 0.5f;
+    schema.push_back(dzTop);
+
+    InspectorControl dzBottom;
+    dzBottom.propertyId = "drumPadDeadZoneBottom";
+    dzBottom.label = "Dead zone bottom";
+    dzBottom.controlType = InspectorControl::Type::Slider;
+    dzBottom.min = 0.0;
+    dzBottom.max = 0.5;
+    dzBottom.step = 0.01;
+    dzBottom.sameLine = true;
+    dzBottom.widthWeight = 0.5f;
+    schema.push_back(dzBottom);
+
+    InspectorControl chCtrl;
+    chCtrl.propertyId = "midiChannel";
+    chCtrl.label = "Channel";
+    chCtrl.controlType = InspectorControl::Type::Slider;
+    chCtrl.min = 1.0;
+    chCtrl.max = 16.0;
+    chCtrl.step = 1.0;
+    chCtrl.valueFormat = InspectorControl::Format::Integer;
+    schema.push_back(chCtrl);
+
+    return schema;
+  }
+
+  // Mixer controls
   InspectorControl qpCtrl;
   qpCtrl.propertyId = "quickPrecision";
   qpCtrl.label = "Quick / Precision";

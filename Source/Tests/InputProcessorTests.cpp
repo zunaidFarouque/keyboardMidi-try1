@@ -2056,3 +2056,131 @@ TEST_F(InputProcessorTest, HasTouchpadMixerStripsReturnsTrueWhenStripsExist) {
   proc.forceRebuildMappings();
   EXPECT_FALSE(proc.hasTouchpadMixerStrips());
 }
+
+TEST_F(InputProcessorTest, HasTouchpadMixerStripsReturnsTrueWhenDrumPadOnly) {
+  TouchpadMixerConfig cfg;
+  cfg.type = TouchpadType::DrumPad;
+  cfg.drumPadRows = 2;
+  cfg.drumPadColumns = 4;
+  touchpadMixerMgr.addStrip(cfg);
+
+  proc.forceRebuildMappings();
+  EXPECT_TRUE(proc.hasTouchpadMixerStrips());
+}
+
+// --- Touchpad drum pad: finger down sends Note On ---
+TEST_F(InputProcessorTest, TouchpadDrumPadFingerDownSendsNoteOn) {
+  MockMidiEngine mockEng;
+  TouchpadMixerManager touchpadMixerMgr;
+  VoiceManager voiceMgr(mockEng, settingsMgr);
+  InputProcessor proc(voiceMgr, presetMgr, deviceMgr, scaleLib, mockEng,
+                      settingsMgr, touchpadMixerMgr);
+
+  presetMgr.getLayersList().removeAllChildren(nullptr);
+  presetMgr.ensureStaticLayers();
+  settingsMgr.setMidiModeActive(true);
+
+  TouchpadMixerConfig cfg;
+  cfg.type = TouchpadType::DrumPad;
+  cfg.layerId = 0;
+  cfg.drumPadRows = 2;
+  cfg.drumPadColumns = 4;
+  cfg.drumPadMidiNoteStart = 60;
+  cfg.drumPadBaseVelocity = 100;
+  cfg.drumPadVelocityRandom = 0;
+  cfg.midiChannel = 1;
+  touchpadMixerMgr.addStrip(cfg);
+
+  proc.initialize();
+  proc.forceRebuildMappings();
+  mockEng.clear();
+
+  uintptr_t deviceHandle = 0x1234;
+  // normX=0.5, normY=0.5 -> col=2, row=1 -> padIndex=6, note=66
+  std::vector<TouchpadContact> contacts = {
+      {0, 100, 100, 0.5f, 0.5f, true},
+  };
+  proc.processTouchpadContacts(deviceHandle, contacts);
+
+  ASSERT_GE(mockEng.events.size(), 1u) << "Expected Note On";
+  EXPECT_TRUE(mockEng.events[0].isNoteOn);
+  EXPECT_EQ(mockEng.events[0].channel, 1);
+  EXPECT_EQ(mockEng.events[0].note, 66);
+  EXPECT_GT(mockEng.events[0].velocity, 0.0f);
+}
+
+TEST_F(InputProcessorTest, TouchpadDrumPadFingerUpSendsNoteOff) {
+  MockMidiEngine mockEng;
+  TouchpadMixerManager touchpadMixerMgr;
+  VoiceManager voiceMgr(mockEng, settingsMgr);
+  InputProcessor proc(voiceMgr, presetMgr, deviceMgr, scaleLib, mockEng,
+                      settingsMgr, touchpadMixerMgr);
+
+  presetMgr.getLayersList().removeAllChildren(nullptr);
+  presetMgr.ensureStaticLayers();
+  settingsMgr.setMidiModeActive(true);
+
+  TouchpadMixerConfig cfg;
+  cfg.type = TouchpadType::DrumPad;
+  cfg.layerId = 0;
+  cfg.drumPadRows = 2;
+  cfg.drumPadColumns = 4;
+  cfg.drumPadMidiNoteStart = 60;
+  cfg.midiChannel = 1;
+  touchpadMixerMgr.addStrip(cfg);
+
+  proc.initialize();
+  proc.forceRebuildMappings();
+  mockEng.clear();
+
+  uintptr_t deviceHandle = 0x1234;
+  std::vector<TouchpadContact> down = {{0, 0, 0, 0.5f, 0.5f, true}};
+  proc.processTouchpadContacts(deviceHandle, down);
+  EXPECT_GE(mockEng.events.size(), 1u);
+  EXPECT_TRUE(mockEng.events[0].isNoteOn);
+
+  mockEng.clear();
+  std::vector<TouchpadContact> up = {{0, 0, 0, 0.5f, 0.5f, false}};
+  proc.processTouchpadContacts(deviceHandle, up);
+  ASSERT_GE(mockEng.events.size(), 1u) << "Expected Note Off";
+  EXPECT_FALSE(mockEng.events[0].isNoteOn);
+  EXPECT_EQ(mockEng.events[0].channel, 1);
+  EXPECT_EQ(mockEng.events[0].note, 66);
+}
+
+TEST_F(InputProcessorTest, TouchpadDrumPadGridMappingCorrectNote) {
+  MockMidiEngine mockEng;
+  TouchpadMixerManager touchpadMixerMgr;
+  VoiceManager voiceMgr(mockEng, settingsMgr);
+  InputProcessor proc(voiceMgr, presetMgr, deviceMgr, scaleLib, mockEng,
+                      settingsMgr, touchpadMixerMgr);
+
+  presetMgr.getLayersList().removeAllChildren(nullptr);
+  presetMgr.ensureStaticLayers();
+  settingsMgr.setMidiModeActive(true);
+
+  TouchpadMixerConfig cfg;
+  cfg.type = TouchpadType::DrumPad;
+  cfg.layerId = 0;
+  cfg.drumPadRows = 2;
+  cfg.drumPadColumns = 4;
+  cfg.drumPadMidiNoteStart = 36;
+  cfg.drumPadVelocityRandom = 0;
+  cfg.midiChannel = 1;
+  touchpadMixerMgr.addStrip(cfg);
+
+  proc.initialize();
+  proc.forceRebuildMappings();
+  mockEng.clear();
+
+  uintptr_t deviceHandle = 0x1234;
+  // Top-left: normX≈0.1, normY≈0.1 -> col=0, row=0 -> pad 0, note 36
+  std::vector<TouchpadContact> contacts = {
+      {0, 0, 0, 0.1f, 0.1f, true},
+  };
+  proc.processTouchpadContacts(deviceHandle, contacts);
+
+  ASSERT_GE(mockEng.events.size(), 1u);
+  EXPECT_TRUE(mockEng.events[0].isNoteOn);
+  EXPECT_EQ(mockEng.events[0].note, 36);
+}

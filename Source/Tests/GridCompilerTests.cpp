@@ -1442,3 +1442,134 @@ TEST_F(GridCompilerTest, TouchpadMixerStripPropertiesMapped) {
   EXPECT_NE((entry.modeFlags & kMixerModeLock), 0);
   EXPECT_NE((entry.modeFlags & kMixerModeMuteButtons), 0);
 }
+
+// --- Drum pad strip compilation ---
+TEST_F(GridCompilerTest, TouchpadDrumPadStripCompiledIntoContext) {
+  TouchpadMixerConfig cfg;
+  cfg.type = TouchpadType::DrumPad;
+  cfg.layerId = 0;
+  cfg.drumPadRows = 2;
+  cfg.drumPadColumns = 4;
+  cfg.drumPadMidiNoteStart = 60;
+  cfg.midiChannel = 1;
+  touchpadMixerMgr.addStrip(cfg);
+
+  auto context = GridCompiler::compile(presetMgr, deviceMgr, zoneMgr,
+                                       touchpadMixerMgr, settingsMgr);
+
+  ASSERT_EQ(context->touchpadDrumPadStrips.size(), 1u);
+  const auto &entry = context->touchpadDrumPadStrips[0];
+  EXPECT_EQ(entry.layerId, 0);
+  EXPECT_EQ(entry.rows, 2);
+  EXPECT_EQ(entry.columns, 4);
+  EXPECT_EQ(entry.numPads, 8);
+  EXPECT_EQ(entry.midiNoteStart, 60);
+  EXPECT_EQ(entry.midiChannel, 1);
+}
+
+TEST_F(GridCompilerTest, TouchpadDrumPadStripPropertiesMapped) {
+  TouchpadMixerConfig cfg;
+  cfg.type = TouchpadType::DrumPad;
+  cfg.drumPadRows = 3;
+  cfg.drumPadColumns = 4;
+  cfg.drumPadMidiNoteStart = 36;
+  cfg.drumPadBaseVelocity = 100;
+  cfg.drumPadVelocityRandom = 10;
+  cfg.drumPadDeadZoneLeft = 0.05f;
+  cfg.drumPadDeadZoneRight = 0.05f;
+  cfg.drumPadDeadZoneTop = 0.1f;
+  cfg.drumPadDeadZoneBottom = 0.1f;
+  touchpadMixerMgr.addStrip(cfg);
+
+  auto context = GridCompiler::compile(presetMgr, deviceMgr, zoneMgr,
+                                       touchpadMixerMgr, settingsMgr);
+
+  ASSERT_EQ(context->touchpadDrumPadStrips.size(), 1u);
+  const auto &entry = context->touchpadDrumPadStrips[0];
+  EXPECT_EQ(entry.rows, 3);
+  EXPECT_EQ(entry.columns, 4);
+  EXPECT_EQ(entry.numPads, 12);
+  EXPECT_EQ(entry.midiNoteStart, 36);
+  EXPECT_EQ(entry.baseVelocity, 100);
+  EXPECT_EQ(entry.velocityRandom, 10);
+  EXPECT_FLOAT_EQ(entry.deadZoneLeft, 0.05f);
+  EXPECT_FLOAT_EQ(entry.deadZoneRight, 0.05f);
+  EXPECT_FLOAT_EQ(entry.deadZoneTop, 0.1f);
+  EXPECT_FLOAT_EQ(entry.deadZoneBottom, 0.1f);
+  EXPECT_GT(entry.invActiveWidth, 1.0f);
+  EXPECT_GT(entry.invActiveHeight, 1.0f);
+}
+
+TEST_F(GridCompilerTest, TouchpadDrumPadAndMixerBothCompiled) {
+  TouchpadMixerConfig mixerCfg;
+  mixerCfg.type = TouchpadType::Mixer;
+  mixerCfg.ccStart = 50;
+  touchpadMixerMgr.addStrip(mixerCfg);
+
+  TouchpadMixerConfig drumCfg;
+  drumCfg.type = TouchpadType::DrumPad;
+  drumCfg.drumPadMidiNoteStart = 60;
+  touchpadMixerMgr.addStrip(drumCfg);
+
+  auto context = GridCompiler::compile(presetMgr, deviceMgr, zoneMgr,
+                                       touchpadMixerMgr, settingsMgr);
+
+  EXPECT_EQ(context->touchpadMixerStrips.size(), 1u);
+  EXPECT_EQ(context->touchpadDrumPadStrips.size(), 1u);
+  EXPECT_EQ(context->touchpadStripOrder.size(), 2u);
+  EXPECT_EQ(context->touchpadStripOrder[0].type, TouchpadType::Mixer);
+  EXPECT_EQ(context->touchpadStripOrder[1].type, TouchpadType::DrumPad);
+}
+
+TEST_F(GridCompilerTest, TouchpadDrumPadToValueTreeRestoreRoundTrips) {
+  // Build ValueTree manually to isolate restore logic (no fixture state)
+  juce::ValueTree vt("TouchpadMixers");
+  juce::ValueTree child("TouchpadMixer");
+  child.setProperty("type", "drumPad", nullptr);
+  child.setProperty("name", "Drum Pad", nullptr);
+  child.setProperty("layerId", 1, nullptr);
+  child.setProperty("drumPadRows", 4, nullptr);
+  child.setProperty("drumPadColumns", 4, nullptr);
+  child.setProperty("drumPadMidiNoteStart", 36, nullptr);
+  child.setProperty("drumPadBaseVelocity", 110, nullptr);
+  child.setProperty("drumPadVelocityRandom", 15, nullptr);
+  child.setProperty("drumPadDeadZoneLeft", 0.05, nullptr);
+  child.setProperty("drumPadDeadZoneRight", 0.05, nullptr);
+  child.setProperty("drumPadDeadZoneTop", 0.08, nullptr);
+  child.setProperty("drumPadDeadZoneBottom", 0.08, nullptr);
+  child.setProperty("midiChannel", 2, nullptr);
+  vt.addChild(child, -1, nullptr);
+
+  TouchpadMixerManager restored;
+  restored.restoreFromValueTree(vt);
+
+  auto strips = restored.getStrips();
+  ASSERT_EQ(strips.size(), 1u);
+  const auto &r = strips[0];
+  EXPECT_EQ(r.type, TouchpadType::DrumPad);
+  EXPECT_EQ(r.name, "Drum Pad");
+  EXPECT_EQ(r.layerId, 1);
+  EXPECT_EQ(r.drumPadRows, 4);
+  EXPECT_EQ(r.drumPadColumns, 4);
+  EXPECT_EQ(r.drumPadMidiNoteStart, 36);
+  EXPECT_EQ(r.drumPadBaseVelocity, 110);
+  EXPECT_EQ(r.drumPadVelocityRandom, 15);
+  EXPECT_FLOAT_EQ(r.drumPadDeadZoneLeft, 0.05f);
+  EXPECT_FLOAT_EQ(r.drumPadDeadZoneRight, 0.05f);
+  EXPECT_FLOAT_EQ(r.drumPadDeadZoneTop, 0.08f);
+  EXPECT_FLOAT_EQ(r.drumPadDeadZoneBottom, 0.08f);
+  EXPECT_EQ(r.midiChannel, 2);
+}
+
+TEST_F(GridCompilerTest, TouchpadMixerManagerDrumPadTypePersistence) {
+  TouchpadMixerConfig cfg;
+  cfg.type = TouchpadType::DrumPad;
+  cfg.name = "Drum Pad";
+  touchpadMixerMgr.addStrip(cfg);
+
+  juce::ValueTree vt = touchpadMixerMgr.toValueTree();
+  TouchpadMixerManager restored;
+  restored.restoreFromValueTree(vt);
+  EXPECT_EQ(restored.getStrips().size(), 1u);
+  EXPECT_EQ(restored.getStrips()[0].type, TouchpadType::DrumPad);
+}

@@ -17,6 +17,15 @@ const juce::Identifier kAbsRel("absRel");
 const juce::Identifier kLockFree("lockFree");
 const juce::Identifier kMuteButtonsEnabled("muteButtonsEnabled");
 const juce::Identifier kType("type");
+const juce::Identifier kDrumPadRows("drumPadRows");
+const juce::Identifier kDrumPadColumns("drumPadColumns");
+const juce::Identifier kDrumPadMidiNoteStart("drumPadMidiNoteStart");
+const juce::Identifier kDrumPadBaseVelocity("drumPadBaseVelocity");
+const juce::Identifier kDrumPadVelocityRandom("drumPadVelocityRandom");
+const juce::Identifier kDrumPadDeadZoneLeft("drumPadDeadZoneLeft");
+const juce::Identifier kDrumPadDeadZoneRight("drumPadDeadZoneRight");
+const juce::Identifier kDrumPadDeadZoneTop("drumPadDeadZoneTop");
+const juce::Identifier kDrumPadDeadZoneBottom("drumPadDeadZoneBottom");
 } // namespace
 
 void TouchpadMixerManager::addStrip(const TouchpadMixerConfig &config) {
@@ -55,7 +64,7 @@ static int enumToInt(TouchpadMixerAbsRel v) { return static_cast<int>(v); }
 static int enumToInt(TouchpadMixerLockFree v) { return static_cast<int>(v); }
 
 static juce::String typeToString(TouchpadType t) {
-  return (t == TouchpadType::Mixer) ? "mixer" : "mixer";
+  return (t == TouchpadType::DrumPad) ? "drumPad" : "mixer";
 }
 
 juce::ValueTree TouchpadMixerManager::toValueTree() const {
@@ -77,6 +86,17 @@ juce::ValueTree TouchpadMixerManager::toValueTree() const {
     child.setProperty(kAbsRel, enumToInt(s.absRel), nullptr);
     child.setProperty(kLockFree, enumToInt(s.lockFree), nullptr);
     child.setProperty(kMuteButtonsEnabled, s.muteButtonsEnabled, nullptr);
+    if (s.type == TouchpadType::DrumPad) {
+      child.setProperty(kDrumPadRows, s.drumPadRows, nullptr);
+      child.setProperty(kDrumPadColumns, s.drumPadColumns, nullptr);
+      child.setProperty(kDrumPadMidiNoteStart, s.drumPadMidiNoteStart, nullptr);
+      child.setProperty(kDrumPadBaseVelocity, s.drumPadBaseVelocity, nullptr);
+      child.setProperty(kDrumPadVelocityRandom, s.drumPadVelocityRandom, nullptr);
+      child.setProperty(kDrumPadDeadZoneLeft, s.drumPadDeadZoneLeft, nullptr);
+      child.setProperty(kDrumPadDeadZoneRight, s.drumPadDeadZoneRight, nullptr);
+      child.setProperty(kDrumPadDeadZoneTop, s.drumPadDeadZoneTop, nullptr);
+      child.setProperty(kDrumPadDeadZoneBottom, s.drumPadDeadZoneBottom, nullptr);
+    }
     vt.addChild(child, -1, nullptr);
   }
   return vt;
@@ -84,7 +104,8 @@ juce::ValueTree TouchpadMixerManager::toValueTree() const {
 
 static TouchpadType parseType(const juce::var &v) {
   juce::String s = v.toString().trim();
-  return s.equalsIgnoreCase("mixer") ? TouchpadType::Mixer : TouchpadType::Mixer;
+  return s.equalsIgnoreCase("drumPad") ? TouchpadType::DrumPad
+                                       : TouchpadType::Mixer;
 }
 
 void TouchpadMixerManager::restoreFromValueTree(const juce::ValueTree &vt) {
@@ -119,6 +140,26 @@ void TouchpadMixerManager::restoreFromValueTree(const juce::ValueTree &vt) {
     s.lockFree = (lf == 0) ? TouchpadMixerLockFree::Lock
                            : TouchpadMixerLockFree::Free;
     s.muteButtonsEnabled = (bool)child.getProperty(kMuteButtonsEnabled, false);
+    if (s.type == TouchpadType::DrumPad) {
+      s.drumPadRows =
+          juce::jlimit(1, 8, (int)child.getProperty(kDrumPadRows, 2));
+      s.drumPadColumns =
+          juce::jlimit(1, 16, (int)child.getProperty(kDrumPadColumns, 4));
+      s.drumPadMidiNoteStart = juce::jlimit(
+          0, 127, (int)child.getProperty(kDrumPadMidiNoteStart, 60));
+      s.drumPadBaseVelocity = juce::jlimit(
+          1, 127, (int)child.getProperty(kDrumPadBaseVelocity, 100));
+      s.drumPadVelocityRandom = juce::jlimit(
+          0, 127, (int)child.getProperty(kDrumPadVelocityRandom, 0));
+      s.drumPadDeadZoneLeft = static_cast<float>(
+          child.getProperty(kDrumPadDeadZoneLeft, 0.0));
+      s.drumPadDeadZoneRight = static_cast<float>(
+          child.getProperty(kDrumPadDeadZoneRight, 0.0));
+      s.drumPadDeadZoneTop = static_cast<float>(
+          child.getProperty(kDrumPadDeadZoneTop, 0.0));
+      s.drumPadDeadZoneBottom = static_cast<float>(
+          child.getProperty(kDrumPadDeadZoneBottom, 0.0));
+    }
     strips_.push_back(s);
   }
   sendChangeMessage();
