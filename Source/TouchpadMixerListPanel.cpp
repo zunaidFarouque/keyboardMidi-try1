@@ -7,7 +7,7 @@ TouchpadMixerListPanel::TouchpadMixerListPanel(TouchpadMixerManager *mgr)
   listBox.setRowHeight(24);
 
   addAndMakeVisible(addButton);
-  addButton.setButtonText("Add Strip");
+  addButton.setButtonText("Add Entry");
   addButton.onClick = [this] {
     if (manager) {
       TouchpadMixerConfig def;

@@ -1,7 +1,20 @@
 #include "TouchpadMixerDefinition.h"
 
+namespace {
+constexpr int kTypeMixerId = 1;
+constexpr int kTypeMoreComingId = 2;
+} // namespace
+
 InspectorSchema TouchpadMixerDefinition::getSchema() {
   InspectorSchema schema;
+
+  InspectorControl typeCtrl;
+  typeCtrl.propertyId = "type";
+  typeCtrl.label = "Type";
+  typeCtrl.controlType = InspectorControl::Type::ComboBox;
+  typeCtrl.options[kTypeMixerId] = "Mixer";
+  typeCtrl.options[kTypeMoreComingId] = "More coming soon...";
+  schema.push_back(typeCtrl);
 
   InspectorControl nameCtrl;
   nameCtrl.propertyId = "name";

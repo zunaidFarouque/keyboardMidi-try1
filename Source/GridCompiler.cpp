@@ -905,6 +905,8 @@ std::shared_ptr<CompiledMapContext> GridCompiler::compile(
 
   // 2b. Collect touchpad mixer strips (CC-only faders per strip)
   for (const auto &cfg : touchpadMixerMgr.getStrips()) {
+    if (cfg.type != TouchpadType::Mixer)
+      continue;
     TouchpadMixerEntry entry;
     entry.layerId = juce::jlimit(0, 8, cfg.layerId);
     entry.numFaders = juce::jlimit(1, 32, cfg.numFaders);

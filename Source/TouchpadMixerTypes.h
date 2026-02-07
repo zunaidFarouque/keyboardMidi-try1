@@ -3,6 +3,9 @@
 #include <string>
 #include <vector>
 
+// Touchpad tab type selector. Mixer = vertical CC faders; more types later.
+enum class TouchpadType { Mixer = 0 };
+
 // Touchpad Mixer: divide touchpad into N vertical faders (CC only).
 // Quick/Precision x Absolute/Relative x Lock/Free.
 
@@ -21,8 +24,10 @@ enum class TouchpadMixerLockFree {
   Free = 1  // Finger can swipe to another fader
 };
 
-// Config for one mixer strip (serialized in preset / session).
+// Config for one touchpad strip (serialized in preset / session).
+// type determines which controls apply; Mixer = vertical CC faders.
 struct TouchpadMixerConfig {
+  TouchpadType type = TouchpadType::Mixer;
   std::string name = "Touchpad Mixer";
   int layerId = 0;
   int numFaders = 5;

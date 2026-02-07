@@ -116,6 +116,8 @@ void TouchpadMixerEditorComponent::setStrip(int index,
 
 juce::var TouchpadMixerEditorComponent::getConfigValue(
     const juce::String &propertyId) const {
+  if (propertyId == "type")
+    return juce::var(currentConfig.type == TouchpadType::Mixer ? 1 : 1);
   if (propertyId == "name")
     return juce::var(juce::String(currentConfig.name));
   if (propertyId == "layerId")
@@ -154,7 +156,12 @@ void TouchpadMixerEditorComponent::applyConfigValue(
     const juce::String &propertyId, const juce::var &value) {
   if (selectedIndex < 0 || !manager)
     return;
-  if (propertyId == "name")
+  if (propertyId == "type") {
+    int id = static_cast<int>(value);
+    if (id == 1)
+      currentConfig.type = TouchpadType::Mixer;
+    // id 2 "More coming soon..." is disabled
+  } else if (propertyId == "name")
     currentConfig.name = value.toString().toStdString();
   else if (propertyId == "layerId")
     currentConfig.layerId =
@@ -256,6 +263,8 @@ void TouchpadMixerEditorComponent::createControl(const InspectorControl &def,
     auto cb = std::make_unique<juce::ComboBox>();
     for (const auto &p : def.options)
       cb->addItem(p.second, p.first);
+    if (propId == "type")
+      cb->setItemEnabled(2, false); // "More coming soon..." disabled
     int id = static_cast<int>(currentVal);
     if (id > 0)
       cb->setSelectedId(id, juce::dontSendNotification);

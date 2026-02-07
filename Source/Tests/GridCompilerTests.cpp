@@ -6,6 +6,7 @@
 #include "../ScaleLibrary.h"
 #include "../SettingsManager.h"
 #include "../TouchpadMixerManager.h"
+#include "../TouchpadMixerTypes.h"
 #include "../Zone.h"
 #include "../ZoneManager.h"
 #include <cmath>
@@ -1191,4 +1192,47 @@ TEST_F(GridCompilerTest, LatchToggleReleaseLatchedCompiled) {
   auto grid = context->globalGrids[0];
   ASSERT_TRUE((*grid)[57].isActive);
   EXPECT_FALSE((*grid)[57].action.releaseLatchedOnLatchToggleOff);
+}
+
+TEST_F(GridCompilerTest, TouchpadMixerManagerTypePersistence) {
+  TouchpadMixerConfig cfg;
+  cfg.type = TouchpadType::Mixer;
+  cfg.name = "Test Strip";
+  touchpadMixerMgr.addStrip(cfg);
+
+  juce::ValueTree vt = touchpadMixerMgr.toValueTree();
+  EXPECT_EQ(vt.getNumChildren(), 1);
+  EXPECT_EQ(vt.getChild(0).getProperty("type", juce::var()).toString(), "mixer");
+
+  TouchpadMixerManager restored;
+  restored.restoreFromValueTree(vt);
+  EXPECT_EQ(restored.getStrips().size(), 1u);
+  EXPECT_EQ(restored.getStrips()[0].type, TouchpadType::Mixer);
+  EXPECT_EQ(restored.getStrips()[0].name, "Test Strip");
+}
+
+TEST_F(GridCompilerTest, TouchpadMixerManagerTypeBackwardCompat) {
+  juce::ValueTree vt("TouchpadMixers");
+  // No type property on child = legacy preset
+  juce::ValueTree child("TouchpadMixer");
+  child.setProperty("name", "Legacy", nullptr);
+  child.setProperty("layerId", 0, nullptr);
+  child.setProperty("numFaders", 5, nullptr);
+  child.setProperty("ccStart", 50, nullptr);
+  child.setProperty("midiChannel", 1, nullptr);
+  child.setProperty("inputMin", 0.0, nullptr);
+  child.setProperty("inputMax", 1.0, nullptr);
+  child.setProperty("outputMin", 0, nullptr);
+  child.setProperty("outputMax", 127, nullptr);
+  child.setProperty("quickPrecision", 0, nullptr);
+  child.setProperty("absRel", 0, nullptr);
+  child.setProperty("lockFree", 1, nullptr);
+  child.setProperty("muteButtonsEnabled", false, nullptr);
+  vt.addChild(child, -1, nullptr);
+
+  TouchpadMixerManager restored;
+  restored.restoreFromValueTree(vt);
+  EXPECT_EQ(restored.getStrips().size(), 1u);
+  EXPECT_EQ(restored.getStrips()[0].type, TouchpadType::Mixer)
+      << "Missing type should default to Mixer";
 }

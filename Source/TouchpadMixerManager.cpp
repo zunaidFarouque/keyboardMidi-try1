@@ -16,6 +16,7 @@ const juce::Identifier kQuickPrecision("quickPrecision");
 const juce::Identifier kAbsRel("absRel");
 const juce::Identifier kLockFree("lockFree");
 const juce::Identifier kMuteButtonsEnabled("muteButtonsEnabled");
+const juce::Identifier kType("type");
 } // namespace
 
 void TouchpadMixerManager::addStrip(const TouchpadMixerConfig &config) {
@@ -53,11 +54,16 @@ static int enumToInt(TouchpadMixerQuickPrecision v) {
 static int enumToInt(TouchpadMixerAbsRel v) { return static_cast<int>(v); }
 static int enumToInt(TouchpadMixerLockFree v) { return static_cast<int>(v); }
 
+static juce::String typeToString(TouchpadType t) {
+  return (t == TouchpadType::Mixer) ? "mixer" : "mixer";
+}
+
 juce::ValueTree TouchpadMixerManager::toValueTree() const {
   juce::ScopedReadLock lock(lock_);
   juce::ValueTree vt(kTouchpadMixers);
   for (const auto &s : strips_) {
     juce::ValueTree child(kTouchpadMixer);
+    child.setProperty(kType, typeToString(s.type), nullptr);
     child.setProperty(kName, juce::String(s.name), nullptr);
     child.setProperty(kLayerId, s.layerId, nullptr);
     child.setProperty(kNumFaders, s.numFaders, nullptr);
@@ -76,6 +82,11 @@ juce::ValueTree TouchpadMixerManager::toValueTree() const {
   return vt;
 }
 
+static TouchpadType parseType(const juce::var &v) {
+  juce::String s = v.toString().trim();
+  return s.equalsIgnoreCase("mixer") ? TouchpadType::Mixer : TouchpadType::Mixer;
+}
+
 void TouchpadMixerManager::restoreFromValueTree(const juce::ValueTree &vt) {
   if (!vt.isValid() || !vt.hasType(kTouchpadMixers))
     return;
@@ -86,6 +97,7 @@ void TouchpadMixerManager::restoreFromValueTree(const juce::ValueTree &vt) {
     if (!child.hasType(kTouchpadMixer))
       continue;
     TouchpadMixerConfig s;
+    s.type = parseType(child.getProperty(kType, "mixer"));
     s.name = child.getProperty(kName, "Touchpad Mixer").toString().toStdString();
     s.layerId = juce::jlimit(0, 8, (int)child.getProperty(kLayerId, 0));
     s.numFaders =
