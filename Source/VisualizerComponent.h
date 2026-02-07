@@ -51,6 +51,12 @@ public:
   /// changes.
   void restartTimerWithInterval(int intervalMs);
 
+  /// When false, touchpad view always follows the active layer (for Mappings/Zones/Settings tabs).
+  /// When true, touchpad tab selection controls the view.
+  void setTouchpadTabActive(bool active);
+
+  std::function<void(int layerId, int stripIndex)> onTouchpadViewChanged;
+
   void paint(juce::Graphics &) override;
   void resized() override;
 
@@ -118,6 +124,8 @@ private:
   // Phase 50.9.1: Follow toggle UI (kept simple for clarity)
   juce::TextButton followButton{"Follow Input"};
   void updateFollowButtonAppearance();
+
+  bool touchpadTabActive_ = false; // when false, touchpad view follows active layer
 
   // Dirty flag for rendering optimization
   std::atomic<bool> needsRepaint{true};

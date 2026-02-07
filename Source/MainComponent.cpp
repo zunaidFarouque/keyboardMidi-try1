@@ -230,6 +230,17 @@ MainComponent::MainComponent()
   mainTabs.addTab("Settings", juce::Colour(0xff2a2a2a), &settingsViewport,
                   false);
 
+  static constexpr int kTouchpadTabIndex = 2; // Mappings=0, Zones=1, Touchpad=2, Settings=3
+  mainTabs.getTabbedButtonBar().addChangeListener(this);
+  if (visualizer)
+    visualizer->setTouchpadTabActive(false); // Default: Mappings tab
+  visualizer->onTouchpadViewChanged = [this](int layerId, int stripIndex) {
+    if (miniWindow && settingsManager.getShowTouchpadVisualizerInMiniWindow()) {
+      miniWindow->setVisualizedLayer(layerId);
+      miniWindow->setSelectedTouchpadStrip(stripIndex, layerId);
+    }
+  };
+
   // --- Add Containers ---
   addAndMakeVisible(visualizerContainer);
   addAndMakeVisible(editorContainer);
@@ -401,6 +412,7 @@ MainComponent::~MainComponent() {
   }
 
   // 6. Remove listeners
+  mainTabs.getTabbedButtonBar().removeChangeListener(this);
   settingsManager.removeChangeListener(this);
   deviceManager.removeChangeListener(this);
 
@@ -528,7 +540,24 @@ void MainComponent::updatePerformanceModeButtonText() {
 }
 
 void MainComponent::changeListenerCallback(juce::ChangeBroadcaster *source) {
-  if (source == &settingsManager) {
+  static constexpr int kTouchpadTabIndex = 2; // Mappings=0, Zones=1, Touchpad=2, Settings=3
+  if (source == &mainTabs.getTabbedButtonBar()) {
+    int idx = mainTabs.getCurrentTabIndex();
+    bool touchpadActive = (idx == kTouchpadTabIndex);
+    if (visualizer)
+      visualizer->setTouchpadTabActive(touchpadActive);
+    if (touchpadActive && touchpadTab) {
+      touchpadTab->refreshVisualizerSelection();
+    } else if (visualizer) {
+      int activeLayer = inputProcessor.getHighestActiveLayerIndex();
+      visualizer->setVisualizedLayer(activeLayer);
+      visualizer->setSelectedTouchpadMixerStrip(-1, 0);
+      if (miniWindow && settingsManager.getShowTouchpadVisualizerInMiniWindow()) {
+        miniWindow->setVisualizedLayer(activeLayer);
+        miniWindow->setSelectedTouchpadStrip(-1, activeLayer);
+      }
+    }
+  } else if (source == &settingsManager) {
     // Handle MIDI mode changes
     if (!settingsManager.isMidiModeActive()) {
       // MIDI mode turned off - hide mini window

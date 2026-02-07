@@ -875,6 +875,10 @@ void VisualizerComponent::restartTimerWithInterval(int intervalMs) {
   startTimer(intervalMs);
 }
 
+void VisualizerComponent::setTouchpadTabActive(bool active) {
+  touchpadTabActive_ = active;
+}
+
 void VisualizerComponent::timerCallback() {
   // Safeguard: timer is normally stopped when minimized (MainComponent); skip
   // work if ever called while minimized
@@ -889,7 +893,23 @@ void VisualizerComponent::timerCallback() {
   // thread only.
 
   // Step 1: Dynamic View – adjust view + layer based on last input.
-  if (followInputEnabled.load(std::memory_order_acquire)) {
+  // When NOT in touchpad tab: touchpad view always follows active layer
+  if (!touchpadTabActive_ && inputProcessor) {
+    int activeLayer = inputProcessor->getHighestActiveLayerIndex();
+    bool changed = false;
+    if (currentVisualizedLayer != activeLayer) {
+      setVisualizedLayer(activeLayer);
+      changed = true;
+      needsRepaint.store(true, std::memory_order_release);
+    }
+    if (selectedTouchpadMixerStripIndex_ >= 0) {
+      setSelectedTouchpadMixerStrip(-1, 0);
+      changed = true;
+      needsRepaint.store(true, std::memory_order_release);
+    }
+    if (changed && onTouchpadViewChanged)
+      onTouchpadViewChanged(activeLayer, -1);
+  } else if (followInputEnabled.load(std::memory_order_acquire)) {
     // A. Device Switching
     uintptr_t handle = lastInputDeviceHandle.load(std::memory_order_relaxed);
     if (handle != 0 && deviceManager != nullptr && viewSelector.isVisible()) {

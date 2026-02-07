@@ -246,11 +246,33 @@ void TouchpadVisualizerPanel::paint(juce::Graphics &g) {
     g.drawEllipse(px - 5.0f, py - 5.0f, 10.0f, 10.0f, 1.0f);
   }
 
-  if (inputProcessor && selectedStripIndex_ >= 0 &&
-      currentVisualizedLayer == selectedStripLayerId_) {
+  // When no strip is explicitly selected (-1), use first strip for current layer
+  // so the touchpad shows the active layout when following the active layer.
+  int displayStripIndex = selectedStripIndex_;
+  if (displayStripIndex < 0 && inputProcessor) {
     auto ctx = inputProcessor->getContext();
     if (ctx) {
-      size_t listIdx = static_cast<size_t>(selectedStripIndex_);
+      for (size_t i = 0; i < ctx->touchpadStripOrder.size(); ++i) {
+        const auto &ref = ctx->touchpadStripOrder[i];
+        int stripLayer = -1;
+        if (ref.type == TouchpadType::Mixer &&
+            ref.index < ctx->touchpadMixerStrips.size())
+          stripLayer = ctx->touchpadMixerStrips[ref.index].layerId;
+        else if (ref.type == TouchpadType::DrumPad &&
+                 ref.index < ctx->touchpadDrumPadStrips.size())
+          stripLayer = ctx->touchpadDrumPadStrips[ref.index].layerId;
+        if (stripLayer == currentVisualizedLayer) {
+          displayStripIndex = static_cast<int>(i);
+          break;
+        }
+      }
+    }
+  }
+
+  if (inputProcessor && displayStripIndex >= 0) {
+    auto ctx = inputProcessor->getContext();
+    if (ctx) {
+      size_t listIdx = static_cast<size_t>(displayStripIndex);
       if (listIdx < ctx->touchpadStripOrder.size()) {
         const auto &ref = ctx->touchpadStripOrder[listIdx];
         if (ref.type == TouchpadType::Mixer &&
