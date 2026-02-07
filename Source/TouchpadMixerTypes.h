@@ -7,18 +7,18 @@
 // Quick/Precision x Absolute/Relative x Lock/Free.
 
 enum class TouchpadMixerQuickPrecision {
-  Quick = 0,     // One finger = direct CC
-  Precision = 1  // One finger = overlay only; second finger = apply CC
+  Quick = 0,    // One finger = direct CC
+  Precision = 1 // One finger = overlay only; second finger = apply CC
 };
 
 enum class TouchpadMixerAbsRel {
-  Absolute = 0,  // Y position maps to CC value
-  Relative = 1   // Y movement (delta) adjusts CC
+  Absolute = 0, // Y position maps to CC value
+  Relative = 1  // Y movement (delta) adjusts CC
 };
 
 enum class TouchpadMixerLockFree {
-  Lock = 0,  // First fader touched is fixed until finger lift
-  Free = 1   // Finger can swipe to another fader
+  Lock = 0, // First fader touched is fixed until finger lift
+  Free = 1  // Finger can swipe to another fader
 };
 
 // Config for one mixer strip (serialized in preset / session).

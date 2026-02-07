@@ -1962,21 +1962,27 @@ void InputProcessor::processTouchpadContacts(
       float effectiveY = strip.muteButtonsEnabled
                              ? (applierY / kMuteButtonRegionTop)  // [0, 0.85] -> [0, 1]
                              : applierY;
-      float t = (effectiveY - strip.inputMin) * strip.invInputRange;
+
+      // Input Y min/max: map touchpad Y from [inputMin, inputMax] to normalized 0..1 (then inverted).
+      float effectiveYClamped = juce::jlimit(strip.inputMin, strip.inputMax, effectiveY);
+      float t = (effectiveYClamped - strip.inputMin) * strip.invInputRange;
       t = std::clamp(t, 0.0f, 1.0f);
       t = 1.0f - t; // Invert Y: screen up = fader up (high value)
+
+      // Output Y min/max: map normalized t to [outputMin, outputMax].
+      const float outputRange =
+          static_cast<float>(strip.outputMax - strip.outputMin);
       int ccVal;
       if (strip.absRel == TouchpadMixerAbsRel::Absolute) {
-        ccVal = juce::jlimit(strip.outputMin, strip.outputMax,
-                             static_cast<int>(std::round(
-                                 static_cast<float>(strip.outputMin) +
-                                 (static_cast<float>(strip.outputMax - strip.outputMin) * t))));
+        ccVal = juce::jlimit(
+            strip.outputMin, strip.outputMax,
+            static_cast<int>(std::round(
+                static_cast<float>(strip.outputMin) + outputRange * t)));
       } else {
         // Relative: finger Y delta moves fader. Down (Y increase) => fader down.
+        // Scale delta by output range and by 1/inputRange so a swipe across input range = full output change.
         auto relKey = std::make_tuple(deviceHandle, static_cast<int>(stripIdx), faderIndex);
         float &acc = touchpadMixerRelativeValue[relKey];
-        const float outputRange =
-            static_cast<float>(strip.outputMax - strip.outputMin);
         if (applierDownEdge) {
           auto lastKey = std::make_tuple(deviceHandle, static_cast<int>(stripIdx), faderIndex);
           auto itLast = lastTouchpadMixerCCValues.find(lastKey);
@@ -1988,8 +1994,9 @@ void InputProcessor::processTouchpadContacts(
           float prevEffectiveY = strip.muteButtonsEnabled
                                     ? juce::jmin(1.0f, prev.y1 / kMuteButtonRegionTop)
                                     : prev.y1;
-          float deltaY = effectiveY - prevEffectiveY; // finger down => deltaY > 0 => fader down
-          acc -= deltaY * outputRange;
+          float prevClamped = juce::jlimit(strip.inputMin, strip.inputMax, prevEffectiveY);
+          float deltaY = effectiveYClamped - prevClamped; // finger down => deltaY > 0 => fader down
+          acc -= deltaY * strip.invInputRange * outputRange;
         }
         acc = std::clamp(acc, static_cast<float>(strip.outputMin),
                          static_cast<float>(strip.outputMax));

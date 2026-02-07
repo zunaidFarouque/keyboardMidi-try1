@@ -453,14 +453,15 @@ void compileZonesForLayer(VisualGrid &vGrid, AudioGrid &aGrid,
     if (zone->targetAliasHash != aliasHash)
       continue;
 
-    std::vector<int> zoneIntervals = zoneMgr.getScaleIntervalsForZone(zone.get());
+    std::vector<int> zoneIntervals =
+        zoneMgr.getScaleIntervalsForZone(zone.get());
     const auto &keyCodes = zone->getInputKeyCodes();
     for (int keyCode : keyCodes) {
       if (keyCode < 0 || keyCode > 0xFF)
         continue;
 
-      auto chordOpt = zone->getNotesForKey(keyCode, globalChrom, globalDeg,
-                                           &zoneIntervals);
+      auto chordOpt =
+          zone->getNotesForKey(keyCode, globalChrom, globalDeg, &zoneIntervals);
       if (!chordOpt.has_value() || chordOpt->empty()) {
         // Zone covers this key but has no notes (e.g. cache not built yet).
         // Claim the key for conflict detection (Mapping + Zone = Conflict).
@@ -883,11 +884,9 @@ void compileMappingsForLayer(
 
 } // namespace
 
-std::shared_ptr<CompiledMapContext>
-GridCompiler::compile(PresetManager &presetMgr, DeviceManager &deviceMgr,
-                      ZoneManager &zoneMgr,
-                      TouchpadMixerManager &touchpadMixerMgr,
-                      SettingsManager &settingsMgr) {
+std::shared_ptr<CompiledMapContext> GridCompiler::compile(
+    PresetManager &presetMgr, DeviceManager &deviceMgr, ZoneManager &zoneMgr,
+    TouchpadMixerManager &touchpadMixerMgr, SettingsManager &settingsMgr) {
   // 1. Setup Context
   auto context = std::make_shared<CompiledMapContext>();
 
@@ -1016,8 +1015,8 @@ GridCompiler::compile(PresetManager &presetMgr, DeviceManager &deviceMgr,
                      &keysWrittenByLayer[(size_t)L]);
 
     if (soloLayer || passthruInheritance)
-      effectiveBaseIndex[(size_t)L] = L > 0 ? effectiveBaseIndex[(size_t)(L - 1)]
-                                            : 0;
+      effectiveBaseIndex[(size_t)L] =
+          L > 0 ? effectiveBaseIndex[(size_t)(L - 1)] : 0;
     else
       effectiveBaseIndex[(size_t)L] = L;
 
@@ -1101,14 +1100,15 @@ void GridCompiler::compileZones(CompiledMapContext &context,
       continue;
     const uintptr_t targetAliasHash = zone->targetAliasHash;
 
-    std::vector<int> zoneIntervals = zoneMgr.getScaleIntervalsForZone(zone.get());
+    std::vector<int> zoneIntervals =
+        zoneMgr.getScaleIntervalsForZone(zone.get());
     const auto &keyCodes = zone->getInputKeyCodes();
     for (int keyCode : keyCodes) {
       if (keyCode < 0 || keyCode > 0xFF)
         continue;
 
-      auto chordOpt = zone->getNotesForKey(keyCode, globalChrom, globalDeg,
-                                           &zoneIntervals);
+      auto chordOpt =
+          zone->getNotesForKey(keyCode, globalChrom, globalDeg, &zoneIntervals);
       if (!chordOpt.has_value())
         continue;
 

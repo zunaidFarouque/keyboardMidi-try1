@@ -847,15 +847,49 @@ void VisualizerComponent::paint(juce::Graphics &g) {
             const float h = touchpadRect.getHeight();
             const float muteRegionH = strip.muteButtonsEnabled ? (h * 0.15f) : 0.0f;
             const float faderH = h - muteRegionH;
+            const float faderTop = touchpadRect.getY();
+            const float faderBottom = faderTop + faderH;
+
+            // Input range dead zones: [0, inputMin] and [inputMax, 1] don't change the fader.
+            const float inMin = juce::jlimit(0.0f, 1.0f, strip.inputMin);
+            const float inMax = juce::jlimit(0.0f, 1.0f, strip.inputMax);
+            const bool hasDeadZones = (inMin > 0.0f || inMax < 1.0f);
+
             for (int i = 0; i < N; ++i) {
+              float stripX = touchpadRect.getX() + static_cast<float>(i) * fw;
+
+              if (hasDeadZones) {
+                // Top dead zone: Y [0, inputMin] -> always max, no effect when dragging
+                if (inMin > 0.0f) {
+                  float topDeadH = inMin * faderH;
+                  g.setColour(juce::Colour(0xff383838).withAlpha(0.75f));
+                  g.fillRect(stripX + 1.0f, faderTop, fw - 2.0f, topDeadH);
+                }
+                // Bottom dead zone: Y [inputMax, 1] -> always min
+                if (inMax < 1.0f) {
+                  float bottomDeadH = (1.0f - inMax) * faderH;
+                  g.setColour(juce::Colour(0xff383838).withAlpha(0.75f));
+                  g.fillRect(stripX + 1.0f, faderBottom - bottomDeadH, fw - 2.0f, bottomDeadH);
+                }
+                // Active band boundaries (thin lines)
+                if (inMin > 0.0f && inMin < 1.0f) {
+                  float yLine = faderTop + inMin * faderH;
+                  g.setColour(juce::Colours::orange.withAlpha(0.7f));
+                  g.drawHorizontalLine(static_cast<int>(yLine), stripX, stripX + fw);
+                }
+                if (inMax > 0.0f && inMax < 1.0f) {
+                  float yLine = faderTop + inMax * faderH;
+                  g.setColour(juce::Colours::orange.withAlpha(0.7f));
+                  g.drawHorizontalLine(static_cast<int>(yLine), stripX, stripX + fw);
+                }
+              }
+
               int displayVal = (i < static_cast<int>(displayValues.size()))
                                   ? displayValues[(size_t)i]
                                   : 0;
               bool isMuted = (i < static_cast<int>(muted.size())) && muted[(size_t)i];
               float fill = static_cast<float>(juce::jlimit(0, 127, displayVal)) / 127.0f;
-              float stripX = touchpadRect.getX() + static_cast<float>(i) * fw;
               float fillH = fill * faderH;
-              float faderBottom = touchpadRect.getY() + faderH;
               g.setColour(isMuted ? juce::Colour(0xff505070).withAlpha(0.85f)
                                  : juce::Colour(0xff406080).withAlpha(0.6f));
               g.fillRect(stripX + 1.0f,
@@ -864,7 +898,7 @@ void VisualizerComponent::paint(juce::Graphics &g) {
                         fillH);
               g.setColour(isMuted ? juce::Colour(0xff8080a0).withAlpha(0.6f)
                                  : juce::Colours::lightgrey.withAlpha(0.5f));
-              g.drawRect(stripX, touchpadRect.getY(), fw, faderH, 0.5f);
+              g.drawRect(stripX, faderTop, fw, faderH, 0.5f);
               // Muted: "M" at top of strip for visibility
               if (isMuted) {
                 g.setColour(juce::Colours::white);

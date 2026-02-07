@@ -101,8 +101,8 @@ public:
 
   // Touchpad mixer: mute state per fader for visualizer (thread-safe).
   std::vector<bool> getTouchpadMixerStripMuteState(uintptr_t deviceHandle,
-                                                  int stripIndex,
-                                                  int numFaders) const;
+                                                   int stripIndex,
+                                                   int numFaders) const;
 
   // Touchpad mixer: value to display per fader (unmuted value when muted, else
   // last sent CC). Thread-safe.
@@ -220,13 +220,15 @@ private:
   // Touchpad mixer strips: lock mode (device, stripIndex) -> locked fader index
   // (-1 = none)
   std::map<std::tuple<uintptr_t, int>, int> touchpadMixerLockedFader;
-  // Relative mode: (device, stripIndex, faderIndex) -> accumulated value [0,127]
+  // Relative mode: (device, stripIndex, faderIndex) -> accumulated value
+  // [0,127]
   std::map<std::tuple<uintptr_t, int, int>, float> touchpadMixerRelativeValue;
   // Mute: (device, stripIndex, faderIndex) -> muted
   std::map<std::tuple<uintptr_t, int, int>, bool> touchpadMixerMuteState;
   // Last sent CC for dedupe: (device, stripIndex, faderIndex) -> value
   std::map<std::tuple<uintptr_t, int, int>, int> lastTouchpadMixerCCValues;
-  // Value to show when muted (stored when muting): (device, stripIndex, faderIndex) -> value
+  // Value to show when muted (stored when muting): (device, stripIndex,
+  // faderIndex) -> value
   std::map<std::tuple<uintptr_t, int, int>, int> touchpadMixerValueBeforeMute;
 
   // ValueTree Callbacks
