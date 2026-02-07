@@ -14,7 +14,7 @@
 #include "SettingsPanel.h"
 #include "StartupManager.h"
 #include "TouchpadMixerManager.h"
-#include "TouchpadMixerTabComponent.h"
+#include "TouchpadTabComponent.h"
 #include "VisualizerComponent.h"
 #include "ZoneEditorComponent.h"
 
@@ -79,7 +79,7 @@ private:
   std::unique_ptr<VisualizerComponent> visualizer;
   std::unique_ptr<MappingEditorComponent> mappingEditor;
   std::unique_ptr<ZoneEditorComponent> zoneEditor;
-  std::unique_ptr<TouchpadMixerTabComponent> touchpadMixerTab;
+  std::unique_ptr<TouchpadTabComponent> touchpadTab;
   std::unique_ptr<SettingsPanel> settingsPanel;
   std::unique_ptr<LogComponent> logComponent;
 

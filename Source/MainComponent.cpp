@@ -40,10 +40,9 @@ MainComponent::MainComponent()
   zoneEditor = std::make_unique<ZoneEditorComponent>(
       &inputProcessor.getZoneManager(), &deviceManager, rawInputManager.get(),
       &scaleLibrary);
-  touchpadMixerTab =
-      std::make_unique<TouchpadMixerTabComponent>(&touchpadMixerManager);
-  touchpadMixerTab->onSelectionChangedForVisualizer = [this](int stripIndex,
-                                                            int layerId) {
+  touchpadTab = std::make_unique<TouchpadTabComponent>(&touchpadMixerManager);
+  touchpadTab->onSelectionChangedForVisualizer = [this](int stripIndex,
+                                                             int layerId) {
     if (visualizer) {
       visualizer->setSelectedTouchpadMixerStrip(stripIndex, layerId);
       if (stripIndex >= 0)
@@ -123,19 +122,19 @@ MainComponent::MainComponent()
         "Save Preset",
         juce::File::getSpecialLocation(juce::File::userHomeDirectory), "*.xml");
 
-    fc->launchAsync(juce::FileBrowserComponent::saveMode |
-                        juce::FileBrowserComponent::canSelectFiles,
-                    [this, fc](const juce::FileChooser &chooser) {
-                      auto result = chooser.getResult();
-                      // If the user didn't cancel (file is valid)
-                      if (result != juce::File()) {
-                        presetManager.saveToFile(result,
-                                                 touchpadMixerManager.toValueTree());
-                        if (logComponent)
-                          logComponent->addEntry("Saved: " +
-                                                 result.getFileName());
-                      }
-                    });
+    fc->launchAsync(
+        juce::FileBrowserComponent::saveMode |
+            juce::FileBrowserComponent::canSelectFiles,
+        [this, fc](const juce::FileChooser &chooser) {
+          auto result = chooser.getResult();
+          // If the user didn't cancel (file is valid)
+          if (result != juce::File()) {
+            presetManager.saveToFile(result,
+                                     touchpadMixerManager.toValueTree());
+            if (logComponent)
+              logComponent->addEntry("Saved: " + result.getFileName());
+          }
+        });
   };
 
   addAndMakeVisible(loadButton);
@@ -212,8 +211,8 @@ MainComponent::MainComponent()
   mainTabs.addTab("Mappings", juce::Colour(0xff2a2a2a), mappingEditor.get(),
                   false);
   mainTabs.addTab("Zones", juce::Colour(0xff2a2a2a), zoneEditor.get(), false);
-  mainTabs.addTab("Touchpad Mixer", juce::Colour(0xff2a2a2a),
-                  touchpadMixerTab.get(), false);
+  mainTabs.addTab("Touchpad", juce::Colour(0xff2a2a2a),
+                  touchpadTab.get(), false);
   settingsViewport.setViewedComponent(settingsPanel.get(), false);
   settingsViewport.setScrollBarsShown(true, false); // vertical scrollbar only
   mainTabs.addTab("Settings", juce::Colour(0xff2a2a2a), &settingsViewport,
@@ -268,7 +267,8 @@ MainComponent::MainComponent()
         juce::AlertWindow::showMessageBoxAsync(
             juce::AlertWindow::WarningIcon, "Performance Mode",
             "No Trackpad mappings found in this preset.\n\n"
-            "Add Trackpad X or Y mappings, or a Touchpad Mixer strip, to use Performance Mode.");
+            "Add Trackpad X or Y mappings, or a Touchpad Mixer strip, to use "
+            "Performance Mode.");
         return;
       }
 
@@ -354,7 +354,8 @@ MainComponent::MainComponent()
   logContainer.onVisibilityChanged = [this](DetachableContainer *container,
                                             bool hidden) { resized(); };
 
-  // Enable tooltips app-wide (required for setTooltip() on any component to show)
+  // Enable tooltips app-wide (required for setTooltip() on any component to
+  // show)
   tooltipWindow = std::make_unique<juce::TooltipWindow>(this, 500);
   addChildComponent(tooltipWindow.get());
 }
@@ -571,7 +572,8 @@ void MainComponent::handleRawKeyEvent(uintptr_t deviceHandle, int keyCode,
         juce::AlertWindow::showMessageBoxAsync(
             juce::AlertWindow::WarningIcon, "Performance Mode",
             "No Trackpad mappings found in this preset.\n\n"
-            "Add Trackpad X or Y mappings, or a Touchpad Mixer strip, to use Performance Mode.");
+            "Add Trackpad X or Y mappings, or a Touchpad Mixer strip, to use "
+            "Performance Mode.");
         return;
       }
 
@@ -653,8 +655,9 @@ void MainComponent::handleAxisEvent(uintptr_t deviceHandle, int inputCode,
         "Dev: " +
         juce::String::toHexString((juce::int64)deviceHandle).toUpperCase();
     juce::String keyName = KeyNameUtilities::getKeyName(inputCode);
-    juce::String keyInfo =
-        "(" + juce::String::toHexString(inputCode).toUpperCase() + ") " + keyName;
+    juce::String keyInfo = "(" +
+                           juce::String::toHexString(inputCode).toUpperCase() +
+                           ") " + keyName;
     keyInfo = keyInfo.paddedRight(' ', 20);
 
     juce::String logLine =
@@ -666,7 +669,8 @@ void MainComponent::handleAxisEvent(uintptr_t deviceHandle, int inputCode,
       const auto &action = *actionOpt;
       if (action.type == ActionType::Expression &&
           action.adsrSettings.target == AdsrTarget::CC) {
-        logLine += " -> [MIDI] CC " + juce::String(action.adsrSettings.ccNumber) +
+        logLine += " -> [MIDI] CC " +
+                   juce::String(action.adsrSettings.ccNumber) +
                    " | ch: " + juce::String(action.channel);
       }
     }
@@ -925,8 +929,10 @@ void MainComponent::resized() {
         bottomArea.getHeight(), false, true);
   }
 
-  // Viewport does not resize its viewed component: set settings panel size so it paints and scrolls
-  if (settingsPanel && settingsViewport.getViewedComponent() == settingsPanel.get()) {
+  // Viewport does not resize its viewed component: set settings panel size so
+  // it paints and scrolls
+  if (settingsPanel &&
+      settingsViewport.getViewedComponent() == settingsPanel.get()) {
     int w = settingsViewport.getWidth();
     if (w > 0)
       settingsPanel->setSize(w, 520);
@@ -953,7 +959,8 @@ void MainComponent::timerCallback() {
     }
   }
 
-  // Main window visibility: when minimized, stop all visualization timers (zero CPU)
+  // Main window visibility: when minimized, stop all visualization timers (zero
+  // CPU)
   bool isMinimized = false;
   if (auto *top = getTopLevelComponent()) {
     if (auto *peer = top->getPeer())

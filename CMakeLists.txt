@@ -131,7 +131,7 @@ target_sources(MIDIQy PRIVATE
     Source/ZonePropertiesPanel.cpp
     Source/TouchpadMixerListPanel.cpp
     Source/TouchpadMixerEditorComponent.cpp
-    Source/TouchpadMixerTabComponent.cpp
+    Source/TouchpadTabComponent.cpp
     Source/GlobalPerformancePanel.cpp
     Source/LogComponent.cpp
     Source/DeviceSetupComponent.cpp

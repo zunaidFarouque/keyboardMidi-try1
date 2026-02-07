@@ -40,6 +40,13 @@ struct TouchpadMixerConfig {
   // Mute = send CC 0 for that fader until toggled again (no separate mute CC)
 };
 
+// Precomputed mode flags (avoids per-frame branching)
+static constexpr uint8_t kMixerModeUseFinger1 = 1 << 0;   // Quick vs Precision
+static constexpr uint8_t kMixerModeLock = 1 << 1;         // Lock vs Free
+static constexpr uint8_t kMixerModeRelative = 1 << 2;     // Absolute vs Relative
+static constexpr uint8_t kMixerModeMuteButtons = 1 << 3;  // Mute buttons enabled
+static constexpr float kMuteButtonRegionTop = 0.85f;      // Bottom 15% = mute
+
 // Compiled entry for runtime (no ValueTree in hot path).
 struct TouchpadMixerEntry {
   int layerId = 0;
@@ -51,6 +58,8 @@ struct TouchpadMixerEntry {
   float invInputRange = 1.0f;
   int outputMin = 0;
   int outputMax = 127;
+  uint8_t modeFlags = 0;        // kMixerMode* bits
+  float effectiveYScale = 1.0f; // 1.0 or 1/0.85 when muteButtonsEnabled
   TouchpadMixerQuickPrecision quickPrecision =
       TouchpadMixerQuickPrecision::Quick;
   TouchpadMixerAbsRel absRel = TouchpadMixerAbsRel::Absolute;

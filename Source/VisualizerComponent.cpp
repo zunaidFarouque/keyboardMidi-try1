@@ -836,16 +836,14 @@ void VisualizerComponent::paint(juce::Graphics &g) {
         if (stripIdx < ctx->touchpadMixerStrips.size()) {
           const auto &strip = ctx->touchpadMixerStrips[stripIdx];
           if (strip.layerId == currentVisualizedLayer && strip.numFaders > 0) {
-            std::vector<int> displayValues =
-                inputProcessor->getTouchpadMixerStripDisplayValues(
-                    dev, static_cast<int>(stripIdx), strip.numFaders);
-            std::vector<bool> muted =
-                inputProcessor->getTouchpadMixerStripMuteState(
-                    dev, static_cast<int>(stripIdx), strip.numFaders);
+            auto state = inputProcessor->getTouchpadMixerStripState(
+                dev, static_cast<int>(stripIdx), strip.numFaders);
+            const auto &displayValues = state.displayValues;
+            const auto &muted = state.muted;
             const int N = strip.numFaders;
             const float fw = touchpadRect.getWidth() / static_cast<float>(N);
             const float h = touchpadRect.getHeight();
-            const float muteRegionH = strip.muteButtonsEnabled ? (h * 0.15f) : 0.0f;
+            const float muteRegionH = (strip.modeFlags & kMixerModeMuteButtons) ? (h * 0.15f) : 0.0f;
             const float faderH = h - muteRegionH;
             const float faderTop = touchpadRect.getY();
             const float faderBottom = faderTop + faderH;

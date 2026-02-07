@@ -2,6 +2,7 @@
 #include "ChordUtilities.h"
 #include "GridCompiler.h"
 #include "MappingTypes.h"
+#include "TouchpadMixerTypes.h"
 #include "MidiEngine.h"
 #include "PitchPadUtilities.h"
 #include "ScaleLibrary.h"
@@ -133,11 +134,14 @@ void InputProcessor::rebuildGrid() {
   }
   touchpadNoteOnSent.clear();
   touchpadPrevState.clear();
-  touchpadMixerLockedFader.clear();
-  touchpadMixerRelativeValue.clear();
-  touchpadMixerMuteState.clear();
-  lastTouchpadMixerCCValues.clear();
-  touchpadMixerValueBeforeMute.clear();
+  {
+    juce::ScopedWriteLock wl(mixerStateLock);
+    touchpadMixerLockedFader.clear();
+    touchpadMixerRelativeValue.clear();
+    touchpadMixerMuteState.clear();
+    lastTouchpadMixerCCValues.clear();
+    touchpadMixerValueBeforeMute.clear();
+  }
   // Phase 53.7: Layer state under stateLock only
   {
     juce::ScopedLock sl(stateLock);
@@ -1082,7 +1086,7 @@ InputProcessor::getPitchPadRelativeAnchorNormX(uintptr_t deviceHandle,
 std::vector<int> InputProcessor::getTouchpadMixerStripCCValues(
     uintptr_t deviceHandle, int stripIndex, int numFaders) const {
   std::vector<int> out(static_cast<size_t>(juce::jmax(0, numFaders)), 0);
-  juce::ScopedReadLock rl(mapLock);
+  juce::ScopedReadLock rl(mixerStateLock);
   for (int i = 0; i < numFaders; ++i) {
     auto key = std::make_tuple(deviceHandle, stripIndex, i);
     auto it = lastTouchpadMixerCCValues.find(key);
@@ -1095,7 +1099,7 @@ std::vector<int> InputProcessor::getTouchpadMixerStripCCValues(
 std::vector<bool> InputProcessor::getTouchpadMixerStripMuteState(
     uintptr_t deviceHandle, int stripIndex, int numFaders) const {
   std::vector<bool> out(static_cast<size_t>(juce::jmax(0, numFaders)), false);
-  juce::ScopedReadLock rl(mapLock);
+  juce::ScopedReadLock rl(mixerStateLock);
   for (int i = 0; i < numFaders; ++i) {
     auto key = std::make_tuple(deviceHandle, stripIndex, i);
     auto it = touchpadMixerMuteState.find(key);
@@ -1107,8 +1111,15 @@ std::vector<bool> InputProcessor::getTouchpadMixerStripMuteState(
 
 std::vector<int> InputProcessor::getTouchpadMixerStripDisplayValues(
     uintptr_t deviceHandle, int stripIndex, int numFaders) const {
-  std::vector<int> out(static_cast<size_t>(juce::jmax(0, numFaders)), 0);
-  juce::ScopedReadLock rl(mapLock);
+  return getTouchpadMixerStripState(deviceHandle, stripIndex, numFaders).displayValues;
+}
+
+InputProcessor::TouchpadMixerStripState InputProcessor::getTouchpadMixerStripState(
+    uintptr_t deviceHandle, int stripIndex, int numFaders) const {
+  TouchpadMixerStripState out;
+  out.displayValues.resize(static_cast<size_t>(juce::jmax(0, numFaders)), 0);
+  out.muted.resize(static_cast<size_t>(juce::jmax(0, numFaders)), false);
+  juce::ScopedReadLock rl(mixerStateLock);
   for (int i = 0; i < numFaders; ++i) {
     auto key = std::make_tuple(deviceHandle, stripIndex, i);
     bool isMuted = false;
@@ -1117,14 +1128,15 @@ std::vector<int> InputProcessor::getTouchpadMixerStripDisplayValues(
       if (itMute != touchpadMixerMuteState.end())
         isMuted = itMute->second;
     }
+    out.muted[(size_t)i] = isMuted;
     if (isMuted) {
       auto itPre = touchpadMixerValueBeforeMute.find(key);
       if (itPre != touchpadMixerValueBeforeMute.end())
-        out[(size_t)i] = itPre->second;
+        out.displayValues[(size_t)i] = itPre->second;
     } else {
       auto itLast = lastTouchpadMixerCCValues.find(key);
       if (itLast != lastTouchpadMixerCCValues.end())
-        out[(size_t)i] = itLast->second;
+        out.displayValues[(size_t)i] = itLast->second;
     }
   }
   return out;
@@ -1511,8 +1523,11 @@ void InputProcessor::processTouchpadContacts(
                                         (layerMomentaryCounts[(size_t)i] > 0);
   }
 
-  juce::ScopedReadLock rl(mapLock);
-  auto ctx = activeContext;
+  std::shared_ptr<const CompiledMapContext> ctx;
+  {
+    juce::ScopedReadLock rl(mapLock);
+    ctx = activeContext;
+  }
   if (!ctx)
     return;
 
@@ -1872,10 +1887,10 @@ void InputProcessor::processTouchpadContacts(
   }
   }
 
-  // Touchpad mixer strips (CC faders)
+  // Touchpad mixer strips (CC faders) - mixerStateLock only (reduces mapLock contention)
   bool touchpadMixerStateChanged = false;
   if (!ctx->touchpadMixerStrips.empty()) {
-    const float kMuteButtonRegionTop = 0.85f; // Bottom 15% of Y = mute button
+    juce::ScopedWriteLock wl(mixerStateLock);
     for (size_t stripIdx = 0; stripIdx < ctx->touchpadMixerStrips.size();
          ++stripIdx) {
       const auto &strip = ctx->touchpadMixerStrips[stripIdx];
@@ -1886,10 +1901,7 @@ void InputProcessor::processTouchpadContacts(
         continue;
 
       // First touch is primary (position); second touch is trigger/activator.
-      // Quick: one finger applies (finger1 position).
-      // Precision: finger1 defines fader and value; finger2 down activates (position of finger2 irrelevant).
-      bool useFinger1 = (strip.quickPrecision ==
-                         TouchpadMixerQuickPrecision::Quick);
+      bool useFinger1 = (strip.modeFlags & kMixerModeUseFinger1) != 0;
       if (!useFinger1 && !tip2)
         continue; // Precision: need second finger down to apply
       float applierX = x1;
@@ -1914,7 +1926,7 @@ void InputProcessor::processTouchpadContacts(
         faderIndex = N - 1;
 
       auto lockKey = std::make_tuple(deviceHandle, static_cast<int>(stripIdx));
-      if (strip.lockFree == TouchpadMixerLockFree::Lock) {
+      if ((strip.modeFlags & kMixerModeLock) != 0) {
         auto itLock = touchpadMixerLockedFader.find(lockKey);
         if (applierDownEdge) {
           touchpadMixerLockedFader[lockKey] = faderIndex;
@@ -1924,7 +1936,7 @@ void InputProcessor::processTouchpadContacts(
       }
 
       // Mute: first touch in mute region defines column; second touch (anywhere) triggers toggle
-      if (strip.muteButtonsEnabled && finger2Down && tip1 &&
+      if ((strip.modeFlags & kMixerModeMuteButtons) != 0 && finger2Down && tip1 &&
           y1 >= kMuteButtonRegionTop) {
         float sx = std::clamp(x1, 0.0f, 1.0f - 1e-6f);
         int col = static_cast<int>(sx * static_cast<float>(N));
@@ -1944,8 +1956,8 @@ void InputProcessor::processTouchpadContacts(
         voiceManager.sendCC(strip.midiChannel, ccNum, muted ? 0 : 64);
       }
 
-      // Fader area = Y [0, 0.85); mute area = Y [0.85, 1]. Finger in mute zone must not drive fader.
-      if (applierY >= kMuteButtonRegionTop)
+      // Fader area: finger in mute zone must not drive fader.
+      if ((strip.modeFlags & kMixerModeMuteButtons) != 0 && applierY >= kMuteButtonRegionTop)
         continue;
 
       auto muteKey = std::make_tuple(deviceHandle, static_cast<int>(stripIdx), faderIndex);
@@ -1958,10 +1970,7 @@ void InputProcessor::processTouchpadContacts(
       if (isMuted)
         continue;
 
-      // With mute button: fader area is Y [0, 0.85], so 0.85 is fader zero. Without: full [0, 1], 1.0 is zero.
-      float effectiveY = strip.muteButtonsEnabled
-                             ? (applierY / kMuteButtonRegionTop)  // [0, 0.85] -> [0, 1]
-                             : applierY;
+      float effectiveY = applierY * strip.effectiveYScale;
 
       // Input Y min/max: map touchpad Y from [inputMin, inputMax] to normalized 0..1 (then inverted).
       float effectiveYClamped = juce::jlimit(strip.inputMin, strip.inputMax, effectiveY);
@@ -1973,7 +1982,7 @@ void InputProcessor::processTouchpadContacts(
       const float outputRange =
           static_cast<float>(strip.outputMax - strip.outputMin);
       int ccVal;
-      if (strip.absRel == TouchpadMixerAbsRel::Absolute) {
+      if ((strip.modeFlags & kMixerModeRelative) == 0) {
         ccVal = juce::jlimit(
             strip.outputMin, strip.outputMax,
             static_cast<int>(std::round(
@@ -1991,9 +2000,7 @@ void InputProcessor::processTouchpadContacts(
           else
             acc = static_cast<float>(strip.outputMin + strip.outputMax) * 0.5f;
         } else {
-          float prevEffectiveY = strip.muteButtonsEnabled
-                                    ? juce::jmin(1.0f, prev.y1 / kMuteButtonRegionTop)
-                                    : prev.y1;
+          float prevEffectiveY = juce::jmin(1.0f, prev.y1 * strip.effectiveYScale);
           float prevClamped = juce::jlimit(strip.inputMin, strip.inputMax, prevEffectiveY);
           float deltaY = effectiveYClamped - prevClamped; // finger down => deltaY > 0 => fader down
           acc -= deltaY * strip.invInputRange * outputRange;
@@ -2012,8 +2019,14 @@ void InputProcessor::processTouchpadContacts(
       lastTouchpadMixerCCValues[lastKey] = ccVal;
       touchpadMixerStateChanged = true;
     }
-    if (touchpadMixerStateChanged)
-      sendChangeMessage();
+    if (touchpadMixerStateChanged) {
+      int64_t now = juce::Time::getMillisecondCounter();
+      int64_t last = lastMixerChangeNotifyMs.load(std::memory_order_relaxed);
+      if (now - last >= 16) { // ~60 Hz throttle
+        lastMixerChangeNotifyMs.store(now, std::memory_order_relaxed);
+        sendChangeMessage();
+      }
+    }
   }
 
   // Release touchpad Expression envelopes when finger is no longer active

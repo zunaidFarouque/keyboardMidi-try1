@@ -10,13 +10,30 @@
 #include "VoiceManager.h"
 #include "ZoneManager.h"
 #include <JuceHeader.h>
+#include <atomic>
 #include <map>
 #include <optional>
 #include <set>
+#include <tuple>
 #include <unordered_map>
 #include <vector>
 
 class ScaleLibrary;
+
+// Custom hash for touchpad mixer tuple keys (O(1) unordered_map lookups)
+struct Tuple2Hash {
+  size_t operator()(const std::tuple<uintptr_t, int> &t) const {
+    return std::hash<uintptr_t>{}(std::get<0>(t)) ^
+           (static_cast<size_t>(std::get<1>(t)) << 16);
+  }
+};
+struct Tuple3Hash {
+  size_t operator()(const std::tuple<uintptr_t, int, int> &t) const {
+    return std::hash<uintptr_t>{}(std::get<0>(t)) ^
+           (static_cast<size_t>(std::get<1>(t)) << 16) ^
+           (static_cast<size_t>(std::get<2>(t)) << 24);
+  }
+};
 class Zone;
 
 // Phase 40.1: ordering for std::set<InputID>
@@ -110,6 +127,15 @@ public:
                                                       int stripIndex,
                                                       int numFaders) const;
 
+  // Combined getter: displayValues + muted in one lock (for visualizer).
+  struct TouchpadMixerStripState {
+    std::vector<int> displayValues;
+    std::vector<bool> muted;
+  };
+  TouchpadMixerStripState getTouchpadMixerStripState(uintptr_t deviceHandle,
+                                                    int stripIndex,
+                                                    int numFaders) const;
+
   // True if any manual mapping exists for this keyCode (for conflict highlight
   // in visualizer)
   bool hasManualMappingForKey(int keyCode);
@@ -144,6 +170,7 @@ private:
   // Thread Safety
   juce::ReadWriteLock mapLock;
   juce::ReadWriteLock bufferLock;
+  juce::ReadWriteLock mixerStateLock; // Touchpad mixer state only (reduces contention)
   mutable juce::CriticalSection stateLock; // Phase 53.7: layer state only
 
   // Phase 50.5 / 52.1: Grid-based compiled context (audio + visuals). Protected
@@ -218,18 +245,20 @@ private:
   std::set<std::tuple<uintptr_t, int, int>> touchpadExpressionActive;
 
   // Touchpad mixer strips: lock mode (device, stripIndex) -> locked fader index
-  // (-1 = none)
-  std::map<std::tuple<uintptr_t, int>, int> touchpadMixerLockedFader;
-  // Relative mode: (device, stripIndex, faderIndex) -> accumulated value
-  // [0,127]
-  std::map<std::tuple<uintptr_t, int, int>, float> touchpadMixerRelativeValue;
-  // Mute: (device, stripIndex, faderIndex) -> muted
-  std::map<std::tuple<uintptr_t, int, int>, bool> touchpadMixerMuteState;
-  // Last sent CC for dedupe: (device, stripIndex, faderIndex) -> value
-  std::map<std::tuple<uintptr_t, int, int>, int> lastTouchpadMixerCCValues;
-  // Value to show when muted (stored when muting): (device, stripIndex,
-  // faderIndex) -> value
-  std::map<std::tuple<uintptr_t, int, int>, int> touchpadMixerValueBeforeMute;
+  // (-1 = none). unordered_map for O(1) lookups.
+  std::unordered_map<std::tuple<uintptr_t, int>, int, Tuple2Hash>
+      touchpadMixerLockedFader;
+  std::unordered_map<std::tuple<uintptr_t, int, int>, float, Tuple3Hash>
+      touchpadMixerRelativeValue;
+  std::unordered_map<std::tuple<uintptr_t, int, int>, bool, Tuple3Hash>
+      touchpadMixerMuteState;
+  std::unordered_map<std::tuple<uintptr_t, int, int>, int, Tuple3Hash>
+      lastTouchpadMixerCCValues;
+  std::unordered_map<std::tuple<uintptr_t, int, int>, int, Tuple3Hash>
+      touchpadMixerValueBeforeMute;
+
+  // Throttle sendChangeMessage for mixer (~60 Hz)
+  std::atomic<int64_t> lastMixerChangeNotifyMs{0};
 
   // ValueTree Callbacks
   void valueTreeChildAdded(juce::ValueTree &parentTree,

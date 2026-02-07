@@ -1,6 +1,6 @@
-#include "TouchpadMixerTabComponent.h"
+#include "TouchpadTabComponent.h"
 
-TouchpadMixerTabComponent::TouchpadMixerTabComponent(TouchpadMixerManager *mgr)
+TouchpadTabComponent::TouchpadTabComponent(TouchpadMixerManager *mgr)
     : manager(mgr),
       listPanel(mgr),
       editorPanel(mgr),
@@ -25,9 +25,9 @@ TouchpadMixerTabComponent::TouchpadMixerTabComponent(TouchpadMixerManager *mgr)
   editorPanel.setStrip(-1, nullptr);
 }
 
-TouchpadMixerTabComponent::~TouchpadMixerTabComponent() {}
+TouchpadTabComponent::~TouchpadTabComponent() {}
 
-void TouchpadMixerTabComponent::refreshVisualizerSelection() {
+void TouchpadTabComponent::refreshVisualizerSelection() {
   if (!onSelectionChangedForVisualizer || !manager)
     return;
   int idx = listPanel.getSelectedStripIndex();
@@ -42,11 +42,11 @@ void TouchpadMixerTabComponent::refreshVisualizerSelection() {
     onSelectionChangedForVisualizer(-1, 0);
 }
 
-void TouchpadMixerTabComponent::paint(juce::Graphics &g) {
+void TouchpadTabComponent::paint(juce::Graphics &g) {
   g.fillAll(juce::Colour(0xff222222));
 }
 
-void TouchpadMixerTabComponent::resized() {
+void TouchpadTabComponent::resized() {
   auto area = getLocalBounds().reduced(4);
   juce::Component *comps[] = {&listPanel, &resizerBar, &editorViewport};
   layout.layOutComponents(comps, 3, area.getX(), area.getY(), area.getWidth(),

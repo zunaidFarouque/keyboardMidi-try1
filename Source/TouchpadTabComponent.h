@@ -4,10 +4,10 @@
 #include <JuceHeader.h>
 #include <functional>
 
-class TouchpadMixerTabComponent : public juce::Component {
+class TouchpadTabComponent : public juce::Component {
 public:
-  explicit TouchpadMixerTabComponent(TouchpadMixerManager *mgr);
-  ~TouchpadMixerTabComponent() override;
+  explicit TouchpadTabComponent(TouchpadMixerManager *mgr);
+  ~TouchpadTabComponent() override;
 
   /// Notified when strip selection changes: (stripIndex, layerId). (-1, 0) when none.
   std::function<void(int stripIndex, int layerId)> onSelectionChangedForVisualizer;
@@ -26,5 +26,5 @@ private:
   juce::StretchableLayoutManager layout;
   juce::StretchableLayoutResizerBar resizerBar;
 
-  JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(TouchpadMixerTabComponent)
+  JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(TouchpadTabComponent)
 };
