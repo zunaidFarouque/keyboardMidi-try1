@@ -71,9 +71,10 @@ public:
   // Check if preset has pointer mappings (for smart cursor locking)
   bool hasPointerMappings();
 
-  // True if compiled context has any touchpad mixer strips (so MainComponent
-  // can pass touchpad contacts even when device is not in "Touchpad" alias).
-  bool hasTouchpadMixerStrips() const;
+  // True if compiled context has any touchpad layouts (mixer or drum pad; so
+  // MainComponent can pass touchpad contacts even when device is not in
+  // "Touchpad" alias).
+  bool hasTouchpadLayouts() const;
 
   // Phase 41.3: Return copy by value to avoid dangling pointer after unlock
   std::optional<MidiAction> getMappingForInput(InputID input);

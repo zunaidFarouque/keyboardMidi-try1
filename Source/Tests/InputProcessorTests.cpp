@@ -2045,20 +2045,20 @@ TEST_F(InputProcessorTest, TouchpadMixerFingerDownSendsCC) {
   EXPECT_LE(mockEng.ccEvents[0].value, 70);
 }
 
-TEST_F(InputProcessorTest, HasTouchpadMixerStripsReturnsTrueWhenStripsExist) {
+TEST_F(InputProcessorTest, HasTouchpadLayoutsReturnsTrueWhenLayoutsExist) {
   TouchpadMixerConfig cfg;
   cfg.type = TouchpadType::Mixer;
   touchpadMixerMgr.addStrip(cfg);
 
   proc.forceRebuildMappings();
-  EXPECT_TRUE(proc.hasTouchpadMixerStrips());
+  EXPECT_TRUE(proc.hasTouchpadLayouts());
 
   touchpadMixerMgr.removeStrip(0);
   proc.forceRebuildMappings();
-  EXPECT_FALSE(proc.hasTouchpadMixerStrips());
+  EXPECT_FALSE(proc.hasTouchpadLayouts());
 }
 
-TEST_F(InputProcessorTest, HasTouchpadMixerStripsReturnsTrueWhenDrumPadOnly) {
+TEST_F(InputProcessorTest, HasTouchpadLayoutsReturnsTrueWhenDrumPadOnly) {
   TouchpadMixerConfig cfg;
   cfg.type = TouchpadType::DrumPad;
   cfg.drumPadRows = 2;
@@ -2066,7 +2066,7 @@ TEST_F(InputProcessorTest, HasTouchpadMixerStripsReturnsTrueWhenDrumPadOnly) {
   touchpadMixerMgr.addStrip(cfg);
 
   proc.forceRebuildMappings();
-  EXPECT_TRUE(proc.hasTouchpadMixerStrips());
+  EXPECT_TRUE(proc.hasTouchpadLayouts());
 }
 
 // --- Touchpad drum pad: finger down sends Note On ---

@@ -25,20 +25,30 @@ void TouchpadVisualizerPanel::setVisualizedLayer(int layerId) {
     currentVisualizedLayer = layerId;
 }
 
-void TouchpadVisualizerPanel::setSelectedStrip(int stripIndex, int layerId) {
-  selectedStripIndex_ = stripIndex;
-  selectedStripLayerId_ = stripIndex >= 0 ? layerId : 0;
+void TouchpadVisualizerPanel::setSelectedLayout(int layoutIndex, int layerId) {
+  selectedLayoutIndex_ = layoutIndex;
+  selectedLayoutLayerId_ = layoutIndex >= 0 ? layerId : 0;
 }
 
 void TouchpadVisualizerPanel::setShowContactCoordinates(bool show) {
   showContactCoordinates_ = show;
 }
 
-void TouchpadVisualizerPanel::visibilityChanged() {
+void TouchpadVisualizerPanel::restartTimerWithInterval(int intervalMs) {
+  stopTimer();
   if (isVisible())
-    startTimer(kRefreshIntervalMs);
-  else
+    startTimer(intervalMs);
+}
+
+void TouchpadVisualizerPanel::visibilityChanged() {
+  if (isVisible()) {
+    int interval = settingsManager
+                       ? settingsManager->getWindowRefreshIntervalMs()
+                       : kDefaultRefreshIntervalMs;
+    startTimer(interval);
+  } else {
     stopTimer();
+  }
 }
 
 void TouchpadVisualizerPanel::timerCallback() { repaint(); }
@@ -246,14 +256,14 @@ void TouchpadVisualizerPanel::paint(juce::Graphics &g) {
     g.drawEllipse(px - 5.0f, py - 5.0f, 10.0f, 10.0f, 1.0f);
   }
 
-  // When no strip is explicitly selected (-1), use first strip for current layer
-  // so the touchpad shows the active layout when following the active layer.
-  int displayStripIndex = selectedStripIndex_;
-  if (displayStripIndex < 0 && inputProcessor) {
+  // When no layout is explicitly selected (-1), use first layout for current
+  // layer so the touchpad shows the active layout when following the active layer.
+  int displayLayoutIndex = selectedLayoutIndex_;
+  if (displayLayoutIndex < 0 && inputProcessor) {
     auto ctx = inputProcessor->getContext();
     if (ctx) {
-      for (size_t i = 0; i < ctx->touchpadStripOrder.size(); ++i) {
-        const auto &ref = ctx->touchpadStripOrder[i];
+      for (size_t i = 0; i < ctx->touchpadLayoutOrder.size(); ++i) {
+        const auto &ref = ctx->touchpadLayoutOrder[i];
         int stripLayer = -1;
         if (ref.type == TouchpadType::Mixer &&
             ref.index < ctx->touchpadMixerStrips.size())
@@ -262,19 +272,19 @@ void TouchpadVisualizerPanel::paint(juce::Graphics &g) {
                  ref.index < ctx->touchpadDrumPadStrips.size())
           stripLayer = ctx->touchpadDrumPadStrips[ref.index].layerId;
         if (stripLayer == currentVisualizedLayer) {
-          displayStripIndex = static_cast<int>(i);
+          displayLayoutIndex = static_cast<int>(i);
           break;
         }
       }
     }
   }
 
-  if (inputProcessor && displayStripIndex >= 0) {
+  if (inputProcessor && displayLayoutIndex >= 0) {
     auto ctx = inputProcessor->getContext();
     if (ctx) {
-      size_t listIdx = static_cast<size_t>(displayStripIndex);
-      if (listIdx < ctx->touchpadStripOrder.size()) {
-        const auto &ref = ctx->touchpadStripOrder[listIdx];
+      size_t listIdx = static_cast<size_t>(displayLayoutIndex);
+      if (listIdx < ctx->touchpadLayoutOrder.size()) {
+        const auto &ref = ctx->touchpadLayoutOrder[listIdx];
         if (ref.type == TouchpadType::Mixer &&
             ref.index < ctx->touchpadMixerStrips.size()) {
           const auto &strip = ctx->touchpadMixerStrips[ref.index];

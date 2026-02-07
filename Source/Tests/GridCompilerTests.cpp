@@ -1516,9 +1516,9 @@ TEST_F(GridCompilerTest, TouchpadDrumPadAndMixerBothCompiled) {
 
   EXPECT_EQ(context->touchpadMixerStrips.size(), 1u);
   EXPECT_EQ(context->touchpadDrumPadStrips.size(), 1u);
-  EXPECT_EQ(context->touchpadStripOrder.size(), 2u);
-  EXPECT_EQ(context->touchpadStripOrder[0].type, TouchpadType::Mixer);
-  EXPECT_EQ(context->touchpadStripOrder[1].type, TouchpadType::DrumPad);
+  EXPECT_EQ(context->touchpadLayoutOrder.size(), 2u);
+  EXPECT_EQ(context->touchpadLayoutOrder[0].type, TouchpadType::Mixer);
+  EXPECT_EQ(context->touchpadLayoutOrder[1].type, TouchpadType::DrumPad);
 }
 
 TEST_F(GridCompilerTest, TouchpadDrumPadToValueTreeRestoreRoundTrips) {

@@ -86,17 +86,24 @@ void MiniStatusWindow::setVisualizedLayer(int layerId) {
   }
 }
 
-void MiniStatusWindow::setSelectedTouchpadStrip(int stripIndex, int layerId) {
+void MiniStatusWindow::setSelectedTouchpadLayout(int layoutIndex, int layerId) {
   if (touchpadPanelHolder) {
     if (auto *panel = dynamic_cast<TouchpadVisualizerPanel *>(
             touchpadPanelHolder.get())) {
-      panel->setSelectedStrip(stripIndex, layerId);
+      panel->setSelectedLayout(layoutIndex, layerId);
     }
   }
 }
 
 void MiniStatusWindow::changeListenerCallback(juce::ChangeBroadcaster *source) {
   if (source == &settingsManager) {
+    if (touchpadPanelHolder) {
+      if (auto *panel = dynamic_cast<TouchpadVisualizerPanel *>(
+              touchpadPanelHolder.get())) {
+        panel->restartTimerWithInterval(
+            settingsManager.getWindowRefreshIntervalMs());
+      }
+    }
     refreshContent();
   }
 }

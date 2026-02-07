@@ -11,6 +11,7 @@
 #include "SettingsManager.h"
 #include "TouchpadMixerTypes.h"
 #include "VoiceManager.h"
+#include "juce_graphics/juce_graphics.h"
 #include <JuceHeader.h>
 #include <algorithm>
 #include <optional>
@@ -144,12 +145,13 @@ void VisualizerComponent::setVisualizedLayer(int layerId) {
   needsRepaint = true;
 }
 
-void VisualizerComponent::setSelectedTouchpadMixerStrip(int stripIndex,
-                                                        int layerId) {
-  selectedTouchpadMixerStripIndex_ = stripIndex;
-  selectedTouchpadMixerLayerId_ = stripIndex >= 0 ? layerId : 0;
+void VisualizerComponent::setSelectedTouchpadLayout(int layoutIndex,
+                                                    int layerId) {
+  selectedTouchpadLayoutIndex_ = layoutIndex;
+  selectedTouchpadLayoutLayerId_ = layoutIndex >= 0 ? layerId : 0;
   if (touchpadPanel_)
-    touchpadPanel_->setSelectedStrip(stripIndex, stripIndex >= 0 ? layerId : 0);
+    touchpadPanel_->setSelectedLayout(layoutIndex,
+                                      layoutIndex >= 0 ? layerId : 0);
   cacheValid = false;
   needsRepaint = true;
 }
@@ -614,19 +616,20 @@ void VisualizerComponent::paint(juce::Graphics &g) {
   // Draw overlay if MIDI mode is disabled
   if (midiModeDisabled) {
     // Semi-transparent black overlay
-    g.setColour(juce::Colours::black.withAlpha(0.7f));
+    g.setColour(juce::Colours::black.withAlpha(0.2f));
     g.fillAll();
 
     // Draw text message
-    g.setColour(juce::Colours::white);
-    g.setFont(24.0f);
+    g.setColour(juce::Colours::burlywood);
+    g.setFont(20.0f);
     juce::String toggleKeyName =
         settingsManager
             ? RawInputManager::getKeyName(settingsManager->getToggleKey())
             : "F12";
     juce::String message =
         "MIDI MODE DISABLED\n(Press " + toggleKeyName + " to enable)";
-    g.drawText(message, getLocalBounds(), juce::Justification::centred, false);
+    g.drawText(message, getLocalBounds(), juce::Justification::bottomLeft,
+               false);
   }
 }
 
@@ -766,8 +769,15 @@ void VisualizerComponent::handleTouchpadContacts(
     juce::ScopedLock lock(contactsLock);
     lastTouchpadContacts = contacts;
   }
-  if (touchpadPanel_)
-    touchpadPanel_->setContacts(contacts, deviceHandle);
+  if (touchpadPanel_) {
+    int throttleMs = settingsManager ? settingsManager->getWindowRefreshIntervalMs()
+                                    : 34;
+    int64_t now = juce::Time::getMillisecondCounter();
+    if (now - lastTouchpadPanelUpdateMs >= throttleMs) {
+      lastTouchpadPanelUpdateMs = now;
+      touchpadPanel_->setContacts(contacts, deviceHandle);
+    }
+  }
   needsRepaint.store(true, std::memory_order_release);
 }
 
@@ -873,6 +883,8 @@ void VisualizerComponent::onViewSelectorChanged() {
 void VisualizerComponent::restartTimerWithInterval(int intervalMs) {
   stopTimer();
   startTimer(intervalMs);
+  if (touchpadPanel_)
+    touchpadPanel_->restartTimerWithInterval(intervalMs);
 }
 
 void VisualizerComponent::setTouchpadTabActive(bool active) {
@@ -902,8 +914,8 @@ void VisualizerComponent::timerCallback() {
       changed = true;
       needsRepaint.store(true, std::memory_order_release);
     }
-    if (selectedTouchpadMixerStripIndex_ >= 0) {
-      setSelectedTouchpadMixerStrip(-1, 0);
+    if (selectedTouchpadLayoutIndex_ >= 0) {
+      setSelectedTouchpadLayout(-1, 0);
       changed = true;
       needsRepaint.store(true, std::memory_order_release);
     }

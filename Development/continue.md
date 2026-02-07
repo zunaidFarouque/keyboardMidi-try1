@@ -5,6 +5,3 @@ Now, we need to extend the types in touchpad entries.
 
 
 ===
-
-
-"selectedTouchpadMixerStripIndex_"  this shouldnt be. it should be touchpad layout index. because these are layouts.

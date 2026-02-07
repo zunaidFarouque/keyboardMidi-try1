@@ -9,9 +9,9 @@ public:
   explicit TouchpadTabComponent(TouchpadMixerManager *mgr);
   ~TouchpadTabComponent() override;
 
-  /// Notified when strip selection changes: (stripIndex, layerId). (-1, 0) when
-  /// none.
-  std::function<void(int stripIndex, int layerId)>
+  /// Notified when layout selection changes: (layoutIndex, layerId). (-1, 0)
+  /// when none.
+  std::function<void(int layoutIndex, int layerId)>
       onSelectionChangedForVisualizer;
 
   /// Sync visualizer with current list selection (call when tab is shown or

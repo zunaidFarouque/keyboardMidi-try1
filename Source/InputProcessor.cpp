@@ -1509,7 +1509,7 @@ bool InputProcessor::hasPointerMappings() {
   return false;
 }
 
-bool InputProcessor::hasTouchpadMixerStrips() const {
+bool InputProcessor::hasTouchpadLayouts() const {
   juce::ScopedReadLock rl(mapLock);
   return activeContext &&
          (!activeContext->touchpadMixerStrips.empty() ||

@@ -931,7 +931,7 @@ std::shared_ptr<CompiledMapContext> GridCompiler::compile(
       entry.effectiveYScale =
           cfg.muteButtonsEnabled ? (1.0f / kMuteButtonRegionTop) : 1.0f;
       context->touchpadMixerStrips.push_back(entry);
-      context->touchpadStripOrder.push_back(
+      context->touchpadLayoutOrder.push_back(
           {TouchpadType::Mixer, context->touchpadMixerStrips.size() - 1});
     } else if (cfg.type == TouchpadType::DrumPad) {
       TouchpadDrumPadEntry dpEntry;
@@ -958,7 +958,7 @@ std::shared_ptr<CompiledMapContext> GridCompiler::compile(
       dpEntry.invActiveHeight =
           (activeH > 1e-6f) ? (1.0f / activeH) : 1.0f;
       context->touchpadDrumPadStrips.push_back(dpEntry);
-      context->touchpadStripOrder.push_back(
+      context->touchpadLayoutOrder.push_back(
           {TouchpadType::DrumPad, context->touchpadDrumPadStrips.size() - 1});
     }
   }

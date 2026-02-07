@@ -153,9 +153,8 @@ private:
   void rebuildTouchpadHandleCache();
 
   // Throttle + async: mini window touchpad updates run on message thread, never
-  // block MIDI/audio input path
+  // block MIDI/audio input path. Uses cap-30-FPS setting (30 or 60 fps).
   int64_t lastMiniWindowTouchpadUpdateMs = 0;
-  static constexpr int kMiniWindowTouchpadThrottleMs = 33; // ~30 Hz
 
   // ChangeListener implementation
   void changeListenerCallback(juce::ChangeBroadcaster *source) override;

@@ -41,16 +41,16 @@ MainComponent::MainComponent()
       &inputProcessor.getZoneManager(), &deviceManager, rawInputManager.get(),
       &scaleLibrary);
   touchpadTab = std::make_unique<TouchpadTabComponent>(&touchpadMixerManager);
-  touchpadTab->onSelectionChangedForVisualizer = [this](int stripIndex,
+  touchpadTab->onSelectionChangedForVisualizer = [this](int layoutIndex,
                                                         int layerId) {
     if (visualizer) {
-      visualizer->setSelectedTouchpadMixerStrip(stripIndex, layerId);
-      if (stripIndex >= 0)
+      visualizer->setSelectedTouchpadLayout(layoutIndex, layerId);
+      if (layoutIndex >= 0)
         visualizer->setVisualizedLayer(layerId);
     }
     if (miniWindow && settingsManager.getShowTouchpadVisualizerInMiniWindow()) {
-      miniWindow->setSelectedTouchpadStrip(stripIndex, layerId);
-      if (stripIndex >= 0)
+      miniWindow->setSelectedTouchpadLayout(layoutIndex, layerId);
+      if (layoutIndex >= 0)
         miniWindow->setVisualizedLayer(layerId);
     }
   };
@@ -234,10 +234,10 @@ MainComponent::MainComponent()
   mainTabs.getTabbedButtonBar().addChangeListener(this);
   if (visualizer)
     visualizer->setTouchpadTabActive(false); // Default: Mappings tab
-  visualizer->onTouchpadViewChanged = [this](int layerId, int stripIndex) {
+  visualizer->onTouchpadViewChanged = [this](int layerId, int layoutIndex) {
     if (miniWindow && settingsManager.getShowTouchpadVisualizerInMiniWindow()) {
       miniWindow->setVisualizedLayer(layerId);
-      miniWindow->setSelectedTouchpadStrip(stripIndex, layerId);
+      miniWindow->setSelectedTouchpadLayout(layoutIndex, layerId);
     }
   };
 
@@ -563,10 +563,10 @@ void MainComponent::changeListenerCallback(juce::ChangeBroadcaster *source) {
     } else if (visualizer) {
       int activeLayer = inputProcessor.getHighestActiveLayerIndex();
       visualizer->setVisualizedLayer(activeLayer);
-      visualizer->setSelectedTouchpadMixerStrip(-1, 0);
+      visualizer->setSelectedTouchpadLayout(-1, 0);
       if (miniWindow && settingsManager.getShowTouchpadVisualizerInMiniWindow()) {
         miniWindow->setVisualizedLayer(activeLayer);
-        miniWindow->setSelectedTouchpadStrip(-1, activeLayer);
+        miniWindow->setSelectedTouchpadLayout(-1, activeLayer);
       }
     }
   } else if (source == &settingsManager) {
@@ -757,12 +757,13 @@ void MainComponent::handleTouchpadContacts(
   // Process when device is in "Touchpad" alias, or when we have touchpad
   // mixer strips (so MIDI is generated even without assigning Touchpad alias).
   if (cachedTouchpadHandles.count(deviceHandle) == 0 &&
-      !inputProcessor.hasTouchpadMixerStrips())
+      !inputProcessor.hasTouchpadLayouts())
     return;
   inputProcessor.processTouchpadContacts(deviceHandle, contacts);
   if (miniWindow && settingsManager.getShowTouchpadVisualizerInMiniWindow()) {
+    int throttleMs = settingsManager.getWindowRefreshIntervalMs();
     int64_t now = juce::Time::getMillisecondCounter();
-    if (now - lastMiniWindowTouchpadUpdateMs >= kMiniWindowTouchpadThrottleMs) {
+    if (now - lastMiniWindowTouchpadUpdateMs >= throttleMs) {
       lastMiniWindowTouchpadUpdateMs = now;
       auto contactsCopy = contacts;
       auto deviceHandleCopy = deviceHandle;

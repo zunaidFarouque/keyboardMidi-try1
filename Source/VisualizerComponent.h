@@ -40,9 +40,9 @@ public:
   // Phase 45.3: choose which layer the visualizer simulates for editing view
   void setVisualizedLayer(int layerId);
 
-  /// When stripIndex >= 0, touchpad mixer overlay is shown only for that strip
+  /// When layoutIndex >= 0, touchpad overlay is shown only for that layout
   /// and only when currentVisualizedLayer == layerId. Pass -1 to hide overlay.
-  void setSelectedTouchpadMixerStrip(int stripIndex, int layerId);
+  void setSelectedTouchpadLayout(int layoutIndex, int layerId);
 
   /// Returns black or white for legible text on the given key fill color.
   static juce::Colour getTextColorForKeyFill(juce::Colour keyFillColor);
@@ -55,7 +55,7 @@ public:
   /// When true, touchpad tab selection controls the view.
   void setTouchpadTabActive(bool active);
 
-  std::function<void(int layerId, int stripIndex)> onTouchpadViewChanged;
+  std::function<void(int layerId, int layoutIndex)> onTouchpadViewChanged;
 
   void paint(juce::Graphics &) override;
   void resized() override;
@@ -105,8 +105,8 @@ private:
   void updateGlobalPanelLayout(int w, int h);
 
   int currentVisualizedLayer = 0; // Phase 45.3: which layer we are inspecting
-  int selectedTouchpadMixerStripIndex_ = -1;
-  int selectedTouchpadMixerLayerId_ = 0;
+  int selectedTouchpadLayoutIndex_ = -1;
+  int selectedTouchpadLayoutLayerId_ = 0;
   std::unique_ptr<TouchpadVisualizerPanel> touchpadPanel_;
   std::set<int> activeKeys;
   mutable juce::CriticalSection keyStateLock;
@@ -116,6 +116,7 @@ private:
   std::vector<TouchpadContact> lastTouchpadContacts;
   mutable juce::CriticalSection contactsLock;
   std::atomic<uintptr_t> lastTouchpadDeviceHandle{0};
+  int64_t lastTouchpadPanelUpdateMs = 0; // throttle to cap-30-FPS setting
 
   // Phase 50.9: Async Dynamic View (mailbox-style atomics)
   std::atomic<uintptr_t> lastInputDeviceHandle{0}; // Written by Input Thread

@@ -20,7 +20,7 @@ public:
   void updateTouchpadContacts(const std::vector<TouchpadContact> &contacts,
                               uintptr_t deviceHandle);
   void setVisualizedLayer(int layerId);
-  void setSelectedTouchpadStrip(int stripIndex, int layerId);
+  void setSelectedTouchpadLayout(int layoutIndex, int layerId);
 
 private:
   void changeListenerCallback(juce::ChangeBroadcaster *source) override;
