@@ -15,6 +15,8 @@ SettingsManager::SettingsManager() {
   // layered.
   rootNode.setProperty("visualizerXOpacity", 0.45, nullptr);
   rootNode.setProperty("visualizerYOpacity", 0.45, nullptr);
+  rootNode.setProperty("showTouchpadVisualizerInMiniWindow", false, nullptr);
+  rootNode.setProperty("miniWindowPosition", "", nullptr);
   rootNode.setProperty("delayMidiEnabled", false, nullptr);
   rootNode.setProperty("delayMidiSeconds", 1, nullptr);
   rootNode.addListener(this);
@@ -142,6 +144,29 @@ float SettingsManager::getVisualizerYOpacity() const {
 void SettingsManager::setVisualizerYOpacity(float alpha) {
   double v = juce::jlimit(0.0f, 1.0f, alpha);
   rootNode.setProperty("visualizerYOpacity", v, nullptr);
+  sendChangeMessage();
+}
+
+bool SettingsManager::getShowTouchpadVisualizerInMiniWindow() const {
+  return rootNode.getProperty("showTouchpadVisualizerInMiniWindow", false);
+}
+
+void SettingsManager::setShowTouchpadVisualizerInMiniWindow(bool show) {
+  rootNode.setProperty("showTouchpadVisualizerInMiniWindow", show, nullptr);
+  sendChangeMessage();
+}
+
+juce::String SettingsManager::getMiniWindowPosition() const {
+  return rootNode.getProperty("miniWindowPosition", "").toString();
+}
+
+void SettingsManager::setMiniWindowPosition(const juce::String &state) {
+  rootNode.setProperty("miniWindowPosition", state, nullptr);
+  sendChangeMessage();
+}
+
+void SettingsManager::resetMiniWindowPosition() {
+  rootNode.setProperty("miniWindowPosition", "", nullptr);
   sendChangeMessage();
 }
 

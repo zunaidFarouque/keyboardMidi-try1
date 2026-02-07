@@ -48,9 +48,18 @@ MainComponent::MainComponent()
       if (stripIndex >= 0)
         visualizer->setVisualizedLayer(layerId);
     }
+    if (miniWindow && settingsManager.getShowTouchpadVisualizerInMiniWindow()) {
+      miniWindow->setSelectedTouchpadStrip(stripIndex, layerId);
+      if (stripIndex >= 0)
+        miniWindow->setVisualizedLayer(layerId);
+    }
   };
   settingsPanel = std::make_unique<SettingsPanel>(settingsManager, midiEngine,
                                                   *rawInputManager);
+  settingsPanel->onResetMiniWindowPosition = [this] {
+    if (miniWindow)
+      miniWindow->resetToDefaultPosition();
+  };
 
   visualizerContainer.setContent(*visualizer);
   logContainer.setContent(*logComponent);
@@ -59,10 +68,13 @@ MainComponent::MainComponent()
   mappingEditor->onLayerChanged = [this](int layerId) {
     if (visualizer)
       visualizer->setVisualizedLayer(layerId);
+    if (miniWindow && settingsManager.getShowTouchpadVisualizerInMiniWindow())
+      miniWindow->setVisualizedLayer(layerId);
   };
 
   // Mini Status Window (before init; no listener storm)
-  miniWindow = std::make_unique<MiniStatusWindow>(settingsManager);
+  miniWindow = std::make_unique<MiniStatusWindow>(settingsManager,
+                                                   &inputProcessor);
 
   // Listen to SettingsManager for MIDI mode changes
   settingsManager.addChangeListener(this);
@@ -689,6 +701,9 @@ void MainComponent::handleTouchpadContacts(
       !inputProcessor.hasTouchpadMixerStrips())
     return;
   inputProcessor.processTouchpadContacts(deviceHandle, contacts);
+  if (miniWindow && settingsManager.getShowTouchpadVisualizerInMiniWindow()) {
+    miniWindow->updateTouchpadContacts(contacts, deviceHandle);
+  }
 }
 
 void MainComponent::rebuildTouchpadHandleCache() {

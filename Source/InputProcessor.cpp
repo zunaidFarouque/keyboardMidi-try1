@@ -1484,6 +1484,13 @@ bool InputProcessor::hasPointerMappings() {
     }
   }
 
+  // Check for touchpad drum pad strips
+  for (const auto &strip : ctx->touchpadDrumPadStrips) {
+    if (activeLayersSnapshot[(size_t)strip.layerId]) {
+      return true;
+    }
+  }
+
   // Also check for legacy PointerX/PointerY mappings in grids
   for (int i = 8; i >= 0; --i) {
     if (!activeLayersSnapshot[(size_t)i])

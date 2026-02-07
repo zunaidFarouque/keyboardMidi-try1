@@ -5,6 +5,7 @@
 #include "GlobalPerformancePanel.h"
 #include "RawInputManager.h"
 #include "TouchpadTypes.h"
+#include "TouchpadVisualizerPanel.h"
 #include "ZoneManager.h"
 #include <JuceHeader.h>
 #include <atomic>
@@ -100,14 +101,14 @@ private:
   int currentVisualizedLayer = 0; // Phase 45.3: which layer we are inspecting
   int selectedTouchpadMixerStripIndex_ = -1;
   int selectedTouchpadMixerLayerId_ = 0;
+  std::unique_ptr<TouchpadVisualizerPanel> touchpadPanel_;
   std::set<int> activeKeys;
   mutable juce::CriticalSection keyStateLock;
 
-  // Touchpad contact display (written by handleTouchpadContacts, read in
-  // paint)
+  // Touchpad contact display (forwarded to touchpadPanel_; kept for backward
+  // compat during refactor, can be removed if panel owns all)
   std::vector<TouchpadContact> lastTouchpadContacts;
   mutable juce::CriticalSection contactsLock;
-  // Device handle of last touchpad contact source (for relative anchor lookup)
   std::atomic<uintptr_t> lastTouchpadDeviceHandle{0};
 
   // Phase 50.9: Async Dynamic View (mailbox-style atomics)

@@ -65,6 +65,25 @@ SettingsPanel::SettingsPanel(SettingsManager &settingsMgr, MidiEngine &midiEng,
     settingsManager.setVisualizerYOpacity(v);
   };
 
+  showTouchpadInMiniWindowToggle.setButtonText(
+      "Show touchpad visualizer in mini window");
+  showTouchpadInMiniWindowToggle.setToggleState(
+      settingsManager.getShowTouchpadVisualizerInMiniWindow(),
+      juce::dontSendNotification);
+  showTouchpadInMiniWindowToggle.onClick = [this] {
+    settingsManager.setShowTouchpadVisualizerInMiniWindow(
+        showTouchpadInMiniWindowToggle.getToggleState());
+  };
+  addAndMakeVisible(showTouchpadInMiniWindowToggle);
+
+  resetMiniWindowPositionButton.setButtonText("Reset mini window position");
+  resetMiniWindowPositionButton.onClick = [this] {
+    settingsManager.resetMiniWindowPosition();
+    if (onResetMiniWindowPosition)
+      onResetMiniWindowPosition();
+  };
+  addAndMakeVisible(resetMiniWindowPositionButton);
+
   // Setup Send RPN Button (Phase 25.2)
   addAndMakeVisible(sendRpnButton);
   sendRpnButton.setButtonText("Sync Range to Synth");
@@ -359,7 +378,7 @@ void SettingsPanel::resized() {
     panelW = vp->getWidth();
     int controlHeight = 25;
     int spacing = 10;
-    int visGroupHeight = controlHeight * 2 + spacing * 3 + 28;
+    int visGroupHeight = controlHeight * 4 + spacing * 5 + 28;
     int groupHeight = controlHeight + spacing + 28;
     int contentH = 10 + (controlHeight + spacing) * 7 + visGroupHeight +
                    spacing + groupHeight + 24;
@@ -413,8 +432,8 @@ void SettingsPanel::resized() {
                             sliderWidth, controlHeight);
   y += controlHeight + spacing;
 
-  // Visualizer group (X/Y opacity sliders)
-  int visGroupHeight = controlHeight * 2 + spacing * 3 + 28;
+  // Visualizer group (X/Y opacity sliders + mini window toggle + reset button)
+  int visGroupHeight = controlHeight * 4 + spacing * 5 + 28;
   visualizerGroup.setBounds(area.getX(), y, area.getWidth(), visGroupHeight);
   int visInnerX = area.getX() + 10;
   int visInnerY = y + 24;
@@ -429,6 +448,12 @@ void SettingsPanel::resized() {
   visYOpacityLabel.setBounds(visInnerX, visInnerY, visLabelW, controlHeight);
   visYOpacitySlider.setBounds(visInnerX + visLabelW, visInnerY, visSliderW,
                               controlHeight);
+  visInnerY += controlHeight + spacing;
+  showTouchpadInMiniWindowToggle.setBounds(visInnerX, visInnerY,
+                                           visInnerW, controlHeight);
+  visInnerY += controlHeight + spacing;
+  resetMiniWindowPositionButton.setBounds(visInnerX, visInnerY, visInnerW,
+                                          controlHeight);
   y += visGroupHeight + spacing;
 
   // Mapping Colors group (panel coordinates)

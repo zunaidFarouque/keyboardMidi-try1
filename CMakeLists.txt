@@ -139,6 +139,7 @@ target_sources(MIDIQy PRIVATE
     Source/DetachableContainer.cpp
     Source/KeyChipList.cpp
     Source/MiniStatusWindow.cpp
+    Source/TouchpadVisualizerPanel.cpp
     Source/QuickSetupWizard.cpp
     Source/StartupManager.cpp
     Source/ScaleEditorComponent.cpp

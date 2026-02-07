@@ -1,11 +1,18 @@
 #include "MiniStatusWindow.h"
+#include "InputProcessor.h"
 #include "RawInputManager.h"
+#include "TouchpadVisualizerPanel.h"
 
-MiniStatusWindow::MiniStatusWindow(SettingsManager &settingsMgr)
+static constexpr int kMiniWindowStatusOnlyW = 300;
+static constexpr int kMiniWindowStatusOnlyH = 50;
+static constexpr int kMiniWindowWithTouchpadW = 240;
+static constexpr int kMiniWindowWithTouchpadH = 240;
+
+MiniStatusWindow::MiniStatusWindow(SettingsManager &settingsMgr,
+                                   InputProcessor *inputProc)
     : juce::DocumentWindow("MIDIQy Status", juce::Colour(0xff2a2a2a),
                            DocumentWindow::closeButton),
-      settingsManager(settingsMgr) {
-  // Configure Label
+      settingsManager(settingsMgr), inputProcessor(inputProc) {
   statusLabel.setText(
       "MIDI Mode is ON. Press " +
           RawInputManager::getKeyName(settingsManager.getToggleKey()) +
@@ -16,28 +23,103 @@ MiniStatusWindow::MiniStatusWindow(SettingsManager &settingsMgr)
   statusLabel.setJustificationType(juce::Justification::centred);
   statusLabel.setColour(juce::Label::textColourId, juce::Colours::white);
 
-  // CRITICAL FIX: Use setContentNonOwned.
-  // We own the label (it's a member), so the Window must NOT delete it.
   setContentNonOwned(&statusLabel, true);
-
   setAlwaysOnTop(true);
   setResizable(true, false);
-  setSize(300, 50);
+  setSize(kMiniWindowStatusOnlyW, kMiniWindowStatusOnlyH);
   addToDesktop();
-  centreWithSize(300, 50);
-  setVisible(false); // Start hidden
+
+  juce::String savedPos = settingsManager.getMiniWindowPosition();
+  if (savedPos.isNotEmpty()) {
+    restoreWindowStateFromString(savedPos);
+  } else {
+    centreWithSize(kMiniWindowStatusOnlyW, kMiniWindowStatusOnlyH);
+  }
+  setVisible(false);
+
+  settingsManager.addChangeListener(this);
+  refreshContent();
 }
 
 MiniStatusWindow::~MiniStatusWindow() {
-  // Detach content without deleting (we own the member). With
-  // setContentNonOwned, clearContentComponent() simply removes it; it does not
-  // delete.
+  settingsManager.removeChangeListener(this);
+  if (isOnDesktop())
+    settingsManager.setMiniWindowPosition(getWindowStateAsString());
   clearContentComponent();
 }
 
 void MiniStatusWindow::closeButtonPressed() {
-  // Turn off MIDI mode
+  if (isOnDesktop())
+    settingsManager.setMiniWindowPosition(getWindowStateAsString());
   settingsManager.setMidiModeActive(false);
-  // Hide the window
   setVisible(false);
+}
+
+void MiniStatusWindow::moved() {
+  if (isOnDesktop() && isVisible())
+    settingsManager.setMiniWindowPosition(getWindowStateAsString());
+}
+
+void MiniStatusWindow::resetToDefaultPosition() {
+  int w = getWidth();
+  int h = getHeight();
+  centreWithSize(w, h);
+  settingsManager.setMiniWindowPosition("");
+}
+
+void MiniStatusWindow::updateTouchpadContacts(
+    const std::vector<TouchpadContact> &contacts, uintptr_t deviceHandle) {
+  if (touchpadPanelHolder) {
+    if (auto *panel = dynamic_cast<TouchpadVisualizerPanel *>(
+            touchpadPanelHolder.get())) {
+      panel->setContacts(contacts, deviceHandle);
+    }
+  }
+}
+
+void MiniStatusWindow::setVisualizedLayer(int layerId) {
+  if (touchpadPanelHolder) {
+    if (auto *panel = dynamic_cast<TouchpadVisualizerPanel *>(
+            touchpadPanelHolder.get())) {
+      panel->setVisualizedLayer(layerId);
+    }
+  }
+}
+
+void MiniStatusWindow::setSelectedTouchpadStrip(int stripIndex, int layerId) {
+  if (touchpadPanelHolder) {
+    if (auto *panel = dynamic_cast<TouchpadVisualizerPanel *>(
+            touchpadPanelHolder.get())) {
+      panel->setSelectedStrip(stripIndex, layerId);
+    }
+  }
+}
+
+void MiniStatusWindow::changeListenerCallback(juce::ChangeBroadcaster *source) {
+  if (source == &settingsManager) {
+    refreshContent();
+  }
+}
+
+void MiniStatusWindow::refreshContent() {
+  const bool showTouchpad =
+      settingsManager.getShowTouchpadVisualizerInMiniWindow();
+
+  if (showTouchpad && inputProcessor) {
+    if (!touchpadPanelHolder) {
+      auto *panel =
+          new TouchpadVisualizerPanel(inputProcessor, &settingsManager);
+      panel->setShowContactCoordinates(false); // Mini window: circles suffice
+      touchpadPanelHolder.reset(panel);
+    }
+    clearContentComponent();
+    setContentNonOwned(touchpadPanelHolder.get(), true);
+    setSize(kMiniWindowWithTouchpadW, kMiniWindowWithTouchpadH);
+  } else {
+    if (touchpadPanelHolder)
+      touchpadPanelHolder.reset();
+    clearContentComponent();
+    setContentNonOwned(&statusLabel, true);
+    setSize(kMiniWindowStatusOnlyW, kMiniWindowStatusOnlyH);
+  }
 }

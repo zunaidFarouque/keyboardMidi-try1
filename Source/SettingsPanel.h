@@ -4,6 +4,7 @@
 #include "RawInputManager.h"
 #include "SettingsManager.h"
 #include <JuceHeader.h>
+#include <functional>
 #include <array>
 
 class SettingsPanel : public juce::Component,
@@ -16,6 +17,8 @@ public:
 
   // Phase 42: Two-stage init – call after object graph is built
   void initialize();
+
+  std::function<void()> onResetMiniWindowPosition;
 
   // RawInputManager::Listener implementation
   void handleRawKeyEvent(uintptr_t deviceHandle, int keyCode,
@@ -40,6 +43,8 @@ private:
   juce::Label visXOpacityLabel;
   juce::Slider visYOpacitySlider;
   juce::Label visYOpacityLabel;
+  juce::ToggleButton showTouchpadInMiniWindowToggle;
+  juce::TextButton resetMiniWindowPositionButton;
   juce::TextButton
       sendRpnButton; // Button to send RPN to all channels (Phase 25.2)
   juce::Label toggleKeyLabel;

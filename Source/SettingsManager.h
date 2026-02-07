@@ -51,6 +51,15 @@ public:
   float getVisualizerYOpacity() const;
   void setVisualizerYOpacity(float alpha);
 
+  // Show touchpad visualizer in mini window (performance mode)
+  bool getShowTouchpadVisualizerInMiniWindow() const;
+  void setShowTouchpadVisualizerInMiniWindow(bool show);
+
+  // Mini window position (JUCE window state string; empty = use default)
+  juce::String getMiniWindowPosition() const;
+  void setMiniWindowPosition(const juce::String &state);
+  void resetMiniWindowPosition();
+
   // Mapping type colors (Phase 37)
   juce::Colour getTypeColor(ActionType type) const;
   void setTypeColor(ActionType type, juce::Colour colour);
