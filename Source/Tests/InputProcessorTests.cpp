@@ -1,6 +1,7 @@
 #include "../ChordUtilities.h"
 #include "../DeviceManager.h"
 #include "../InputProcessor.h"
+#include "../TouchpadMixerManager.h"
 #include "../MappingTypes.h"
 #include "../MidiEngine.h"
 #include "../PresetManager.h"
@@ -50,10 +51,11 @@ protected:
   DeviceManager deviceMgr;
   ScaleLibrary scaleLib;
   SettingsManager settingsMgr;
+  TouchpadMixerManager touchpadMixerMgr;
   MidiEngine midiEng;
   VoiceManager voiceMgr{midiEng, settingsMgr};
-  InputProcessor proc{voiceMgr, presetMgr, deviceMgr,
-                      scaleLib, midiEng,   settingsMgr};
+  InputProcessor proc{voiceMgr, presetMgr, deviceMgr, scaleLib, midiEng,
+                     settingsMgr, touchpadMixerMgr};
 
   void SetUp() override {
     presetMgr.getLayersList().removeAllChildren(nullptr);
@@ -70,10 +72,11 @@ protected:
   DeviceManager deviceMgr;
   ScaleLibrary scaleLib;
   SettingsManager settingsMgr;
+  TouchpadMixerManager touchpadMixerMgr;
   MidiEngine midiEng;
   VoiceManager voiceMgr{midiEng, settingsMgr};
-  InputProcessor proc{voiceMgr, presetMgr, deviceMgr,
-                      scaleLib, midiEng,   settingsMgr};
+  InputProcessor proc{voiceMgr, presetMgr, deviceMgr, scaleLib, midiEng,
+                     settingsMgr, touchpadMixerMgr};
 
   void SetUp() override {
     presetMgr.getLayersList().removeAllChildren(nullptr);
@@ -753,10 +756,11 @@ protected:
   DeviceManager deviceMgr;
   ScaleLibrary scaleLib;
   SettingsManager settingsMgr;
+  TouchpadMixerManager touchpadMixerMgr;
   MockMidiEngine mockMidi;
   VoiceManager voiceMgr{mockMidi, settingsMgr};
-  InputProcessor proc{voiceMgr, presetMgr, deviceMgr,
-                      scaleLib, mockMidi,  settingsMgr};
+  InputProcessor proc{voiceMgr, presetMgr, deviceMgr, scaleLib, mockMidi,
+                     settingsMgr, touchpadMixerMgr};
 
   void SetUp() override {
     presetMgr.getLayersList().removeAllChildren(nullptr);
@@ -873,10 +877,11 @@ protected:
   DeviceManager deviceMgr;
   ScaleLibrary scaleLib;
   SettingsManager settingsMgr;
+  TouchpadMixerManager touchpadMixerMgr;
   MockMidiEngine mockMidi;
   VoiceManager voiceMgr{mockMidi, settingsMgr};
-  InputProcessor proc{voiceMgr, presetMgr, deviceMgr,
-                      scaleLib, mockMidi,  settingsMgr};
+  InputProcessor proc{voiceMgr, presetMgr, deviceMgr, scaleLib, mockMidi,
+                     settingsMgr, touchpadMixerMgr};
 
   void SetUp() override {
     presetMgr.getLayersList().removeAllChildren(nullptr);
@@ -1585,9 +1590,10 @@ TEST_F(NoteTypeTest, LegacyGlobalPitchDown_DecreasesChromaticByOne) {
 // Off ---
 TEST_F(InputProcessorTest, TouchpadFinger1DownSendsNoteOnThenNoteOff) {
   MockMidiEngine mockEng;
+  TouchpadMixerManager touchpadMixerMgr;
   VoiceManager voiceMgr(mockEng, settingsMgr);
   InputProcessor proc(voiceMgr, presetMgr, deviceMgr, scaleLib, midiEng,
-                      settingsMgr);
+                      settingsMgr, touchpadMixerMgr);
   presetMgr.getLayersList().removeAllChildren(nullptr);
   presetMgr.ensureStaticLayers();
   settingsMgr.setMidiModeActive(true);
@@ -1635,9 +1641,10 @@ TEST_F(InputProcessorTest, TouchpadFinger1DownSendsNoteOnThenNoteOff) {
 TEST_F(InputProcessorTest,
        TouchpadFinger1DownSustainUntilRetrigger_NoNoteOffOnRelease) {
   MockMidiEngine mockEng;
+  TouchpadMixerManager touchpadMixerMgr;
   VoiceManager voiceMgr(mockEng, settingsMgr);
   InputProcessor proc(voiceMgr, presetMgr, deviceMgr, scaleLib, midiEng,
-                      settingsMgr);
+                      settingsMgr, touchpadMixerMgr);
   presetMgr.getLayersList().removeAllChildren(nullptr);
   presetMgr.ensureStaticLayers();
   settingsMgr.setMidiModeActive(true);
@@ -1675,9 +1682,10 @@ TEST_F(InputProcessorTest,
 TEST_F(InputProcessorTest,
        TouchpadSustainUntilRetrigger_ReTrigger_NoNoteOffBeforeSecondNoteOn) {
   MockMidiEngine mockEng;
+  TouchpadMixerManager touchpadMixerMgr;
   VoiceManager voiceMgr(mockEng, settingsMgr);
   InputProcessor proc(voiceMgr, presetMgr, deviceMgr, scaleLib, midiEng,
-                      settingsMgr);
+                      settingsMgr, touchpadMixerMgr);
   presetMgr.getLayersList().removeAllChildren(nullptr);
   presetMgr.ensureStaticLayers();
   settingsMgr.setMidiModeActive(true);
@@ -1720,9 +1728,10 @@ TEST_F(InputProcessorTest,
 // Finger 1 Up -> Note: trigger note when finger lifts (one-shot), no note off
 TEST_F(InputProcessorTest, TouchpadFinger1UpTriggersNoteOnOnly) {
   MockMidiEngine mockEng;
+  TouchpadMixerManager touchpadMixerMgr;
   VoiceManager voiceMgr(mockEng, settingsMgr);
   InputProcessor proc(voiceMgr, presetMgr, deviceMgr, scaleLib, midiEng,
-                      settingsMgr);
+                      settingsMgr, touchpadMixerMgr);
   presetMgr.getLayersList().removeAllChildren(nullptr);
   presetMgr.ensureStaticLayers();
   settingsMgr.setMidiModeActive(true);
@@ -1777,9 +1786,10 @@ TEST_F(InputProcessorTest, DisabledMappingNotExecuted) {
 
   proc.initialize();
   MockMidiEngine mockEng;
+  TouchpadMixerManager touchpadMixerMgr;
   VoiceManager voiceMgr(mockEng, settingsMgr);
   InputProcessor proc2(voiceMgr, presetMgr, deviceMgr, scaleLib, mockEng,
-                      settingsMgr);
+                      settingsMgr, touchpadMixerMgr);
   proc2.initialize();
 
   proc2.processEvent(InputID{0, 50}, true);
@@ -1791,8 +1801,9 @@ TEST_F(InputProcessorTest, DisabledMappingNotExecuted) {
 // --- Touchpad continuous-to-note: threshold and triggerAbove affect runtime ---
 TEST_F(InputProcessorTest, TouchpadContinuousToGate_ThresholdAndTriggerAbove_AffectsNoteOnOff) {
   MockMidiEngine mockEng;
+  TouchpadMixerManager touchpadMixerMgr;
   VoiceManager voiceMgr(mockEng, settingsMgr);
-  InputProcessor proc(voiceMgr, presetMgr, deviceMgr, scaleLib, midiEng, settingsMgr);
+  InputProcessor proc(voiceMgr, presetMgr, deviceMgr, scaleLib, midiEng, settingsMgr, touchpadMixerMgr);
   presetMgr.getLayersList().removeAllChildren(nullptr);
   presetMgr.ensureStaticLayers();
   settingsMgr.setMidiModeActive(true);
@@ -1902,8 +1913,9 @@ TEST_F(InputProcessorTest, StudioModeOn_UsesDeviceSpecificMapping) {
 // --- Pitch bend range: sent PB value respects configured range ---
 TEST_F(InputProcessorTest, PitchBendRangeAffectsSentPitchBend) {
   MockMidiEngine mockEng;
+  TouchpadMixerManager touchpadMixerMgr;
   VoiceManager voiceMgr(mockEng, settingsMgr);
-  InputProcessor proc(voiceMgr, presetMgr, deviceMgr, scaleLib, mockEng, settingsMgr);
+  InputProcessor proc(voiceMgr, presetMgr, deviceMgr, scaleLib, mockEng, settingsMgr, touchpadMixerMgr);
   presetMgr.getLayersList().removeAllChildren(nullptr);
   presetMgr.ensureStaticLayers();
   settingsMgr.setMidiModeActive(true);
@@ -1956,9 +1968,10 @@ TEST_F(InputProcessorTest, MidiModeOff_KeyEventsProduceNoMidi) {
   mappings.addChild(m, -1, nullptr);
 
   MockMidiEngine mockEng;
+  TouchpadMixerManager touchpadMixerMgr;
   VoiceManager voiceMgr(mockEng, settingsMgr);
   InputProcessor proc2(voiceMgr, presetMgr, deviceMgr, scaleLib, mockEng,
-                      settingsMgr);
+                      settingsMgr, touchpadMixerMgr);
   proc2.initialize();
 
   proc2.processEvent(InputID{0, 50}, true);

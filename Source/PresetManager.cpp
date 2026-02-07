@@ -47,10 +47,22 @@ void PresetManager::migrateToLayerHierarchy() {
 }
 
 void PresetManager::saveToFile(juce::File file) {
-  auto xml = rootNode.createXml();
-  if (xml) {
+  saveToFile(file, juce::ValueTree());
+}
+
+void PresetManager::saveToFile(juce::File file,
+                               const juce::ValueTree &touchpadMixersTree) {
+  juce::ValueTree copy = rootNode.createCopy();
+  if (touchpadMixersTree.isValid()) {
+    copy.addChild(touchpadMixersTree.createCopy(), -1, nullptr);
+  }
+  if (auto xml = copy.createXml()) {
     xml->writeTo(file);
   }
+}
+
+juce::ValueTree PresetManager::getTouchpadMixersNode() const {
+  return rootNode.getChildWithName("TouchpadMixers");
 }
 
 namespace {

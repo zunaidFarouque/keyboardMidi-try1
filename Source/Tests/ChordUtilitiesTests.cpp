@@ -5,6 +5,7 @@
 #include "../ScaleLibrary.h"
 #include "../ScaleUtilities.h"
 #include "../SettingsManager.h"
+#include "../TouchpadMixerManager.h"
 #include "../Zone.h"
 #include "../ZoneManager.h"
 #include <algorithm>
@@ -270,6 +271,7 @@ TEST(ChordUtilitiesZoneIntegration, PianoClose_Triad_CompilesToChordPool) {
   PresetManager presetMgr;
   DeviceManager deviceMgr;
   SettingsManager settingsMgr;
+  TouchpadMixerManager touchpadMixerMgr;
   presetMgr.ensureStaticLayers();
 
   auto zone = std::make_shared<Zone>();
@@ -285,7 +287,7 @@ TEST(ChordUtilitiesZoneIntegration, PianoClose_Triad_CompilesToChordPool) {
   zoneMgr.addZone(zone);
 
   auto context =
-      GridCompiler::compile(presetMgr, deviceMgr, zoneMgr, settingsMgr);
+      GridCompiler::compile(presetMgr, deviceMgr, zoneMgr, touchpadMixerMgr, settingsMgr);
   const auto &slot = (*context->globalGrids[0])[81];
   ASSERT_TRUE(slot.isActive);
   ASSERT_GE(slot.chordIndex, 0);
@@ -301,6 +303,7 @@ TEST(ChordUtilitiesZoneIntegration, PianoOpen_Seventh_CompilesToChordPool) {
   PresetManager presetMgr;
   DeviceManager deviceMgr;
   SettingsManager settingsMgr;
+  TouchpadMixerManager touchpadMixerMgr;
   presetMgr.ensureStaticLayers();
 
   auto zone = std::make_shared<Zone>();
@@ -316,7 +319,7 @@ TEST(ChordUtilitiesZoneIntegration, PianoOpen_Seventh_CompilesToChordPool) {
   zoneMgr.addZone(zone);
 
   auto context =
-      GridCompiler::compile(presetMgr, deviceMgr, zoneMgr, settingsMgr);
+      GridCompiler::compile(presetMgr, deviceMgr, zoneMgr, touchpadMixerMgr, settingsMgr);
   const auto &slot = (*context->globalGrids[0])[81];
   ASSERT_TRUE(slot.isActive);
   ASSERT_GE(slot.chordIndex, 0);
@@ -331,6 +334,7 @@ TEST(ChordUtilitiesZoneIntegration, GuitarCampfire_Triad_CompilesToChordPool) {
   PresetManager presetMgr;
   DeviceManager deviceMgr;
   SettingsManager settingsMgr;
+  TouchpadMixerManager touchpadMixerMgr;
   presetMgr.ensureStaticLayers();
 
   auto zone = std::make_shared<Zone>();
@@ -346,7 +350,7 @@ TEST(ChordUtilitiesZoneIntegration, GuitarCampfire_Triad_CompilesToChordPool) {
   zoneMgr.addZone(zone);
 
   auto context =
-      GridCompiler::compile(presetMgr, deviceMgr, zoneMgr, settingsMgr);
+      GridCompiler::compile(presetMgr, deviceMgr, zoneMgr, touchpadMixerMgr, settingsMgr);
   const auto &slot = (*context->globalGrids[0])[81];
   ASSERT_TRUE(slot.isActive);
   ASSERT_GE(slot.chordIndex, 0);
@@ -363,6 +367,7 @@ TEST(ChordUtilitiesZoneIntegration,
   PresetManager presetMgr;
   DeviceManager deviceMgr;
   SettingsManager settingsMgr;
+  TouchpadMixerManager touchpadMixerMgr;
   presetMgr.ensureStaticLayers();
 
   auto zone = std::make_shared<Zone>();
@@ -379,7 +384,7 @@ TEST(ChordUtilitiesZoneIntegration,
   zoneMgr.addZone(zone);
 
   auto context =
-      GridCompiler::compile(presetMgr, deviceMgr, zoneMgr, settingsMgr);
+      GridCompiler::compile(presetMgr, deviceMgr, zoneMgr, touchpadMixerMgr, settingsMgr);
   const auto &slot = (*context->globalGrids[0])[81];
   ASSERT_TRUE(slot.isActive);
   ASSERT_GE(slot.chordIndex, 0);

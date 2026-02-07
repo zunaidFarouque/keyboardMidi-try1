@@ -5,10 +5,12 @@
 #include "MappingTypes.h"
 #include "PresetManager.h"
 #include "RhythmAnalyzer.h"
+#include "TouchpadMixerManager.h"
 #include "TouchpadTypes.h"
 #include "VoiceManager.h"
 #include "ZoneManager.h"
 #include <JuceHeader.h>
+#include <map>
 #include <optional>
 #include <set>
 #include <unordered_map>
@@ -35,7 +37,8 @@ class InputProcessor : public juce::ChangeBroadcaster,
 public:
   InputProcessor(VoiceManager &voiceMgr, PresetManager &presetMgr,
                  DeviceManager &deviceMgr, ScaleLibrary &scaleLib,
-                 MidiEngine &midiEng, SettingsManager &settingsMgr);
+                 MidiEngine &midiEng, SettingsManager &settingsMgr,
+                 TouchpadMixerManager &touchpadMixerMgr);
   ~InputProcessor() override;
 
   // The main entry point for key events
@@ -50,6 +53,10 @@ public:
 
   // Check if preset has pointer mappings (for smart cursor locking)
   bool hasPointerMappings();
+
+  // True if compiled context has any touchpad mixer strips (so MainComponent
+  // can pass touchpad contacts even when device is not in "Touchpad" alias).
+  bool hasTouchpadMixerStrips() const;
 
   // Phase 41.3: Return copy by value to avoid dangling pointer after unlock
   std::optional<MidiAction> getMappingForInput(InputID input);
@@ -86,6 +93,23 @@ public:
                                                       int layerId,
                                                       int eventId) const;
 
+  // Touchpad mixer: last sent CC value per fader for visualizer (thread-safe).
+  // Returns numFaders values; 0 where none sent yet.
+  std::vector<int> getTouchpadMixerStripCCValues(uintptr_t deviceHandle,
+                                                 int stripIndex,
+                                                 int numFaders) const;
+
+  // Touchpad mixer: mute state per fader for visualizer (thread-safe).
+  std::vector<bool> getTouchpadMixerStripMuteState(uintptr_t deviceHandle,
+                                                  int stripIndex,
+                                                  int numFaders) const;
+
+  // Touchpad mixer: value to display per fader (unmuted value when muted, else
+  // last sent CC). Thread-safe.
+  std::vector<int> getTouchpadMixerStripDisplayValues(uintptr_t deviceHandle,
+                                                      int stripIndex,
+                                                      int numFaders) const;
+
   // True if any manual mapping exists for this keyCode (for conflict highlight
   // in visualizer)
   bool hasManualMappingForKey(int keyCode);
@@ -113,6 +137,7 @@ private:
   DeviceManager &deviceManager;
   ScaleLibrary &scaleLibrary;
   ZoneManager zoneManager;
+  TouchpadMixerManager &touchpadMixerManager;
   ExpressionEngine expressionEngine;
   SettingsManager &settingsManager;
 
@@ -191,6 +216,18 @@ private:
   std::set<std::tuple<uintptr_t, int, int>> touchpadNoteOnSent;
   // Touchpad BoolToCC Expression: active envelopes to release when finger lifts
   std::set<std::tuple<uintptr_t, int, int>> touchpadExpressionActive;
+
+  // Touchpad mixer strips: lock mode (device, stripIndex) -> locked fader index
+  // (-1 = none)
+  std::map<std::tuple<uintptr_t, int>, int> touchpadMixerLockedFader;
+  // Relative mode: (device, stripIndex, faderIndex) -> accumulated value [0,127]
+  std::map<std::tuple<uintptr_t, int, int>, float> touchpadMixerRelativeValue;
+  // Mute: (device, stripIndex, faderIndex) -> muted
+  std::map<std::tuple<uintptr_t, int, int>, bool> touchpadMixerMuteState;
+  // Last sent CC for dedupe: (device, stripIndex, faderIndex) -> value
+  std::map<std::tuple<uintptr_t, int, int>, int> lastTouchpadMixerCCValues;
+  // Value to show when muted (stored when muting): (device, stripIndex, faderIndex) -> value
+  std::map<std::tuple<uintptr_t, int, int>, int> touchpadMixerValueBeforeMute;
 
   // ValueTree Callbacks
   void valueTreeChildAdded(juce::ValueTree &parentTree,

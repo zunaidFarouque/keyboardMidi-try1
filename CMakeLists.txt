@@ -59,6 +59,8 @@ add_library(MIDIQy_Core STATIC
     Source/ColourContrast.cpp
     Source/ZoneDefinition.cpp
     Source/ZonePropertiesLogic.cpp
+    Source/TouchpadMixerManager.cpp
+    Source/TouchpadMixerDefinition.cpp
 )
 
 # 3a. Link Libraries to Core
@@ -127,6 +129,9 @@ target_sources(MIDIQy PRIVATE
     Source/LayerListPanel.cpp
     Source/ZoneListPanel.cpp
     Source/ZonePropertiesPanel.cpp
+    Source/TouchpadMixerListPanel.cpp
+    Source/TouchpadMixerEditorComponent.cpp
+    Source/TouchpadMixerTabComponent.cpp
     Source/GlobalPerformancePanel.cpp
     Source/LogComponent.cpp
     Source/DeviceSetupComponent.cpp

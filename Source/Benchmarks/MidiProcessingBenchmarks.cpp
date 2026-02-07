@@ -751,7 +751,7 @@ BENCHMARK_DEFINE_F(MidiBenchmarkFixture, HotPath_GridCompiler_FullRebuild)
 
   for (auto _ : state) {
     (void)GridCompiler::compile(presetMgr, deviceMgr, proc.getZoneManager(),
-                                settingsMgr);
+                                touchpadMixerMgr, settingsMgr);
   }
   for (auto &z : zonesToRemove) {
     proc.getZoneManager().removeZone(z);

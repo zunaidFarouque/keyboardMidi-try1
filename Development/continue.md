@@ -17,3 +17,16 @@ this will be called touchpad mixer/fader/something like that. easy to set up, ju
 it will have many things from zones e.g. channel, CC number starting point (user can start at CC50 and have 5 faders so it will be like CC50 - CC54)
 there will be range mapping too. to increase/reduce sensitivity.
 on the bottom of the sliders there could be buttons (e.g. mute buttons) which can be activated/deactivated by the second finger tap.
+
+---
+**Touchpad Mixer – implementation status (from plan above)**
+- [x] N faders, CC start, channel, name, layer
+- [x] Quick / Precision (one-finger direct vs overlay + second-finger apply)
+- [x] Absolute / Relative
+- [x] Lock / Free (first-fader lock vs free swipe)
+- [x] Input Y range and Output range (sensitivity)
+- [x] Mute buttons (second-finger tap toggles mute; sends CC 0 when muted)
+- [x] UI: list + editor, visualizer overlay when layer matches selected strip
+- [x] Persistence: session (StartupManager); strips cleared when loading a new session
+- [ ] Optional later: save/load touchpad mixer strips with preset (currently session-only)
+- [ ] Optional later: dedicated “mute strip” region at bottom of touchpad (currently second-finger tap anywhere on fader toggles that fader’s mute)

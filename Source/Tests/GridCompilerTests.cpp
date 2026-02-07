@@ -5,6 +5,7 @@
 #include "../PresetManager.h"
 #include "../ScaleLibrary.h"
 #include "../SettingsManager.h"
+#include "../TouchpadMixerManager.h"
 #include "../Zone.h"
 #include "../ZoneManager.h"
 #include <cmath>
@@ -17,6 +18,7 @@ protected:
   DeviceManager deviceMgr;
   ScaleLibrary scaleLib;
   SettingsManager settingsMgr;
+  TouchpadMixerManager touchpadMixerMgr;
   ZoneManager zoneMgr{scaleLib};
 
   // Mock Device Hash
@@ -183,7 +185,7 @@ TEST_F(GridCompilerTest, VerticalInheritance) {
 
   // Act: Compile
   auto context =
-      GridCompiler::compile(presetMgr, deviceMgr, zoneMgr, settingsMgr);
+      GridCompiler::compile(presetMgr, deviceMgr, zoneMgr, touchpadMixerMgr, settingsMgr);
 
   // Assert: Layer 0 Global
   auto l0 = context->visualLookup[0][0];
@@ -204,7 +206,7 @@ TEST_F(GridCompilerTest, VerticalOverride) {
 
   // Act
   auto context =
-      GridCompiler::compile(presetMgr, deviceMgr, zoneMgr, settingsMgr);
+      GridCompiler::compile(presetMgr, deviceMgr, zoneMgr, touchpadMixerMgr, settingsMgr);
 
   // Assert
   auto l1 = context->visualLookup[0][1];
@@ -222,7 +224,7 @@ TEST_F(GridCompilerTest, ConflictDetection) {
 
   // Act
   auto context =
-      GridCompiler::compile(presetMgr, deviceMgr, zoneMgr, settingsMgr);
+      GridCompiler::compile(presetMgr, deviceMgr, zoneMgr, touchpadMixerMgr, settingsMgr);
 
   // Assert
   auto l0 = context->visualLookup[0][0];
@@ -238,7 +240,7 @@ TEST_F(GridCompilerTest, DeviceOverridesGlobal) {
 
   // Act
   auto context =
-      GridCompiler::compile(presetMgr, deviceMgr, zoneMgr, settingsMgr);
+      GridCompiler::compile(presetMgr, deviceMgr, zoneMgr, touchpadMixerMgr, settingsMgr);
 
   // Assert: Global Grid should be Active
   auto globalGrid = context->visualLookup[0][0];
@@ -256,7 +258,7 @@ TEST_F(GridCompilerTest, DeviceInheritsFromGlobal) {
 
   // Act
   auto context =
-      GridCompiler::compile(presetMgr, deviceMgr, zoneMgr, settingsMgr);
+      GridCompiler::compile(presetMgr, deviceMgr, zoneMgr, touchpadMixerMgr, settingsMgr);
 
   // Assert: The specific device should see this as Inherited
   auto deviceGrid = context->visualLookup[aliasHash][0];
@@ -272,7 +274,7 @@ TEST_F(GridCompilerTest, DeviceOverridesGlobalWithCC) {
 
   // Act
   auto context =
-      GridCompiler::compile(presetMgr, deviceMgr, zoneMgr, settingsMgr);
+      GridCompiler::compile(presetMgr, deviceMgr, zoneMgr, touchpadMixerMgr, settingsMgr);
 
   // Assert: Device grid should show Override
   auto deviceGrid = context->visualLookup[aliasHash][0];
@@ -286,7 +288,7 @@ TEST_F(GridCompilerTest, GenericShiftExpandsToSides) {
   addMapping(0, 0x10, 0); // VK_SHIFT
 
   auto context =
-      GridCompiler::compile(presetMgr, deviceMgr, zoneMgr, settingsMgr);
+      GridCompiler::compile(presetMgr, deviceMgr, zoneMgr, touchpadMixerMgr, settingsMgr);
   auto grid = context->visualLookup[0][0];
 
   EXPECT_EQ((*grid)[0xA0].state, VisualState::Active); // Left Shift
@@ -301,7 +303,7 @@ TEST_F(GridCompilerTest, SpecificModifierOverridesGeneric) {
   addMapping(0, 0xA0, 0, ActionType::Note);       // LShift -> Note
 
   auto context =
-      GridCompiler::compile(presetMgr, deviceMgr, zoneMgr, settingsMgr);
+      GridCompiler::compile(presetMgr, deviceMgr, zoneMgr, touchpadMixerMgr, settingsMgr);
   auto grid = context->visualLookup[0][0];
 
   // LShift: specific Note (default data1=60 -> "C4")
@@ -323,7 +325,7 @@ TEST_F(GridCompilerTest, ZoneCompilesToChordPool) {
   zoneMgr.addZone(zone); // addZone calls rebuildZoneCache
 
   auto context =
-      GridCompiler::compile(presetMgr, deviceMgr, zoneMgr, settingsMgr);
+      GridCompiler::compile(presetMgr, deviceMgr, zoneMgr, touchpadMixerMgr, settingsMgr);
   auto audioGrid = context->globalGrids[0];
 
   const auto &slot = (*audioGrid)[81];
@@ -367,7 +369,7 @@ TEST_F(GridCompilerTest, LayerCommandsAreNotInherited) {
                     static_cast<int>(MIDIQy::CommandID::LayerMomentary), 1);
 
   auto context =
-      GridCompiler::compile(presetMgr, deviceMgr, zoneMgr, settingsMgr);
+      GridCompiler::compile(presetMgr, deviceMgr, zoneMgr, touchpadMixerMgr, settingsMgr);
 
   auto l0 = context->visualLookup[0][0];
   EXPECT_EQ((*l0)[10].state, VisualState::Active);
@@ -382,7 +384,7 @@ TEST_F(GridCompilerTest, LayerToggleNotInherited) {
                     1);
 
   auto context =
-      GridCompiler::compile(presetMgr, deviceMgr, zoneMgr, settingsMgr);
+      GridCompiler::compile(presetMgr, deviceMgr, zoneMgr, touchpadMixerMgr, settingsMgr);
 
   auto l0 = context->visualLookup[0][0];
   EXPECT_EQ((*l0)[11].state, VisualState::Active);
@@ -398,7 +400,7 @@ TEST_F(GridCompilerTest, LayerInheritanceSoloLayer) {
   setLayerSolo(1);
 
   auto context =
-      GridCompiler::compile(presetMgr, deviceMgr, zoneMgr, settingsMgr);
+      GridCompiler::compile(presetMgr, deviceMgr, zoneMgr, touchpadMixerMgr, settingsMgr);
 
   auto l0 = context->visualLookup[0][0];
   EXPECT_EQ((*l0)[81].state, VisualState::Active);
@@ -422,7 +424,7 @@ TEST_F(GridCompilerTest, LayerInheritancePassthru) {
   addMapping(2, 83, 0); // Layer 2: key 83
 
   auto context =
-      GridCompiler::compile(presetMgr, deviceMgr, zoneMgr, settingsMgr);
+      GridCompiler::compile(presetMgr, deviceMgr, zoneMgr, touchpadMixerMgr, settingsMgr);
 
   auto l2 = context->visualLookup[0][2];
   EXPECT_EQ((*l2)[81].state, VisualState::Inherited); // from layer 0
@@ -443,7 +445,7 @@ TEST_F(GridCompilerTest, LayerInheritancePrivateToLayer) {
   addMapping(2, 83, 0); // Layer 2: key 83
 
   auto context =
-      GridCompiler::compile(presetMgr, deviceMgr, zoneMgr, settingsMgr);
+      GridCompiler::compile(presetMgr, deviceMgr, zoneMgr, touchpadMixerMgr, settingsMgr);
 
   auto l1 = context->visualLookup[0][1];
   EXPECT_EQ((*l1)[81].state, VisualState::Inherited);
@@ -467,7 +469,7 @@ TEST_F(GridCompilerTest, LayerInheritanceDefaultUnchanged) {
   // no solo/passthru/private set
 
   auto context =
-      GridCompiler::compile(presetMgr, deviceMgr, zoneMgr, settingsMgr);
+      GridCompiler::compile(presetMgr, deviceMgr, zoneMgr, touchpadMixerMgr, settingsMgr);
 
   auto l1 = context->visualLookup[0][1];
   EXPECT_EQ((*l1)[81].state, VisualState::Inherited);
@@ -484,7 +486,7 @@ TEST_F(GridCompilerTest, LayerInheritanceSoloPlusPassthru) {
   addMapping(2, 83, 0);
 
   auto context =
-      GridCompiler::compile(presetMgr, deviceMgr, zoneMgr, settingsMgr);
+      GridCompiler::compile(presetMgr, deviceMgr, zoneMgr, touchpadMixerMgr, settingsMgr);
 
   auto l1 = context->visualLookup[0][1];
   EXPECT_EQ((*l1)[81].state, VisualState::Empty);
@@ -506,7 +508,7 @@ TEST_F(GridCompilerTest, LayerInheritancePrivatePlusPassthru) {
   addMapping(2, 83, 0);
 
   auto context =
-      GridCompiler::compile(presetMgr, deviceMgr, zoneMgr, settingsMgr);
+      GridCompiler::compile(presetMgr, deviceMgr, zoneMgr, touchpadMixerMgr, settingsMgr);
 
   auto l2 = context->visualLookup[0][2];
   EXPECT_EQ((*l2)[81].state, VisualState::Inherited);
@@ -522,7 +524,7 @@ TEST_F(GridCompilerTest, LayerInheritanceSolo_WithZone) {
   setLayerSolo(1);
 
   auto context =
-      GridCompiler::compile(presetMgr, deviceMgr, zoneMgr, settingsMgr);
+      GridCompiler::compile(presetMgr, deviceMgr, zoneMgr, touchpadMixerMgr, settingsMgr);
 
   auto l0 = context->visualLookup[0][0];
   auto l1 = context->visualLookup[0][1];
@@ -544,7 +546,7 @@ TEST_F(GridCompilerTest, LayerInheritancePrivate_WithZone) {
   addMapping(2, 83, 0);
 
   auto context =
-      GridCompiler::compile(presetMgr, deviceMgr, zoneMgr, settingsMgr);
+      GridCompiler::compile(presetMgr, deviceMgr, zoneMgr, touchpadMixerMgr, settingsMgr);
 
   auto l2 = context->visualLookup[0][2];
   EXPECT_EQ((*l2)[81].state, VisualState::Inherited);
@@ -566,7 +568,7 @@ TEST_F(GridCompilerTest, LayerInheritancePassthru_WithZone) {
   addMapping(2, 83, 0);
 
   auto context =
-      GridCompiler::compile(presetMgr, deviceMgr, zoneMgr, settingsMgr);
+      GridCompiler::compile(presetMgr, deviceMgr, zoneMgr, touchpadMixerMgr, settingsMgr);
 
   auto l2 = context->visualLookup[0][2];
   EXPECT_EQ((*l2)[81].state, VisualState::Inherited);
@@ -623,7 +625,7 @@ TEST_F(GridCompilerTest, MoveMappingsToLayer_CompiledGridReflectsMove) {
   moveMappingToLayer(0, 1, 1);
 
   auto context =
-      GridCompiler::compile(presetMgr, deviceMgr, zoneMgr, settingsMgr);
+      GridCompiler::compile(presetMgr, deviceMgr, zoneMgr, touchpadMixerMgr, settingsMgr);
 
   auto l0 = context->visualLookup[0][0];
   auto l1 = context->visualLookup[0][1];
@@ -660,7 +662,7 @@ TEST_F(GridCompilerTest, MoveMappingsToLayer_MultipleMappings) {
   EXPECT_TRUE(keysOn2.contains(83));
 
   auto context =
-      GridCompiler::compile(presetMgr, deviceMgr, zoneMgr, settingsMgr);
+      GridCompiler::compile(presetMgr, deviceMgr, zoneMgr, touchpadMixerMgr, settingsMgr);
   auto l2 = context->visualLookup[0][2];
   EXPECT_EQ((*l2)[81].state, VisualState::Active);   // moved to L2
   EXPECT_EQ((*l2)[82].state, VisualState::Inherited); // still on L0, inherited
@@ -673,7 +675,7 @@ TEST_F(GridCompilerTest, DeviceVerticalInheritanceIsDimmed) {
   addMapping(0, 20, aliasHash); // Key 20 on Layer 0 for TestDevice only
 
   auto context =
-      GridCompiler::compile(presetMgr, deviceMgr, zoneMgr, settingsMgr);
+      GridCompiler::compile(presetMgr, deviceMgr, zoneMgr, touchpadMixerMgr, settingsMgr);
 
   auto devL0 = context->visualLookup[aliasHash][0];
   EXPECT_EQ((*devL0)[20].state, VisualState::Active);
@@ -689,7 +691,7 @@ TEST_F(GridCompilerTest, DeviceBaseOverridesGlobalLayer) {
   addMapping(0, 81, aliasHash); // Device Layer 0 (Q -> Note)
 
   auto context =
-      GridCompiler::compile(presetMgr, deviceMgr, zoneMgr, settingsMgr);
+      GridCompiler::compile(presetMgr, deviceMgr, zoneMgr, touchpadMixerMgr, settingsMgr);
   auto deviceGrid = context->visualLookup[aliasHash][1]; // View Layer 1
 
   // Device Layer 0 wins over Global Layer 1; from Layer 0 -> Inherited
@@ -714,7 +716,7 @@ TEST_F(GridCompilerTest, ExpressionSimpleCcProducesFastPathAdsr) {
   mappings.addChild(m, -1, nullptr);
 
   auto context =
-      GridCompiler::compile(presetMgr, deviceMgr, zoneMgr, settingsMgr);
+      GridCompiler::compile(presetMgr, deviceMgr, zoneMgr, touchpadMixerMgr, settingsMgr);
   auto audioGrid = context->globalGrids[0];
   const auto &slot = (*audioGrid)[50];
 
@@ -753,7 +755,7 @@ TEST_F(GridCompilerTest, ExpressionCustomEnvelopeReadsAdsr) {
   mappings.addChild(m, -1, nullptr);
 
   auto context =
-      GridCompiler::compile(presetMgr, deviceMgr, zoneMgr, settingsMgr);
+      GridCompiler::compile(presetMgr, deviceMgr, zoneMgr, touchpadMixerMgr, settingsMgr);
   auto audioGrid = context->globalGrids[0];
   const auto &slot = (*audioGrid)[51];
 
@@ -785,7 +787,7 @@ TEST_F(GridCompilerTest, ExpressionValueWhenOnOffCompiled) {
   mappings.addChild(m, -1, nullptr);
 
   auto context =
-      GridCompiler::compile(presetMgr, deviceMgr, zoneMgr, settingsMgr);
+      GridCompiler::compile(presetMgr, deviceMgr, zoneMgr, touchpadMixerMgr, settingsMgr);
   const auto &slot = (*context->globalGrids[0])[53];
 
   EXPECT_EQ(slot.action.adsrSettings.valueWhenOn, 100);
@@ -810,7 +812,7 @@ TEST_F(GridCompilerTest, ExpressionPitchBendCompilesCorrectly) {
   mappings.addChild(m, -1, nullptr);
 
   auto context =
-      GridCompiler::compile(presetMgr, deviceMgr, zoneMgr, settingsMgr);
+      GridCompiler::compile(presetMgr, deviceMgr, zoneMgr, touchpadMixerMgr, settingsMgr);
   auto l0 = context->visualLookup[0][0];
   EXPECT_EQ((*l0)[52].label, "Expr: PB");
 
@@ -836,7 +838,7 @@ TEST_F(GridCompilerTest, SettingsPitchBendRangeAffectsExpressionBend) {
   mappings.addChild(m, -1, nullptr);
 
   auto context =
-      GridCompiler::compile(presetMgr, deviceMgr, zoneMgr, settingsMgr);
+      GridCompiler::compile(presetMgr, deviceMgr, zoneMgr, touchpadMixerMgr, settingsMgr);
   const auto &slot = (*context->globalGrids[0])[53];
   EXPECT_EQ(slot.action.adsrSettings.target, AdsrTarget::PitchBend);
   EXPECT_EQ(slot.action.data2, 4);
@@ -853,7 +855,7 @@ TEST_F(GridCompilerTest, SettingsPitchBendRangeAffectsExpressionBend) {
   m2.setProperty("layerID", 0, nullptr);
   presetMgr.getMappingsListForLayer(0).addChild(m2, -1, nullptr);
   auto ctx2 =
-      GridCompiler::compile(presetMgr, deviceMgr, zoneMgr, settingsMgr);
+      GridCompiler::compile(presetMgr, deviceMgr, zoneMgr, touchpadMixerMgr, settingsMgr);
   EXPECT_EQ((*ctx2->globalGrids[0])[54].action.data2, 6)
       << "Bend semitones should be clamped to pitch bend range 6";
 }
@@ -875,7 +877,7 @@ TEST_F(GridCompilerTest, NoteReleaseBehaviorCompiles) {
     mappings.addChild(m, -1, nullptr);
 
     auto ctx =
-        GridCompiler::compile(presetMgr, deviceMgr, zoneMgr, settingsMgr);
+        GridCompiler::compile(presetMgr, deviceMgr, zoneMgr, touchpadMixerMgr, settingsMgr);
     auto grid = ctx->globalGrids[0];
     EXPECT_EQ((*grid)[50].action.releaseBehavior, expected)
         << "releaseBehavior \"" << rbStr << "\"";
@@ -907,7 +909,7 @@ TEST_F(GridCompilerTest, SmartScaleBendLookupIsBuilt) {
   mappings.addChild(m, -1, nullptr);
 
   auto context =
-      GridCompiler::compile(presetMgr, deviceMgr, zoneMgr, settingsMgr);
+      GridCompiler::compile(presetMgr, deviceMgr, zoneMgr, touchpadMixerMgr, settingsMgr);
   auto audioGrid = context->globalGrids[0];
   const auto &slot = (*audioGrid)[52];
 
@@ -952,7 +954,7 @@ TEST_F(GridCompilerTest, SmartScaleBendScalesWithPitchBendRange) {
   mappings.addChild(m, -1, nullptr);
 
   auto context =
-      GridCompiler::compile(presetMgr, deviceMgr, zoneMgr, settingsMgr);
+      GridCompiler::compile(presetMgr, deviceMgr, zoneMgr, touchpadMixerMgr, settingsMgr);
   auto audioGrid = context->globalGrids[0];
   const auto &slot = (*audioGrid)[52];
 
@@ -969,7 +971,7 @@ TEST_F(GridCompilerTest, TouchpadMappingCompiledIntoContext) {
   addTouchpadMapping(0, TouchpadEvent::Finger1Down, "Note");
 
   auto context =
-      GridCompiler::compile(presetMgr, deviceMgr, zoneMgr, settingsMgr);
+      GridCompiler::compile(presetMgr, deviceMgr, zoneMgr, touchpadMixerMgr, settingsMgr);
 
   ASSERT_EQ(context->touchpadMappings.size(), 1u);
   const auto &entry = context->touchpadMappings.front();
@@ -985,7 +987,7 @@ TEST_F(GridCompilerTest, TouchpadNoteReleaseBehaviorApplied) {
                      "Sustain until retrigger", true);
 
   auto context =
-      GridCompiler::compile(presetMgr, deviceMgr, zoneMgr, settingsMgr);
+      GridCompiler::compile(presetMgr, deviceMgr, zoneMgr, touchpadMixerMgr, settingsMgr);
 
   ASSERT_EQ(context->touchpadMappings.size(), 1u);
   EXPECT_EQ(context->touchpadMappings.front().action.releaseBehavior,
@@ -997,7 +999,7 @@ TEST_F(GridCompilerTest, TouchpadNoteAlwaysLatchApplied) {
                      true);
 
   auto context =
-      GridCompiler::compile(presetMgr, deviceMgr, zoneMgr, settingsMgr);
+      GridCompiler::compile(presetMgr, deviceMgr, zoneMgr, touchpadMixerMgr, settingsMgr);
 
   ASSERT_EQ(context->touchpadMappings.size(), 1u);
   EXPECT_EQ(context->touchpadMappings.front().action.releaseBehavior,
@@ -1008,7 +1010,7 @@ TEST_F(GridCompilerTest, TouchpadContinuousEventCompiledAsContinuousToGate) {
   addTouchpadMapping(0, TouchpadEvent::Finger1X, "Note"); // continuous event
 
   auto context =
-      GridCompiler::compile(presetMgr, deviceMgr, zoneMgr, settingsMgr);
+      GridCompiler::compile(presetMgr, deviceMgr, zoneMgr, touchpadMixerMgr, settingsMgr);
 
   ASSERT_EQ(context->touchpadMappings.size(), 1u);
   EXPECT_EQ(context->touchpadMappings.front().conversionKind,
@@ -1033,7 +1035,7 @@ TEST_F(GridCompilerTest, TouchpadPitchPadConfigCompiledForPitchBend) {
   mappings.addChild(m, -1, nullptr);
 
   auto context =
-      GridCompiler::compile(presetMgr, deviceMgr, zoneMgr, settingsMgr);
+      GridCompiler::compile(presetMgr, deviceMgr, zoneMgr, touchpadMixerMgr, settingsMgr);
 
   ASSERT_EQ(context->touchpadMappings.size(), 1u);
   const auto &entry = context->touchpadMappings.front();
@@ -1067,7 +1069,7 @@ TEST_F(GridCompilerTest, TouchpadPitchPadHonoursResetPitchFlag) {
   mappings.addChild(m, -1, nullptr);
 
   auto context =
-      GridCompiler::compile(presetMgr, deviceMgr, zoneMgr, settingsMgr);
+      GridCompiler::compile(presetMgr, deviceMgr, zoneMgr, touchpadMixerMgr, settingsMgr);
   ASSERT_EQ(context->touchpadMappings.size(), 1u);
   const auto &entry = context->touchpadMappings.front();
   EXPECT_FALSE(entry.action.sendReleaseValue)
@@ -1091,7 +1093,7 @@ TEST_F(GridCompilerTest, DisabledMappingNotCompiled) {
   mappings.addChild(m, -1, nullptr);
 
   auto context =
-      GridCompiler::compile(presetMgr, deviceMgr, zoneMgr, settingsMgr);
+      GridCompiler::compile(presetMgr, deviceMgr, zoneMgr, touchpadMixerMgr, settingsMgr);
   auto grid = context->globalGrids[0];
   EXPECT_FALSE((*grid)[50].isActive)
       << "Disabled mapping should not appear in compiled grid";
@@ -1112,7 +1114,7 @@ TEST_F(GridCompilerTest, DisabledTouchpadMappingNotInContext) {
   mappings.addChild(m, -1, nullptr);
 
   auto context =
-      GridCompiler::compile(presetMgr, deviceMgr, zoneMgr, settingsMgr);
+      GridCompiler::compile(presetMgr, deviceMgr, zoneMgr, touchpadMixerMgr, settingsMgr);
   EXPECT_EQ(context->touchpadMappings.size(), 0u)
       << "Disabled touchpad mapping should not be in context";
 }
@@ -1135,7 +1137,7 @@ TEST_F(GridCompilerTest, TransposeCommandCompilesModifyAndSemitones) {
   mappings.addChild(m, -1, nullptr);
 
   auto context =
-      GridCompiler::compile(presetMgr, deviceMgr, zoneMgr, settingsMgr);
+      GridCompiler::compile(presetMgr, deviceMgr, zoneMgr, touchpadMixerMgr, settingsMgr);
   auto grid = context->globalGrids[0];
   ASSERT_TRUE((*grid)[55].isActive);
   const auto &action = (*grid)[55].action;
@@ -1160,7 +1162,7 @@ TEST_F(GridCompilerTest, PanicCommandCompilesData2) {
   mappings.addChild(m, -1, nullptr);
 
   auto context =
-      GridCompiler::compile(presetMgr, deviceMgr, zoneMgr, settingsMgr);
+      GridCompiler::compile(presetMgr, deviceMgr, zoneMgr, touchpadMixerMgr, settingsMgr);
   auto grid = context->globalGrids[0];
   ASSERT_TRUE((*grid)[56].isActive);
   const auto &action = (*grid)[56].action;
@@ -1185,7 +1187,7 @@ TEST_F(GridCompilerTest, LatchToggleReleaseLatchedCompiled) {
   mappings.addChild(m, -1, nullptr);
 
   auto context =
-      GridCompiler::compile(presetMgr, deviceMgr, zoneMgr, settingsMgr);
+      GridCompiler::compile(presetMgr, deviceMgr, zoneMgr, touchpadMixerMgr, settingsMgr);
   auto grid = context->globalGrids[0];
   ASSERT_TRUE((*grid)[57].isActive);
   EXPECT_FALSE((*grid)[57].action.releaseLatchedOnLatchToggleOff);

@@ -1,4 +1,5 @@
 #pragma once
+#include "TouchpadMixerTypes.h"
 #include <JuceHeader.h>
 #include <array>
 #include <cstdint>
@@ -356,6 +357,10 @@ struct CompiledContext {
 
   // 3. Touchpad mappings (alias "Touchpad"); applied by InputProcessor
   std::vector<TouchpadMappingEntry> touchpadMappings;
+
+  // 4. Touchpad mixer strips (N faders per strip, CC only); applied by
+  // InputProcessor
+  std::vector<TouchpadMixerEntry> touchpadMixerStrips;
 };
 
 // Backward-compatible alias used in development docs/prompts.

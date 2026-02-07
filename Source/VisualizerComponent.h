@@ -39,6 +39,10 @@ public:
   // Phase 45.3: choose which layer the visualizer simulates for editing view
   void setVisualizedLayer(int layerId);
 
+  /// When stripIndex >= 0, touchpad mixer overlay is shown only for that strip
+  /// and only when currentVisualizedLayer == layerId. Pass -1 to hide overlay.
+  void setSelectedTouchpadMixerStrip(int stripIndex, int layerId);
+
   /// Returns black or white for legible text on the given key fill color.
   static juce::Colour getTextColorForKeyFill(juce::Colour keyFillColor);
 
@@ -94,6 +98,8 @@ private:
   void updateGlobalPanelLayout(int w, int h);
 
   int currentVisualizedLayer = 0; // Phase 45.3: which layer we are inspecting
+  int selectedTouchpadMixerStripIndex_ = -1;
+  int selectedTouchpadMixerLayerId_ = 0;
   std::set<int> activeKeys;
   mutable juce::CriticalSection keyStateLock;
 

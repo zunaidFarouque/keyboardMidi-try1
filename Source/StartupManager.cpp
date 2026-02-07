@@ -2,13 +2,15 @@
 #include "DeviceManager.h"
 #include "ScaleUtilities.h"
 #include "SettingsManager.h"
+#include "TouchpadMixerManager.h"
 #include "Zone.h"
 
 StartupManager::StartupManager(PresetManager *presetMgr,
                                DeviceManager *deviceMgr, ZoneManager *zoneMgr,
+                               TouchpadMixerManager *touchpadMixerMgr,
                                SettingsManager *settingsMgr)
     : presetManager(presetMgr), deviceManager(deviceMgr), zoneManager(zoneMgr),
-      settingsManager(settingsMgr) {
+      touchpadMixerManager(touchpadMixerMgr), settingsManager(settingsMgr) {
 
   // Setup file paths (use portable data directory next to executable)
   appDataFolder = DeviceManager::getPortableDataDirectory();
@@ -24,6 +26,9 @@ StartupManager::StartupManager(PresetManager *presetMgr,
   }
   if (zoneManager) {
     zoneManager->addChangeListener(this);
+  }
+  if (touchpadMixerManager) {
+    touchpadMixerManager->addChangeListener(this);
   }
   if (settingsManager) {
     settingsManager->addChangeListener(this);
@@ -42,6 +47,9 @@ StartupManager::~StartupManager() {
   }
   if (zoneManager) {
     zoneManager->removeChangeListener(this);
+  }
+  if (touchpadMixerManager) {
+    touchpadMixerManager->removeChangeListener(this);
   }
   if (settingsManager) {
     settingsManager->removeChangeListener(this);
@@ -99,6 +107,12 @@ void StartupManager::initApp() {
             zoneManager->restoreFromValueTree(zoneMgrNode);
           }
         }
+        if (loadSuccess && touchpadMixerManager) {
+          auto mixersNode = sessionTree.getChildWithName("TouchpadMixers");
+          if (mixersNode.isValid()) {
+            touchpadMixerManager->restoreFromValueTree(mixersNode);
+          }
+        }
       }
     }
   }
@@ -133,6 +147,14 @@ void StartupManager::createFactoryDefault() {
     auto zones = zoneManager->getZones();
     for (auto &zone : zones) {
       zoneManager->removeZone(zone);
+    }
+  }
+
+  // Clear all touchpad mixer strips
+  if (touchpadMixerManager) {
+    auto strips = touchpadMixerManager->getStrips();
+    for (int i = static_cast<int>(strips.size()) - 1; i >= 0; --i) {
+      touchpadMixerManager->removeStrip(i);
     }
   }
 
@@ -200,6 +222,11 @@ void StartupManager::performSave() {
   // Add ZoneManager tree
   if (zoneManager) {
     sessionTree.addChild(zoneManager->toValueTree(), -1, nullptr);
+  }
+
+  // Add TouchpadMixers tree
+  if (touchpadMixerManager) {
+    sessionTree.addChild(touchpadMixerManager->toValueTree(), -1, nullptr);
   }
 
   // Write to autoload.xml

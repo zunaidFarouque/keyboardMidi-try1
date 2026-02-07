@@ -4,6 +4,7 @@
 #include "KeyboardLayoutUtils.h"
 #include "MappingTypes.h"
 #include "PitchPadUtilities.h"
+#include "TouchpadMixerTypes.h"
 #include "PresetManager.h"
 #include "RawInputManager.h"
 #include "ScaleLibrary.h"
@@ -131,6 +132,14 @@ void VisualizerComponent::setVisualizedLayer(int layerId) {
   if (layerId < 0)
     layerId = 0;
   currentVisualizedLayer = layerId;
+  cacheValid = false;
+  needsRepaint = true;
+}
+
+void VisualizerComponent::setSelectedTouchpadMixerStrip(int stripIndex,
+                                                        int layerId) {
+  selectedTouchpadMixerStripIndex_ = stripIndex;
+  selectedTouchpadMixerLayerId_ = stripIndex >= 0 ? layerId : 0;
   cacheValid = false;
   needsRepaint = true;
 }
@@ -812,6 +821,96 @@ void VisualizerComponent::paint(juce::Graphics &g) {
       g.fillEllipse(px - 5.0f, py - 5.0f, 10.0f, 10.0f);
       g.setColour(col.contrasting(0.5f));
       g.drawEllipse(px - 5.0f, py - 5.0f, 10.0f, 10.0f, 1.0f);
+    }
+
+    // Touchpad mixer overlay: when we have a selected strip and we're
+    // viewing its layer, show the strip (fader columns + values) always.
+    if (inputProcessor && selectedTouchpadMixerStripIndex_ >= 0 &&
+        currentVisualizedLayer == selectedTouchpadMixerLayerId_) {
+      std::shared_ptr<const CompiledMapContext> ctx = inputProcessor->getContext();
+      if (ctx) {
+        uintptr_t dev =
+            lastTouchpadDeviceHandle.load(std::memory_order_acquire);
+        size_t stripIdx =
+            static_cast<size_t>(selectedTouchpadMixerStripIndex_);
+        if (stripIdx < ctx->touchpadMixerStrips.size()) {
+          const auto &strip = ctx->touchpadMixerStrips[stripIdx];
+          if (strip.layerId == currentVisualizedLayer && strip.numFaders > 0) {
+            std::vector<int> displayValues =
+                inputProcessor->getTouchpadMixerStripDisplayValues(
+                    dev, static_cast<int>(stripIdx), strip.numFaders);
+            std::vector<bool> muted =
+                inputProcessor->getTouchpadMixerStripMuteState(
+                    dev, static_cast<int>(stripIdx), strip.numFaders);
+            const int N = strip.numFaders;
+            const float fw = touchpadRect.getWidth() / static_cast<float>(N);
+            const float h = touchpadRect.getHeight();
+            const float muteRegionH = strip.muteButtonsEnabled ? (h * 0.15f) : 0.0f;
+            const float faderH = h - muteRegionH;
+            for (int i = 0; i < N; ++i) {
+              int displayVal = (i < static_cast<int>(displayValues.size()))
+                                  ? displayValues[(size_t)i]
+                                  : 0;
+              bool isMuted = (i < static_cast<int>(muted.size())) && muted[(size_t)i];
+              float fill = static_cast<float>(juce::jlimit(0, 127, displayVal)) / 127.0f;
+              float stripX = touchpadRect.getX() + static_cast<float>(i) * fw;
+              float fillH = fill * faderH;
+              float faderBottom = touchpadRect.getY() + faderH;
+              g.setColour(isMuted ? juce::Colour(0xff505070).withAlpha(0.85f)
+                                 : juce::Colour(0xff406080).withAlpha(0.6f));
+              g.fillRect(stripX + 1.0f,
+                        faderBottom - fillH,
+                        fw - 2.0f,
+                        fillH);
+              g.setColour(isMuted ? juce::Colour(0xff8080a0).withAlpha(0.6f)
+                                 : juce::Colours::lightgrey.withAlpha(0.5f));
+              g.drawRect(stripX, touchpadRect.getY(), fw, faderH, 0.5f);
+              // Muted: "M" at top of strip for visibility
+              if (isMuted) {
+                g.setColour(juce::Colours::white);
+                g.setFont(juce::jmin(10.0f, fw * 0.6f));
+                g.drawText("M", stripX, touchpadRect.getY(), fw, 14.0f,
+                           juce::Justification::centred, false);
+                g.setFont(juce::jmin(9.0f, fw * 0.5f));
+                g.drawText(juce::String(displayVal), stripX,
+                           touchpadRect.getY() + 14.0f, fw, 12.0f,
+                           juce::Justification::centred, false);
+              } else {
+                g.setColour(juce::Colours::white);
+                g.setFont(juce::jmin(10.0f, fw * 0.6f));
+                g.drawText(juce::String(displayVal), stripX, touchpadRect.getY(),
+                           fw, 14.0f, juce::Justification::centred, false);
+              }
+              // CC number at bottom of fader area (above mute row)
+              g.setColour(juce::Colours::white);
+              g.setFont(juce::jmin(9.0f, fw * 0.5f));
+              g.drawText(juce::String(strip.ccStart + i),
+                         stripX, faderBottom - 14.0f, fw, 12.0f,
+                         juce::Justification::centred, false);
+            }
+            if (strip.muteButtonsEnabled && muteRegionH > 0) {
+              float muteTop = touchpadRect.getY() + faderH;
+              g.setColour(juce::Colour(0xff303050).withAlpha(0.8f));
+              g.fillRect(touchpadRect.getX(), muteTop, touchpadRect.getWidth(),
+                         muteRegionH);
+              g.setColour(juce::Colours::lightgrey.withAlpha(0.6f));
+              g.setFont(8.0f);
+              for (int i = 0; i < N; ++i) {
+                float mx = touchpadRect.getX() + static_cast<float>(i) * fw;
+                g.drawText("M", mx, muteTop, fw, muteRegionH,
+                           juce::Justification::centred, false);
+              }
+            }
+            g.setColour(juce::Colours::white);
+            g.setFont(9.0f);
+            g.drawText("Mixer: CC" + juce::String(strip.ccStart) + "-" +
+                       juce::String(strip.ccStart + N - 1),
+                       touchpadRect.getX(), touchpadRect.getBottom() + 2.0f,
+                       touchpadRect.getWidth(), 10,
+                       juce::Justification::centredLeft, false);
+          }
+        }
+      }
     }
 
     float y = touchpadRect.getBottom() + 6.0f;

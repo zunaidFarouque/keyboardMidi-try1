@@ -17,7 +17,7 @@ struct InspectorControl {
   // is true
   juce::String enabledConditionProperty;
 
-  enum class Type { Slider, ComboBox, Toggle, LabelOnly, Color, Separator };
+  enum class Type { Slider, ComboBox, Toggle, LabelOnly, Color, Separator, TextEditor };
   juce::Justification separatorAlign =
       juce::Justification::centred; // Phase 55.9: for Separator type
   Type controlType = Type::Slider;

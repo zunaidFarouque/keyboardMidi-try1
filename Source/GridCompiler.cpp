@@ -3,6 +3,7 @@
 #include "PitchPadUtilities.h"
 #include "ScaleUtilities.h"
 #include "SettingsManager.h"
+#include "TouchpadMixerTypes.h"
 #include <algorithm>
 #include <cmath>
 #include <numeric>
@@ -884,7 +885,9 @@ void compileMappingsForLayer(
 
 std::shared_ptr<CompiledMapContext>
 GridCompiler::compile(PresetManager &presetMgr, DeviceManager &deviceMgr,
-                      ZoneManager &zoneMgr, SettingsManager &settingsMgr) {
+                      ZoneManager &zoneMgr,
+                      TouchpadMixerManager &touchpadMixerMgr,
+                      SettingsManager &settingsMgr) {
   // 1. Setup Context
   auto context = std::make_shared<CompiledMapContext>();
 
@@ -899,6 +902,26 @@ GridCompiler::compile(PresetManager &presetMgr, DeviceManager &deviceMgr,
                             settingsMgr, touchpadAliasHash, layerId,
                             touchedKeys, VisualState::Active,
                             &context->touchpadMappings);
+  }
+
+  // 2b. Collect touchpad mixer strips (CC-only faders per strip)
+  for (const auto &cfg : touchpadMixerMgr.getStrips()) {
+    TouchpadMixerEntry entry;
+    entry.layerId = juce::jlimit(0, 8, cfg.layerId);
+    entry.numFaders = juce::jlimit(1, 32, cfg.numFaders);
+    entry.ccStart = juce::jlimit(0, 127, cfg.ccStart);
+    entry.midiChannel = juce::jlimit(1, 16, cfg.midiChannel);
+    entry.inputMin = cfg.inputMin;
+    entry.inputMax = cfg.inputMax;
+    float r = entry.inputMax - entry.inputMin;
+    entry.invInputRange = (r > 0.0f) ? (1.0f / r) : 0.0f;
+    entry.outputMin = juce::jlimit(0, 127, cfg.outputMin);
+    entry.outputMax = juce::jlimit(0, 127, cfg.outputMax);
+    entry.quickPrecision = cfg.quickPrecision;
+    entry.absRel = cfg.absRel;
+    entry.lockFree = cfg.lockFree;
+    entry.muteButtonsEnabled = cfg.muteButtonsEnabled;
+    context->touchpadMixerStrips.push_back(entry);
   }
 
   // 3. Define Helper Lambda "applyLayerToGrid"

@@ -13,9 +13,10 @@
 MainComponent::MainComponent()
     : voiceManager(midiEngine, settingsManager),
       inputProcessor(voiceManager, presetManager, deviceManager, scaleLibrary,
-                     midiEngine, settingsManager),
+                     midiEngine, settingsManager, touchpadMixerManager),
       startupManager(&presetManager, &deviceManager,
-                     &inputProcessor.getZoneManager(), &settingsManager),
+                     &inputProcessor.getZoneManager(), &touchpadMixerManager,
+                     &settingsManager),
       rawInputManager(std::make_unique<RawInputManager>()),
       mainTabs(juce::TabbedButtonBar::TabsAtTop),
       visualizerContainer("Visualizer", layoutPlaceholder),
@@ -39,6 +40,16 @@ MainComponent::MainComponent()
   zoneEditor = std::make_unique<ZoneEditorComponent>(
       &inputProcessor.getZoneManager(), &deviceManager, rawInputManager.get(),
       &scaleLibrary);
+  touchpadMixerTab =
+      std::make_unique<TouchpadMixerTabComponent>(&touchpadMixerManager);
+  touchpadMixerTab->onSelectionChangedForVisualizer = [this](int stripIndex,
+                                                            int layerId) {
+    if (visualizer) {
+      visualizer->setSelectedTouchpadMixerStrip(stripIndex, layerId);
+      if (stripIndex >= 0)
+        visualizer->setVisualizedLayer(layerId);
+    }
+  };
   settingsPanel = std::make_unique<SettingsPanel>(settingsManager, midiEngine,
                                                   *rawInputManager);
 
@@ -118,7 +129,8 @@ MainComponent::MainComponent()
                       auto result = chooser.getResult();
                       // If the user didn't cancel (file is valid)
                       if (result != juce::File()) {
-                        presetManager.saveToFile(result);
+                        presetManager.saveToFile(result,
+                                                 touchpadMixerManager.toValueTree());
                         if (logComponent)
                           logComponent->addEntry("Saved: " +
                                                  result.getFileName());
@@ -140,6 +152,8 @@ MainComponent::MainComponent()
           auto result = chooser.getResult();
           if (result.exists()) {
             presetManager.loadFromFile(result);
+            touchpadMixerManager.restoreFromValueTree(
+                presetManager.getTouchpadMixersNode());
             if (logComponent)
               logComponent->addEntry("Loaded: " + result.getFileName());
 
@@ -198,6 +212,8 @@ MainComponent::MainComponent()
   mainTabs.addTab("Mappings", juce::Colour(0xff2a2a2a), mappingEditor.get(),
                   false);
   mainTabs.addTab("Zones", juce::Colour(0xff2a2a2a), zoneEditor.get(), false);
+  mainTabs.addTab("Touchpad Mixer", juce::Colour(0xff2a2a2a),
+                  touchpadMixerTab.get(), false);
   settingsViewport.setViewedComponent(settingsPanel.get(), false);
   settingsViewport.setScrollBarsShown(true, false); // vertical scrollbar only
   mainTabs.addTab("Settings", juce::Colour(0xff2a2a2a), &settingsViewport,
@@ -252,7 +268,7 @@ MainComponent::MainComponent()
         juce::AlertWindow::showMessageBoxAsync(
             juce::AlertWindow::WarningIcon, "Performance Mode",
             "No Trackpad mappings found in this preset.\n\n"
-            "Add Trackpad X or Y mappings to use Performance Mode.");
+            "Add Trackpad X or Y mappings, or a Touchpad Mixer strip, to use Performance Mode.");
         return;
       }
 
@@ -555,7 +571,7 @@ void MainComponent::handleRawKeyEvent(uintptr_t deviceHandle, int keyCode,
         juce::AlertWindow::showMessageBoxAsync(
             juce::AlertWindow::WarningIcon, "Performance Mode",
             "No Trackpad mappings found in this preset.\n\n"
-            "Add Trackpad X or Y mappings to use Performance Mode.");
+            "Add Trackpad X or Y mappings, or a Touchpad Mixer strip, to use Performance Mode.");
         return;
       }
 
@@ -663,7 +679,10 @@ void MainComponent::handleAxisEvent(uintptr_t deviceHandle, int inputCode,
 
 void MainComponent::handleTouchpadContacts(
     uintptr_t deviceHandle, const std::vector<TouchpadContact> &contacts) {
-  if (cachedTouchpadHandles.count(deviceHandle) == 0)
+  // Process when device is in "Touchpad" alias, or when we have touchpad
+  // mixer strips (so MIDI is generated even without assigning Touchpad alias).
+  if (cachedTouchpadHandles.count(deviceHandle) == 0 &&
+      !inputProcessor.hasTouchpadMixerStrips())
     return;
   inputProcessor.processTouchpadContacts(deviceHandle, contacts);
 }

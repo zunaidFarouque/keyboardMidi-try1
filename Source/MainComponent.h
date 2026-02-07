@@ -13,6 +13,8 @@
 #include "SettingsManager.h"
 #include "SettingsPanel.h"
 #include "StartupManager.h"
+#include "TouchpadMixerManager.h"
+#include "TouchpadMixerTabComponent.h"
 #include "VisualizerComponent.h"
 #include "ZoneEditorComponent.h"
 
@@ -64,6 +66,7 @@ private:
   // 2. Logic Managers
   VoiceManager voiceManager; // Depends on MidiEngine, SettingsManager
   PresetManager presetManager;
+  TouchpadMixerManager touchpadMixerManager;
 
   // 3. Processors
   InputProcessor inputProcessor; // Listens to Preset/Device/Zone
@@ -76,6 +79,7 @@ private:
   std::unique_ptr<VisualizerComponent> visualizer;
   std::unique_ptr<MappingEditorComponent> mappingEditor;
   std::unique_ptr<ZoneEditorComponent> zoneEditor;
+  std::unique_ptr<TouchpadMixerTabComponent> touchpadMixerTab;
   std::unique_ptr<SettingsPanel> settingsPanel;
   std::unique_ptr<LogComponent> logComponent;
 
