@@ -8,13 +8,13 @@ public:
   TouchpadMixerManager() = default;
   ~TouchpadMixerManager() override = default;
 
-  void addStrip(const TouchpadMixerConfig &config);
-  void removeStrip(int index);
-  void updateStrip(int index, const TouchpadMixerConfig &config);
+  void addLayout(const TouchpadMixerConfig &config);
+  void removeLayout(int index);
+  void updateLayout(int index, const TouchpadMixerConfig &config);
 
-  std::vector<TouchpadMixerConfig> getStrips() const {
+  std::vector<TouchpadMixerConfig> getLayouts() const {
     juce::ScopedReadLock lock(lock_);
-    return strips_;
+    return layouts_;
   }
 
   juce::ValueTree toValueTree() const;
@@ -22,7 +22,7 @@ public:
 
 private:
   mutable juce::ReadWriteLock lock_;
-  std::vector<TouchpadMixerConfig> strips_;
+  std::vector<TouchpadMixerConfig> layouts_;
 
   JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(TouchpadMixerManager)
 };

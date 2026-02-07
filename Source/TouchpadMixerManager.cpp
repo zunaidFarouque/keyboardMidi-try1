@@ -28,30 +28,30 @@ const juce::Identifier kDrumPadDeadZoneTop("drumPadDeadZoneTop");
 const juce::Identifier kDrumPadDeadZoneBottom("drumPadDeadZoneBottom");
 } // namespace
 
-void TouchpadMixerManager::addStrip(const TouchpadMixerConfig &config) {
+void TouchpadMixerManager::addLayout(const TouchpadMixerConfig &config) {
   {
     juce::ScopedWriteLock lock(lock_);
-    strips_.push_back(config);
+    layouts_.push_back(config);
   }
   sendChangeMessage();
 }
 
-void TouchpadMixerManager::removeStrip(int index) {
+void TouchpadMixerManager::removeLayout(int index) {
   {
     juce::ScopedWriteLock lock(lock_);
-    if (index >= 0 && index < static_cast<int>(strips_.size())) {
-      strips_.erase(strips_.begin() + index);
+    if (index >= 0 && index < static_cast<int>(layouts_.size())) {
+      layouts_.erase(layouts_.begin() + index);
     }
   }
   sendChangeMessage();
 }
 
-void TouchpadMixerManager::updateStrip(int index,
-                                       const TouchpadMixerConfig &config) {
+void TouchpadMixerManager::updateLayout(int index,
+                                        const TouchpadMixerConfig &config) {
   {
     juce::ScopedWriteLock lock(lock_);
-    if (index >= 0 && index < static_cast<int>(strips_.size())) {
-      strips_[static_cast<size_t>(index)] = config;
+    if (index >= 0 && index < static_cast<int>(layouts_.size())) {
+      layouts_[static_cast<size_t>(index)] = config;
     }
   }
   sendChangeMessage();
@@ -70,7 +70,7 @@ static juce::String typeToString(TouchpadType t) {
 juce::ValueTree TouchpadMixerManager::toValueTree() const {
   juce::ScopedReadLock lock(lock_);
   juce::ValueTree vt(kTouchpadMixers);
-  for (const auto &s : strips_) {
+  for (const auto &s : layouts_) {
     juce::ValueTree child(kTouchpadMixer);
     child.setProperty(kType, typeToString(s.type), nullptr);
     child.setProperty(kName, juce::String(s.name), nullptr);
@@ -112,7 +112,7 @@ void TouchpadMixerManager::restoreFromValueTree(const juce::ValueTree &vt) {
   if (!vt.isValid() || !vt.hasType(kTouchpadMixers))
     return;
   juce::ScopedWriteLock lock(lock_);
-  strips_.clear();
+  layouts_.clear();
   for (int i = 0; i < vt.getNumChildren(); ++i) {
     auto child = vt.getChild(i);
     if (!child.hasType(kTouchpadMixer))
@@ -160,7 +160,7 @@ void TouchpadMixerManager::restoreFromValueTree(const juce::ValueTree &vt) {
       s.drumPadDeadZoneBottom = static_cast<float>(
           child.getProperty(kDrumPadDeadZoneBottom, 0.0));
     }
-    strips_.push_back(s);
+    layouts_.push_back(s);
   }
   sendChangeMessage();
 }

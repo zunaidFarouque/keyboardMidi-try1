@@ -16,12 +16,12 @@ TouchpadTabComponent::TouchpadTabComponent(TouchpadMixerManager *mgr)
 
   listPanel.onSelectionChanged = [this](int index,
                                         const TouchpadMixerConfig *c) {
-    editorPanel.setStrip(index, c);
+    editorPanel.setLayout(index, c);
     if (onSelectionChangedForVisualizer)
       onSelectionChangedForVisualizer(index, c ? c->layerId : 0);
     resized();
   };
-  editorPanel.setStrip(-1, nullptr);
+  editorPanel.setLayout(-1, nullptr);
 }
 
 TouchpadTabComponent::~TouchpadTabComponent() {}
@@ -29,14 +29,14 @@ TouchpadTabComponent::~TouchpadTabComponent() {}
 void TouchpadTabComponent::refreshVisualizerSelection() {
   if (!onSelectionChangedForVisualizer || !manager)
     return;
-  int idx = listPanel.getSelectedStripIndex();
+  int idx = listPanel.getSelectedLayoutIndex();
   if (idx < 0) {
     onSelectionChangedForVisualizer(-1, 0);
     return;
   }
-  auto strips = manager->getStrips();
-  if (idx < static_cast<int>(strips.size()))
-    onSelectionChangedForVisualizer(idx, strips[(size_t)idx].layerId);
+  auto layouts = manager->getLayouts();
+  if (idx < static_cast<int>(layouts.size()))
+    onSelectionChangedForVisualizer(idx, layouts[(size_t)idx].layerId);
   else
     onSelectionChangedForVisualizer(-1, 0);
 }

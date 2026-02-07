@@ -904,7 +904,7 @@ std::shared_ptr<CompiledMapContext> GridCompiler::compile(
   }
 
   // 2b. Collect touchpad mixer and drum pad strips
-  for (const auto &cfg : touchpadMixerMgr.getStrips()) {
+  for (const auto &cfg : touchpadMixerMgr.getLayouts()) {
     if (cfg.type == TouchpadType::Mixer) {
       TouchpadMixerEntry entry;
       entry.layerId = juce::jlimit(0, 8, cfg.layerId);

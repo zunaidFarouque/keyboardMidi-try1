@@ -106,7 +106,7 @@ TouchpadMixerEditorComponent::~TouchpadMixerEditorComponent() {
   uiRows.clear();
 }
 
-void TouchpadMixerEditorComponent::setStrip(int index,
+void TouchpadMixerEditorComponent::setLayout(int index,
                                             const TouchpadMixerConfig *config) {
   selectedIndex = index;
   if (config)
@@ -183,7 +183,7 @@ void TouchpadMixerEditorComponent::applyConfigValue(
       currentConfig.type = TouchpadType::DrumPad;
     else
       currentConfig.type = TouchpadType::Mixer;
-    manager->updateStrip(selectedIndex, currentConfig);
+    manager->updateLayout(selectedIndex, currentConfig);
     rebuildUI();
     return;
   } else if (propertyId == "name")
@@ -246,7 +246,7 @@ void TouchpadMixerEditorComponent::applyConfigValue(
         static_cast<float>(juce::jlimit(0.0, 0.5, static_cast<double>(value)));
   else
     return;
-  manager->updateStrip(selectedIndex, currentConfig);
+  manager->updateLayout(selectedIndex, currentConfig);
 }
 
 void TouchpadMixerEditorComponent::createControl(

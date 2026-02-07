@@ -14,7 +14,7 @@ public:
   void paint(juce::Graphics &) override;
   void resized() override;
 
-  void setStrip(int index, const TouchpadMixerConfig *config);
+  void setLayout(int index, const TouchpadMixerConfig *config);
 
 private:
   struct UiItem {

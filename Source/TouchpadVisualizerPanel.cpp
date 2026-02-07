@@ -264,14 +264,14 @@ void TouchpadVisualizerPanel::paint(juce::Graphics &g) {
     if (ctx) {
       for (size_t i = 0; i < ctx->touchpadLayoutOrder.size(); ++i) {
         const auto &ref = ctx->touchpadLayoutOrder[i];
-        int stripLayer = -1;
+        int layoutLayer = -1;
         if (ref.type == TouchpadType::Mixer &&
             ref.index < ctx->touchpadMixerStrips.size())
-          stripLayer = ctx->touchpadMixerStrips[ref.index].layerId;
+          layoutLayer = ctx->touchpadMixerStrips[ref.index].layerId;
         else if (ref.type == TouchpadType::DrumPad &&
                  ref.index < ctx->touchpadDrumPadStrips.size())
-          stripLayer = ctx->touchpadDrumPadStrips[ref.index].layerId;
-        if (stripLayer == currentVisualizedLayer) {
+          layoutLayer = ctx->touchpadDrumPadStrips[ref.index].layerId;
+        if (layoutLayer == currentVisualizedLayer) {
           displayLayoutIndex = static_cast<int>(i);
           break;
         }

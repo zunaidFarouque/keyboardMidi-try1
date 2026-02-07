@@ -2001,7 +2001,7 @@ TEST_F(InputProcessorTest, MidiModeOff_KeyEventsProduceNoMidi) {
       << "When MIDI mode is off, key events should not produce MIDI";
 }
 
-// --- Touchpad mixer strip: finger down sends CC ---
+// --- Touchpad mixer layout: finger down sends CC ---
 TEST_F(InputProcessorTest, TouchpadMixerFingerDownSendsCC) {
   MockMidiEngine mockEng;
   TouchpadMixerManager touchpadMixerMgr;
@@ -2025,7 +2025,7 @@ TEST_F(InputProcessorTest, TouchpadMixerFingerDownSendsCC) {
   cfg.inputMax = 1.0f;
   cfg.outputMin = 0;
   cfg.outputMax = 127;
-  touchpadMixerMgr.addStrip(cfg);
+  touchpadMixerMgr.addLayout(cfg);
 
   proc.initialize();
   proc.forceRebuildMappings();
@@ -2048,12 +2048,12 @@ TEST_F(InputProcessorTest, TouchpadMixerFingerDownSendsCC) {
 TEST_F(InputProcessorTest, HasTouchpadLayoutsReturnsTrueWhenLayoutsExist) {
   TouchpadMixerConfig cfg;
   cfg.type = TouchpadType::Mixer;
-  touchpadMixerMgr.addStrip(cfg);
+  touchpadMixerMgr.addLayout(cfg);
 
   proc.forceRebuildMappings();
   EXPECT_TRUE(proc.hasTouchpadLayouts());
 
-  touchpadMixerMgr.removeStrip(0);
+  touchpadMixerMgr.removeLayout(0);
   proc.forceRebuildMappings();
   EXPECT_FALSE(proc.hasTouchpadLayouts());
 }
@@ -2063,7 +2063,7 @@ TEST_F(InputProcessorTest, HasTouchpadLayoutsReturnsTrueWhenDrumPadOnly) {
   cfg.type = TouchpadType::DrumPad;
   cfg.drumPadRows = 2;
   cfg.drumPadColumns = 4;
-  touchpadMixerMgr.addStrip(cfg);
+  touchpadMixerMgr.addLayout(cfg);
 
   proc.forceRebuildMappings();
   EXPECT_TRUE(proc.hasTouchpadLayouts());
@@ -2090,7 +2090,7 @@ TEST_F(InputProcessorTest, TouchpadDrumPadFingerDownSendsNoteOn) {
   cfg.drumPadBaseVelocity = 100;
   cfg.drumPadVelocityRandom = 0;
   cfg.midiChannel = 1;
-  touchpadMixerMgr.addStrip(cfg);
+  touchpadMixerMgr.addLayout(cfg);
 
   proc.initialize();
   proc.forceRebuildMappings();
@@ -2128,7 +2128,7 @@ TEST_F(InputProcessorTest, TouchpadDrumPadFingerUpSendsNoteOff) {
   cfg.drumPadColumns = 4;
   cfg.drumPadMidiNoteStart = 60;
   cfg.midiChannel = 1;
-  touchpadMixerMgr.addStrip(cfg);
+  touchpadMixerMgr.addLayout(cfg);
 
   proc.initialize();
   proc.forceRebuildMappings();
@@ -2168,7 +2168,7 @@ TEST_F(InputProcessorTest, TouchpadDrumPadGridMappingCorrectNote) {
   cfg.drumPadMidiNoteStart = 36;
   cfg.drumPadVelocityRandom = 0;
   cfg.midiChannel = 1;
-  touchpadMixerMgr.addStrip(cfg);
+  touchpadMixerMgr.addLayout(cfg);
 
   proc.initialize();
   proc.forceRebuildMappings();
@@ -2206,7 +2206,7 @@ TEST_F(InputProcessorTest, TouchpadDrumPadNoteHoldsWhileFingerDown) {
   cfg.drumPadMidiNoteStart = 60;
   cfg.drumPadVelocityRandom = 0;
   cfg.midiChannel = 1;
-  touchpadMixerMgr.addStrip(cfg);
+  touchpadMixerMgr.addLayout(cfg);
 
   proc.initialize();
   proc.forceRebuildMappings();
@@ -2260,7 +2260,7 @@ TEST_F(InputProcessorTest, TouchpadDrumPadNoteOffWhenFingerMovesOutside) {
   cfg.drumPadDeadZoneTop = 0.0f;
   cfg.drumPadDeadZoneBottom = 0.0f;
   cfg.midiChannel = 1;
-  touchpadMixerMgr.addStrip(cfg);
+  touchpadMixerMgr.addLayout(cfg);
 
   proc.initialize();
   proc.forceRebuildMappings();
@@ -2301,7 +2301,7 @@ TEST_F(InputProcessorTest, TouchpadDrumPadDifferentPadsDifferentNotes) {
   cfg.drumPadMidiNoteStart = 36;
   cfg.drumPadVelocityRandom = 0;
   cfg.midiChannel = 1;
-  touchpadMixerMgr.addStrip(cfg);
+  touchpadMixerMgr.addLayout(cfg);
 
   proc.initialize();
   proc.forceRebuildMappings();
@@ -2351,7 +2351,7 @@ TEST_F(InputProcessorTest, TouchpadDrumPadVelocityUsesBaseVelocity) {
   cfg.drumPadBaseVelocity = 80;
   cfg.drumPadVelocityRandom = 0;
   cfg.midiChannel = 1;
-  touchpadMixerMgr.addStrip(cfg);
+  touchpadMixerMgr.addLayout(cfg);
 
   proc.initialize();
   proc.forceRebuildMappings();
@@ -2386,7 +2386,7 @@ TEST_F(InputProcessorTest, TouchpadDrumPadVelocityRandomProducesVariation) {
   cfg.drumPadBaseVelocity = 100;
   cfg.drumPadVelocityRandom = 20;
   cfg.midiChannel = 1;
-  touchpadMixerMgr.addStrip(cfg);
+  touchpadMixerMgr.addLayout(cfg);
 
   proc.initialize();
   proc.forceRebuildMappings();
@@ -2424,7 +2424,7 @@ TEST_F(InputProcessorTest, TouchpadDrumPadFingerMovesToDifferentPad) {
   cfg.drumPadMidiNoteStart = 36;
   cfg.drumPadVelocityRandom = 0;
   cfg.midiChannel = 1;
-  touchpadMixerMgr.addStrip(cfg);
+  touchpadMixerMgr.addLayout(cfg);
 
   proc.initialize();
   proc.forceRebuildMappings();
@@ -2468,7 +2468,7 @@ TEST_F(InputProcessorTest, TouchpadDrumPadFirstTouchUsesPositionNotFixedNote) {
   presetMgr.ensureStaticLayers();
   settingsMgr.setMidiModeActive(true);
 
-  // Add Drum Pad strip (position-based notes)
+  // Add Drum Pad layout (position-based notes)
   TouchpadMixerConfig cfg;
   cfg.type = TouchpadType::DrumPad;
   cfg.layerId = 0;
@@ -2477,7 +2477,7 @@ TEST_F(InputProcessorTest, TouchpadDrumPadFirstTouchUsesPositionNotFixedNote) {
   cfg.drumPadMidiNoteStart = 36;
   cfg.drumPadVelocityRandom = 0;
   cfg.midiChannel = 1;
-  touchpadMixerMgr.addStrip(cfg);
+  touchpadMixerMgr.addLayout(cfg);
 
   // Add Finger1Down Note mapping (would send fixed note 60 if it fired)
   auto mappings = presetMgr.getMappingsListForLayer(0);
@@ -2525,7 +2525,7 @@ TEST_F(InputProcessorTest, TouchpadDrumPadFinger2DownMappingSkipped) {
   cfg.drumPadMidiNoteStart = 36;
   cfg.drumPadVelocityRandom = 0;
   cfg.midiChannel = 1;
-  touchpadMixerMgr.addStrip(cfg);
+  touchpadMixerMgr.addLayout(cfg);
 
   // Finger2Down Note mapping would send fixed note 72 if it fired
   auto mappings = presetMgr.getMappingsListForLayer(0);
@@ -2578,7 +2578,7 @@ TEST_F(InputProcessorTest, TouchpadDrumPadMultipleContactsIndependentRelease) {
   cfg.drumPadMidiNoteStart = 36;
   cfg.drumPadVelocityRandom = 0;
   cfg.midiChannel = 1;
-  touchpadMixerMgr.addStrip(cfg);
+  touchpadMixerMgr.addLayout(cfg);
 
   proc.initialize();
   proc.forceRebuildMappings();
@@ -2607,7 +2607,7 @@ TEST_F(InputProcessorTest, TouchpadDrumPadMultipleContactsIndependentRelease) {
   EXPECT_EQ(mockEng.events[0].note, 36) << "Note off for released finger only";
 }
 
-// --- Drum pad: strip on inactive layer produces no notes ---
+// --- Drum pad: layout on inactive layer produces no notes ---
 TEST_F(InputProcessorTest, TouchpadDrumPadLayerFiltering) {
   MockMidiEngine mockEng;
   TouchpadMixerManager touchpadMixerMgr;
@@ -2627,7 +2627,7 @@ TEST_F(InputProcessorTest, TouchpadDrumPadLayerFiltering) {
   cfg.drumPadMidiNoteStart = 60;
   cfg.drumPadVelocityRandom = 0;
   cfg.midiChannel = 1;
-  touchpadMixerMgr.addStrip(cfg);
+  touchpadMixerMgr.addLayout(cfg);
 
   proc.initialize();
   proc.forceRebuildMappings();
@@ -2670,7 +2670,7 @@ TEST_F(InputProcessorTest, TouchpadDrumPadDeadZones) {
   cfg.drumPadDeadZoneTop = 0.1f;
   cfg.drumPadDeadZoneBottom = 0.1f;
   cfg.midiChannel = 1;
-  touchpadMixerMgr.addStrip(cfg);
+  touchpadMixerMgr.addLayout(cfg);
 
   proc.initialize();
   proc.forceRebuildMappings();
@@ -2716,7 +2716,7 @@ TEST_F(InputProcessorTest, TouchpadDrumPadBoundaryMapping) {
   cfg.drumPadMidiNoteStart = 36;
   cfg.drumPadVelocityRandom = 0;
   cfg.midiChannel = 1;
-  touchpadMixerMgr.addStrip(cfg);
+  touchpadMixerMgr.addLayout(cfg);
 
   proc.initialize();
   proc.forceRebuildMappings();
@@ -2757,7 +2757,7 @@ TEST_F(InputProcessorTest, TouchpadDrumPadVelocityClamped) {
   cfg.drumPadBaseVelocity = 127;
   cfg.drumPadVelocityRandom = 20;
   cfg.midiChannel = 1;
-  touchpadMixerMgr.addStrip(cfg);
+  touchpadMixerMgr.addLayout(cfg);
 
   proc.initialize();
   proc.forceRebuildMappings();
@@ -2775,8 +2775,8 @@ TEST_F(InputProcessorTest, TouchpadDrumPadVelocityClamped) {
 
   cfg.drumPadBaseVelocity = 1;
   cfg.drumPadVelocityRandom = 10;
-  touchpadMixerMgr.removeStrip(0);
-  touchpadMixerMgr.addStrip(cfg);
+  touchpadMixerMgr.removeLayout(0);
+  touchpadMixerMgr.addLayout(cfg);
   proc.forceRebuildMappings();
 
   for (int i = 0; i < 20; ++i) {
@@ -2810,7 +2810,7 @@ TEST_F(InputProcessorTest, TouchpadDrumPadFinger1UpMappingCoexists) {
   cfg.drumPadColumns = 4;
   cfg.drumPadMidiNoteStart = 36;
   cfg.midiChannel = 1;
-  touchpadMixerMgr.addStrip(cfg);
+  touchpadMixerMgr.addLayout(cfg);
 
   auto mappings = presetMgr.getMappingsListForLayer(0);
   juce::ValueTree m("Mapping");

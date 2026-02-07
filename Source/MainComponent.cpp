@@ -292,7 +292,7 @@ MainComponent::MainComponent()
         juce::AlertWindow::showMessageBoxAsync(
             juce::AlertWindow::WarningIcon, "Performance Mode",
             "No Trackpad mappings found in this preset.\n\n"
-            "Add Trackpad X or Y mappings, or a Touchpad Mixer strip, to use "
+            "Add Trackpad X or Y mappings, or a Touchpad layout, to use "
             "Performance Mode.");
         return;
       }
@@ -636,7 +636,7 @@ void MainComponent::handleRawKeyEvent(uintptr_t deviceHandle, int keyCode,
         juce::AlertWindow::showMessageBoxAsync(
             juce::AlertWindow::WarningIcon, "Performance Mode",
             "No Trackpad mappings found in this preset.\n\n"
-            "Add Trackpad X or Y mappings, or a Touchpad Mixer strip, to use "
+            "Add Trackpad X or Y mappings, or a Touchpad layout, to use "
             "Performance Mode.");
         return;
       }
@@ -755,7 +755,7 @@ void MainComponent::handleAxisEvent(uintptr_t deviceHandle, int inputCode,
 void MainComponent::handleTouchpadContacts(
     uintptr_t deviceHandle, const std::vector<TouchpadContact> &contacts) {
   // Process when device is in "Touchpad" alias, or when we have touchpad
-  // mixer strips (so MIDI is generated even without assigning Touchpad alias).
+  // touchpad layouts (so MIDI is generated even without assigning Touchpad alias).
   if (cachedTouchpadHandles.count(deviceHandle) == 0 &&
       !inputProcessor.hasTouchpadLayouts())
     return;

@@ -150,11 +150,11 @@ void StartupManager::createFactoryDefault() {
     }
   }
 
-  // Clear all touchpad mixer strips
+  // Clear all touchpad layouts
   if (touchpadMixerManager) {
-    auto strips = touchpadMixerManager->getStrips();
-    for (int i = static_cast<int>(strips.size()) - 1; i >= 0; --i) {
-      touchpadMixerManager->removeStrip(i);
+    auto layouts = touchpadMixerManager->getLayouts();
+    for (int i = static_cast<int>(layouts.size()) - 1; i >= 0; --i) {
+      touchpadMixerManager->removeLayout(i);
     }
   }
 

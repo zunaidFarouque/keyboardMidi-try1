@@ -6,6 +6,16 @@
 // Touchpad tab type selector. Mixer = vertical CC faders; DrumPad = finger drumming grid.
 enum class TouchpadType { Mixer = 0, DrumPad = 1 };
 
+// Universal region for touchpad layouts. Defines where on the touchpad (0-1 normalized)
+// this layout is active. Content is stretched to fit within the region.
+struct TouchpadLayoutRegion {
+  float left = 0.0f;
+  float top = 0.0f;
+  float right = 1.0f;
+  float bottom = 1.0f;
+  // Invariant: left < right, top < bottom
+};
+
 // Touchpad Mixer: divide touchpad into N vertical faders (CC only).
 // Quick/Precision x Absolute/Relative x Lock/Free.
 
@@ -45,6 +55,9 @@ struct TouchpadMixerConfig {
   bool muteButtonsEnabled = false;
   // Mute = send CC 0 for that fader until toggled again (no separate mute CC)
 
+  // Universal: where this layout is active on the touchpad (default: full pad)
+  TouchpadLayoutRegion region;
+
   // DrumPad fields (used when type == DrumPad)
   int drumPadRows = 2;
   int drumPadColumns = 4;
@@ -82,9 +95,14 @@ struct TouchpadMixerEntry {
   TouchpadMixerAbsRel absRel = TouchpadMixerAbsRel::Absolute;
   TouchpadMixerLockFree lockFree = TouchpadMixerLockFree::Free;
   bool muteButtonsEnabled = false;
+  // Region: where this layout is active; precomputed for O(1) lookup
+  float regionLeft = 0.0f, regionTop = 0.0f, regionRight = 1.0f,
+        regionBottom = 1.0f;
+  float invRegionWidth = 1.0f, invRegionHeight = 1.0f;
 };
 
 // Compiled entry for DrumPad strip (O(1) runtime).
+// Grid is stretched to fit within region; region defines active area.
 struct TouchpadDrumPadEntry {
   int layerId = 0;
   int rows = 0;
@@ -94,10 +112,7 @@ struct TouchpadDrumPadEntry {
   int midiChannel = 1;
   int baseVelocity = 100;
   int velocityRandom = 0;
-  float deadZoneLeft = 0.0f;
-  float deadZoneRight = 0.0f;
-  float deadZoneTop = 0.0f;
-  float deadZoneBottom = 0.0f;
-  float invActiveWidth = 1.0f;
-  float invActiveHeight = 1.0f;
+  float regionLeft = 0.0f, regionTop = 0.0f, regionRight = 1.0f,
+        regionBottom = 1.0f;
+  float invRegionWidth = 1.0f, invRegionHeight = 1.0f;
 };

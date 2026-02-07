@@ -1203,8 +1203,8 @@ TEST_F(GridCompilerTest, LatchToggleReleaseLatchedCompiled) {
 TEST_F(GridCompilerTest, TouchpadMixerManagerTypePersistence) {
   TouchpadMixerConfig cfg;
   cfg.type = TouchpadType::Mixer;
-  cfg.name = "Test Strip";
-  touchpadMixerMgr.addStrip(cfg);
+  cfg.name = "Test Layout";
+  touchpadMixerMgr.addLayout(cfg);
 
   juce::ValueTree vt = touchpadMixerMgr.toValueTree();
   EXPECT_EQ(vt.getNumChildren(), 1);
@@ -1213,9 +1213,9 @@ TEST_F(GridCompilerTest, TouchpadMixerManagerTypePersistence) {
 
   TouchpadMixerManager restored;
   restored.restoreFromValueTree(vt);
-  EXPECT_EQ(restored.getStrips().size(), 1u);
-  EXPECT_EQ(restored.getStrips()[0].type, TouchpadType::Mixer);
-  EXPECT_EQ(restored.getStrips()[0].name, "Test Strip");
+  EXPECT_EQ(restored.getLayouts().size(), 1u);
+  EXPECT_EQ(restored.getLayouts()[0].type, TouchpadType::Mixer);
+  EXPECT_EQ(restored.getLayouts()[0].name, "Test Layout");
 }
 
 TEST_F(GridCompilerTest, TouchpadMixerManagerTypeBackwardCompat) {
@@ -1239,66 +1239,66 @@ TEST_F(GridCompilerTest, TouchpadMixerManagerTypeBackwardCompat) {
 
   TouchpadMixerManager restored;
   restored.restoreFromValueTree(vt);
-  EXPECT_EQ(restored.getStrips().size(), 1u);
-  EXPECT_EQ(restored.getStrips()[0].type, TouchpadType::Mixer)
+  EXPECT_EQ(restored.getLayouts().size(), 1u);
+  EXPECT_EQ(restored.getLayouts()[0].type, TouchpadType::Mixer)
       << "Missing type should default to Mixer";
 }
 
 // --- TouchpadMixerManager unit tests ---
-TEST_F(GridCompilerTest, TouchpadMixerAddStripAddsEntry) {
+TEST_F(GridCompilerTest, TouchpadMixerAddLayoutAddsEntry) {
   TouchpadMixerConfig cfg;
-  cfg.name = "My Strip";
+  cfg.name = "My Layout";
   cfg.layerId = 2;
   cfg.numFaders = 8;
-  touchpadMixerMgr.addStrip(cfg);
+  touchpadMixerMgr.addLayout(cfg);
 
-  auto strips = touchpadMixerMgr.getStrips();
-  ASSERT_EQ(strips.size(), 1u);
-  EXPECT_EQ(strips[0].name, "My Strip");
-  EXPECT_EQ(strips[0].layerId, 2);
-  EXPECT_EQ(strips[0].numFaders, 8);
+  auto layouts = touchpadMixerMgr.getLayouts();
+  ASSERT_EQ(layouts.size(), 1u);
+  EXPECT_EQ(layouts[0].name, "My Layout");
+  EXPECT_EQ(layouts[0].layerId, 2);
+  EXPECT_EQ(layouts[0].numFaders, 8);
 }
 
-TEST_F(GridCompilerTest, TouchpadMixerRemoveStripRemovesAtIndex) {
+TEST_F(GridCompilerTest, TouchpadMixerRemoveLayoutRemovesAtIndex) {
   TouchpadMixerConfig cfg1;
   cfg1.name = "First";
   TouchpadMixerConfig cfg2;
   cfg2.name = "Second";
-  touchpadMixerMgr.addStrip(cfg1);
-  touchpadMixerMgr.addStrip(cfg2);
+  touchpadMixerMgr.addLayout(cfg1);
+  touchpadMixerMgr.addLayout(cfg2);
 
-  touchpadMixerMgr.removeStrip(0);
+  touchpadMixerMgr.removeLayout(0);
 
-  auto strips = touchpadMixerMgr.getStrips();
-  ASSERT_EQ(strips.size(), 1u);
-  EXPECT_EQ(strips[0].name, "Second");
+  auto layouts = touchpadMixerMgr.getLayouts();
+  ASSERT_EQ(layouts.size(), 1u);
+  EXPECT_EQ(layouts[0].name, "Second");
 }
 
-TEST_F(GridCompilerTest, TouchpadMixerUpdateStripUpdatesAtIndex) {
+TEST_F(GridCompilerTest, TouchpadMixerUpdateLayoutUpdatesAtIndex) {
   TouchpadMixerConfig cfg;
   cfg.name = "Original";
   cfg.ccStart = 50;
-  touchpadMixerMgr.addStrip(cfg);
+  touchpadMixerMgr.addLayout(cfg);
 
   cfg.name = "Updated";
   cfg.ccStart = 60;
-  touchpadMixerMgr.updateStrip(0, cfg);
+  touchpadMixerMgr.updateLayout(0, cfg);
 
-  auto strips = touchpadMixerMgr.getStrips();
-  ASSERT_EQ(strips.size(), 1u);
-  EXPECT_EQ(strips[0].name, "Updated");
-  EXPECT_EQ(strips[0].ccStart, 60);
+  auto layouts = touchpadMixerMgr.getLayouts();
+  ASSERT_EQ(layouts.size(), 1u);
+  EXPECT_EQ(layouts[0].name, "Updated");
+  EXPECT_EQ(layouts[0].ccStart, 60);
 }
 
-TEST_F(GridCompilerTest, TouchpadMixerRemoveStripInvalidIndexNoOp) {
+TEST_F(GridCompilerTest, TouchpadMixerRemoveLayoutInvalidIndexNoOp) {
   TouchpadMixerConfig cfg;
-  touchpadMixerMgr.addStrip(cfg);
+  touchpadMixerMgr.addLayout(cfg);
 
-  touchpadMixerMgr.removeStrip(-1);
-  EXPECT_EQ(touchpadMixerMgr.getStrips().size(), 1u);
+  touchpadMixerMgr.removeLayout(-1);
+  EXPECT_EQ(touchpadMixerMgr.getLayouts().size(), 1u);
 
-  touchpadMixerMgr.removeStrip(99);
-  EXPECT_EQ(touchpadMixerMgr.getStrips().size(), 1u);
+  touchpadMixerMgr.removeLayout(99);
+  EXPECT_EQ(touchpadMixerMgr.getLayouts().size(), 1u);
 }
 
 TEST_F(GridCompilerTest, TouchpadMixerToValueTreeRestoreRoundTripsAllFields) {
@@ -1317,15 +1317,15 @@ TEST_F(GridCompilerTest, TouchpadMixerToValueTreeRestoreRoundTripsAllFields) {
   cfg.absRel = TouchpadMixerAbsRel::Relative;
   cfg.lockFree = TouchpadMixerLockFree::Lock;
   cfg.muteButtonsEnabled = true;
-  touchpadMixerMgr.addStrip(cfg);
+  touchpadMixerMgr.addLayout(cfg);
 
   juce::ValueTree vt = touchpadMixerMgr.toValueTree();
   TouchpadMixerManager restored;
   restored.restoreFromValueTree(vt);
 
-  auto strips = restored.getStrips();
-  ASSERT_EQ(strips.size(), 1u);
-  const auto &r = strips[0];
+  auto layouts = restored.getLayouts();
+  ASSERT_EQ(layouts.size(), 1u);
+  const auto &r = layouts[0];
   EXPECT_EQ(r.type, TouchpadType::Mixer);
   EXPECT_EQ(r.name, "Full Config");
   EXPECT_EQ(r.layerId, 3);
@@ -1364,30 +1364,30 @@ TEST_F(GridCompilerTest, TouchpadMixerRestoreIgnoresInvalidChildren) {
   TouchpadMixerManager restored;
   restored.restoreFromValueTree(vt);
 
-  auto strips = restored.getStrips();
-  EXPECT_EQ(strips.size(), 1u);
-  EXPECT_EQ(strips[0].name, "Valid");
+  auto layouts = restored.getLayouts();
+  EXPECT_EQ(layouts.size(), 1u);
+  EXPECT_EQ(layouts[0].name, "Valid");
 }
 
-TEST_F(GridCompilerTest, TouchpadMixerRestoreEmptyTreeClearsStrips) {
+TEST_F(GridCompilerTest, TouchpadMixerRestoreEmptyTreeClearsLayouts) {
   TouchpadMixerConfig cfg;
-  touchpadMixerMgr.addStrip(cfg);
-  touchpadMixerMgr.addStrip(cfg);
+  touchpadMixerMgr.addLayout(cfg);
+  touchpadMixerMgr.addLayout(cfg);
 
   juce::ValueTree empty("TouchpadMixers");
   touchpadMixerMgr.restoreFromValueTree(empty);
 
-  EXPECT_EQ(touchpadMixerMgr.getStrips().size(), 0u);
+  EXPECT_EQ(touchpadMixerMgr.getLayouts().size(), 0u);
 }
 
-// --- GridCompiler touchpad mixer strip compilation ---
-TEST_F(GridCompilerTest, TouchpadMixerStripCompiledIntoContext) {
+// --- GridCompiler touchpad mixer layout compilation ---
+TEST_F(GridCompilerTest, TouchpadMixerLayoutCompiledIntoContext) {
   TouchpadMixerConfig cfg;
   cfg.type = TouchpadType::Mixer;
   cfg.layerId = 1;
   cfg.numFaders = 6;
   cfg.ccStart = 55;
-  touchpadMixerMgr.addStrip(cfg);
+  touchpadMixerMgr.addLayout(cfg);
 
   auto context = GridCompiler::compile(presetMgr, deviceMgr, zoneMgr,
                                        touchpadMixerMgr, settingsMgr);
@@ -1399,19 +1399,19 @@ TEST_F(GridCompilerTest, TouchpadMixerStripCompiledIntoContext) {
   EXPECT_EQ(entry.ccStart, 55);
 }
 
-TEST_F(GridCompilerTest, TouchpadMixerMultipleStripsAllCompiled) {
+TEST_F(GridCompilerTest, TouchpadMixerMultipleLayoutsAllCompiled) {
   TouchpadMixerConfig cfg1;
   cfg1.type = TouchpadType::Mixer;
-  cfg1.name = "Strip A";
+  cfg1.name = "Layout A";
   cfg1.layerId = 0;
   cfg1.ccStart = 50;
   TouchpadMixerConfig cfg2;
   cfg2.type = TouchpadType::Mixer;
-  cfg2.name = "Strip B";
+  cfg2.name = "Layout B";
   cfg2.layerId = 2;
   cfg2.ccStart = 60;
-  touchpadMixerMgr.addStrip(cfg1);
-  touchpadMixerMgr.addStrip(cfg2);
+  touchpadMixerMgr.addLayout(cfg1);
+  touchpadMixerMgr.addLayout(cfg2);
 
   auto context = GridCompiler::compile(presetMgr, deviceMgr, zoneMgr,
                                        touchpadMixerMgr, settingsMgr);
@@ -1423,13 +1423,13 @@ TEST_F(GridCompilerTest, TouchpadMixerMultipleStripsAllCompiled) {
   EXPECT_EQ(context->touchpadMixerStrips[1].ccStart, 60);
 }
 
-TEST_F(GridCompilerTest, TouchpadMixerStripPropertiesMapped) {
+TEST_F(GridCompilerTest, TouchpadMixerLayoutPropertiesMapped) {
   TouchpadMixerConfig cfg;
   cfg.type = TouchpadType::Mixer;
   cfg.quickPrecision = TouchpadMixerQuickPrecision::Precision;
   cfg.lockFree = TouchpadMixerLockFree::Lock;
   cfg.muteButtonsEnabled = true;
-  touchpadMixerMgr.addStrip(cfg);
+  touchpadMixerMgr.addLayout(cfg);
 
   auto context = GridCompiler::compile(presetMgr, deviceMgr, zoneMgr,
                                        touchpadMixerMgr, settingsMgr);
@@ -1443,8 +1443,8 @@ TEST_F(GridCompilerTest, TouchpadMixerStripPropertiesMapped) {
   EXPECT_NE((entry.modeFlags & kMixerModeMuteButtons), 0);
 }
 
-// --- Drum pad strip compilation ---
-TEST_F(GridCompilerTest, TouchpadDrumPadStripCompiledIntoContext) {
+// --- Drum pad layout compilation ---
+TEST_F(GridCompilerTest, TouchpadDrumPadLayoutCompiledIntoContext) {
   TouchpadMixerConfig cfg;
   cfg.type = TouchpadType::DrumPad;
   cfg.layerId = 0;
@@ -1452,7 +1452,7 @@ TEST_F(GridCompilerTest, TouchpadDrumPadStripCompiledIntoContext) {
   cfg.drumPadColumns = 4;
   cfg.drumPadMidiNoteStart = 60;
   cfg.midiChannel = 1;
-  touchpadMixerMgr.addStrip(cfg);
+  touchpadMixerMgr.addLayout(cfg);
 
   auto context = GridCompiler::compile(presetMgr, deviceMgr, zoneMgr,
                                        touchpadMixerMgr, settingsMgr);
@@ -1467,7 +1467,7 @@ TEST_F(GridCompilerTest, TouchpadDrumPadStripCompiledIntoContext) {
   EXPECT_EQ(entry.midiChannel, 1);
 }
 
-TEST_F(GridCompilerTest, TouchpadDrumPadStripPropertiesMapped) {
+TEST_F(GridCompilerTest, TouchpadDrumPadLayoutPropertiesMapped) {
   TouchpadMixerConfig cfg;
   cfg.type = TouchpadType::DrumPad;
   cfg.drumPadRows = 3;
@@ -1479,7 +1479,7 @@ TEST_F(GridCompilerTest, TouchpadDrumPadStripPropertiesMapped) {
   cfg.drumPadDeadZoneRight = 0.05f;
   cfg.drumPadDeadZoneTop = 0.1f;
   cfg.drumPadDeadZoneBottom = 0.1f;
-  touchpadMixerMgr.addStrip(cfg);
+  touchpadMixerMgr.addLayout(cfg);
 
   auto context = GridCompiler::compile(presetMgr, deviceMgr, zoneMgr,
                                        touchpadMixerMgr, settingsMgr);
@@ -1504,12 +1504,12 @@ TEST_F(GridCompilerTest, TouchpadDrumPadAndMixerBothCompiled) {
   TouchpadMixerConfig mixerCfg;
   mixerCfg.type = TouchpadType::Mixer;
   mixerCfg.ccStart = 50;
-  touchpadMixerMgr.addStrip(mixerCfg);
+  touchpadMixerMgr.addLayout(mixerCfg);
 
   TouchpadMixerConfig drumCfg;
   drumCfg.type = TouchpadType::DrumPad;
   drumCfg.drumPadMidiNoteStart = 60;
-  touchpadMixerMgr.addStrip(drumCfg);
+  touchpadMixerMgr.addLayout(drumCfg);
 
   auto context = GridCompiler::compile(presetMgr, deviceMgr, zoneMgr,
                                        touchpadMixerMgr, settingsMgr);
@@ -1543,9 +1543,9 @@ TEST_F(GridCompilerTest, TouchpadDrumPadToValueTreeRestoreRoundTrips) {
   TouchpadMixerManager restored;
   restored.restoreFromValueTree(vt);
 
-  auto strips = restored.getStrips();
-  ASSERT_EQ(strips.size(), 1u);
-  const auto &r = strips[0];
+  auto layouts = restored.getLayouts();
+  ASSERT_EQ(layouts.size(), 1u);
+  const auto &r = layouts[0];
   EXPECT_EQ(r.type, TouchpadType::DrumPad);
   EXPECT_EQ(r.name, "Drum Pad");
   EXPECT_EQ(r.layerId, 1);
@@ -1565,11 +1565,11 @@ TEST_F(GridCompilerTest, TouchpadMixerManagerDrumPadTypePersistence) {
   TouchpadMixerConfig cfg;
   cfg.type = TouchpadType::DrumPad;
   cfg.name = "Drum Pad";
-  touchpadMixerMgr.addStrip(cfg);
+  touchpadMixerMgr.addLayout(cfg);
 
   juce::ValueTree vt = touchpadMixerMgr.toValueTree();
   TouchpadMixerManager restored;
   restored.restoreFromValueTree(vt);
-  EXPECT_EQ(restored.getStrips().size(), 1u);
-  EXPECT_EQ(restored.getStrips()[0].type, TouchpadType::DrumPad);
+  EXPECT_EQ(restored.getLayouts().size(), 1u);
+  EXPECT_EQ(restored.getLayouts()[0].type, TouchpadType::DrumPad);
 }

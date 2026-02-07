@@ -21,9 +21,9 @@ public:
   void changeListenerCallback(juce::ChangeBroadcaster *source) override;
 
   /// Returns the currently selected row index, or -1 if none.
-  int getSelectedStripIndex() const;
+  int getSelectedLayoutIndex() const;
 
-  std::function<void(int stripIndex, const TouchpadMixerConfig *)>
+  std::function<void(int layoutIndex, const TouchpadMixerConfig *)>
       onSelectionChanged;
 
 private:

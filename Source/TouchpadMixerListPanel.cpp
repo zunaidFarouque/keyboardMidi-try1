@@ -12,9 +12,9 @@ TouchpadMixerListPanel::TouchpadMixerListPanel(TouchpadMixerManager *mgr)
     if (manager) {
       TouchpadMixerConfig def;
       def.name = "Touchpad Mixer";
-      manager->addStrip(def);
+      manager->addLayout(def);
       listBox.updateContent();
-      int n = static_cast<int>(manager->getStrips().size());
+      int n = static_cast<int>(manager->getLayouts().size());
       if (n > 0)
         listBox.selectRow(n - 1);
     }
@@ -25,7 +25,7 @@ TouchpadMixerListPanel::TouchpadMixerListPanel(TouchpadMixerManager *mgr)
   removeButton.onClick = [this] {
     int row = listBox.getSelectedRow();
     if (row >= 0 && manager) {
-      manager->removeStrip(row);
+      manager->removeLayout(row);
       listBox.updateContent();
       listBox.deselectAllRows();
     }
@@ -57,7 +57,7 @@ void TouchpadMixerListPanel::resized() {
 int TouchpadMixerListPanel::getNumRows() {
   if (!manager)
     return 0;
-  return static_cast<int>(manager->getStrips().size());
+  return static_cast<int>(manager->getLayouts().size());
 }
 
 void TouchpadMixerListPanel::paintListBoxItem(int rowNumber, juce::Graphics &g,
@@ -65,8 +65,8 @@ void TouchpadMixerListPanel::paintListBoxItem(int rowNumber, juce::Graphics &g,
                                               bool rowIsSelected) {
   if (!manager)
     return;
-  auto strips = manager->getStrips();
-  if (rowNumber < 0 || rowNumber >= static_cast<int>(strips.size()))
+  auto layouts = manager->getLayouts();
+  if (rowNumber < 0 || rowNumber >= static_cast<int>(layouts.size()))
     return;
   if (rowIsSelected)
     g.fillAll(juce::Colour(0xff4a4a4a));
@@ -74,20 +74,20 @@ void TouchpadMixerListPanel::paintListBoxItem(int rowNumber, juce::Graphics &g,
     g.fillAll(juce::Colour(0xff2a2a2a));
   g.setColour(juce::Colours::white);
   g.setFont(14.0f);
-  g.drawText(juce::String(strips[(size_t)rowNumber].name), 8, 0, width - 16,
+  g.drawText(juce::String(layouts[(size_t)rowNumber].name), 8, 0, width - 16,
              height, juce::Justification::centredLeft);
 }
 
-int TouchpadMixerListPanel::getSelectedStripIndex() const {
+int TouchpadMixerListPanel::getSelectedLayoutIndex() const {
   return listBox.getSelectedRow();
 }
 
 void TouchpadMixerListPanel::selectedRowsChanged(int lastRowSelected) {
   if (onSelectionChanged) {
     if (lastRowSelected >= 0 && manager) {
-      auto strips = manager->getStrips();
-      if (lastRowSelected < static_cast<int>(strips.size()))
-        onSelectionChanged(lastRowSelected, &strips[(size_t)lastRowSelected]);
+      auto layouts = manager->getLayouts();
+      if (lastRowSelected < static_cast<int>(layouts.size()))
+        onSelectionChanged(lastRowSelected, &layouts[(size_t)lastRowSelected]);
       else
         onSelectionChanged(-1, nullptr);
     } else {

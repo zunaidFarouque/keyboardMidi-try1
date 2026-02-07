@@ -1477,14 +1477,14 @@ bool InputProcessor::hasPointerMappings() {
     }
   }
 
-  // Check for touchpad mixer strips (CC faders)
+  // Check for touchpad mixer layouts (CC faders)
   for (const auto &strip : ctx->touchpadMixerStrips) {
     if (activeLayersSnapshot[(size_t)strip.layerId]) {
       return true;
     }
   }
 
-  // Check for touchpad drum pad strips
+  // Check for touchpad drum pad layouts
   for (const auto &strip : ctx->touchpadDrumPadStrips) {
     if (activeLayersSnapshot[(size_t)strip.layerId]) {
       return true;
@@ -1564,7 +1564,7 @@ void InputProcessor::processTouchpadContacts(
   bool finger2Down = tip2 && !prev.tip2;
   bool finger2Up = !tip2 && prev.tip2;
 
-  // When drum pad strips are active, they consume finger-down touches for
+  // When drum pad layouts are active, they consume finger-down touches for
   // position-based notes. Skip Finger1Down/Finger2Down Note mappings so the
   // drum pad emits the correct note for the touch position (not a fixed note).
   bool drumPadConsumesFingerDown =
@@ -1911,7 +1911,7 @@ void InputProcessor::processTouchpadContacts(
     }
   }
 
-  // Touchpad mixer strips (CC faders) - mixerStateLock only (reduces mapLock
+  // Touchpad mixer layouts (CC faders) - mixerStateLock only (reduces mapLock
   // contention)
   bool touchpadMixerStateChanged = false;
   if (!ctx->touchpadMixerStrips.empty()) {
@@ -2069,7 +2069,7 @@ void InputProcessor::processTouchpadContacts(
     }
   }
 
-  // Drum pad strips: grid -> Note On/Off per contact.
+  // Drum pad layouts: grid -> Note On/Off per contact.
   // Note holds while finger is down and inside pad. Note off when finger lifts
   // or moves outside pad. When finger moves to a different pad: note off for
   // old pad, note on for new pad.

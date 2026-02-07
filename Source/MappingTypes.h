@@ -366,7 +366,7 @@ struct CompiledContext {
   // 5. Touchpad drum pad strips (grid of note pads); applied by InputProcessor
   std::vector<TouchpadDrumPadEntry> touchpadDrumPadStrips;
 
-  // Maps layout index (from TouchpadMixerManager.getStrips) to (type, index in
+  // Maps layout index (from TouchpadMixerManager.getLayouts) to (type, index in
   // that type's vector). Used by visualizer for overlay selection.
   struct TouchpadLayoutRef {
     TouchpadType type = TouchpadType::Mixer;
