@@ -349,16 +349,20 @@ MainComponent::MainComponent()
 
   // Register focus target callback
   rawInputManager->setFocusTargetCallback([this]() -> void * {
-    // Check if Main Window is Minimized (Iconic)
+    // When performance mode is on, cursor is clipped to mini window - use it
+    // as focus target to avoid stealing focus back to main on every input
+    if (performanceModeButton.getToggleState() && miniWindow &&
+        miniWindow->getPeer()) {
+      return miniWindow->getPeer()->getNativeHandle();
+    }
+    // Main window minimized - use mini window
     if (auto *peer = getPeer()) {
       void *hwnd = peer->getNativeHandle();
       if (hwnd != nullptr && IsIconic(static_cast<HWND>(hwnd))) {
-        // Main window is minimized - use mini window
         if (miniWindow && miniWindow->getPeer()) {
           return miniWindow->getPeer()->getNativeHandle();
         }
       }
-      // Main window is not minimized - use main window
       return hwnd;
     }
     return nullptr;
@@ -757,7 +761,19 @@ void MainComponent::handleTouchpadContacts(
     return;
   inputProcessor.processTouchpadContacts(deviceHandle, contacts);
   if (miniWindow && settingsManager.getShowTouchpadVisualizerInMiniWindow()) {
-    miniWindow->updateTouchpadContacts(contacts, deviceHandle);
+    int64_t now = juce::Time::getMillisecondCounter();
+    if (now - lastMiniWindowTouchpadUpdateMs >= kMiniWindowTouchpadThrottleMs) {
+      lastMiniWindowTouchpadUpdateMs = now;
+      auto contactsCopy = contacts;
+      auto deviceHandleCopy = deviceHandle;
+      juce::Component::SafePointer<MainComponent> weakThis(this);
+      juce::MessageManager::callAsync(
+          [weakThis, contactsCopy, deviceHandleCopy]() {
+            if (weakThis != nullptr && weakThis->miniWindow)
+              weakThis->miniWindow->updateTouchpadContacts(contactsCopy,
+                                                         deviceHandleCopy);
+          });
+    }
   }
 }
 

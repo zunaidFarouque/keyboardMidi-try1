@@ -299,13 +299,15 @@ int64_t __stdcall RawInputManager::rawInputWndProc(void *hwnd, unsigned int msg,
             bool shouldBroadcast = false;
             if (globalManagerInstance->settingsManager) {
               // Always broadcast if MIDI mode is active
-              // Also always broadcast toggle key so it can be detected to turn
-              // mode off
+              // Also broadcast toggle key (turn off) and performance key (turn
+              // on both) even when MIDI is off
               int toggleKey =
                   globalManagerInstance->settingsManager->getToggleKey();
+              int perfKey =
+                  globalManagerInstance->settingsManager->getPerformanceModeKey();
               shouldBroadcast =
                   globalManagerInstance->settingsManager->isMidiModeActive() ||
-                  (vKey == toggleKey);
+                  (vKey == toggleKey) || (vKey == perfKey);
             } else {
               // If no settings manager, always broadcast (backward
               // compatibility)

@@ -105,6 +105,12 @@ void MiniStatusWindow::refreshContent() {
   const bool showTouchpad =
       settingsManager.getShowTouchpadVisualizerInMiniWindow();
 
+  // Skip clear/re-set when content type unchanged - avoids brief stretched
+  // glitch when window is visible and listener runs (e.g. after setMidiModeActive)
+  if (showingTouchpadPanel == showTouchpad)
+    return;
+  showingTouchpadPanel = showTouchpad;
+
   if (showTouchpad && inputProcessor) {
     if (!touchpadPanelHolder) {
       auto *panel =

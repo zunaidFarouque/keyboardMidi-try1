@@ -30,6 +30,7 @@ private:
   InputProcessor *inputProcessor;
   juce::Label statusLabel;
   std::unique_ptr<juce::Component> touchpadPanelHolder;
+  bool showingTouchpadPanel = false; // avoid clear/re-set when content type unchanged
 
   JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(MiniStatusWindow)
 };
