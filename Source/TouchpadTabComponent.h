@@ -9,10 +9,13 @@ public:
   explicit TouchpadTabComponent(TouchpadMixerManager *mgr);
   ~TouchpadTabComponent() override;
 
-  /// Notified when strip selection changes: (stripIndex, layerId). (-1, 0) when none.
-  std::function<void(int stripIndex, int layerId)> onSelectionChangedForVisualizer;
+  /// Notified when strip selection changes: (stripIndex, layerId). (-1, 0) when
+  /// none.
+  std::function<void(int stripIndex, int layerId)>
+      onSelectionChangedForVisualizer;
 
-  /// Sync visualizer with current list selection (call when tab is shown or after preset load).
+  /// Sync visualizer with current list selection (call when tab is shown or
+  /// after preset load).
   void refreshVisualizerSelection();
 
   void paint(juce::Graphics &) override;

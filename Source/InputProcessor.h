@@ -133,8 +133,8 @@ public:
     std::vector<bool> muted;
   };
   TouchpadMixerStripState getTouchpadMixerStripState(uintptr_t deviceHandle,
-                                                    int stripIndex,
-                                                    int numFaders) const;
+                                                     int stripIndex,
+                                                     int numFaders) const;
 
   // True if any manual mapping exists for this keyCode (for conflict highlight
   // in visualizer)
@@ -170,7 +170,8 @@ private:
   // Thread Safety
   juce::ReadWriteLock mapLock;
   juce::ReadWriteLock bufferLock;
-  juce::ReadWriteLock mixerStateLock; // Touchpad mixer state only (reduces contention)
+  juce::ReadWriteLock
+      mixerStateLock; // Touchpad mixer state only (reduces contention)
   mutable juce::CriticalSection stateLock; // Phase 53.7: layer state only
 
   // Phase 50.5 / 52.1: Grid-based compiled context (audio + visuals). Protected

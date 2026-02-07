@@ -286,8 +286,8 @@ TEST(ChordUtilitiesZoneIntegration, PianoClose_Triad_CompilesToChordPool) {
   zone->pianoVoicingStyle = Zone::PianoVoicingStyle::Close;
   zoneMgr.addZone(zone);
 
-  auto context =
-      GridCompiler::compile(presetMgr, deviceMgr, zoneMgr, touchpadMixerMgr, settingsMgr);
+  auto context = GridCompiler::compile(presetMgr, deviceMgr, zoneMgr,
+                                       touchpadMixerMgr, settingsMgr);
   const auto &slot = (*context->globalGrids[0])[81];
   ASSERT_TRUE(slot.isActive);
   ASSERT_GE(slot.chordIndex, 0);
@@ -318,8 +318,8 @@ TEST(ChordUtilitiesZoneIntegration, PianoOpen_Seventh_CompilesToChordPool) {
   zone->pianoVoicingStyle = Zone::PianoVoicingStyle::Open;
   zoneMgr.addZone(zone);
 
-  auto context =
-      GridCompiler::compile(presetMgr, deviceMgr, zoneMgr, touchpadMixerMgr, settingsMgr);
+  auto context = GridCompiler::compile(presetMgr, deviceMgr, zoneMgr,
+                                       touchpadMixerMgr, settingsMgr);
   const auto &slot = (*context->globalGrids[0])[81];
   ASSERT_TRUE(slot.isActive);
   ASSERT_GE(slot.chordIndex, 0);
@@ -349,8 +349,8 @@ TEST(ChordUtilitiesZoneIntegration, GuitarCampfire_Triad_CompilesToChordPool) {
   zone->guitarPlayerPosition = Zone::GuitarPlayerPosition::Campfire;
   zoneMgr.addZone(zone);
 
-  auto context =
-      GridCompiler::compile(presetMgr, deviceMgr, zoneMgr, touchpadMixerMgr, settingsMgr);
+  auto context = GridCompiler::compile(presetMgr, deviceMgr, zoneMgr,
+                                       touchpadMixerMgr, settingsMgr);
   const auto &slot = (*context->globalGrids[0])[81];
   ASSERT_TRUE(slot.isActive);
   ASSERT_GE(slot.chordIndex, 0);
@@ -383,8 +383,8 @@ TEST(ChordUtilitiesZoneIntegration,
   zone->guitarFretAnchor = 5;
   zoneMgr.addZone(zone);
 
-  auto context =
-      GridCompiler::compile(presetMgr, deviceMgr, zoneMgr, touchpadMixerMgr, settingsMgr);
+  auto context = GridCompiler::compile(presetMgr, deviceMgr, zoneMgr,
+                                       touchpadMixerMgr, settingsMgr);
   const auto &slot = (*context->globalGrids[0])[81];
   ASSERT_TRUE(slot.isActive);
   ASSERT_GE(slot.chordIndex, 0);

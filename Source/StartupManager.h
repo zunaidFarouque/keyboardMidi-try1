@@ -1,6 +1,6 @@
 #pragma once
-#include "PresetManager.h"
 #include "DeviceManager.h"
+#include "PresetManager.h"
 #include "ZoneManager.h"
 #include <JuceHeader.h>
 
@@ -8,10 +8,12 @@ class SettingsManager;
 class TouchpadMixerManager;
 
 class StartupManager : public juce::Timer,
-                        public juce::ValueTree::Listener,
-                        public juce::ChangeListener {
+                       public juce::ValueTree::Listener,
+                       public juce::ChangeListener {
 public:
-  StartupManager(PresetManager* presetMgr, DeviceManager* deviceMgr, ZoneManager* zoneMgr, TouchpadMixerManager* touchpadMixerMgr, SettingsManager* settingsMgr);
+  StartupManager(PresetManager *presetMgr, DeviceManager *deviceMgr,
+                 ZoneManager *zoneMgr, TouchpadMixerManager *touchpadMixerMgr,
+                 SettingsManager *settingsMgr);
   ~StartupManager() override;
 
   // Initialize application (load or create factory default)
@@ -30,23 +32,26 @@ public:
   void timerCallback() override;
 
   // ValueTree::Listener implementation
-  void valueTreePropertyChanged(juce::ValueTree& treeWhosePropertyHasChanged,
-                                const juce::Identifier& property) override;
-  void valueTreeChildAdded(juce::ValueTree& parentTree, juce::ValueTree& childWhichHasBeenAdded) override;
-  void valueTreeChildRemoved(juce::ValueTree& parentTree, juce::ValueTree& childWhichHasBeenRemoved,
+  void valueTreePropertyChanged(juce::ValueTree &treeWhosePropertyHasChanged,
+                                const juce::Identifier &property) override;
+  void valueTreeChildAdded(juce::ValueTree &parentTree,
+                           juce::ValueTree &childWhichHasBeenAdded) override;
+  void valueTreeChildRemoved(juce::ValueTree &parentTree,
+                             juce::ValueTree &childWhichHasBeenRemoved,
                              int indexFromWhichChildWasRemoved) override;
-  void valueTreeChildOrderChanged(juce::ValueTree& parentTreeWhoseChildrenHaveMoved,
-                                   int oldIndex, int newIndex) override;
+  void
+  valueTreeChildOrderChanged(juce::ValueTree &parentTreeWhoseChildrenHaveMoved,
+                             int oldIndex, int newIndex) override;
 
   // ChangeListener implementation
-  void changeListenerCallback(juce::ChangeBroadcaster* source) override;
+  void changeListenerCallback(juce::ChangeBroadcaster *source) override;
 
 private:
-  PresetManager* presetManager;
-  DeviceManager* deviceManager;
-  ZoneManager* zoneManager;
-  TouchpadMixerManager* touchpadMixerManager;
-  SettingsManager* settingsManager;
+  PresetManager *presetManager;
+  DeviceManager *deviceManager;
+  ZoneManager *zoneManager;
+  TouchpadMixerManager *touchpadMixerManager;
+  SettingsManager *settingsManager;
 
   juce::File appDataFolder;
   juce::File autoloadFile;

@@ -61,7 +61,8 @@ TouchpadMixerEditorComponent::SeparatorComponent::SeparatorComponent(
     const juce::String &label, juce::Justification justification)
     : labelText(label), textAlign(justification) {}
 
-void TouchpadMixerEditorComponent::SeparatorComponent::paint(juce::Graphics &g) {
+void TouchpadMixerEditorComponent::SeparatorComponent::paint(
+    juce::Graphics &g) {
   auto bounds = getLocalBounds();
   const float centreY = bounds.getCentreY();
   const int lineY = static_cast<int>(centreY - 0.5f);
@@ -80,10 +81,12 @@ void TouchpadMixerEditorComponent::SeparatorComponent::paint(juce::Graphics &g) 
   g.drawText(labelText, textLeft, bounds.getY(), textBlockWidth,
              bounds.getHeight(), textAlign, true);
   if (textLeft - pad > bounds.getX())
-    g.fillRect(bounds.getX(), lineY, textLeft - pad - bounds.getX(), lineHeight);
+    g.fillRect(bounds.getX(), lineY, textLeft - pad - bounds.getX(),
+               lineHeight);
   if (textLeft + textBlockWidth + pad < bounds.getRight())
     g.fillRect(textLeft + textBlockWidth + pad, lineY,
-               bounds.getRight() - (textLeft + textBlockWidth + pad), lineHeight);
+               bounds.getRight() - (textLeft + textBlockWidth + pad),
+               lineHeight);
 }
 
 TouchpadMixerEditorComponent::TouchpadMixerEditorComponent(
@@ -146,7 +149,7 @@ juce::var TouchpadMixerEditorComponent::getConfigValue(
                                                                            : 1);
   if (propertyId == "lockFree")
     return juce::var(currentConfig.lockFree == TouchpadMixerLockFree::Free ? 2
-                                                                            : 1);
+                                                                           : 1);
   if (propertyId == "muteButtonsEnabled")
     return juce::var(currentConfig.muteButtonsEnabled);
   return juce::var();
@@ -167,13 +170,11 @@ void TouchpadMixerEditorComponent::applyConfigValue(
     currentConfig.layerId =
         juce::jlimit(0, 8, static_cast<int>(value) - 1); // combo ID 1..9
   else if (propertyId == "numFaders")
-    currentConfig.numFaders =
-        juce::jlimit(1, 32, static_cast<int>(value));
+    currentConfig.numFaders = juce::jlimit(1, 32, static_cast<int>(value));
   else if (propertyId == "ccStart")
     currentConfig.ccStart = juce::jlimit(0, 127, static_cast<int>(value));
   else if (propertyId == "midiChannel")
-    currentConfig.midiChannel =
-        juce::jlimit(1, 16, static_cast<int>(value));
+    currentConfig.midiChannel = juce::jlimit(1, 16, static_cast<int>(value));
   else if (propertyId == "inputMin")
     currentConfig.inputMin = static_cast<float>(static_cast<double>(value));
   else if (propertyId == "inputMax")
@@ -183,18 +184,17 @@ void TouchpadMixerEditorComponent::applyConfigValue(
   else if (propertyId == "outputMax")
     currentConfig.outputMax = juce::jlimit(0, 127, static_cast<int>(value));
   else if (propertyId == "quickPrecision")
-    currentConfig.quickPrecision =
-        (static_cast<int>(value) == 2)
-            ? TouchpadMixerQuickPrecision::Precision
-            : TouchpadMixerQuickPrecision::Quick;
+    currentConfig.quickPrecision = (static_cast<int>(value) == 2)
+                                       ? TouchpadMixerQuickPrecision::Precision
+                                       : TouchpadMixerQuickPrecision::Quick;
   else if (propertyId == "absRel")
-    currentConfig.absRel =
-        (static_cast<int>(value) == 2) ? TouchpadMixerAbsRel::Relative
-                                       : TouchpadMixerAbsRel::Absolute;
+    currentConfig.absRel = (static_cast<int>(value) == 2)
+                               ? TouchpadMixerAbsRel::Relative
+                               : TouchpadMixerAbsRel::Absolute;
   else if (propertyId == "lockFree")
-    currentConfig.lockFree =
-        (static_cast<int>(value) == 2) ? TouchpadMixerLockFree::Free
-                                       : TouchpadMixerLockFree::Lock;
+    currentConfig.lockFree = (static_cast<int>(value) == 2)
+                                 ? TouchpadMixerLockFree::Free
+                                 : TouchpadMixerLockFree::Lock;
   else if (propertyId == "muteButtonsEnabled")
     currentConfig.muteButtonsEnabled = static_cast<bool>(value);
   else
@@ -202,8 +202,8 @@ void TouchpadMixerEditorComponent::applyConfigValue(
   manager->updateStrip(selectedIndex, currentConfig);
 }
 
-void TouchpadMixerEditorComponent::createControl(const InspectorControl &def,
-                                                 std::vector<UiItem> &currentRow) {
+void TouchpadMixerEditorComponent::createControl(
+    const InspectorControl &def, std::vector<UiItem> &currentRow) {
   const juce::String propId = def.propertyId;
   juce::var currentVal = getConfigValue(propId);
 
@@ -244,10 +244,9 @@ void TouchpadMixerEditorComponent::createControl(const InspectorControl &def,
     juce::Slider *slPtr = sl.get();
     sl->onValueChange = [this, propId, def, slPtr]() {
       double v = slPtr->getValue();
-      juce::var valueToSet =
-          (def.step >= 1.0)
-              ? juce::var(static_cast<int>(std::round(v)))
-              : juce::var(v);
+      juce::var valueToSet = (def.step >= 1.0)
+                                 ? juce::var(static_cast<int>(std::round(v)))
+                                 : juce::var(v);
       applyConfigValue(propId, valueToSet);
     };
     auto rowComp = std::make_unique<LabelEditorRow>();
@@ -269,13 +268,20 @@ void TouchpadMixerEditorComponent::createControl(const InspectorControl &def,
     if (id > 0)
       cb->setSelectedId(id, juce::dontSendNotification);
     if (propId == "quickPrecision")
-      cb->setTooltip("Quick: one finger directly controls a fader. Precision: one finger shows overlay and position, second finger applies the value.");
+      cb->setTooltip(
+          "Quick: one finger directly controls a fader. Precision: one finger "
+          "shows overlay and position, second finger applies the value.");
     else if (propId == "absRel")
-      cb->setTooltip("Absolute: finger position on the touchpad sets the value. Relative: finger movement changes the value; you can start anywhere.");
+      cb->setTooltip(
+          "Absolute: finger position on the touchpad sets the value. Relative: "
+          "finger movement changes the value; you can start anywhere.");
     else if (propId == "lockFree")
-      cb->setTooltip("Lock: the first fader you touch stays selected until you release. Free: you can swipe to another fader while holding.");
+      cb->setTooltip(
+          "Lock: the first fader you touch stays selected until you release. "
+          "Free: you can swipe to another fader while holding.");
     else if (propId == "layerId")
-      cb->setTooltip("Layer this strip belongs to. Only active when this layer is selected.");
+      cb->setTooltip("Layer this strip belongs to. Only active when this layer "
+                     "is selected.");
     juce::ComboBox *cbPtr = cb.get();
     cb->onChange = [this, propId, cbPtr]() {
       applyConfigValue(propId, juce::var(cbPtr->getSelectedId()));
@@ -376,8 +382,7 @@ void TouchpadMixerEditorComponent::resized() {
     float totalWeight = 0.0f;
     for (auto &item : row.items) {
       if (item.isAutoWidth) {
-        if (auto *lc =
-                dynamic_cast<LabeledControl *>(item.component.get()))
+        if (auto *lc = dynamic_cast<LabeledControl *>(item.component.get()))
           usedWidth += lc->getIdealWidth();
         else
           usedWidth += 100;
@@ -390,8 +395,7 @@ void TouchpadMixerEditorComponent::resized() {
     for (auto &item : row.items) {
       int w = 0;
       if (item.isAutoWidth) {
-        if (auto *lc =
-                dynamic_cast<LabeledControl *>(item.component.get()))
+        if (auto *lc = dynamic_cast<LabeledControl *>(item.component.get()))
           w = lc->getIdealWidth();
         else
           w = 100;

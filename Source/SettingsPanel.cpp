@@ -342,7 +342,8 @@ void SettingsPanel::paint(juce::Graphics &g) {
 }
 
 void SettingsPanel::parentSizeChanged() {
-  // When inside a Viewport, ensure we have a size so we paint (viewport doesn't resize its viewed component)
+  // When inside a Viewport, ensure we have a size so we paint (viewport doesn't
+  // resize its viewed component)
   if (auto *vp = dynamic_cast<juce::Viewport *>(getParentComponent())) {
     int w = vp->getWidth();
     if (w > 0)
@@ -351,7 +352,8 @@ void SettingsPanel::parentSizeChanged() {
 }
 
 void SettingsPanel::resized() {
-  // When inside a Viewport, use viewport width and set height to content height so scrollbar appears
+  // When inside a Viewport, use viewport width and set height to content height
+  // so scrollbar appears
   int panelW = getWidth();
   if (auto *vp = dynamic_cast<juce::Viewport *>(getParentComponent())) {
     panelW = vp->getWidth();
@@ -359,7 +361,8 @@ void SettingsPanel::resized() {
     int spacing = 10;
     int visGroupHeight = controlHeight * 2 + spacing * 3 + 28;
     int groupHeight = controlHeight + spacing + 28;
-    int contentH = 10 + (controlHeight + spacing) * 7 + visGroupHeight + spacing + groupHeight + 24;
+    int contentH = 10 + (controlHeight + spacing) * 7 + visGroupHeight +
+                   spacing + groupHeight + 24;
     setSize(panelW, contentH);
   }
 

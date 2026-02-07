@@ -52,8 +52,9 @@ private:
 
   // LAF so combo popups parent to top-level (not clipped by Viewport)
   struct ComboPopupLAF : juce::LookAndFeel_V4 {
-    juce::PopupMenu::Options getOptionsForComboBoxPopupMenu(
-        juce::ComboBox &box, juce::Label &label) override;
+    juce::PopupMenu::Options
+    getOptionsForComboBoxPopupMenu(juce::ComboBox &box,
+                                   juce::Label &label) override;
   } comboPopupLAF;
 
   JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(TouchpadMixerEditorComponent)

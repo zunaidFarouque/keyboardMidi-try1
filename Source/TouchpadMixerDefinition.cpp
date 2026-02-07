@@ -31,7 +31,8 @@ InspectorSchema TouchpadMixerDefinition::getSchema() {
     layerCtrl.options[i + 1] = "Layer " + juce::String(i);
   schema.push_back(layerCtrl);
 
-  schema.push_back(MappingDefinition::createSeparator("", juce::Justification::centred));
+  schema.push_back(
+      MappingDefinition::createSeparator("", juce::Justification::centred));
 
   // Interaction matrix: each on its own row
   InspectorControl qpCtrl;
@@ -58,7 +59,8 @@ InspectorSchema TouchpadMixerDefinition::getSchema() {
   lfCtrl.options[2] = "Free";
   schema.push_back(lfCtrl);
 
-  schema.push_back(MappingDefinition::createSeparator("", juce::Justification::centred));
+  schema.push_back(
+      MappingDefinition::createSeparator("", juce::Justification::centred));
 
   InspectorControl numFadersCtrl;
   numFadersCtrl.propertyId = "numFaders";
@@ -90,7 +92,8 @@ InspectorSchema TouchpadMixerDefinition::getSchema() {
   chCtrl.valueFormat = InspectorControl::Format::Integer;
   schema.push_back(chCtrl);
 
-  schema.push_back(MappingDefinition::createSeparator("", juce::Justification::centred));
+  schema.push_back(
+      MappingDefinition::createSeparator("", juce::Justification::centred));
 
   InspectorControl inMinCtrl;
   inMinCtrl.propertyId = "inputMin";
@@ -136,7 +139,8 @@ InspectorSchema TouchpadMixerDefinition::getSchema() {
   outMaxCtrl.widthWeight = 0.5f;
   schema.push_back(outMaxCtrl);
 
-  schema.push_back(MappingDefinition::createSeparator("", juce::Justification::centred));
+  schema.push_back(
+      MappingDefinition::createSeparator("", juce::Justification::centred));
 
   InspectorControl muteCtrl;
   muteCtrl.propertyId = "muteButtonsEnabled";

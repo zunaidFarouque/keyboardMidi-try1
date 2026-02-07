@@ -42,9 +42,7 @@ void SettingsManager::setPitchBendRange(int range) {
   sendChangeMessage();
 }
 
-bool SettingsManager::isMidiModeActive() const {
-  return cachedMidiModeActive;
-}
+bool SettingsManager::isMidiModeActive() const { return cachedMidiModeActive; }
 
 void SettingsManager::updateCachedMidiModeActive() {
   cachedMidiModeActive = rootNode.getProperty("midiModeActive", false);
@@ -115,8 +113,8 @@ void SettingsManager::setDelayMidiEnabled(bool enabled) {
 }
 
 int SettingsManager::getDelayMidiSeconds() const {
-  return juce::jlimit(1, 10,
-                      static_cast<int>(rootNode.getProperty("delayMidiSeconds", 1)));
+  return juce::jlimit(
+      1, 10, static_cast<int>(rootNode.getProperty("delayMidiSeconds", 1)));
 }
 
 void SettingsManager::setDelayMidiSeconds(int seconds) {

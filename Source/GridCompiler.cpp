@@ -923,11 +923,14 @@ std::shared_ptr<CompiledMapContext> GridCompiler::compile(
     entry.lockFree = cfg.lockFree;
     entry.muteButtonsEnabled = cfg.muteButtonsEnabled;
     entry.modeFlags =
-        (cfg.quickPrecision == TouchpadMixerQuickPrecision::Quick ? kMixerModeUseFinger1 : 0) |
+        (cfg.quickPrecision == TouchpadMixerQuickPrecision::Quick
+             ? kMixerModeUseFinger1
+             : 0) |
         (cfg.lockFree == TouchpadMixerLockFree::Lock ? kMixerModeLock : 0) |
         (cfg.absRel == TouchpadMixerAbsRel::Relative ? kMixerModeRelative : 0) |
         (cfg.muteButtonsEnabled ? kMixerModeMuteButtons : 0);
-    entry.effectiveYScale = cfg.muteButtonsEnabled ? (1.0f / kMuteButtonRegionTop) : 1.0f;
+    entry.effectiveYScale =
+        cfg.muteButtonsEnabled ? (1.0f / kMuteButtonRegionTop) : 1.0f;
     context->touchpadMixerStrips.push_back(entry);
   }
 

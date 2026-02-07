@@ -4,11 +4,11 @@
 #include "KeyboardLayoutUtils.h"
 #include "MappingTypes.h"
 #include "PitchPadUtilities.h"
-#include "TouchpadMixerTypes.h"
 #include "PresetManager.h"
 #include "RawInputManager.h"
 #include "ScaleLibrary.h"
 #include "SettingsManager.h"
+#include "TouchpadMixerTypes.h"
 #include "VoiceManager.h"
 #include <JuceHeader.h>
 #include <algorithm>
@@ -63,13 +63,10 @@ VisualizerComponent::getTextColorForKeyFill(juce::Colour keyFillColor) {
   return ColourContrast::getTextColorForKeyFill(keyFillColor);
 }
 
-VisualizerComponent::VisualizerComponent(ZoneManager *zoneMgr,
-                                         DeviceManager *deviceMgr,
-                                         const VoiceManager &voiceMgr,
-                                         SettingsManager *settingsMgr,
-                                         PresetManager *presetMgr,
-                                         InputProcessor *inputProc,
-                                         ScaleLibrary *scaleLib)
+VisualizerComponent::VisualizerComponent(
+    ZoneManager *zoneMgr, DeviceManager *deviceMgr,
+    const VoiceManager &voiceMgr, SettingsManager *settingsMgr,
+    PresetManager *presetMgr, InputProcessor *inputProc, ScaleLibrary *scaleLib)
     : zoneManager(zoneMgr), deviceManager(deviceMgr), voiceManager(voiceMgr),
       settingsManager(settingsMgr), presetManager(presetMgr),
       inputProcessor(inputProc), scaleLibrary(scaleLib),
@@ -79,9 +76,12 @@ VisualizerComponent::VisualizerComponent(ZoneManager *zoneMgr,
   addAndMakeVisible(globalPanel);
 
   globalPanelResizerBar = std::make_unique<GlobalPanelResizerBar>();
-  auto *resizer = static_cast<GlobalPanelResizerBar *>(globalPanelResizerBar.get());
+  auto *resizer =
+      static_cast<GlobalPanelResizerBar *>(globalPanelResizerBar.get());
   resizer->setMouseCursor(juce::MouseCursor::LeftRightResizeCursor);
-  resizer->onWidthChange = [this](float w) { setGlobalPanelWidthFromResizer(w); };
+  resizer->onWidthChange = [this](float w) {
+    setGlobalPanelWidthFromResizer(w);
+  };
   addAndMakeVisible(*globalPanelResizerBar);
 
   addAndMakeVisible(expandPanelButton);
@@ -100,10 +100,12 @@ VisualizerComponent::VisualizerComponent(ZoneManager *zoneMgr,
   // Ensure selector is on top to receive mouse events
   viewSelector.toFront(false);
 
-  // Phase 50.9.1: Follow Input toggle (always visible; layer system works regardless of Studio Mode)
+  // Phase 50.9.1: Follow Input toggle (always visible; layer system works
+  // regardless of Studio Mode)
   addAndMakeVisible(followButton);
   followButton.setClickingTogglesState(true);
-  followButton.setTooltip("When on, the visualizer follows the layer currently being triggered by input.");
+  followButton.setTooltip("When on, the visualizer follows the layer currently "
+                          "being triggered by input.");
   followButton.onClick = [this] {
     followInputEnabled.store(followButton.getToggleState(),
                              std::memory_order_release);
@@ -228,7 +230,8 @@ void VisualizerComponent::refreshCache() {
 
     g.fillAll(juce::Colour(0xff111111)); // Background
 
-    // --- 0. Header Bar (Transpose left, Sustain right) - only over content area ---
+    // --- 0. Header Bar (Transpose left, Sustain right) - only over content
+    // area ---
     auto bounds = juce::Rectangle<int>(0, 0, contentWidth, height);
     auto headerRect = bounds.removeFromTop(30);
     g.setColour(juce::Colour(0xff222222));
@@ -827,12 +830,12 @@ void VisualizerComponent::paint(juce::Graphics &g) {
     // viewing its layer, show the strip (fader columns + values) always.
     if (inputProcessor && selectedTouchpadMixerStripIndex_ >= 0 &&
         currentVisualizedLayer == selectedTouchpadMixerLayerId_) {
-      std::shared_ptr<const CompiledMapContext> ctx = inputProcessor->getContext();
+      std::shared_ptr<const CompiledMapContext> ctx =
+          inputProcessor->getContext();
       if (ctx) {
         uintptr_t dev =
             lastTouchpadDeviceHandle.load(std::memory_order_acquire);
-        size_t stripIdx =
-            static_cast<size_t>(selectedTouchpadMixerStripIndex_);
+        size_t stripIdx = static_cast<size_t>(selectedTouchpadMixerStripIndex_);
         if (stripIdx < ctx->touchpadMixerStrips.size()) {
           const auto &strip = ctx->touchpadMixerStrips[stripIdx];
           if (strip.layerId == currentVisualizedLayer && strip.numFaders > 0) {
@@ -843,12 +846,14 @@ void VisualizerComponent::paint(juce::Graphics &g) {
             const int N = strip.numFaders;
             const float fw = touchpadRect.getWidth() / static_cast<float>(N);
             const float h = touchpadRect.getHeight();
-            const float muteRegionH = (strip.modeFlags & kMixerModeMuteButtons) ? (h * 0.15f) : 0.0f;
+            const float muteRegionH =
+                (strip.modeFlags & kMixerModeMuteButtons) ? (h * 0.15f) : 0.0f;
             const float faderH = h - muteRegionH;
             const float faderTop = touchpadRect.getY();
             const float faderBottom = faderTop + faderH;
 
-            // Input range dead zones: [0, inputMin] and [inputMax, 1] don't change the fader.
+            // Input range dead zones: [0, inputMin] and [inputMax, 1] don't
+            // change the fader.
             const float inMin = juce::jlimit(0.0f, 1.0f, strip.inputMin);
             const float inMax = juce::jlimit(0.0f, 1.0f, strip.inputMax);
             const bool hasDeadZones = (inMin > 0.0f || inMax < 1.0f);
@@ -857,7 +862,8 @@ void VisualizerComponent::paint(juce::Graphics &g) {
               float stripX = touchpadRect.getX() + static_cast<float>(i) * fw;
 
               if (hasDeadZones) {
-                // Top dead zone: Y [0, inputMin] -> always max, no effect when dragging
+                // Top dead zone: Y [0, inputMin] -> always max, no effect when
+                // dragging
                 if (inMin > 0.0f) {
                   float topDeadH = inMin * faderH;
                   g.setColour(juce::Colour(0xff383838).withAlpha(0.75f));
@@ -867,35 +873,37 @@ void VisualizerComponent::paint(juce::Graphics &g) {
                 if (inMax < 1.0f) {
                   float bottomDeadH = (1.0f - inMax) * faderH;
                   g.setColour(juce::Colour(0xff383838).withAlpha(0.75f));
-                  g.fillRect(stripX + 1.0f, faderBottom - bottomDeadH, fw - 2.0f, bottomDeadH);
+                  g.fillRect(stripX + 1.0f, faderBottom - bottomDeadH,
+                             fw - 2.0f, bottomDeadH);
                 }
                 // Active band boundaries (thin lines)
                 if (inMin > 0.0f && inMin < 1.0f) {
                   float yLine = faderTop + inMin * faderH;
                   g.setColour(juce::Colours::orange.withAlpha(0.7f));
-                  g.drawHorizontalLine(static_cast<int>(yLine), stripX, stripX + fw);
+                  g.drawHorizontalLine(static_cast<int>(yLine), stripX,
+                                       stripX + fw);
                 }
                 if (inMax > 0.0f && inMax < 1.0f) {
                   float yLine = faderTop + inMax * faderH;
                   g.setColour(juce::Colours::orange.withAlpha(0.7f));
-                  g.drawHorizontalLine(static_cast<int>(yLine), stripX, stripX + fw);
+                  g.drawHorizontalLine(static_cast<int>(yLine), stripX,
+                                       stripX + fw);
                 }
               }
 
               int displayVal = (i < static_cast<int>(displayValues.size()))
-                                  ? displayValues[(size_t)i]
-                                  : 0;
-              bool isMuted = (i < static_cast<int>(muted.size())) && muted[(size_t)i];
-              float fill = static_cast<float>(juce::jlimit(0, 127, displayVal)) / 127.0f;
+                                   ? displayValues[(size_t)i]
+                                   : 0;
+              bool isMuted =
+                  (i < static_cast<int>(muted.size())) && muted[(size_t)i];
+              float fill =
+                  static_cast<float>(juce::jlimit(0, 127, displayVal)) / 127.0f;
               float fillH = fill * faderH;
               g.setColour(isMuted ? juce::Colour(0xff505070).withAlpha(0.85f)
-                                 : juce::Colour(0xff406080).withAlpha(0.6f));
-              g.fillRect(stripX + 1.0f,
-                        faderBottom - fillH,
-                        fw - 2.0f,
-                        fillH);
+                                  : juce::Colour(0xff406080).withAlpha(0.6f));
+              g.fillRect(stripX + 1.0f, faderBottom - fillH, fw - 2.0f, fillH);
               g.setColour(isMuted ? juce::Colour(0xff8080a0).withAlpha(0.6f)
-                                 : juce::Colours::lightgrey.withAlpha(0.5f));
+                                  : juce::Colours::lightgrey.withAlpha(0.5f));
               g.drawRect(stripX, faderTop, fw, faderH, 0.5f);
               // Muted: "M" at top of strip for visibility
               if (isMuted) {
@@ -910,14 +918,15 @@ void VisualizerComponent::paint(juce::Graphics &g) {
               } else {
                 g.setColour(juce::Colours::white);
                 g.setFont(juce::jmin(10.0f, fw * 0.6f));
-                g.drawText(juce::String(displayVal), stripX, touchpadRect.getY(),
-                           fw, 14.0f, juce::Justification::centred, false);
+                g.drawText(juce::String(displayVal), stripX,
+                           touchpadRect.getY(), fw, 14.0f,
+                           juce::Justification::centred, false);
               }
               // CC number at bottom of fader area (above mute row)
               g.setColour(juce::Colours::white);
               g.setFont(juce::jmin(9.0f, fw * 0.5f));
-              g.drawText(juce::String(strip.ccStart + i),
-                         stripX, faderBottom - 14.0f, fw, 12.0f,
+              g.drawText(juce::String(strip.ccStart + i), stripX,
+                         faderBottom - 14.0f, fw, 12.0f,
                          juce::Justification::centred, false);
             }
             if (strip.muteButtonsEnabled && muteRegionH > 0) {
@@ -936,7 +945,7 @@ void VisualizerComponent::paint(juce::Graphics &g) {
             g.setColour(juce::Colours::white);
             g.setFont(9.0f);
             g.drawText("Mixer: CC" + juce::String(strip.ccStart) + "-" +
-                       juce::String(strip.ccStart + N - 1),
+                           juce::String(strip.ccStart + N - 1),
                        touchpadRect.getX(), touchpadRect.getBottom() + 2.0f,
                        touchpadRect.getWidth(), 10,
                        juce::Justification::centredLeft, false);
@@ -997,7 +1006,8 @@ float VisualizerComponent::getEffectiveRightPanelWidth() const {
 void VisualizerComponent::setGlobalPanelWidthFromResizer(float newWidth) {
   if (newWidth < kGlobalPanelMinWidth) {
     globalPanelCollapsed_ = true;
-    globalPanelWidth_ = kGlobalPanelDefaultWidth; // restore default when re-expanded
+    globalPanelWidth_ =
+        kGlobalPanelDefaultWidth; // restore default when re-expanded
   } else {
     globalPanelCollapsed_ = false;
     globalPanelWidth_ = juce::jlimit(60.0f, 500.0f, newWidth);
@@ -1011,7 +1021,7 @@ void VisualizerComponent::updateGlobalPanelLayout(int w, int h) {
 
   if (globalPanelCollapsed_) {
     expandPanelButton.setBounds(w - static_cast<int>(kExpandTabWidth), 0,
-                               static_cast<int>(kExpandTabWidth), h);
+                                static_cast<int>(kExpandTabWidth), h);
     expandPanelButton.setVisible(true);
     if (globalPanelResizerBar) {
       globalPanelResizerBar->setBounds(0, 0, 0, 0);
@@ -1044,8 +1054,9 @@ void VisualizerComponent::resized() {
 
   updateGlobalPanelLayout(w, h);
 
-  // Position Follow Input button (always visible) and View Selector (when Studio Mode)
-  int headerHeight = 30;   // Status bar height
+  // Position Follow Input button (always visible) and View Selector (when
+  // Studio Mode)
+  int headerHeight = 30; // Status bar height
   int selectorHeight = 25;
   int margin = 10;
   int selectorY = headerHeight + margin;

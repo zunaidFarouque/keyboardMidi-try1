@@ -1,9 +1,9 @@
 // MIDI Processing Performance Benchmarks
 // Uses Google Benchmark to measure latency and throughput of various MIDI paths
 
-#include "BenchmarkFixtures.h"
 #include "../GridCompiler.h"
 #include "../TouchpadTypes.h"
+#include "BenchmarkFixtures.h"
 
 // =============================================================================
 // Category 1: Manual Mapping Tests
@@ -207,8 +207,7 @@ BENCHMARK_REGISTER_F(MidiBenchmarkFixture, Layer_MomentarySwitch)
 // Layer toggle command
 BENCHMARK_DEFINE_F(MidiBenchmarkFixture, Layer_Toggle)
 (benchmark::State &state) {
-  addCommandMapping(0, 81, static_cast<int>(MIDIQy::CommandID::LayerToggle),
-                    1);
+  addCommandMapping(0, 81, static_cast<int>(MIDIQy::CommandID::LayerToggle), 1);
   proc.forceRebuildMappings();
 
   InputID input{0, 81};
@@ -652,8 +651,7 @@ BENCHMARK_REGISTER_F(MidiBenchmarkFixture, Stress_PolyChords_10Keys)
 // Rapid layer toggling while playing notes
 BENCHMARK_DEFINE_F(MidiBenchmarkFixture, Stress_RapidLayerSwitch)
 (benchmark::State &state) {
-  addCommandMapping(0, 70, static_cast<int>(MIDIQy::CommandID::LayerToggle),
-                    1);
+  addCommandMapping(0, 70, static_cast<int>(MIDIQy::CommandID::LayerToggle), 1);
   addNoteMapping(0, 81, 60, 100, 1);
   addNoteMapping(1, 81, 72, 100, 1); // Different note on layer 1
   proc.forceRebuildMappings();
@@ -767,8 +765,9 @@ BENCHMARK_DEFINE_F(MidiBenchmarkFixture, HotPath_ZoneManager_AddFiveZones)
     std::vector<std::shared_ptr<Zone>> zones;
     for (int i = 0; i < 5; ++i) {
       std::vector<int> keys = {81 + i, 82 + i, 83 + i};
-      auto z = createZone("BmZ" + juce::String(i), 0, keys,
-                          ChordUtilities::ChordType::Triad, PolyphonyMode::Poly);
+      auto z =
+          createZone("BmZ" + juce::String(i), 0, keys,
+                     ChordUtilities::ChordType::Triad, PolyphonyMode::Poly);
       proc.getZoneManager().addZone(z);
       zones.push_back(z);
     }
@@ -809,8 +808,9 @@ BENCHMARK_REGISTER_F(MidiBenchmarkFixture, Feature_Zone_Strum_Trigger)
 // Legato zone with adaptive glide (RhythmAnalyzer path)
 BENCHMARK_DEFINE_F(MidiBenchmarkFixture, Feature_Zone_Legato_AdaptiveGlide)
 (benchmark::State &state) {
-  auto zone = createZone("LegatoAdaptive", 0, {81, 87, 69},
-                         ChordUtilities::ChordType::None, PolyphonyMode::Legato);
+  auto zone =
+      createZone("LegatoAdaptive", 0, {81, 87, 69},
+                 ChordUtilities::ChordType::None, PolyphonyMode::Legato);
   zone->glideTimeMs = 50;
   zone->isAdaptiveGlide = true;
   zone->maxGlideTimeMs = 200;
@@ -837,10 +837,8 @@ BENCHMARK_DEFINE_F(MidiBenchmarkFixture, Feature_Touchpad_FingerDownUp)
   mockMidi.clear();
 
   uintptr_t deviceHandle = 0x9000;
-  std::vector<TouchpadContact> downContacts = {
-      {0, 100, 100, 0.5f, 0.5f, true}};
-  std::vector<TouchpadContact> upContacts = {
-      {0, 100, 100, 0.5f, 0.5f, false}};
+  std::vector<TouchpadContact> downContacts = {{0, 100, 100, 0.5f, 0.5f, true}};
+  std::vector<TouchpadContact> upContacts = {{0, 100, 100, 0.5f, 0.5f, false}};
 
   for (auto _ : state) {
     proc.processTouchpadContacts(deviceHandle, downContacts);
@@ -854,7 +852,8 @@ BENCHMARK_REGISTER_F(MidiBenchmarkFixture, Feature_Touchpad_FingerDownUp)
 // Axis/pitch-pad path: handleAxisEvent (scroll or pointer)
 BENCHMARK_DEFINE_F(MidiBenchmarkFixture, Feature_HandleAxisEvent)
 (benchmark::State &state) {
-  // Expression CC on ScrollUp (InputTypes::ScrollUp) - if no mapping, still exercises path
+  // Expression CC on ScrollUp (InputTypes::ScrollUp) - if no mapping, still
+  // exercises path
   addExpressionCCMapping(0, InputTypes::ScrollUp, 1, 1, false);
   proc.forceRebuildMappings();
   mockMidi.clear();
@@ -900,7 +899,8 @@ BENCHMARK_DEFINE_F(MidiBenchmarkFixture, Stress_ManyZones_15)
 BENCHMARK_REGISTER_F(MidiBenchmarkFixture, Stress_ManyZones_15)
     ->Unit(benchmark::kMicrosecond);
 
-// Layer search: 9 layers with note on layer 8, toggle all on (already in Layer_AllActive; this one emphasizes compile + one hit)
+// Layer search: 9 layers with note on layer 8, toggle all on (already in
+// Layer_AllActive; this one emphasizes compile + one hit)
 BENCHMARK_DEFINE_F(MidiBenchmarkFixture, Stress_LayerSearch_AllNineActive)
 (benchmark::State &state) {
   for (int layer = 1; layer < 9; ++layer) {

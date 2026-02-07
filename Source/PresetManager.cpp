@@ -8,9 +8,7 @@ PresetManager::PresetManager() {
 
 PresetManager::~PresetManager() {}
 
-void PresetManager::beginTransaction() {
-  isLoading = true;
-}
+void PresetManager::beginTransaction() { isLoading = true; }
 
 void PresetManager::endTransaction() {
   isLoading = false;
@@ -107,7 +105,8 @@ void PresetManager::loadFromFile(juce::File file) {
             auto layer = child.getChild(j);
             int id = static_cast<int>(layer.getProperty("id", -1));
             if (id < 0 || id > 8) {
-              DBG("PresetManager: Removing invalid layer ID " + juce::String(id));
+              DBG("PresetManager: Removing invalid layer ID " +
+                  juce::String(id));
               child.removeChild(j, nullptr);
             }
           }
@@ -115,7 +114,8 @@ void PresetManager::loadFromFile(juce::File file) {
         rootNode.addChild(child, -1, nullptr);
       }
 
-      // Phase 41.2: Sanitize – keep only first "Layers" child if duplicates exist
+      // Phase 41.2: Sanitize – keep only first "Layers" child if duplicates
+      // exist
       juce::Array<int> layersIndices;
       for (int i = 0; i < rootNode.getNumChildren(); ++i)
         if (rootNode.getChild(i).hasType("Layers"))
@@ -205,10 +205,11 @@ juce::ValueTree PresetManager::getMappingsListForLayer(int layerIndex) {
   return mappings;
 }
 
-std::vector<juce::ValueTree> PresetManager::getEnabledMappingsForLayer(
-    int layerIndex) const {
+std::vector<juce::ValueTree>
+PresetManager::getEnabledMappingsForLayer(int layerIndex) const {
   std::vector<juce::ValueTree> out;
-  juce::ValueTree layer = const_cast<PresetManager *>(this)->getLayerNode(layerIndex);
+  juce::ValueTree layer =
+      const_cast<PresetManager *>(this)->getLayerNode(layerIndex);
   if (!layer.isValid())
     return out;
   juce::ValueTree mappings = layer.getChildWithName("Mappings");

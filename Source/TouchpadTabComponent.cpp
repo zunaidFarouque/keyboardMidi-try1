@@ -1,9 +1,7 @@
 #include "TouchpadTabComponent.h"
 
 TouchpadTabComponent::TouchpadTabComponent(TouchpadMixerManager *mgr)
-    : manager(mgr),
-      listPanel(mgr),
-      editorPanel(mgr),
+    : manager(mgr), listPanel(mgr), editorPanel(mgr),
       resizerBar(&layout, 1, true) {
   addAndMakeVisible(listPanel);
   addAndMakeVisible(editorViewport);
@@ -16,7 +14,8 @@ TouchpadTabComponent::TouchpadTabComponent(TouchpadMixerManager *mgr)
   layout.setItemLayout(1, 5, 5, 5);
   layout.setItemLayout(2, -0.6, -0.75, -0.7);
 
-  listPanel.onSelectionChanged = [this](int index, const TouchpadMixerConfig *c) {
+  listPanel.onSelectionChanged = [this](int index,
+                                        const TouchpadMixerConfig *c) {
     editorPanel.setStrip(index, c);
     if (onSelectionChangedForVisualizer)
       onSelectionChangedForVisualizer(index, c ? c->layerId : 0);
@@ -51,7 +50,8 @@ void TouchpadTabComponent::resized() {
   juce::Component *comps[] = {&listPanel, &resizerBar, &editorViewport};
   layout.layOutComponents(comps, 3, area.getX(), area.getY(), area.getWidth(),
                           area.getHeight(), false, true);
-  // Content size: fixed height + min width so all params (e.g. Output range) are visible
+  // Content size: fixed height + min width so all params (e.g. Output range)
+  // are visible
   static constexpr int kEditorContentHeight = 480;
   static constexpr int kEditorMinWidth = 400;
   int scrollW = 10;

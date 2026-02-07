@@ -292,11 +292,12 @@ enum class TouchpadConversionKind {
   ContinuousToRange // Continuous input -> Expression (range map)
 };
 
-// Pitch-pad layout types (shared by TouchpadConversionParams and PitchPadUtilities)
+// Pitch-pad layout types (shared by TouchpadConversionParams and
+// PitchPadUtilities)
 struct PitchPadBand {
   float xStart = 0.0f;
   float xEnd = 0.0f;
-  float invSpan = 0.0f;  // 1/(xEnd-xStart) when span > 0, else 0
+  float invSpan = 0.0f; // 1/(xEnd-xStart) when span > 0, else 0
   int step = 0;
   bool isRest = false;
 };

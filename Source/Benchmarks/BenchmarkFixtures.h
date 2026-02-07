@@ -46,8 +46,8 @@ public:
   MockMidiEngine mockMidi;
   TouchpadMixerManager touchpadMixerMgr;
   VoiceManager voiceMgr{mockMidi, settingsMgr};
-  InputProcessor proc{voiceMgr, presetMgr, deviceMgr, scaleLib, mockMidi,
-                     settingsMgr, touchpadMixerMgr};
+  InputProcessor proc{voiceMgr, presetMgr,   deviceMgr,       scaleLib,
+                      mockMidi, settingsMgr, touchpadMixerMgr};
 
   void SetUp(benchmark::State &state) override {
     presetMgr.getLayersList().removeAllChildren(nullptr);
@@ -175,7 +175,8 @@ public:
     return zone;
   }
 
-  // Helper: Add a Touchpad Finger1Down -> Note mapping (for touchpad benchmarks)
+  // Helper: Add a Touchpad Finger1Down -> Note mapping (for touchpad
+  // benchmarks)
   void addTouchpadNoteMapping(int layer, int midiNote = 60, int channel = 1) {
     deviceMgr.createAlias("Touchpad");
     auto mappings = presetMgr.getMappingsListForLayer(layer);

@@ -16,14 +16,15 @@ public:
 
   int getNumRows() override;
   void paintListBoxItem(int rowNumber, juce::Graphics &g, int width, int height,
-                       bool rowIsSelected) override;
+                        bool rowIsSelected) override;
   void selectedRowsChanged(int lastRowSelected) override;
   void changeListenerCallback(juce::ChangeBroadcaster *source) override;
 
   /// Returns the currently selected row index, or -1 if none.
   int getSelectedStripIndex() const;
 
-  std::function<void(int stripIndex, const TouchpadMixerConfig *)> onSelectionChanged;
+  std::function<void(int stripIndex, const TouchpadMixerConfig *)>
+      onSelectionChanged;
 
 private:
   TouchpadMixerManager *manager;

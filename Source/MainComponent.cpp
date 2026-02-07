@@ -42,7 +42,7 @@ MainComponent::MainComponent()
       &scaleLibrary);
   touchpadTab = std::make_unique<TouchpadTabComponent>(&touchpadMixerManager);
   touchpadTab->onSelectionChangedForVisualizer = [this](int stripIndex,
-                                                             int layerId) {
+                                                        int layerId) {
     if (visualizer) {
       visualizer->setSelectedTouchpadMixerStrip(stripIndex, layerId);
       if (stripIndex >= 0)
@@ -211,8 +211,8 @@ MainComponent::MainComponent()
   mainTabs.addTab("Mappings", juce::Colour(0xff2a2a2a), mappingEditor.get(),
                   false);
   mainTabs.addTab("Zones", juce::Colour(0xff2a2a2a), zoneEditor.get(), false);
-  mainTabs.addTab("Touchpad", juce::Colour(0xff2a2a2a),
-                  touchpadTab.get(), false);
+  mainTabs.addTab("Touchpad", juce::Colour(0xff2a2a2a), touchpadTab.get(),
+                  false);
   settingsViewport.setViewedComponent(settingsPanel.get(), false);
   settingsViewport.setScrollBarsShown(true, false); // vertical scrollbar only
   mainTabs.addTab("Settings", juce::Colour(0xff2a2a2a), &settingsViewport,

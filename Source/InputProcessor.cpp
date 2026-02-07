@@ -2,12 +2,12 @@
 #include "ChordUtilities.h"
 #include "GridCompiler.h"
 #include "MappingTypes.h"
-#include "TouchpadMixerTypes.h"
 #include "MidiEngine.h"
 #include "PitchPadUtilities.h"
 #include "ScaleLibrary.h"
 #include "ScaleUtilities.h"
 #include "SettingsManager.h"
+#include "TouchpadMixerTypes.h"
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -125,9 +125,9 @@ void InputProcessor::applySustainDefaultFromPreset() {
 }
 
 void InputProcessor::rebuildGrid() {
-  auto newContext = GridCompiler::compile(
-      presetManager, deviceManager, zoneManager, touchpadMixerManager,
-      settingsManager);
+  auto newContext =
+      GridCompiler::compile(presetManager, deviceManager, zoneManager,
+                            touchpadMixerManager, settingsManager);
   {
     juce::ScopedWriteLock sl(mapLock);
     activeContext = std::move(newContext);
@@ -682,23 +682,18 @@ void InputProcessor::processEvent(InputID input, bool isDown) {
           int chrom = zoneManager.getGlobalChromaticTranspose();
           int deg = zoneManager.getGlobalDegreeTranspose();
           zoneManager.setGlobalTranspose(chrom, deg + 1);
-        } else if (cmd ==
-                   static_cast<int>(MIDIQy::CommandID::GlobalModeDown)) {
+        } else if (cmd == static_cast<int>(MIDIQy::CommandID::GlobalModeDown)) {
           int chrom = zoneManager.getGlobalChromaticTranspose();
           int deg = zoneManager.getGlobalDegreeTranspose();
           zoneManager.setGlobalTranspose(chrom, deg - 1);
-        } else if (cmd ==
-                   static_cast<int>(MIDIQy::CommandID::GlobalRootUp)) {
+        } else if (cmd == static_cast<int>(MIDIQy::CommandID::GlobalRootUp)) {
           int root = zoneManager.getGlobalRootNote();
           zoneManager.setGlobalRoot(juce::jlimit(0, 127, root + 1));
-        } else if (cmd ==
-                   static_cast<int>(MIDIQy::CommandID::GlobalRootDown)) {
+        } else if (cmd == static_cast<int>(MIDIQy::CommandID::GlobalRootDown)) {
           int root = zoneManager.getGlobalRootNote();
           zoneManager.setGlobalRoot(juce::jlimit(0, 127, root - 1));
-        } else if (cmd ==
-                   static_cast<int>(MIDIQy::CommandID::GlobalRootSet)) {
-          zoneManager.setGlobalRoot(
-              juce::jlimit(0, 127, midiAction.rootNote));
+        } else if (cmd == static_cast<int>(MIDIQy::CommandID::GlobalRootSet)) {
+          zoneManager.setGlobalRoot(juce::jlimit(0, 127, midiAction.rootNote));
         } else if (cmd ==
                    static_cast<int>(MIDIQy::CommandID::GlobalScaleNext)) {
           juce::StringArray names = scaleLibrary.getScaleNames();
@@ -721,8 +716,7 @@ void InputProcessor::processEvent(InputID input, bool isDown) {
             idx = (idx + names.size() - 1) % names.size();
             zoneManager.setGlobalScale(names[idx]);
           }
-        } else if (cmd ==
-                   static_cast<int>(MIDIQy::CommandID::GlobalScaleSet)) {
+        } else if (cmd == static_cast<int>(MIDIQy::CommandID::GlobalScaleSet)) {
           juce::StringArray names = scaleLibrary.getScaleNames();
           int idx = juce::jlimit(0, names.size() - 1, midiAction.scaleIndex);
           if (idx >= 0 && idx < names.size())
@@ -1111,11 +1105,14 @@ std::vector<bool> InputProcessor::getTouchpadMixerStripMuteState(
 
 std::vector<int> InputProcessor::getTouchpadMixerStripDisplayValues(
     uintptr_t deviceHandle, int stripIndex, int numFaders) const {
-  return getTouchpadMixerStripState(deviceHandle, stripIndex, numFaders).displayValues;
+  return getTouchpadMixerStripState(deviceHandle, stripIndex, numFaders)
+      .displayValues;
 }
 
-InputProcessor::TouchpadMixerStripState InputProcessor::getTouchpadMixerStripState(
-    uintptr_t deviceHandle, int stripIndex, int numFaders) const {
+InputProcessor::TouchpadMixerStripState
+InputProcessor::getTouchpadMixerStripState(uintptr_t deviceHandle,
+                                           int stripIndex,
+                                           int numFaders) const {
   TouchpadMixerStripState out;
   out.displayValues.resize(static_cast<size_t>(juce::jmax(0, numFaders)), 0);
   out.muted.resize(static_cast<size_t>(juce::jmax(0, numFaders)), false);
@@ -1558,336 +1555,340 @@ void InputProcessor::processTouchpadContacts(
   bool finger2Up = !tip2 && prev.tip2;
 
   if (!ctx->touchpadMappings.empty()) {
-  for (const auto &entry : ctx->touchpadMappings) {
-    if (!activeLayersSnapshot[(size_t)entry.layerId])
-      continue;
+    for (const auto &entry : ctx->touchpadMappings) {
+      if (!activeLayersSnapshot[(size_t)entry.layerId])
+        continue;
 
-    bool boolVal = false;
-    float continuousVal = 0.0f;
-    switch (entry.eventId) {
-    case TouchpadEvent::Finger1Down:
-      boolVal = finger1Down;
-      break;
-    case TouchpadEvent::Finger1Up:
-      boolVal = finger1Up;
-      break;
-    case TouchpadEvent::Finger1X:
-      continuousVal = x1;
-      break;
-    case TouchpadEvent::Finger1Y:
-      continuousVal = y1;
-      break;
-    case TouchpadEvent::Finger2Down:
-      boolVal = finger2Down;
-      break;
-    case TouchpadEvent::Finger2Up:
-      boolVal = finger2Up;
-      break;
-    case TouchpadEvent::Finger2X:
-      continuousVal = x2;
-      break;
-    case TouchpadEvent::Finger2Y:
-      continuousVal = y2;
-      break;
-    case TouchpadEvent::Finger1And2Dist:
-      continuousVal = dist;
-      break;
-    case TouchpadEvent::Finger1And2AvgX:
-      continuousVal = avgX;
-      break;
-    case TouchpadEvent::Finger1And2AvgY:
-      continuousVal = avgY;
-      break;
-    default:
-      continue;
-    }
-
-    const auto &act = entry.action;
-    const auto &p = entry.conversionParams;
-    auto key = std::make_tuple(deviceHandle, entry.layerId, entry.eventId);
-
-    switch (entry.conversionKind) {
-    case TouchpadConversionKind::BoolToGate:
-      if (act.type == ActionType::Note) {
-        bool isDownEvent = (entry.eventId == TouchpadEvent::Finger1Down ||
-                            entry.eventId == TouchpadEvent::Finger2Down);
-        bool releaseThisFrame =
-            (entry.eventId == TouchpadEvent::Finger1Down && finger1Up) ||
-            (entry.eventId == TouchpadEvent::Finger2Down && finger2Up);
-        InputID touchpadInput{deviceHandle, 0};
-        if (isDownEvent && boolVal)
-          triggerManualNoteOn(touchpadInput, act,
-                              true); // Latch applies to Down
-        else if (releaseThisFrame)
-          triggerManualNoteRelease(touchpadInput, act);
-        else if (!isDownEvent && boolVal)
-          // Finger1Up/Finger2Up: trigger note when finger lifts (one-shot); no
-          // Send Note Off, Latch only applies to Down so pass false
-          triggerManualNoteOn(touchpadInput, act, false);
-      } else if (act.type == ActionType::Command && boolVal) {
-        int cmd = act.data1;
-        if (cmd == static_cast<int>(MIDIQy::CommandID::SustainMomentary))
-          voiceManager.setSustain(true);
-        else if (cmd == static_cast<int>(MIDIQy::CommandID::SustainToggle))
-          voiceManager.setSustain(!voiceManager.isSustainActive());
-        else if (cmd == static_cast<int>(MIDIQy::CommandID::Panic))
-          voiceManager.panic();
-        else if (cmd == static_cast<int>(MIDIQy::CommandID::PanicLatch))
-          voiceManager.panicLatch();
+      bool boolVal = false;
+      float continuousVal = 0.0f;
+      switch (entry.eventId) {
+      case TouchpadEvent::Finger1Down:
+        boolVal = finger1Down;
+        break;
+      case TouchpadEvent::Finger1Up:
+        boolVal = finger1Up;
+        break;
+      case TouchpadEvent::Finger1X:
+        continuousVal = x1;
+        break;
+      case TouchpadEvent::Finger1Y:
+        continuousVal = y1;
+        break;
+      case TouchpadEvent::Finger2Down:
+        boolVal = finger2Down;
+        break;
+      case TouchpadEvent::Finger2Up:
+        boolVal = finger2Up;
+        break;
+      case TouchpadEvent::Finger2X:
+        continuousVal = x2;
+        break;
+      case TouchpadEvent::Finger2Y:
+        continuousVal = y2;
+        break;
+      case TouchpadEvent::Finger1And2Dist:
+        continuousVal = dist;
+        break;
+      case TouchpadEvent::Finger1And2AvgX:
+        continuousVal = avgX;
+        break;
+      case TouchpadEvent::Finger1And2AvgY:
+        continuousVal = avgY;
+        break;
+      default:
+        continue;
       }
-      break;
-    case TouchpadConversionKind::BoolToCC:
-      if (act.type == ActionType::Expression) {
-        if (boolVal) {
-          InputID touchpadExprInput{deviceHandle,
-                                    static_cast<int>(entry.eventId)};
-          int peakValue;
-          if (act.adsrSettings.target == AdsrTarget::CC) {
-            peakValue = act.adsrSettings.valueWhenOn;
-          } else           if (act.adsrSettings.target == AdsrTarget::PitchBend) {
-            double stepsPerSemitone = settingsManager.getStepsPerSemitone();
-            peakValue =
-                static_cast<int>(8192.0 + (act.data2 * stepsPerSemitone));
-            peakValue = juce::jlimit(0, 16383, peakValue);
-          } else {
-            if (!act.smartBendLookup.empty() && lastTriggeredNote >= 0 &&
-                lastTriggeredNote < 128)
-              peakValue = act.smartBendLookup[lastTriggeredNote];
-            else
-              peakValue = 8192;
-          }
-          expressionEngine.triggerEnvelope(touchpadExprInput, act.channel,
-                                           act.adsrSettings, peakValue);
-          touchpadExpressionActive.insert(
-              std::make_tuple(deviceHandle, entry.layerId, entry.eventId));
-        }
-      }
-      break;
-    case TouchpadConversionKind::ContinuousToGate: {
-      bool above = continuousVal >= p.threshold;
-      bool trigger = p.triggerAbove ? above : !above;
-      InputID touchpadInput{deviceHandle, 0};
-      if (trigger) {
-        if (touchpadNoteOnSent.find(key) == touchpadNoteOnSent.end()) {
-          touchpadNoteOnSent.insert(key);
-          triggerManualNoteOn(touchpadInput, act);
-        }
-      } else {
-        if (touchpadNoteOnSent.erase(key))
-          triggerManualNoteRelease(touchpadInput, act);
-      }
-      break;
-    }
-    case TouchpadConversionKind::ContinuousToRange:
-      if (act.type == ActionType::Expression) {
-        // Determine whether this continuous event is currently active based on
-        // the touch contact state.
-        bool eventActive = true;
-        switch (entry.eventId) {
-        case TouchpadEvent::Finger1X:
-        case TouchpadEvent::Finger1Y:
-        case TouchpadEvent::Finger1And2AvgX:
-        case TouchpadEvent::Finger1And2AvgY:
-          eventActive = tip1;
-          break;
-        case TouchpadEvent::Finger2X:
-        case TouchpadEvent::Finger2Y:
-          eventActive = tip2;
-          break;
-        case TouchpadEvent::Finger1And2Dist:
-          eventActive = tip1 && tip2;
-          break;
-        default:
-          break;
-        }
 
-        const int ccNumberOrMinusOne =
-            (act.adsrSettings.target == AdsrTarget::CC)
-                ? act.adsrSettings.ccNumber
-                : -1;
-        auto keyCont =
-            std::make_tuple(deviceHandle, entry.layerId, entry.eventId,
-                            act.channel, ccNumberOrMinusOne);
+      const auto &act = entry.action;
+      const auto &p = entry.conversionParams;
+      auto key = std::make_tuple(deviceHandle, entry.layerId, entry.eventId);
 
-        // If the event is no longer active and we previously sent a value, send
-        // the configured release value (for CC) or center pitch (for PB) when
-        // requested, then clear the last-value entry so this happens only once.
-        if (!eventActive) {
-          auto itLast = lastTouchpadContinuousValues.find(keyCont);
-          if (itLast != lastTouchpadContinuousValues.end()) {
-            if (act.sendReleaseValue) {
-              if (act.adsrSettings.target == AdsrTarget::CC) {
-                voiceManager.sendCC(act.channel, act.adsrSettings.ccNumber,
-                                    act.releaseValue);
-              } else if (act.adsrSettings.target == AdsrTarget::PitchBend ||
-                         act.adsrSettings.target ==
-                             AdsrTarget::SmartScaleBend) {
-                voiceManager.sendPitchBend(act.channel, 8192);
-              }
+      switch (entry.conversionKind) {
+      case TouchpadConversionKind::BoolToGate:
+        if (act.type == ActionType::Note) {
+          bool isDownEvent = (entry.eventId == TouchpadEvent::Finger1Down ||
+                              entry.eventId == TouchpadEvent::Finger2Down);
+          bool releaseThisFrame =
+              (entry.eventId == TouchpadEvent::Finger1Down && finger1Up) ||
+              (entry.eventId == TouchpadEvent::Finger2Down && finger2Up);
+          InputID touchpadInput{deviceHandle, 0};
+          if (isDownEvent && boolVal)
+            triggerManualNoteOn(touchpadInput, act,
+                                true); // Latch applies to Down
+          else if (releaseThisFrame)
+            triggerManualNoteRelease(touchpadInput, act);
+          else if (!isDownEvent && boolVal)
+            // Finger1Up/Finger2Up: trigger note when finger lifts (one-shot);
+            // no Send Note Off, Latch only applies to Down so pass false
+            triggerManualNoteOn(touchpadInput, act, false);
+        } else if (act.type == ActionType::Command && boolVal) {
+          int cmd = act.data1;
+          if (cmd == static_cast<int>(MIDIQy::CommandID::SustainMomentary))
+            voiceManager.setSustain(true);
+          else if (cmd == static_cast<int>(MIDIQy::CommandID::SustainToggle))
+            voiceManager.setSustain(!voiceManager.isSustainActive());
+          else if (cmd == static_cast<int>(MIDIQy::CommandID::Panic))
+            voiceManager.panic();
+          else if (cmd == static_cast<int>(MIDIQy::CommandID::PanicLatch))
+            voiceManager.panicLatch();
+        }
+        break;
+      case TouchpadConversionKind::BoolToCC:
+        if (act.type == ActionType::Expression) {
+          if (boolVal) {
+            InputID touchpadExprInput{deviceHandle,
+                                      static_cast<int>(entry.eventId)};
+            int peakValue;
+            if (act.adsrSettings.target == AdsrTarget::CC) {
+              peakValue = act.adsrSettings.valueWhenOn;
+            } else if (act.adsrSettings.target == AdsrTarget::PitchBend) {
+              double stepsPerSemitone = settingsManager.getStepsPerSemitone();
+              peakValue =
+                  static_cast<int>(8192.0 + (act.data2 * stepsPerSemitone));
+              peakValue = juce::jlimit(0, 16383, peakValue);
+            } else {
+              if (!act.smartBendLookup.empty() && lastTriggeredNote >= 0 &&
+                  lastTriggeredNote < 128)
+                peakValue = act.smartBendLookup[lastTriggeredNote];
+              else
+                peakValue = 8192;
             }
-            lastTouchpadContinuousValues.erase(itLast);
+            expressionEngine.triggerEnvelope(touchpadExprInput, act.channel,
+                                             act.adsrSettings, peakValue);
+            touchpadExpressionActive.insert(
+                std::make_tuple(deviceHandle, entry.layerId, entry.eventId));
           }
-          break;
         }
+        break;
+      case TouchpadConversionKind::ContinuousToGate: {
+        bool above = continuousVal >= p.threshold;
+        bool trigger = p.triggerAbove ? above : !above;
+        InputID touchpadInput{deviceHandle, 0};
+        if (trigger) {
+          if (touchpadNoteOnSent.find(key) == touchpadNoteOnSent.end()) {
+            touchpadNoteOnSent.insert(key);
+            triggerManualNoteOn(touchpadInput, act);
+          }
+        } else {
+          if (touchpadNoteOnSent.erase(key))
+            triggerManualNoteRelease(touchpadInput, act);
+        }
+        break;
+      }
+      case TouchpadConversionKind::ContinuousToRange:
+        if (act.type == ActionType::Expression) {
+          // Determine whether this continuous event is currently active based
+          // on the touch contact state.
+          bool eventActive = true;
+          switch (entry.eventId) {
+          case TouchpadEvent::Finger1X:
+          case TouchpadEvent::Finger1Y:
+          case TouchpadEvent::Finger1And2AvgX:
+          case TouchpadEvent::Finger1And2AvgY:
+            eventActive = tip1;
+            break;
+          case TouchpadEvent::Finger2X:
+          case TouchpadEvent::Finger2Y:
+            eventActive = tip2;
+            break;
+          case TouchpadEvent::Finger1And2Dist:
+            eventActive = tip1 && tip2;
+            break;
+          default:
+            break;
+          }
 
-        float t = (continuousVal - p.inputMin) * p.invInputRange;
-        t = std::clamp(t, 0.0f, 1.0f);
+          const int ccNumberOrMinusOne =
+              (act.adsrSettings.target == AdsrTarget::CC)
+                  ? act.adsrSettings.ccNumber
+                  : -1;
+          auto keyCont =
+              std::make_tuple(deviceHandle, entry.layerId, entry.eventId,
+                              act.channel, ccNumberOrMinusOne);
 
-        float outVal = static_cast<float>(p.outputMin) +
-                       static_cast<float>(p.outputMax - p.outputMin) * t;
-        float stepOffset = 0.0f;
+          // If the event is no longer active and we previously sent a value,
+          // send the configured release value (for CC) or center pitch (for PB)
+          // when requested, then clear the last-value entry so this happens
+          // only once.
+          if (!eventActive) {
+            auto itLast = lastTouchpadContinuousValues.find(keyCont);
+            if (itLast != lastTouchpadContinuousValues.end()) {
+              if (act.sendReleaseValue) {
+                if (act.adsrSettings.target == AdsrTarget::CC) {
+                  voiceManager.sendCC(act.channel, act.adsrSettings.ccNumber,
+                                      act.releaseValue);
+                } else if (act.adsrSettings.target == AdsrTarget::PitchBend ||
+                           act.adsrSettings.target ==
+                               AdsrTarget::SmartScaleBend) {
+                  voiceManager.sendPitchBend(act.channel, 8192);
+                }
+              }
+              lastTouchpadContinuousValues.erase(itLast);
+            }
+            break;
+          }
 
-        // If a pitch-pad config is present and this is a pitch-based target,
-        // use the shared pitch-pad layout to derive the discrete step from X
-        // instead of direct linear min/max mapping.
-        if (p.pitchPadConfig.has_value() &&
-            (act.adsrSettings.target == AdsrTarget::PitchBend ||
-             act.adsrSettings.target == AdsrTarget::SmartScaleBend)) {
-          const PitchPadConfig &cfg = *p.pitchPadConfig;
-          const PitchPadLayout &layout =
-              p.cachedPitchPadLayout ? *p.cachedPitchPadLayout
-                                    : buildPitchPadLayout(cfg);
+          float t = (continuousVal - p.inputMin) * p.invInputRange;
+          t = std::clamp(t, 0.0f, 1.0f);
 
-          auto relKey = std::make_tuple(deviceHandle, entry.layerId,
-                                        entry.eventId, act.channel);
+          float outVal = static_cast<float>(p.outputMin) +
+                         static_cast<float>(p.outputMax - p.outputMin) * t;
+          float stepOffset = 0.0f;
+
+          // If a pitch-pad config is present and this is a pitch-based target,
+          // use the shared pitch-pad layout to derive the discrete step from X
+          // instead of direct linear min/max mapping.
+          if (p.pitchPadConfig.has_value() &&
+              (act.adsrSettings.target == AdsrTarget::PitchBend ||
+               act.adsrSettings.target == AdsrTarget::SmartScaleBend)) {
+            const PitchPadConfig &cfg = *p.pitchPadConfig;
+            const PitchPadLayout &layout = p.cachedPitchPadLayout
+                                               ? *p.cachedPitchPadLayout
+                                               : buildPitchPadLayout(cfg);
+
+            auto relKey = std::make_tuple(deviceHandle, entry.layerId,
+                                          entry.eventId, act.channel);
 
             if (cfg.mode == PitchPadMode::Relative) {
-            // Relative mode: anchor point (where user first touches) becomes PB
-            // zero. Movement from anchor uses the SAME pitch-pad layout as
-            // Absolute, just re-centered at the anchor.
-            bool startGesture = false;
-            if (entry.eventId == TouchpadEvent::Finger1X ||
-                entry.eventId == TouchpadEvent::Finger1Y ||
-                entry.eventId == TouchpadEvent::Finger1And2Dist ||
-                entry.eventId == TouchpadEvent::Finger1And2AvgX ||
-                entry.eventId == TouchpadEvent::Finger1And2AvgY) {
-              startGesture = finger1Down;
-            } else if (entry.eventId == TouchpadEvent::Finger2X ||
-                       entry.eventId == TouchpadEvent::Finger2Y) {
-              startGesture = finger2Down;
-            }
+              // Relative mode: anchor point (where user first touches) becomes
+              // PB zero. Movement from anchor uses the SAME pitch-pad layout as
+              // Absolute, just re-centered at the anchor.
+              bool startGesture = false;
+              if (entry.eventId == TouchpadEvent::Finger1X ||
+                  entry.eventId == TouchpadEvent::Finger1Y ||
+                  entry.eventId == TouchpadEvent::Finger1And2Dist ||
+                  entry.eventId == TouchpadEvent::Finger1And2AvgX ||
+                  entry.eventId == TouchpadEvent::Finger1And2AvgY) {
+                startGesture = finger1Down;
+              } else if (entry.eventId == TouchpadEvent::Finger2X ||
+                         entry.eventId == TouchpadEvent::Finger2Y) {
+                startGesture = finger2Down;
+              }
 
-            if (startGesture) {
-              // Store anchor X position and the absolute step it maps to.
+              if (startGesture) {
+                // Store anchor X position and the absolute step it maps to.
+                {
+                  juce::ScopedLock al(anchorLock);
+                  pitchPadRelativeAnchorT[relKey] = t;
+                  float anchorXClamped = juce::jlimit(0.0f, 1.0f, t);
+                  PitchSample anchorSample = mapXToStep(layout, anchorXClamped);
+                  pitchPadRelativeAnchorStep[relKey] = anchorSample.step;
+                }
+              }
+
+              float anchorStepVal = 0.0f;
+              bool hasAnchor = false;
               {
                 juce::ScopedLock al(anchorLock);
-                pitchPadRelativeAnchorT[relKey] = t;
-                float anchorXClamped = juce::jlimit(0.0f, 1.0f, t);
-                PitchSample anchorSample = mapXToStep(layout, anchorXClamped);
-                pitchPadRelativeAnchorStep[relKey] = anchorSample.step;
+                auto itAnchorStep = pitchPadRelativeAnchorStep.find(relKey);
+                if (itAnchorStep != pitchPadRelativeAnchorStep.end()) {
+                  anchorStepVal = itAnchorStep->second;
+                  hasAnchor = true;
+                }
               }
-            }
-
-            float anchorStepVal = 0.0f;
-            bool hasAnchor = false;
-            {
-              juce::ScopedLock al(anchorLock);
-              auto itAnchorStep = pitchPadRelativeAnchorStep.find(relKey);
-              if (itAnchorStep != pitchPadRelativeAnchorStep.end()) {
-                anchorStepVal = itAnchorStep->second;
-                hasAnchor = true;
+              if (hasAnchor) {
+                float xClamped = juce::jlimit(0.0f, 1.0f, t);
+                PitchSample sample = mapXToStep(layout, xClamped);
+                stepOffset = sample.step - anchorStepVal;
+              } else {
+                stepOffset = 0.0f;
               }
-            }
-            if (hasAnchor) {
+            } else {
+              // Absolute mode: use normalized coordinate directly. zeroStep is
+              // the configured center (currently 0.0f so middle of range).
               float xClamped = juce::jlimit(0.0f, 1.0f, t);
               PitchSample sample = mapXToStep(layout, xClamped);
-              stepOffset = sample.step - anchorStepVal;
+              stepOffset = sample.step - cfg.zeroStep;
+            }
+          } else {
+            // No pitch-pad config: fall back to simple linear mapping of the
+            // normalized touch value into the configured output step range.
+            stepOffset = juce::jmap(
+                t, static_cast<float>(p.outputMin),
+                static_cast<float>(p.outputMax)); // may be fractional
+          }
+
+          // Change-only sending: only send CC/PB when the quantized value
+          // changes for this (device, layer, eventId, channel, ccNumber/-1 for
+          // PB).
+          if (act.adsrSettings.target == AdsrTarget::CC) {
+            int ccVal =
+                juce::jlimit(0, 127, static_cast<int>(std::round(outVal)));
+            auto itLast = lastTouchpadContinuousValues.find(keyCont);
+            if (itLast != lastTouchpadContinuousValues.end() &&
+                itLast->second == ccVal) {
+              break; // No CC change – skip send
+            }
+            voiceManager.sendCC(act.channel, act.adsrSettings.ccNumber, ccVal);
+            lastTouchpadContinuousValues[keyCont] = ccVal;
+          } else {
+            // Pitch-based targets: interpret the (possibly fractional) step
+            // offset and convert to a PB value.
+            int pbRange = juce::jmax(1, settingsManager.getPitchBendRange());
+            int pbVal = 8192;
+
+            if (act.adsrSettings.target == AdsrTarget::SmartScaleBend) {
+              // SmartScaleBend: stepOffset is SMART SCALE DISTANCE (scale
+              // steps). Same semantics as keyboard SmartScaleBend: e.g. C
+              // major, press C, bend down 1 = B, bend down 2 = A; bend up 1 =
+              // D, bend up 2 = E. Do not clamp stepOffset by semitone range;
+              // pass scale steps through. smartStepOffsetToPitchBend clips the
+              // final PB to [0,16383] and respects global PB range.
+              int currentNote = voiceManager.getCurrentPlayingNote(act.channel);
+              if (currentNote < 0) {
+                currentNote = lastTriggeredNote;
+              }
+              if (currentNote >= 0 && currentNote < 128) {
+                std::vector<int> intervals =
+                    zoneManager.getGlobalScaleIntervals();
+                if (intervals.empty())
+                  intervals = {0, 2, 4, 5, 7, 9, 11}; // Major fallback
+                int root = zoneManager.getGlobalRootNote();
+
+                float baseStep = std::floor(stepOffset);
+                float frac = stepOffset - baseStep;
+                int s0 = static_cast<int>(baseStep);
+                int s1 = (frac >= 0.0f) ? s0 + 1 : s0 - 1;
+                int pb0 = ScaleUtilities::smartStepOffsetToPitchBend(
+                    currentNote, root, intervals, s0, pbRange);
+                int pb1 = ScaleUtilities::smartStepOffsetToPitchBend(
+                    currentNote, root, intervals, s1, pbRange);
+                float f = std::abs(frac);
+                float blended =
+                    juce::jmap(f, 0.0f, 1.0f, static_cast<float>(pb0),
+                               static_cast<float>(pb1));
+                pbVal = juce::jlimit(0, 16383,
+                                     static_cast<int>(std::round(blended)));
+              }
             } else {
-              stepOffset = 0.0f;
+              // Standard PitchBend: stepOffset is in semitones. Clamp to global
+              // PB range and allow extrapolation up to that range.
+              float clampedOffset =
+                  juce::jlimit(static_cast<float>(-pbRange),
+                               static_cast<float>(pbRange), stepOffset);
+              double stepsPerSemitone = settingsManager.getStepsPerSemitone();
+              pbVal = static_cast<int>(std::round(
+                  8192.0 +
+                  (static_cast<double>(clampedOffset) * stepsPerSemitone)));
+              pbVal = juce::jlimit(0, 16383, pbVal);
             }
-          } else {
-            // Absolute mode: use normalized coordinate directly. zeroStep is
-            // the configured center (currently 0.0f so middle of range).
-            float xClamped = juce::jlimit(0.0f, 1.0f, t);
-            PitchSample sample = mapXToStep(layout, xClamped);
-            stepOffset = sample.step - cfg.zeroStep;
+
+            auto itLast = lastTouchpadContinuousValues.find(keyCont);
+            if (itLast != lastTouchpadContinuousValues.end() &&
+                itLast->second == pbVal) {
+              break; // No PB change – skip send
+            }
+            voiceManager.sendPitchBend(act.channel, pbVal);
+            lastTouchpadContinuousValues[keyCont] = pbVal;
           }
-        } else {
-          // No pitch-pad config: fall back to simple linear mapping of the
-          // normalized touch value into the configured output step range.
-          stepOffset =
-              juce::jmap(t, static_cast<float>(p.outputMin),
-                         static_cast<float>(p.outputMax)); // may be fractional
         }
-
-        // Change-only sending: only send CC/PB when the quantized value changes
-        // for this (device, layer, eventId, channel, ccNumber/-1 for PB).
-        if (act.adsrSettings.target == AdsrTarget::CC) {
-          int ccVal =
-              juce::jlimit(0, 127, static_cast<int>(std::round(outVal)));
-          auto itLast = lastTouchpadContinuousValues.find(keyCont);
-          if (itLast != lastTouchpadContinuousValues.end() &&
-              itLast->second == ccVal) {
-            break; // No CC change – skip send
-          }
-          voiceManager.sendCC(act.channel, act.adsrSettings.ccNumber, ccVal);
-          lastTouchpadContinuousValues[keyCont] = ccVal;
-        } else {
-          // Pitch-based targets: interpret the (possibly fractional) step
-          // offset and convert to a PB value.
-          int pbRange = juce::jmax(1, settingsManager.getPitchBendRange());
-          int pbVal = 8192;
-
-          if (act.adsrSettings.target == AdsrTarget::SmartScaleBend) {
-            // SmartScaleBend: stepOffset is SMART SCALE DISTANCE (scale steps).
-            // Same semantics as keyboard SmartScaleBend: e.g. C major, press C,
-            // bend down 1 = B, bend down 2 = A; bend up 1 = D, bend up 2 = E.
-            // Do not clamp stepOffset by semitone range; pass scale steps
-            // through. smartStepOffsetToPitchBend clips the final PB to
-            // [0,16383] and respects global PB range.
-            int currentNote = voiceManager.getCurrentPlayingNote(act.channel);
-            if (currentNote < 0) {
-              currentNote = lastTriggeredNote;
-            }
-            if (currentNote >= 0 && currentNote < 128) {
-              std::vector<int> intervals =
-                  zoneManager.getGlobalScaleIntervals();
-              if (intervals.empty())
-                intervals = {0, 2, 4, 5, 7, 9, 11}; // Major fallback
-              int root = zoneManager.getGlobalRootNote();
-
-              float baseStep = std::floor(stepOffset);
-              float frac = stepOffset - baseStep;
-              int s0 = static_cast<int>(baseStep);
-              int s1 = (frac >= 0.0f) ? s0 + 1 : s0 - 1;
-              int pb0 = ScaleUtilities::smartStepOffsetToPitchBend(
-                  currentNote, root, intervals, s0, pbRange);
-              int pb1 = ScaleUtilities::smartStepOffsetToPitchBend(
-                  currentNote, root, intervals, s1, pbRange);
-              float f = std::abs(frac);
-              float blended = juce::jmap(f, 0.0f, 1.0f, static_cast<float>(pb0),
-                                         static_cast<float>(pb1));
-              pbVal =
-                  juce::jlimit(0, 16383, static_cast<int>(std::round(blended)));
-            }
-          } else {
-            // Standard PitchBend: stepOffset is in semitones. Clamp to global
-            // PB range and allow extrapolation up to that range.
-            float clampedOffset =
-                juce::jlimit(static_cast<float>(-pbRange),
-                             static_cast<float>(pbRange), stepOffset);
-            double stepsPerSemitone = settingsManager.getStepsPerSemitone();
-            pbVal = static_cast<int>(std::round(
-                8192.0 +
-                (static_cast<double>(clampedOffset) * stepsPerSemitone)));
-            pbVal = juce::jlimit(0, 16383, pbVal);
-          }
-
-          auto itLast = lastTouchpadContinuousValues.find(keyCont);
-          if (itLast != lastTouchpadContinuousValues.end() &&
-              itLast->second == pbVal) {
-            break; // No PB change – skip send
-          }
-          voiceManager.sendPitchBend(act.channel, pbVal);
-          lastTouchpadContinuousValues[keyCont] = pbVal;
-        }
+        break;
       }
-      break;
     }
   }
-  }
 
-  // Touchpad mixer strips (CC faders) - mixerStateLock only (reduces mapLock contention)
+  // Touchpad mixer strips (CC faders) - mixerStateLock only (reduces mapLock
+  // contention)
   bool touchpadMixerStateChanged = false;
   if (!ctx->touchpadMixerStrips.empty()) {
     juce::ScopedWriteLock wl(mixerStateLock);
@@ -1911,7 +1912,8 @@ void InputProcessor::processTouchpadContacts(
       bool applierUpEdge = useFinger1 ? finger1Up : finger2Up;
 
       if (!applierDown) {
-        auto lockKey = std::make_tuple(deviceHandle, static_cast<int>(stripIdx));
+        auto lockKey =
+            std::make_tuple(deviceHandle, static_cast<int>(stripIdx));
         auto itLock = touchpadMixerLockedFader.find(lockKey);
         if (itLock != touchpadMixerLockedFader.end()) {
           touchpadMixerLockedFader.erase(itLock);
@@ -1935,17 +1937,20 @@ void InputProcessor::processTouchpadContacts(
         }
       }
 
-      // Mute: first touch in mute region defines column; second touch (anywhere) triggers toggle
-      if ((strip.modeFlags & kMixerModeMuteButtons) != 0 && finger2Down && tip1 &&
-          y1 >= kMuteButtonRegionTop) {
+      // Mute: first touch in mute region defines column; second touch
+      // (anywhere) triggers toggle
+      if ((strip.modeFlags & kMixerModeMuteButtons) != 0 && finger2Down &&
+          tip1 && y1 >= kMuteButtonRegionTop) {
         float sx = std::clamp(x1, 0.0f, 1.0f - 1e-6f);
         int col = static_cast<int>(sx * static_cast<float>(N));
         if (col >= N)
           col = N - 1;
-        auto muteKey = std::make_tuple(deviceHandle, static_cast<int>(stripIdx), col);
+        auto muteKey =
+            std::make_tuple(deviceHandle, static_cast<int>(stripIdx), col);
         bool &muted = touchpadMixerMuteState[muteKey];
         if (!muted) {
-          auto lastKey = std::make_tuple(deviceHandle, static_cast<int>(stripIdx), col);
+          auto lastKey =
+              std::make_tuple(deviceHandle, static_cast<int>(stripIdx), col);
           auto itLast = lastTouchpadMixerCCValues.find(lastKey);
           if (itLast != lastTouchpadMixerCCValues.end())
             touchpadMixerValueBeforeMute[muteKey] = itLast->second;
@@ -1957,10 +1962,12 @@ void InputProcessor::processTouchpadContacts(
       }
 
       // Fader area: finger in mute zone must not drive fader.
-      if ((strip.modeFlags & kMixerModeMuteButtons) != 0 && applierY >= kMuteButtonRegionTop)
+      if ((strip.modeFlags & kMixerModeMuteButtons) != 0 &&
+          applierY >= kMuteButtonRegionTop)
         continue;
 
-      auto muteKey = std::make_tuple(deviceHandle, static_cast<int>(stripIdx), faderIndex);
+      auto muteKey =
+          std::make_tuple(deviceHandle, static_cast<int>(stripIdx), faderIndex);
       bool isMuted = false;
       {
         auto itMute = touchpadMixerMuteState.find(muteKey);
@@ -1972,8 +1979,10 @@ void InputProcessor::processTouchpadContacts(
 
       float effectiveY = applierY * strip.effectiveYScale;
 
-      // Input Y min/max: map touchpad Y from [inputMin, inputMax] to normalized 0..1 (then inverted).
-      float effectiveYClamped = juce::jlimit(strip.inputMin, strip.inputMax, effectiveY);
+      // Input Y min/max: map touchpad Y from [inputMin, inputMax] to normalized
+      // 0..1 (then inverted).
+      float effectiveYClamped =
+          juce::jlimit(strip.inputMin, strip.inputMax, effectiveY);
       float t = (effectiveYClamped - strip.inputMin) * strip.invInputRange;
       t = std::clamp(t, 0.0f, 1.0f);
       t = 1.0f - t; // Invert Y: screen up = fader up (high value)
@@ -1985,24 +1994,30 @@ void InputProcessor::processTouchpadContacts(
       if ((strip.modeFlags & kMixerModeRelative) == 0) {
         ccVal = juce::jlimit(
             strip.outputMin, strip.outputMax,
-            static_cast<int>(std::round(
-                static_cast<float>(strip.outputMin) + outputRange * t)));
+            static_cast<int>(std::round(static_cast<float>(strip.outputMin) +
+                                        outputRange * t)));
       } else {
-        // Relative: finger Y delta moves fader. Down (Y increase) => fader down.
-        // Scale delta by output range and by 1/inputRange so a swipe across input range = full output change.
-        auto relKey = std::make_tuple(deviceHandle, static_cast<int>(stripIdx), faderIndex);
+        // Relative: finger Y delta moves fader. Down (Y increase) => fader
+        // down. Scale delta by output range and by 1/inputRange so a swipe
+        // across input range = full output change.
+        auto relKey = std::make_tuple(deviceHandle, static_cast<int>(stripIdx),
+                                      faderIndex);
         float &acc = touchpadMixerRelativeValue[relKey];
         if (applierDownEdge) {
-          auto lastKey = std::make_tuple(deviceHandle, static_cast<int>(stripIdx), faderIndex);
+          auto lastKey = std::make_tuple(
+              deviceHandle, static_cast<int>(stripIdx), faderIndex);
           auto itLast = lastTouchpadMixerCCValues.find(lastKey);
           if (itLast != lastTouchpadMixerCCValues.end())
             acc = static_cast<float>(itLast->second);
           else
             acc = static_cast<float>(strip.outputMin + strip.outputMax) * 0.5f;
         } else {
-          float prevEffectiveY = juce::jmin(1.0f, prev.y1 * strip.effectiveYScale);
-          float prevClamped = juce::jlimit(strip.inputMin, strip.inputMax, prevEffectiveY);
-          float deltaY = effectiveYClamped - prevClamped; // finger down => deltaY > 0 => fader down
+          float prevEffectiveY =
+              juce::jmin(1.0f, prev.y1 * strip.effectiveYScale);
+          float prevClamped =
+              juce::jlimit(strip.inputMin, strip.inputMax, prevEffectiveY);
+          float deltaY = effectiveYClamped -
+                         prevClamped; // finger down => deltaY > 0 => fader down
           acc -= deltaY * strip.invInputRange * outputRange;
         }
         acc = std::clamp(acc, static_cast<float>(strip.outputMin),
@@ -2011,7 +2026,8 @@ void InputProcessor::processTouchpadContacts(
       }
 
       int ccNum = strip.ccStart + faderIndex;
-      auto lastKey = std::make_tuple(deviceHandle, static_cast<int>(stripIdx), faderIndex);
+      auto lastKey =
+          std::make_tuple(deviceHandle, static_cast<int>(stripIdx), faderIndex);
       auto itLast = lastTouchpadMixerCCValues.find(lastKey);
       if (itLast != lastTouchpadMixerCCValues.end() && itLast->second == ccVal)
         continue;
