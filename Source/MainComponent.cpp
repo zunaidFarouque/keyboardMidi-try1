@@ -284,6 +284,8 @@ MainComponent::MainComponent()
   performanceModeButton.onClick = [this] {
     bool enabled = performanceModeButton.getToggleState();
     if (enabled) {
+      // Performance mode ON implies MIDI mode ON
+      settingsManager.setMidiModeActive(true);
       // Smart Locking: Only lock if preset has pointer mappings
       if (!inputProcessor.hasPointerMappings()) {
         performanceModeButton.setToggleState(false, juce::dontSendNotification);
@@ -317,12 +319,16 @@ MainComponent::MainComponent()
             rect.right -= margin;
             rect.bottom -= margin;
             ClipCursor(&rect);
+            if (settingsManager.getHideCursorInPerformanceMode())
+              ShowCursor(FALSE);
           }
         }
       }
       updatePerformanceModeButtonText();
     } else {
-      // Unlock cursor: release clip
+      // Performance mode OFF -> performance off, MIDI stays on
+      if (settingsManager.getHideCursorInPerformanceMode())
+        ShowCursor(TRUE);
       ClipCursor(nullptr);
       updatePerformanceModeButtonText();
     }
@@ -416,8 +422,10 @@ MainComponent::~MainComponent() {
   settingsManager.removeChangeListener(this);
   deviceManager.removeChangeListener(this);
 
-  // 7. Ensure cursor is unlocked on exit
+  // 7. Ensure cursor is unlocked and visible on exit
   if (performanceModeButton.getToggleState()) {
+    if (settingsManager.getHideCursorInPerformanceMode())
+      ShowCursor(TRUE);
     ClipCursor(nullptr);
   }
 }
@@ -560,9 +568,18 @@ void MainComponent::changeListenerCallback(juce::ChangeBroadcaster *source) {
   } else if (source == &settingsManager) {
     // Handle MIDI mode changes
     if (!settingsManager.isMidiModeActive()) {
-      // MIDI mode turned off - hide mini window
+      // MIDI mode turned off -> go to standard: hide mini window, turn off
+      // performance mode, unclip cursor
       if (miniWindow) {
         miniWindow->setVisible(false);
+      }
+      if (performanceModeButton.getToggleState()) {
+        performanceModeButton.setToggleState(false,
+                                             juce::dontSendNotification);
+        if (settingsManager.getHideCursorInPerformanceMode())
+          ShowCursor(TRUE);
+        ClipCursor(nullptr);
+        updatePerformanceModeButtonText();
       }
     } else {
       // MIDI mode turned on - show mini window if main window is minimized
@@ -607,6 +624,8 @@ void MainComponent::handleRawKeyEvent(uintptr_t deviceHandle, int keyCode,
     // Trigger the onClick handler logic
     bool enabled = !currentState;
     if (enabled) {
+      // Performance mode ON implies MIDI mode ON
+      settingsManager.setMidiModeActive(true);
       // Smart Locking: Only lock if preset has pointer mappings
       if (!inputProcessor.hasPointerMappings()) {
         performanceModeButton.setToggleState(false, juce::dontSendNotification);
@@ -640,12 +659,16 @@ void MainComponent::handleRawKeyEvent(uintptr_t deviceHandle, int keyCode,
             rect.right -= margin;
             rect.bottom -= margin;
             ClipCursor(&rect);
+            if (settingsManager.getHideCursorInPerformanceMode())
+              ShowCursor(FALSE);
           }
         }
       }
       updatePerformanceModeButtonText();
     } else {
-      // Unlock cursor: release clip
+      // Performance mode OFF -> performance off, MIDI stays on
+      if (settingsManager.getHideCursorInPerformanceMode())
+        ShowCursor(TRUE);
       ClipCursor(nullptr);
       updatePerformanceModeButtonText();
     }
@@ -655,7 +678,10 @@ void MainComponent::handleRawKeyEvent(uintptr_t deviceHandle, int keyCode,
   // Safety: Check for Escape key to unlock cursor
   if (isDown && keyCode == VK_ESCAPE &&
       performanceModeButton.getToggleState()) {
+    // Performance mode OFF -> performance off, MIDI stays on
     performanceModeButton.setToggleState(false, juce::dontSendNotification);
+    if (settingsManager.getHideCursorInPerformanceMode())
+      ShowCursor(TRUE);
     ClipCursor(nullptr);
     updatePerformanceModeButtonText();
     return;

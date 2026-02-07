@@ -55,6 +55,10 @@ public:
   bool getShowTouchpadVisualizerInMiniWindow() const;
   void setShowTouchpadVisualizerInMiniWindow(bool show);
 
+  // Hide cursor when in performance mode (cursor still clipped)
+  bool getHideCursorInPerformanceMode() const;
+  void setHideCursorInPerformanceMode(bool hide);
+
   // Mini window position (JUCE window state string; empty = use default)
   juce::String getMiniWindowPosition() const;
   void setMiniWindowPosition(const juce::String &state);

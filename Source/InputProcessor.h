@@ -258,13 +258,20 @@ private:
   std::unordered_map<std::tuple<uintptr_t, int, int>, int, Tuple3Hash>
       touchpadMixerValueBeforeMute;
 
-  // Drum pad: active notes per (deviceHandle, stripIdx, contactId) for Note Off
+  // Drum pad: active notes per (deviceHandle, stripIdx, contactId).
+  // Value stores InputID and padIndex so we can send note off when finger moves
+  // outside or to a different pad.
   struct DrumPadKeyHash {
     size_t operator()(const std::tuple<uintptr_t, int, int> &t) const {
       return Tuple3Hash{}(t);
     }
   };
-  std::unordered_map<std::tuple<uintptr_t, int, int>, InputID, DrumPadKeyHash>
+  struct DrumPadActiveEntry {
+    InputID inputId;
+    int padIndex;
+  };
+  std::unordered_map<std::tuple<uintptr_t, int, int>, DrumPadActiveEntry,
+                    DrumPadKeyHash>
       drumPadActiveNotes;
 
   // Throttle sendChangeMessage for mixer (~60 Hz)

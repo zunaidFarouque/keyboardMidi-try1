@@ -183,6 +183,7 @@ enable_testing()
 add_executable(MIDIQy_Tests
     Source/Tests/SanityTest.cpp
     Source/Tests/ChordUtilitiesTests.cpp
+    Source/Tests/MidiPerformanceModeTests.cpp
     Source/Tests/ColourContrastTests.cpp
     Source/Tests/GridCompilerTests.cpp
     Source/Tests/PitchPadUtilitiesTests.cpp

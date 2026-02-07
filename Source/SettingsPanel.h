@@ -44,6 +44,7 @@ private:
   juce::Slider visYOpacitySlider;
   juce::Label visYOpacityLabel;
   juce::ToggleButton showTouchpadInMiniWindowToggle;
+  juce::ToggleButton hideCursorInPerformanceModeToggle;
   juce::TextButton resetMiniWindowPositionButton;
   juce::TextButton
       sendRpnButton; // Button to send RPN to all channels (Phase 25.2)

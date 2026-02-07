@@ -1564,6 +1564,18 @@ void InputProcessor::processTouchpadContacts(
   bool finger2Down = tip2 && !prev.tip2;
   bool finger2Up = !tip2 && prev.tip2;
 
+  // When drum pad strips are active, they consume finger-down touches for
+  // position-based notes. Skip Finger1Down/Finger2Down Note mappings so the
+  // drum pad emits the correct note for the touch position (not a fixed note).
+  bool drumPadConsumesFingerDown =
+      !ctx->touchpadDrumPadStrips.empty() &&
+      std::any_of(ctx->touchpadDrumPadStrips.begin(),
+                  ctx->touchpadDrumPadStrips.end(),
+                  [&activeLayersSnapshot](const auto &strip) {
+                    return activeLayersSnapshot[(size_t)strip.layerId] &&
+                           strip.numPads > 0;
+                  });
+
   if (!ctx->touchpadMappings.empty()) {
     for (const auto &entry : ctx->touchpadMappings) {
       if (!activeLayersSnapshot[(size_t)entry.layerId])
@@ -1618,6 +1630,8 @@ void InputProcessor::processTouchpadContacts(
         if (act.type == ActionType::Note) {
           bool isDownEvent = (entry.eventId == TouchpadEvent::Finger1Down ||
                               entry.eventId == TouchpadEvent::Finger2Down);
+          if (isDownEvent && drumPadConsumesFingerDown)
+            continue; // Drum pad emits position-based notes; skip fixed-note mapping
           bool releaseThisFrame =
               (entry.eventId == TouchpadEvent::Finger1Down && finger1Up) ||
               (entry.eventId == TouchpadEvent::Finger2Down && finger2Up);
@@ -2055,7 +2069,10 @@ void InputProcessor::processTouchpadContacts(
     }
   }
 
-  // Drum pad strips: grid -> Note On/Off per contact
+  // Drum pad strips: grid -> Note On/Off per contact.
+  // Note holds while finger is down and inside pad. Note off when finger lifts
+  // or moves outside pad. When finger moves to a different pad: note off for
+  // old pad, note on for new pad.
   if (!ctx->touchpadDrumPadStrips.empty()) {
     juce::ScopedWriteLock wl(mixerStateLock);
     for (size_t stripIdx = 0; stripIdx < ctx->touchpadDrumPadStrips.size();
@@ -2063,38 +2080,61 @@ void InputProcessor::processTouchpadContacts(
       const auto &strip = ctx->touchpadDrumPadStrips[stripIdx];
       if (!activeLayersSnapshot[(size_t)strip.layerId] || strip.numPads <= 0)
         continue;
-      for (const auto &c : contacts) {
-        if (!c.tipDown)
-          continue;
-        float nx = c.normX;
-        float ny = c.normY;
+
+      MidiAction actTemplate{};
+      actTemplate.type = ActionType::Note;
+      actTemplate.channel = strip.midiChannel;
+      actTemplate.data2 = strip.baseVelocity;
+      actTemplate.velocityRandom = strip.velocityRandom;
+      actTemplate.releaseBehavior = NoteReleaseBehavior::SendNoteOff;
+
+      // Helper: compute pad index and MIDI note from contact position, or -1 if
+      // outside active area
+      auto contactToPad = [&strip](float nx, float ny) -> std::pair<int, int> {
         float ax = (nx - strip.deadZoneLeft) * strip.invActiveWidth;
         float ay = (ny - strip.deadZoneTop) * strip.invActiveHeight;
         if (ax < 0.0f || ax >= 1.0f || ay < 0.0f || ay >= 1.0f)
-          continue;
+          return {-1, -1};
         int col = static_cast<int>(ax * static_cast<float>(strip.columns));
         int row = static_cast<int>(ay * static_cast<float>(strip.rows));
         col = juce::jlimit(0, strip.columns - 1, col);
         row = juce::jlimit(0, strip.rows - 1, row);
         int padIndex = row * strip.columns + col;
-        int midiNote = strip.midiNoteStart + padIndex;
-        midiNote = juce::jlimit(0, 127, midiNote);
+        int midiNote =
+            juce::jlimit(0, 127, strip.midiNoteStart + padIndex);
+        return {padIndex, midiNote};
+      };
+
+      // Process contacts that are tipDown and inside pad area
+      for (const auto &c : contacts) {
+        if (!c.tipDown)
+          continue;
+        auto [padIndex, midiNote] = contactToPad(c.normX, c.normY);
+        if (padIndex < 0)
+          continue; // Outside pad area
         auto key = std::make_tuple(deviceHandle, static_cast<int>(stripIdx),
                                    c.contactId);
-        if (drumPadActiveNotes.find(key) != drumPadActiveNotes.end())
-          continue;
-        MidiAction act{};
-        act.type = ActionType::Note;
-        act.channel = strip.midiChannel;
-        act.data1 = midiNote;
-        act.data2 = strip.baseVelocity;
-        act.velocityRandom = strip.velocityRandom;
-        act.releaseBehavior = NoteReleaseBehavior::SendNoteOff;
         int keyCode = static_cast<int>((stripIdx << 8) | (c.contactId & 0xFF));
         InputID drumPadInput{deviceHandle, keyCode};
+
+        auto it = drumPadActiveNotes.find(key);
+        if (it != drumPadActiveNotes.end()) {
+          if (it->second.padIndex == padIndex)
+            continue; // Same pad, holding
+          // Moved to different pad: note off for old, then note on for new
+          MidiAction releaseAct = actTemplate;
+          triggerManualNoteRelease(it->second.inputId, releaseAct);
+          drumPadActiveNotes.erase(it);
+        }
+
+        MidiAction act = actTemplate;
+        act.data1 = midiNote;
         triggerManualNoteOn(drumPadInput, act, true);
-        drumPadActiveNotes[key] = drumPadInput;
+        drumPadActiveNotes[key] = {drumPadInput, padIndex};
       }
+
+      // For each tracked contact: if no longer valid (tipUp or outside pad),
+      // send note off
       for (auto it = drumPadActiveNotes.begin();
            it != drumPadActiveNotes.end();) {
         uintptr_t kDev = std::get<0>(it->first);
@@ -2104,18 +2144,28 @@ void InputProcessor::processTouchpadContacts(
           ++it;
           continue;
         }
-        bool stillDown = false;
+        bool stillValid = false;
         for (const auto &c : contacts) {
-          if (c.contactId == kContact && c.tipDown) {
-            stillDown = true;
+          if (c.contactId != kContact)
+            continue;
+          if (!c.tipDown)
+            break; // Finger lifted
+          auto [padIndex, _] = contactToPad(c.normX, c.normY);
+          if (padIndex >= 0 && padIndex == it->second.padIndex) {
+            stillValid = true;
             break;
           }
+          // Finger still down but moved outside or to different pad - will be
+          // handled by the "moved to different pad" path when we process that
+          // contact; but if outside, we need note off here
+          if (padIndex >= 0)
+            stillValid = true; // Different pad: new note on was sent above
+          break;
         }
-        if (!stillDown) {
-          MidiAction act{};
-          act.type = ActionType::Note;
-          act.releaseBehavior = NoteReleaseBehavior::SendNoteOff;
-          triggerManualNoteRelease(it->second, act);
+        if (!stillValid) {
+          MidiAction releaseAct = actTemplate;
+          releaseAct.releaseBehavior = NoteReleaseBehavior::SendNoteOff;
+          triggerManualNoteRelease(it->second.inputId, releaseAct);
           it = drumPadActiveNotes.erase(it);
         } else {
           ++it;

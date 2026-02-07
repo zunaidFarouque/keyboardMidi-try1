@@ -27,7 +27,9 @@ public:
       setContentOwned(mainComp, true);
       setMenuBar(mainComp); // Set MainComponent as menu bar model
       setResizable(true, true);
-      centreWithSize(getWidth(), getHeight());
+      // Use explicit size: getWidth/getHeight can be 0 before addToDesktop
+      const int w = 800, h = 600;
+      centreWithSize(w, h);
       setVisible(true);
     }
 

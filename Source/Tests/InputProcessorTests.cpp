@@ -11,6 +11,7 @@
 #include "../VoiceManager.h"
 #include "../Zone.h"
 #include <gtest/gtest.h>
+#include <cmath>
 #include <set>
 
 // Records MIDI note on/off for release behaviour and Note type tests
@@ -2183,4 +2184,668 @@ TEST_F(InputProcessorTest, TouchpadDrumPadGridMappingCorrectNote) {
   ASSERT_GE(mockEng.events.size(), 1u);
   EXPECT_TRUE(mockEng.events[0].isNoteOn);
   EXPECT_EQ(mockEng.events[0].note, 36);
+}
+
+// --- Drum pad: note holds while finger stays down (no spurious note off) ---
+TEST_F(InputProcessorTest, TouchpadDrumPadNoteHoldsWhileFingerDown) {
+  MockMidiEngine mockEng;
+  TouchpadMixerManager touchpadMixerMgr;
+  VoiceManager voiceMgr(mockEng, settingsMgr);
+  InputProcessor proc(voiceMgr, presetMgr, deviceMgr, scaleLib, mockEng,
+                      settingsMgr, touchpadMixerMgr);
+
+  presetMgr.getLayersList().removeAllChildren(nullptr);
+  presetMgr.ensureStaticLayers();
+  settingsMgr.setMidiModeActive(true);
+
+  TouchpadMixerConfig cfg;
+  cfg.type = TouchpadType::DrumPad;
+  cfg.layerId = 0;
+  cfg.drumPadRows = 2;
+  cfg.drumPadColumns = 4;
+  cfg.drumPadMidiNoteStart = 60;
+  cfg.drumPadVelocityRandom = 0;
+  cfg.midiChannel = 1;
+  touchpadMixerMgr.addStrip(cfg);
+
+  proc.initialize();
+  proc.forceRebuildMappings();
+  mockEng.clear();
+
+  uintptr_t deviceHandle = 0x1234;
+  std::vector<TouchpadContact> down = {{0, 0, 0, 0.5f, 0.5f, true}};
+
+  proc.processTouchpadContacts(deviceHandle, down);
+  ASSERT_GE(mockEng.events.size(), 1u);
+  EXPECT_TRUE(mockEng.events[0].isNoteOn);
+  size_t countAfterFirst = mockEng.events.size();
+
+  // Second frame: same finger still down - must NOT send note off
+  proc.processTouchpadContacts(deviceHandle, down);
+  EXPECT_EQ(mockEng.events.size(), countAfterFirst)
+      << "Should not send extra events while finger holds";
+
+  // Third frame: still holding
+  proc.processTouchpadContacts(deviceHandle, down);
+  EXPECT_EQ(mockEng.events.size(), countAfterFirst);
+
+  // Fourth frame: finger lifts - now expect note off
+  std::vector<TouchpadContact> up = {{0, 0, 0, 0.5f, 0.5f, false}};
+  proc.processTouchpadContacts(deviceHandle, up);
+  ASSERT_GE(mockEng.events.size(), countAfterFirst + 1u);
+  EXPECT_FALSE(mockEng.events.back().isNoteOn);
+  EXPECT_EQ(mockEng.events.back().note, 66);
+}
+
+// --- Drum pad: note off when finger moves outside pad area ---
+TEST_F(InputProcessorTest, TouchpadDrumPadNoteOffWhenFingerMovesOutside) {
+  MockMidiEngine mockEng;
+  TouchpadMixerManager touchpadMixerMgr;
+  VoiceManager voiceMgr(mockEng, settingsMgr);
+  InputProcessor proc(voiceMgr, presetMgr, deviceMgr, scaleLib, mockEng,
+                      settingsMgr, touchpadMixerMgr);
+
+  presetMgr.getLayersList().removeAllChildren(nullptr);
+  presetMgr.ensureStaticLayers();
+  settingsMgr.setMidiModeActive(true);
+
+  TouchpadMixerConfig cfg;
+  cfg.type = TouchpadType::DrumPad;
+  cfg.layerId = 0;
+  cfg.drumPadRows = 2;
+  cfg.drumPadColumns = 4;
+  cfg.drumPadMidiNoteStart = 60;
+  cfg.drumPadDeadZoneLeft = 0.0f;
+  cfg.drumPadDeadZoneRight = 0.0f;
+  cfg.drumPadDeadZoneTop = 0.0f;
+  cfg.drumPadDeadZoneBottom = 0.0f;
+  cfg.midiChannel = 1;
+  touchpadMixerMgr.addStrip(cfg);
+
+  proc.initialize();
+  proc.forceRebuildMappings();
+  mockEng.clear();
+
+  uintptr_t deviceHandle = 0x1234;
+  proc.processTouchpadContacts(deviceHandle, {{0, 0, 0, 0.5f, 0.5f, true}});
+  ASSERT_GE(mockEng.events.size(), 1u);
+  EXPECT_TRUE(mockEng.events[0].isNoteOn);
+  EXPECT_EQ(mockEng.events[0].note, 66);
+
+  mockEng.clear();
+  // Finger still down (tipDown=true) but moved outside active area (e.g. left of dead zone)
+  // Use normX/normY that map outside the pad grid
+  proc.processTouchpadContacts(deviceHandle, {{0, 0, 0, -0.1f, 0.5f, true}});
+  ASSERT_GE(mockEng.events.size(), 1u) << "Expected Note Off when finger moves outside";
+  EXPECT_FALSE(mockEng.events[0].isNoteOn);
+  EXPECT_EQ(mockEng.events[0].note, 66);
+}
+
+// --- Drum pad: different pads send different notes ---
+TEST_F(InputProcessorTest, TouchpadDrumPadDifferentPadsDifferentNotes) {
+  MockMidiEngine mockEng;
+  TouchpadMixerManager touchpadMixerMgr;
+  VoiceManager voiceMgr(mockEng, settingsMgr);
+  InputProcessor proc(voiceMgr, presetMgr, deviceMgr, scaleLib, mockEng,
+                      settingsMgr, touchpadMixerMgr);
+
+  presetMgr.getLayersList().removeAllChildren(nullptr);
+  presetMgr.ensureStaticLayers();
+  settingsMgr.setMidiModeActive(true);
+
+  TouchpadMixerConfig cfg;
+  cfg.type = TouchpadType::DrumPad;
+  cfg.layerId = 0;
+  cfg.drumPadRows = 2;
+  cfg.drumPadColumns = 4;
+  cfg.drumPadMidiNoteStart = 36;
+  cfg.drumPadVelocityRandom = 0;
+  cfg.midiChannel = 1;
+  touchpadMixerMgr.addStrip(cfg);
+
+  proc.initialize();
+  proc.forceRebuildMappings();
+  mockEng.clear();
+
+  uintptr_t deviceHandle = 0x1234;
+  // Pad 0: top-left (col=0, row=0)
+  proc.processTouchpadContacts(deviceHandle, {{0, 0, 0, 0.1f, 0.1f, true}});
+  ASSERT_GE(mockEng.events.size(), 1u);
+  EXPECT_EQ(mockEng.events[0].note, 36);
+
+  proc.processTouchpadContacts(deviceHandle, {{0, 0, 0, 0.1f, 0.1f, false}});
+  mockEng.clear();
+
+  // Pad 3: top-right (col=3, row=0)
+  proc.processTouchpadContacts(deviceHandle, {{0, 0, 0, 0.9f, 0.1f, true}});
+  ASSERT_GE(mockEng.events.size(), 1u);
+  EXPECT_EQ(mockEng.events[0].note, 39);
+
+  proc.processTouchpadContacts(deviceHandle, {{0, 0, 0, 0.9f, 0.1f, false}});
+  mockEng.clear();
+
+  // Pad 4: bottom-left (col=0, row=1)
+  proc.processTouchpadContacts(deviceHandle, {{0, 0, 0, 0.1f, 0.9f, true}});
+  ASSERT_GE(mockEng.events.size(), 1u);
+  EXPECT_EQ(mockEng.events[0].note, 40);
+}
+
+// --- Drum pad: velocity uses baseVelocity when velocityRandom=0 ---
+TEST_F(InputProcessorTest, TouchpadDrumPadVelocityUsesBaseVelocity) {
+  MockMidiEngine mockEng;
+  TouchpadMixerManager touchpadMixerMgr;
+  VoiceManager voiceMgr(mockEng, settingsMgr);
+  InputProcessor proc(voiceMgr, presetMgr, deviceMgr, scaleLib, mockEng,
+                      settingsMgr, touchpadMixerMgr);
+
+  presetMgr.getLayersList().removeAllChildren(nullptr);
+  presetMgr.ensureStaticLayers();
+  settingsMgr.setMidiModeActive(true);
+
+  TouchpadMixerConfig cfg;
+  cfg.type = TouchpadType::DrumPad;
+  cfg.layerId = 0;
+  cfg.drumPadRows = 2;
+  cfg.drumPadColumns = 4;
+  cfg.drumPadMidiNoteStart = 60;
+  cfg.drumPadBaseVelocity = 80;
+  cfg.drumPadVelocityRandom = 0;
+  cfg.midiChannel = 1;
+  touchpadMixerMgr.addStrip(cfg);
+
+  proc.initialize();
+  proc.forceRebuildMappings();
+  mockEng.clear();
+
+  uintptr_t deviceHandle = 0x1234;
+  proc.processTouchpadContacts(deviceHandle, {{0, 0, 0, 0.5f, 0.5f, true}});
+  ASSERT_GE(mockEng.events.size(), 1u);
+  EXPECT_TRUE(mockEng.events[0].isNoteOn);
+  float expectedVel = 80.0f / 127.0f;
+  EXPECT_NEAR(mockEng.events[0].velocity, expectedVel, 0.001f);
+}
+
+// --- Drum pad: velocity random produces variation ---
+TEST_F(InputProcessorTest, TouchpadDrumPadVelocityRandomProducesVariation) {
+  MockMidiEngine mockEng;
+  TouchpadMixerManager touchpadMixerMgr;
+  VoiceManager voiceMgr(mockEng, settingsMgr);
+  InputProcessor proc(voiceMgr, presetMgr, deviceMgr, scaleLib, mockEng,
+                      settingsMgr, touchpadMixerMgr);
+
+  presetMgr.getLayersList().removeAllChildren(nullptr);
+  presetMgr.ensureStaticLayers();
+  settingsMgr.setMidiModeActive(true);
+
+  TouchpadMixerConfig cfg;
+  cfg.type = TouchpadType::DrumPad;
+  cfg.layerId = 0;
+  cfg.drumPadRows = 2;
+  cfg.drumPadColumns = 4;
+  cfg.drumPadMidiNoteStart = 60;
+  cfg.drumPadBaseVelocity = 100;
+  cfg.drumPadVelocityRandom = 20;
+  cfg.midiChannel = 1;
+  touchpadMixerMgr.addStrip(cfg);
+
+  proc.initialize();
+  proc.forceRebuildMappings();
+
+  std::set<float> velocities;
+  for (int i = 0; i < 30; ++i) {
+    mockEng.clear();
+    proc.processTouchpadContacts(0x1234, {{i, 0, 0, 0.5f, 0.5f, true}});
+    proc.processTouchpadContacts(0x1234, {{i, 0, 0, 0.5f, 0.5f, false}});
+    if (!mockEng.events.empty() && mockEng.events[0].isNoteOn) {
+      velocities.insert(mockEng.events[0].velocity);
+    }
+  }
+  EXPECT_GT(velocities.size(), 1u)
+      << "Velocity random should produce different velocities across hits";
+}
+
+// --- Drum pad: finger moves from pad A to pad B sends note off A, note on B ---
+TEST_F(InputProcessorTest, TouchpadDrumPadFingerMovesToDifferentPad) {
+  MockMidiEngine mockEng;
+  TouchpadMixerManager touchpadMixerMgr;
+  VoiceManager voiceMgr(mockEng, settingsMgr);
+  InputProcessor proc(voiceMgr, presetMgr, deviceMgr, scaleLib, mockEng,
+                      settingsMgr, touchpadMixerMgr);
+
+  presetMgr.getLayersList().removeAllChildren(nullptr);
+  presetMgr.ensureStaticLayers();
+  settingsMgr.setMidiModeActive(true);
+
+  TouchpadMixerConfig cfg;
+  cfg.type = TouchpadType::DrumPad;
+  cfg.layerId = 0;
+  cfg.drumPadRows = 2;
+  cfg.drumPadColumns = 4;
+  cfg.drumPadMidiNoteStart = 36;
+  cfg.drumPadVelocityRandom = 0;
+  cfg.midiChannel = 1;
+  touchpadMixerMgr.addStrip(cfg);
+
+  proc.initialize();
+  proc.forceRebuildMappings();
+  mockEng.clear();
+
+  uintptr_t deviceHandle = 0x1234;
+  // Frame 1: finger on pad 0 (top-left)
+  proc.processTouchpadContacts(deviceHandle, {{0, 0, 0, 0.1f, 0.1f, true}});
+  ASSERT_GE(mockEng.events.size(), 1u);
+  EXPECT_TRUE(mockEng.events[0].isNoteOn);
+  EXPECT_EQ(mockEng.events[0].note, 36);
+
+  mockEng.clear();
+  // Frame 2: same contact (contactId=0) moves to pad 5 (row 1, col 1)
+  // Position: col 1/4 -> ax~0.3, row 1/2 -> ay~0.7
+  // Should send note off 36, then note on for pad 5's note (36+5=41)
+  proc.processTouchpadContacts(deviceHandle, {{0, 0, 0, 0.3f, 0.7f, true}});
+  ASSERT_GE(mockEng.events.size(), 2u)
+      << "Expected Note Off for old pad and Note On for new pad";
+  bool foundNoteOff36 = false;
+  bool foundNoteOn41 = false;
+  for (const auto &e : mockEng.events) {
+    if (!e.isNoteOn && e.note == 36)
+      foundNoteOff36 = true;
+    if (e.isNoteOn && e.note == 41) // pad 5 = row 1, col 1 -> 36+5=41
+      foundNoteOn41 = true;
+  }
+  EXPECT_TRUE(foundNoteOff36) << "Should send Note Off for old pad (note 36)";
+  EXPECT_TRUE(foundNoteOn41) << "Should send Note On for new pad (note 41)";
+}
+
+// --- Drum pad takes priority over Finger1Down Note mapping on first touch ---
+TEST_F(InputProcessorTest, TouchpadDrumPadFirstTouchUsesPositionNotFixedNote) {
+  MockMidiEngine mockEng;
+  TouchpadMixerManager touchpadMixerMgr;
+  VoiceManager voiceMgr(mockEng, settingsMgr);
+  InputProcessor proc(voiceMgr, presetMgr, deviceMgr, scaleLib, mockEng,
+                      settingsMgr, touchpadMixerMgr);
+
+  presetMgr.getLayersList().removeAllChildren(nullptr);
+  presetMgr.ensureStaticLayers();
+  settingsMgr.setMidiModeActive(true);
+
+  // Add Drum Pad strip (position-based notes)
+  TouchpadMixerConfig cfg;
+  cfg.type = TouchpadType::DrumPad;
+  cfg.layerId = 0;
+  cfg.drumPadRows = 2;
+  cfg.drumPadColumns = 4;
+  cfg.drumPadMidiNoteStart = 36;
+  cfg.drumPadVelocityRandom = 0;
+  cfg.midiChannel = 1;
+  touchpadMixerMgr.addStrip(cfg);
+
+  // Add Finger1Down Note mapping (would send fixed note 60 if it fired)
+  auto mappings = presetMgr.getMappingsListForLayer(0);
+  juce::ValueTree m("Mapping");
+  m.setProperty("inputAlias", "Touchpad", nullptr);
+  m.setProperty("inputTouchpadEvent", (int)TouchpadEvent::Finger1Down, nullptr);
+  m.setProperty("type", "Note", nullptr);
+  m.setProperty("channel", 1, nullptr);
+  m.setProperty("data1", 60, nullptr);
+  m.setProperty("data2", 100, nullptr);
+  m.setProperty("layerID", 0, nullptr);
+  m.setProperty("releaseBehavior", "Send Note Off", nullptr);
+  mappings.addChild(m, -1, nullptr);
+
+  proc.initialize();
+  proc.forceRebuildMappings();
+  mockEng.clear();
+
+  uintptr_t deviceHandle = 0x1234;
+  // First touch at pad 3 (top-right) -> should get note 39, NOT note 60
+  proc.processTouchpadContacts(deviceHandle, {{0, 0, 0, 0.9f, 0.1f, true}});
+  ASSERT_GE(mockEng.events.size(), 1u) << "Expected at least one Note On";
+  EXPECT_TRUE(mockEng.events[0].isNoteOn);
+  EXPECT_EQ(mockEng.events[0].note, 39)
+      << "Drum pad should emit position-based note 39, not fixed Finger1Down note 60";
+}
+
+// --- Drum pad: Finger2Down Note mapping also skipped when drum pad active ---
+TEST_F(InputProcessorTest, TouchpadDrumPadFinger2DownMappingSkipped) {
+  MockMidiEngine mockEng;
+  TouchpadMixerManager touchpadMixerMgr;
+  VoiceManager voiceMgr(mockEng, settingsMgr);
+  InputProcessor proc(voiceMgr, presetMgr, deviceMgr, scaleLib, mockEng,
+                      settingsMgr, touchpadMixerMgr);
+
+  presetMgr.getLayersList().removeAllChildren(nullptr);
+  presetMgr.ensureStaticLayers();
+  settingsMgr.setMidiModeActive(true);
+
+  TouchpadMixerConfig cfg;
+  cfg.type = TouchpadType::DrumPad;
+  cfg.layerId = 0;
+  cfg.drumPadRows = 2;
+  cfg.drumPadColumns = 4;
+  cfg.drumPadMidiNoteStart = 36;
+  cfg.drumPadVelocityRandom = 0;
+  cfg.midiChannel = 1;
+  touchpadMixerMgr.addStrip(cfg);
+
+  // Finger2Down Note mapping would send fixed note 72 if it fired
+  auto mappings = presetMgr.getMappingsListForLayer(0);
+  juce::ValueTree m("Mapping");
+  m.setProperty("inputAlias", "Touchpad", nullptr);
+  m.setProperty("inputTouchpadEvent", (int)TouchpadEvent::Finger2Down, nullptr);
+  m.setProperty("type", "Note", nullptr);
+  m.setProperty("channel", 1, nullptr);
+  m.setProperty("data1", 72, nullptr);
+  m.setProperty("data2", 100, nullptr);
+  m.setProperty("layerID", 0, nullptr);
+  m.setProperty("releaseBehavior", "Send Note Off", nullptr);
+  mappings.addChild(m, -1, nullptr);
+
+  proc.initialize();
+  proc.forceRebuildMappings();
+  mockEng.clear();
+
+  uintptr_t deviceHandle = 0x1234;
+  // First touch (finger 1), then second touch (finger 2) at pad 5
+  proc.processTouchpadContacts(deviceHandle, {{0, 0, 0, 0.5f, 0.5f, true}});
+  proc.processTouchpadContacts(
+      deviceHandle,
+      {{0, 0, 0, 0.5f, 0.5f, true}, {1, 0, 0, 0.3f, 0.7f, true}});
+  ASSERT_GE(mockEng.events.size(), 2u);
+  EXPECT_TRUE(mockEng.events[0].isNoteOn);
+  EXPECT_EQ(mockEng.events[0].note, 42); // pad 6 (0.5, 0.5) -> 36+6=42
+  EXPECT_TRUE(mockEng.events[1].isNoteOn);
+  EXPECT_EQ(mockEng.events[1].note, 41)
+      << "Second finger should get pad 5 (note 41), not fixed Finger2Down note 72";
+}
+
+// --- Drum pad: multiple simultaneous contacts, independent release ---
+TEST_F(InputProcessorTest, TouchpadDrumPadMultipleContactsIndependentRelease) {
+  MockMidiEngine mockEng;
+  TouchpadMixerManager touchpadMixerMgr;
+  VoiceManager voiceMgr(mockEng, settingsMgr);
+  InputProcessor proc(voiceMgr, presetMgr, deviceMgr, scaleLib, mockEng,
+                      settingsMgr, touchpadMixerMgr);
+
+  presetMgr.getLayersList().removeAllChildren(nullptr);
+  presetMgr.ensureStaticLayers();
+  settingsMgr.setMidiModeActive(true);
+
+  TouchpadMixerConfig cfg;
+  cfg.type = TouchpadType::DrumPad;
+  cfg.layerId = 0;
+  cfg.drumPadRows = 2;
+  cfg.drumPadColumns = 4;
+  cfg.drumPadMidiNoteStart = 36;
+  cfg.drumPadVelocityRandom = 0;
+  cfg.midiChannel = 1;
+  touchpadMixerMgr.addStrip(cfg);
+
+  proc.initialize();
+  proc.forceRebuildMappings();
+  mockEng.clear();
+
+  uintptr_t deviceHandle = 0x1234;
+  // Two fingers on two pads: contact 0 on pad 0, contact 1 on pad 3
+  proc.processTouchpadContacts(
+      deviceHandle,
+      {{0, 0, 0, 0.1f, 0.1f, true}, {1, 0, 0, 0.9f, 0.1f, true}});
+  ASSERT_GE(mockEng.events.size(), 2u);
+  std::set<int> notesOn;
+  for (const auto &e : mockEng.events)
+    if (e.isNoteOn)
+      notesOn.insert(e.note);
+  EXPECT_TRUE(notesOn.count(36)) << "Pad 0 should trigger note 36";
+  EXPECT_TRUE(notesOn.count(39)) << "Pad 3 should trigger note 39";
+
+  mockEng.clear();
+  // Release contact 0 only; contact 1 still down
+  proc.processTouchpadContacts(
+      deviceHandle,
+      {{0, 0, 0, 0.1f, 0.1f, false}, {1, 0, 0, 0.9f, 0.1f, true}});
+  ASSERT_GE(mockEng.events.size(), 1u);
+  EXPECT_FALSE(mockEng.events[0].isNoteOn);
+  EXPECT_EQ(mockEng.events[0].note, 36) << "Note off for released finger only";
+}
+
+// --- Drum pad: strip on inactive layer produces no notes ---
+TEST_F(InputProcessorTest, TouchpadDrumPadLayerFiltering) {
+  MockMidiEngine mockEng;
+  TouchpadMixerManager touchpadMixerMgr;
+  VoiceManager voiceMgr(mockEng, settingsMgr);
+  InputProcessor proc(voiceMgr, presetMgr, deviceMgr, scaleLib, mockEng,
+                      settingsMgr, touchpadMixerMgr);
+
+  presetMgr.getLayersList().removeAllChildren(nullptr);
+  presetMgr.ensureStaticLayers();
+  settingsMgr.setMidiModeActive(true);
+
+  TouchpadMixerConfig cfg;
+  cfg.type = TouchpadType::DrumPad;
+  cfg.layerId = 1; // On layer 1
+  cfg.drumPadRows = 2;
+  cfg.drumPadColumns = 4;
+  cfg.drumPadMidiNoteStart = 60;
+  cfg.drumPadVelocityRandom = 0;
+  cfg.midiChannel = 1;
+  touchpadMixerMgr.addStrip(cfg);
+
+  proc.initialize();
+  proc.forceRebuildMappings();
+  mockEng.clear();
+
+  uintptr_t deviceHandle = 0x1234;
+  proc.processTouchpadContacts(deviceHandle, {{0, 0, 0, 0.5f, 0.5f, true}});
+  EXPECT_EQ(mockEng.events.size(), 0u)
+      << "Drum pad on inactive layer 1 should not trigger";
+
+  presetMgr.getLayerNode(1).setProperty("isActive", true, nullptr);
+  proc.forceRebuildMappings();
+  mockEng.clear();
+  proc.processTouchpadContacts(deviceHandle, {{0, 0, 0, 0.5f, 0.5f, true}});
+  ASSERT_GE(mockEng.events.size(), 1u);
+  EXPECT_TRUE(mockEng.events[0].isNoteOn);
+  EXPECT_EQ(mockEng.events[0].note, 66) << "When layer 1 active, drum pad fires";
+}
+
+// --- Drum pad: dead zones - no trigger in dead zone, note off when move into ---
+TEST_F(InputProcessorTest, TouchpadDrumPadDeadZones) {
+  MockMidiEngine mockEng;
+  TouchpadMixerManager touchpadMixerMgr;
+  VoiceManager voiceMgr(mockEng, settingsMgr);
+  InputProcessor proc(voiceMgr, presetMgr, deviceMgr, scaleLib, mockEng,
+                      settingsMgr, touchpadMixerMgr);
+
+  presetMgr.getLayersList().removeAllChildren(nullptr);
+  presetMgr.ensureStaticLayers();
+  settingsMgr.setMidiModeActive(true);
+
+  TouchpadMixerConfig cfg;
+  cfg.type = TouchpadType::DrumPad;
+  cfg.layerId = 0;
+  cfg.drumPadRows = 2;
+  cfg.drumPadColumns = 4;
+  cfg.drumPadMidiNoteStart = 36;
+  cfg.drumPadDeadZoneLeft = 0.1f;
+  cfg.drumPadDeadZoneRight = 0.1f;
+  cfg.drumPadDeadZoneTop = 0.1f;
+  cfg.drumPadDeadZoneBottom = 0.1f;
+  cfg.midiChannel = 1;
+  touchpadMixerMgr.addStrip(cfg);
+
+  proc.initialize();
+  proc.forceRebuildMappings();
+  mockEng.clear();
+
+  uintptr_t deviceHandle = 0x1234;
+  // Finger in dead zone (left side, normX=0.05)
+  proc.processTouchpadContacts(deviceHandle, {{0, 0, 0, 0.05f, 0.5f, true}});
+  EXPECT_EQ(mockEng.events.size(), 0u)
+      << "Finger in dead zone should not trigger";
+
+  mockEng.clear();
+  // Finger in active area (0.5,0.5 with 0.1 dead zones -> pad 6 -> note 42)
+  proc.processTouchpadContacts(deviceHandle, {{0, 0, 0, 0.5f, 0.5f, true}});
+  ASSERT_GE(mockEng.events.size(), 1u);
+  EXPECT_EQ(mockEng.events[0].note, 42);
+
+  mockEng.clear();
+  // Finger moves from active into dead zone (still tipDown)
+  proc.processTouchpadContacts(deviceHandle, {{0, 0, 0, 0.05f, 0.5f, true}});
+  ASSERT_GE(mockEng.events.size(), 1u);
+  EXPECT_FALSE(mockEng.events[0].isNoteOn);
+  EXPECT_EQ(mockEng.events[0].note, 42);
+}
+
+// --- Drum pad: boundary positions map to correct edge pads ---
+TEST_F(InputProcessorTest, TouchpadDrumPadBoundaryMapping) {
+  MockMidiEngine mockEng;
+  TouchpadMixerManager touchpadMixerMgr;
+  VoiceManager voiceMgr(mockEng, settingsMgr);
+  InputProcessor proc(voiceMgr, presetMgr, deviceMgr, scaleLib, mockEng,
+                      settingsMgr, touchpadMixerMgr);
+
+  presetMgr.getLayersList().removeAllChildren(nullptr);
+  presetMgr.ensureStaticLayers();
+  settingsMgr.setMidiModeActive(true);
+
+  TouchpadMixerConfig cfg;
+  cfg.type = TouchpadType::DrumPad;
+  cfg.layerId = 0;
+  cfg.drumPadRows = 2;
+  cfg.drumPadColumns = 4;
+  cfg.drumPadMidiNoteStart = 36;
+  cfg.drumPadVelocityRandom = 0;
+  cfg.midiChannel = 1;
+  touchpadMixerMgr.addStrip(cfg);
+
+  proc.initialize();
+  proc.forceRebuildMappings();
+
+  uintptr_t deviceHandle = 0x1234;
+  mockEng.clear();
+  proc.processTouchpadContacts(deviceHandle, {{0, 0, 0, 0.01f, 0.01f, true}});
+  proc.processTouchpadContacts(deviceHandle, {{0, 0, 0, 0.01f, 0.01f, false}});
+  ASSERT_GE(mockEng.events.size(), 1u);
+  EXPECT_EQ(mockEng.events[0].note, 36) << "Top-left (0.01,0.01) -> pad 0, note 36";
+
+  mockEng.clear();
+  proc.processTouchpadContacts(deviceHandle, {{0, 0, 0, 0.99f, 0.99f, true}});
+  proc.processTouchpadContacts(deviceHandle, {{0, 0, 0, 0.99f, 0.99f, false}});
+  ASSERT_GE(mockEng.events.size(), 1u);
+  EXPECT_EQ(mockEng.events[0].note, 43)
+      << "Bottom-right (0.99,0.99) -> pad 7, note 43";
+}
+
+// --- Drum pad: velocity clamped to 1-127 ---
+TEST_F(InputProcessorTest, TouchpadDrumPadVelocityClamped) {
+  MockMidiEngine mockEng;
+  TouchpadMixerManager touchpadMixerMgr;
+  VoiceManager voiceMgr(mockEng, settingsMgr);
+  InputProcessor proc(voiceMgr, presetMgr, deviceMgr, scaleLib, mockEng,
+                      settingsMgr, touchpadMixerMgr);
+
+  presetMgr.getLayersList().removeAllChildren(nullptr);
+  presetMgr.ensureStaticLayers();
+  settingsMgr.setMidiModeActive(true);
+
+  TouchpadMixerConfig cfg;
+  cfg.type = TouchpadType::DrumPad;
+  cfg.layerId = 0;
+  cfg.drumPadRows = 2;
+  cfg.drumPadColumns = 4;
+  cfg.drumPadMidiNoteStart = 60;
+  cfg.drumPadBaseVelocity = 127;
+  cfg.drumPadVelocityRandom = 20;
+  cfg.midiChannel = 1;
+  touchpadMixerMgr.addStrip(cfg);
+
+  proc.initialize();
+  proc.forceRebuildMappings();
+
+  for (int i = 0; i < 20; ++i) {
+    mockEng.clear();
+    proc.processTouchpadContacts(0x1234, {{i, 0, 0, 0.5f, 0.5f, true}});
+    proc.processTouchpadContacts(0x1234, {{i, 0, 0, 0.5f, 0.5f, false}});
+    if (!mockEng.events.empty() && mockEng.events[0].isNoteOn) {
+      int vel127 = static_cast<int>(std::round(mockEng.events[0].velocity * 127.0f));
+      EXPECT_GE(vel127, 1) << "Velocity must be at least 1";
+      EXPECT_LE(vel127, 127) << "Velocity must be at most 127";
+    }
+  }
+
+  cfg.drumPadBaseVelocity = 1;
+  cfg.drumPadVelocityRandom = 10;
+  touchpadMixerMgr.removeStrip(0);
+  touchpadMixerMgr.addStrip(cfg);
+  proc.forceRebuildMappings();
+
+  for (int i = 0; i < 20; ++i) {
+    mockEng.clear();
+    proc.processTouchpadContacts(0x1234, {{i + 100, 0, 0, 0.5f, 0.5f, true}});
+    proc.processTouchpadContacts(0x1234, {{i + 100, 0, 0, 0.5f, 0.5f, false}});
+    if (!mockEng.events.empty() && mockEng.events[0].isNoteOn) {
+      int vel127 = static_cast<int>(std::round(mockEng.events[0].velocity * 127.0f));
+      EXPECT_GE(vel127, 1) << "Velocity must be at least 1 with base=1";
+      EXPECT_LE(vel127, 127) << "Velocity must be at most 127";
+    }
+  }
+}
+
+// --- Drum pad + Finger1Up mapping: Finger1Up still fires (different event) ---
+TEST_F(InputProcessorTest, TouchpadDrumPadFinger1UpMappingCoexists) {
+  MockMidiEngine mockEng;
+  TouchpadMixerManager touchpadMixerMgr;
+  VoiceManager voiceMgr(mockEng, settingsMgr);
+  InputProcessor proc(voiceMgr, presetMgr, deviceMgr, scaleLib, mockEng,
+                      settingsMgr, touchpadMixerMgr);
+
+  presetMgr.getLayersList().removeAllChildren(nullptr);
+  presetMgr.ensureStaticLayers();
+  settingsMgr.setMidiModeActive(true);
+
+  TouchpadMixerConfig cfg;
+  cfg.type = TouchpadType::DrumPad;
+  cfg.layerId = 0;
+  cfg.drumPadRows = 2;
+  cfg.drumPadColumns = 4;
+  cfg.drumPadMidiNoteStart = 36;
+  cfg.midiChannel = 1;
+  touchpadMixerMgr.addStrip(cfg);
+
+  auto mappings = presetMgr.getMappingsListForLayer(0);
+  juce::ValueTree m("Mapping");
+  m.setProperty("inputAlias", "Touchpad", nullptr);
+  m.setProperty("inputTouchpadEvent", (int)TouchpadEvent::Finger1Up, nullptr);
+  m.setProperty("type", "Note", nullptr);
+  m.setProperty("channel", 1, nullptr);
+  m.setProperty("data1", 96, nullptr); // C7 - distinct from drum pad range
+  m.setProperty("data2", 80, nullptr);
+  m.setProperty("layerID", 0, nullptr);
+  m.setProperty("releaseBehavior", "Sustain until retrigger", nullptr);
+  mappings.addChild(m, -1, nullptr);
+
+  proc.initialize();
+  proc.forceRebuildMappings();
+  mockEng.clear();
+
+  uintptr_t deviceHandle = 0x1234;
+  proc.processTouchpadContacts(deviceHandle, {{0, 0, 0, 0.5f, 0.5f, true}});
+  ASSERT_GE(mockEng.events.size(), 1u);
+  EXPECT_EQ(mockEng.events[0].note, 42); // Drum pad pad 6 -> note 42
+
+  mockEng.clear();
+  proc.processTouchpadContacts(deviceHandle, {{0, 0, 0, 0.5f, 0.5f, false}});
+  ASSERT_GE(mockEng.events.size(), 2u)
+      << "Expect Finger1Up note-on (96) and drum pad note-off on lift";
+  bool found96on = false;
+  int noteOffCount = 0;
+  for (const auto &e : mockEng.events) {
+    if (e.isNoteOn && e.note == 96)
+      found96on = true;
+    if (!e.isNoteOn)
+      ++noteOffCount;
+  }
+  EXPECT_TRUE(found96on) << "Finger1Up mapping should fire note 96 on lift";
+  EXPECT_GE(noteOffCount, 1)
+      << "Drum pad (or shared release) should send note off when finger lifts";
 }

@@ -16,6 +16,7 @@ SettingsManager::SettingsManager() {
   rootNode.setProperty("visualizerXOpacity", 0.45, nullptr);
   rootNode.setProperty("visualizerYOpacity", 0.45, nullptr);
   rootNode.setProperty("showTouchpadVisualizerInMiniWindow", false, nullptr);
+  rootNode.setProperty("hideCursorInPerformanceMode", false, nullptr);
   rootNode.setProperty("miniWindowPosition", "", nullptr);
   rootNode.setProperty("delayMidiEnabled", false, nullptr);
   rootNode.setProperty("delayMidiSeconds", 1, nullptr);
@@ -156,6 +157,15 @@ void SettingsManager::setShowTouchpadVisualizerInMiniWindow(bool show) {
   sendChangeMessage();
 }
 
+bool SettingsManager::getHideCursorInPerformanceMode() const {
+  return rootNode.getProperty("hideCursorInPerformanceMode", false);
+}
+
+void SettingsManager::setHideCursorInPerformanceMode(bool hide) {
+  rootNode.setProperty("hideCursorInPerformanceMode", hide, nullptr);
+  sendChangeMessage();
+}
+
 juce::String SettingsManager::getMiniWindowPosition() const {
   return rootNode.getProperty("miniWindowPosition", "").toString();
 }
@@ -262,6 +272,8 @@ void SettingsManager::loadFromXml(juce::File file) {
           rootNode.setProperty("delayMidiEnabled", false, nullptr);
         if (!rootNode.hasProperty("delayMidiSeconds"))
           rootNode.setProperty("delayMidiSeconds", 1, nullptr);
+        if (!rootNode.hasProperty("hideCursorInPerformanceMode"))
+          rootNode.setProperty("hideCursorInPerformanceMode", false, nullptr);
       }
       rootNode.addListener(this);
       updateCachedStepsPerSemitone();

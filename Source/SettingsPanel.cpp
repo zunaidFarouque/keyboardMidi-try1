@@ -76,6 +76,17 @@ SettingsPanel::SettingsPanel(SettingsManager &settingsMgr, MidiEngine &midiEng,
   };
   addAndMakeVisible(showTouchpadInMiniWindowToggle);
 
+  hideCursorInPerformanceModeToggle.setButtonText(
+      "Hide cursor in performance mode");
+  hideCursorInPerformanceModeToggle.setToggleState(
+      settingsManager.getHideCursorInPerformanceMode(),
+      juce::dontSendNotification);
+  hideCursorInPerformanceModeToggle.onClick = [this] {
+    settingsManager.setHideCursorInPerformanceMode(
+        hideCursorInPerformanceModeToggle.getToggleState());
+  };
+  addAndMakeVisible(hideCursorInPerformanceModeToggle);
+
   resetMiniWindowPositionButton.setButtonText("Reset mini window position");
   resetMiniWindowPositionButton.onClick = [this] {
     settingsManager.resetMiniWindowPosition();
@@ -266,6 +277,12 @@ void SettingsPanel::changeListenerCallback(juce::ChangeBroadcaster *source) {
                                juce::dontSendNotification);
     visYOpacitySlider.setValue(settingsManager.getVisualizerYOpacity() * 100.0,
                                juce::dontSendNotification);
+    showTouchpadInMiniWindowToggle.setToggleState(
+        settingsManager.getShowTouchpadVisualizerInMiniWindow(),
+        juce::dontSendNotification);
+    hideCursorInPerformanceModeToggle.setToggleState(
+        settingsManager.getHideCursorInPerformanceMode(),
+        juce::dontSendNotification);
   }
 }
 
@@ -432,8 +449,9 @@ void SettingsPanel::resized() {
                             sliderWidth, controlHeight);
   y += controlHeight + spacing;
 
-  // Visualizer group (X/Y opacity sliders + mini window toggle + reset button)
-  int visGroupHeight = controlHeight * 4 + spacing * 5 + 28;
+  // Visualizer group (X/Y opacity sliders + mini window toggle + hide cursor +
+  // reset button)
+  int visGroupHeight = controlHeight * 5 + spacing * 6 + 28;
   visualizerGroup.setBounds(area.getX(), y, area.getWidth(), visGroupHeight);
   int visInnerX = area.getX() + 10;
   int visInnerY = y + 24;
@@ -451,6 +469,9 @@ void SettingsPanel::resized() {
   visInnerY += controlHeight + spacing;
   showTouchpadInMiniWindowToggle.setBounds(visInnerX, visInnerY,
                                            visInnerW, controlHeight);
+  visInnerY += controlHeight + spacing;
+  hideCursorInPerformanceModeToggle.setBounds(visInnerX, visInnerY,
+                                              visInnerW, controlHeight);
   visInnerY += controlHeight + spacing;
   resetMiniWindowPositionButton.setBounds(visInnerX, visInnerY, visInnerW,
                                           controlHeight);
