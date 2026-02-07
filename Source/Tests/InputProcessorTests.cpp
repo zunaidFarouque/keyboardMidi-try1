@@ -30,6 +30,13 @@ public:
   };
   std::vector<PitchEvent> pitchEvents;
 
+  struct CCEvent {
+    int channel;
+    int controller;
+    int value;
+  };
+  std::vector<CCEvent> ccEvents;
+
   void sendNoteOn(int channel, int note, float velocity) override {
     events.push_back({channel, note, velocity, true});
   }
@@ -39,9 +46,13 @@ public:
   void sendPitchBend(int channel, int value) override {
     pitchEvents.push_back({channel, value});
   }
+  void sendCC(int channel, int controller, int value) override {
+    ccEvents.push_back({channel, controller, value});
+  }
   void clear() {
     events.clear();
     pitchEvents.clear();
+    ccEvents.clear();
   }
 };
 
@@ -1978,4 +1989,61 @@ TEST_F(InputProcessorTest, MidiModeOff_KeyEventsProduceNoMidi) {
   proc2.processEvent(InputID{0, 50}, false);
   EXPECT_TRUE(mockEng.events.empty())
       << "When MIDI mode is off, key events should not produce MIDI";
+}
+
+// --- Touchpad mixer strip: finger down sends CC ---
+TEST_F(InputProcessorTest, TouchpadMixerFingerDownSendsCC) {
+  MockMidiEngine mockEng;
+  TouchpadMixerManager touchpadMixerMgr;
+  VoiceManager voiceMgr(mockEng, settingsMgr);
+  InputProcessor proc(voiceMgr, presetMgr, deviceMgr, scaleLib, mockEng,
+                     settingsMgr, touchpadMixerMgr);
+
+  presetMgr.getLayersList().removeAllChildren(nullptr);
+  presetMgr.ensureStaticLayers();
+  settingsMgr.setMidiModeActive(true);
+
+  TouchpadMixerConfig cfg;
+  cfg.type = TouchpadType::Mixer;
+  cfg.quickPrecision = TouchpadMixerQuickPrecision::Quick;
+  cfg.absRel = TouchpadMixerAbsRel::Absolute;
+  cfg.lockFree = TouchpadMixerLockFree::Free;
+  cfg.ccStart = 50;
+  cfg.midiChannel = 2;
+  cfg.numFaders = 5;
+  cfg.inputMin = 0.0f;
+  cfg.inputMax = 1.0f;
+  cfg.outputMin = 0;
+  cfg.outputMax = 127;
+  touchpadMixerMgr.addStrip(cfg);
+
+  proc.initialize();
+  proc.forceRebuildMappings();
+  mockEng.clear();
+
+  uintptr_t deviceHandle = 0x1234;
+  // normX=0.1 -> fader 0 (of 5), normY=0.5 -> mid CC value (~64)
+  std::vector<TouchpadContact> contacts = {
+      {0, 100, 100, 0.1f, 0.5f, true},
+  };
+  proc.processTouchpadContacts(deviceHandle, contacts);
+
+  ASSERT_GE(mockEng.ccEvents.size(), 1u) << "Expected at least one CC";
+  EXPECT_EQ(mockEng.ccEvents[0].channel, 2);
+  EXPECT_EQ(mockEng.ccEvents[0].controller, 50);
+  EXPECT_GE(mockEng.ccEvents[0].value, 60);
+  EXPECT_LE(mockEng.ccEvents[0].value, 70);
+}
+
+TEST_F(InputProcessorTest, HasTouchpadMixerStripsReturnsTrueWhenStripsExist) {
+  TouchpadMixerConfig cfg;
+  cfg.type = TouchpadType::Mixer;
+  touchpadMixerMgr.addStrip(cfg);
+
+  proc.forceRebuildMappings();
+  EXPECT_TRUE(proc.hasTouchpadMixerStrips());
+
+  touchpadMixerMgr.removeStrip(0);
+  proc.forceRebuildMappings();
+  EXPECT_FALSE(proc.hasTouchpadMixerStrips());
 }
