@@ -26,6 +26,11 @@ const juce::Identifier kDrumPadDeadZoneLeft("drumPadDeadZoneLeft");
 const juce::Identifier kDrumPadDeadZoneRight("drumPadDeadZoneRight");
 const juce::Identifier kDrumPadDeadZoneTop("drumPadDeadZoneTop");
 const juce::Identifier kDrumPadDeadZoneBottom("drumPadDeadZoneBottom");
+const juce::Identifier kRegionLeft("regionLeft");
+const juce::Identifier kRegionTop("regionTop");
+const juce::Identifier kRegionRight("regionRight");
+const juce::Identifier kRegionBottom("regionBottom");
+const juce::Identifier kZIndex("zIndex");
 } // namespace
 
 void TouchpadMixerManager::addLayout(const TouchpadMixerConfig &config) {
@@ -86,6 +91,11 @@ juce::ValueTree TouchpadMixerManager::toValueTree() const {
     child.setProperty(kAbsRel, enumToInt(s.absRel), nullptr);
     child.setProperty(kLockFree, enumToInt(s.lockFree), nullptr);
     child.setProperty(kMuteButtonsEnabled, s.muteButtonsEnabled, nullptr);
+    child.setProperty(kRegionLeft, s.region.left, nullptr);
+    child.setProperty(kRegionTop, s.region.top, nullptr);
+    child.setProperty(kRegionRight, s.region.right, nullptr);
+    child.setProperty(kRegionBottom, s.region.bottom, nullptr);
+    child.setProperty(kZIndex, s.zIndex, nullptr);
     if (s.type == TouchpadType::DrumPad) {
       child.setProperty(kDrumPadRows, s.drumPadRows, nullptr);
       child.setProperty(kDrumPadColumns, s.drumPadColumns, nullptr);
@@ -140,6 +150,17 @@ void TouchpadMixerManager::restoreFromValueTree(const juce::ValueTree &vt) {
     s.lockFree = (lf == 0) ? TouchpadMixerLockFree::Lock
                            : TouchpadMixerLockFree::Free;
     s.muteButtonsEnabled = (bool)child.getProperty(kMuteButtonsEnabled, false);
+    if (child.hasProperty(kRegionLeft)) {
+      s.region.left =
+          static_cast<float>(child.getProperty(kRegionLeft, 0.0));
+      s.region.top =
+          static_cast<float>(child.getProperty(kRegionTop, 0.0));
+      s.region.right =
+          static_cast<float>(child.getProperty(kRegionRight, 1.0));
+      s.region.bottom =
+          static_cast<float>(child.getProperty(kRegionBottom, 1.0));
+    }
+    s.zIndex = juce::jlimit(-100, 100, (int)child.getProperty(kZIndex, 0));
     if (s.type == TouchpadType::DrumPad) {
       s.drumPadRows =
           juce::jlimit(1, 8, (int)child.getProperty(kDrumPadRows, 2));
@@ -159,6 +180,17 @@ void TouchpadMixerManager::restoreFromValueTree(const juce::ValueTree &vt) {
           child.getProperty(kDrumPadDeadZoneTop, 0.0));
       s.drumPadDeadZoneBottom = static_cast<float>(
           child.getProperty(kDrumPadDeadZoneBottom, 0.0));
+      if (!child.hasProperty(kRegionLeft)) {
+        s.region.left = s.drumPadDeadZoneLeft;
+        s.region.top = s.drumPadDeadZoneTop;
+        s.region.right = 1.0f - s.drumPadDeadZoneRight;
+        s.region.bottom = 1.0f - s.drumPadDeadZoneBottom;
+      }
+    } else if (!child.hasProperty(kRegionLeft)) {
+      s.region.left = 0.0f;
+      s.region.top = 0.0f;
+      s.region.right = 1.0f;
+      s.region.bottom = 1.0f;
     }
     layouts_.push_back(s);
   }

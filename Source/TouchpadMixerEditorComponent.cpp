@@ -162,14 +162,16 @@ juce::var TouchpadMixerEditorComponent::getConfigValue(
     return juce::var(currentConfig.drumPadBaseVelocity);
   if (propertyId == "drumPadVelocityRandom")
     return juce::var(currentConfig.drumPadVelocityRandom);
-  if (propertyId == "drumPadDeadZoneLeft")
-    return juce::var(static_cast<double>(currentConfig.drumPadDeadZoneLeft));
-  if (propertyId == "drumPadDeadZoneRight")
-    return juce::var(static_cast<double>(currentConfig.drumPadDeadZoneRight));
-  if (propertyId == "drumPadDeadZoneTop")
-    return juce::var(static_cast<double>(currentConfig.drumPadDeadZoneTop));
-  if (propertyId == "drumPadDeadZoneBottom")
-    return juce::var(static_cast<double>(currentConfig.drumPadDeadZoneBottom));
+  if (propertyId == "regionLeft")
+    return juce::var(static_cast<double>(currentConfig.region.left));
+  if (propertyId == "regionTop")
+    return juce::var(static_cast<double>(currentConfig.region.top));
+  if (propertyId == "regionRight")
+    return juce::var(static_cast<double>(currentConfig.region.right));
+  if (propertyId == "regionBottom")
+    return juce::var(static_cast<double>(currentConfig.region.bottom));
+  if (propertyId == "zIndex")
+    return juce::var(currentConfig.zIndex);
   return juce::var();
 }
 
@@ -232,18 +234,20 @@ void TouchpadMixerEditorComponent::applyConfigValue(
   else if (propertyId == "drumPadVelocityRandom")
     currentConfig.drumPadVelocityRandom =
         juce::jlimit(0, 127, static_cast<int>(value));
-  else if (propertyId == "drumPadDeadZoneLeft")
-    currentConfig.drumPadDeadZoneLeft =
-        static_cast<float>(juce::jlimit(0.0, 0.5, static_cast<double>(value)));
-  else if (propertyId == "drumPadDeadZoneRight")
-    currentConfig.drumPadDeadZoneRight =
-        static_cast<float>(juce::jlimit(0.0, 0.5, static_cast<double>(value)));
-  else if (propertyId == "drumPadDeadZoneTop")
-    currentConfig.drumPadDeadZoneTop =
-        static_cast<float>(juce::jlimit(0.0, 0.5, static_cast<double>(value)));
-  else if (propertyId == "drumPadDeadZoneBottom")
-    currentConfig.drumPadDeadZoneBottom =
-        static_cast<float>(juce::jlimit(0.0, 0.5, static_cast<double>(value)));
+  else if (propertyId == "regionLeft")
+    currentConfig.region.left =
+        static_cast<float>(juce::jlimit(0.0, 1.0, static_cast<double>(value)));
+  else if (propertyId == "regionTop")
+    currentConfig.region.top =
+        static_cast<float>(juce::jlimit(0.0, 1.0, static_cast<double>(value)));
+  else if (propertyId == "regionRight")
+    currentConfig.region.right =
+        static_cast<float>(juce::jlimit(0.0, 1.0, static_cast<double>(value)));
+  else if (propertyId == "regionBottom")
+    currentConfig.region.bottom =
+        static_cast<float>(juce::jlimit(0.0, 1.0, static_cast<double>(value)));
+  else if (propertyId == "zIndex")
+    currentConfig.zIndex = juce::jlimit(-100, 100, static_cast<int>(value));
   else
     return;
   manager->updateLayout(selectedIndex, currentConfig);
@@ -409,6 +413,24 @@ void TouchpadMixerEditorComponent::paint(juce::Graphics &g) {
     g.drawText("Select a strip from the list.", getLocalBounds(),
                juce::Justification::centred);
   }
+}
+
+int TouchpadMixerEditorComponent::getPreferredContentHeight() const {
+  const int rowHeight = 25;
+  const int separatorRowHeight = 15;
+  const int spacing = 4;
+  const int topPadding = 4;
+  const int boundsReduction = 8;
+  int y = boundsReduction + topPadding;
+  for (const auto &row : uiRows) {
+    if (row.items.empty())
+      continue;
+    if (row.isSeparatorRow)
+      y += 12;
+    const int h = row.isSeparatorRow ? separatorRowHeight : rowHeight;
+    y += h + spacing;
+  }
+  return y + boundsReduction;
 }
 
 void TouchpadMixerEditorComponent::resized() {

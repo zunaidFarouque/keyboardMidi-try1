@@ -5,9 +5,13 @@ constexpr int kTypeMixerId = 1;
 constexpr int kTypeDrumPadId = 2;
 } // namespace
 
-InspectorSchema TouchpadMixerDefinition::getSchema(TouchpadType type) {
+InspectorSchema TouchpadMixerDefinition::getCommonLayoutHeader() {
   InspectorSchema schema;
-
+  InspectorControl nameCtrl;
+  nameCtrl.propertyId = "name";
+  nameCtrl.label = "Name";
+  nameCtrl.controlType = InspectorControl::Type::TextEditor;
+  schema.push_back(nameCtrl);
   InspectorControl typeCtrl;
   typeCtrl.propertyId = "type";
   typeCtrl.label = "Type";
@@ -15,13 +19,6 @@ InspectorSchema TouchpadMixerDefinition::getSchema(TouchpadType type) {
   typeCtrl.options[kTypeMixerId] = "Mixer";
   typeCtrl.options[kTypeDrumPadId] = "Drum Pad / Launcher";
   schema.push_back(typeCtrl);
-
-  InspectorControl nameCtrl;
-  nameCtrl.propertyId = "name";
-  nameCtrl.label = "Name";
-  nameCtrl.controlType = InspectorControl::Type::TextEditor;
-  schema.push_back(nameCtrl);
-
   InspectorControl layerCtrl;
   layerCtrl.propertyId = "layerId";
   layerCtrl.label = "Layer";
@@ -30,7 +27,78 @@ InspectorSchema TouchpadMixerDefinition::getSchema(TouchpadType type) {
   for (int i = 1; i <= 8; ++i)
     layerCtrl.options[i + 1] = "Layer " + juce::String(i);
   schema.push_back(layerCtrl);
+  InspectorControl chCtrl;
+  chCtrl.propertyId = "midiChannel";
+  chCtrl.label = "Channel";
+  chCtrl.controlType = InspectorControl::Type::Slider;
+  chCtrl.min = 1.0;
+  chCtrl.max = 16.0;
+  chCtrl.step = 1.0;
+  chCtrl.valueFormat = InspectorControl::Format::Integer;
+  schema.push_back(chCtrl);
+  InspectorControl zIndexCtrl;
+  zIndexCtrl.propertyId = "zIndex";
+  zIndexCtrl.label = "Z-index";
+  zIndexCtrl.controlType = InspectorControl::Type::Slider;
+  zIndexCtrl.min = -100.0;
+  zIndexCtrl.max = 100.0;
+  zIndexCtrl.step = 1.0;
+  zIndexCtrl.valueFormat = InspectorControl::Format::Integer;
+  schema.push_back(zIndexCtrl);
+  return schema;
+}
 
+InspectorSchema TouchpadMixerDefinition::getCommonLayoutControls() {
+  InspectorSchema schema;
+  schema.push_back(
+      MappingDefinition::createSeparator("Region", juce::Justification::centredLeft));
+  InspectorControl regionLeft;
+  regionLeft.propertyId = "regionLeft";
+  regionLeft.label = "Region left";
+  regionLeft.controlType = InspectorControl::Type::Slider;
+  regionLeft.min = 0.0;
+  regionLeft.max = 1.0;
+  regionLeft.step = 0.01;
+  regionLeft.sameLine = false;
+  regionLeft.widthWeight = 0.5f;
+  schema.push_back(regionLeft);
+  InspectorControl regionRight;
+  regionRight.propertyId = "regionRight";
+  regionRight.label = "Region right";
+  regionRight.controlType = InspectorControl::Type::Slider;
+  regionRight.min = 0.0;
+  regionRight.max = 1.0;
+  regionRight.step = 0.01;
+  regionRight.sameLine = true;
+  regionRight.widthWeight = 0.5f;
+  schema.push_back(regionRight);
+  InspectorControl regionTop;
+  regionTop.propertyId = "regionTop";
+  regionTop.label = "Region top";
+  regionTop.controlType = InspectorControl::Type::Slider;
+  regionTop.min = 0.0;
+  regionTop.max = 1.0;
+  regionTop.step = 0.01;
+  regionTop.sameLine = false;
+  regionTop.widthWeight = 0.5f;
+  schema.push_back(regionTop);
+  InspectorControl regionBottom;
+  regionBottom.propertyId = "regionBottom";
+  regionBottom.label = "Region bottom";
+  regionBottom.controlType = InspectorControl::Type::Slider;
+  regionBottom.min = 0.0;
+  regionBottom.max = 1.0;
+  regionBottom.step = 0.01;
+  regionBottom.sameLine = true;
+  regionBottom.widthWeight = 0.5f;
+  schema.push_back(regionBottom);
+  return schema;
+}
+
+InspectorSchema TouchpadMixerDefinition::getSchema(TouchpadType type) {
+  InspectorSchema schema;
+  for (const auto &c : getCommonLayoutHeader())
+    schema.push_back(c);
   schema.push_back(
       MappingDefinition::createSeparator("", juce::Justification::centred));
 
@@ -86,62 +154,8 @@ InspectorSchema TouchpadMixerDefinition::getSchema(TouchpadType type) {
     velRandCtrl.valueFormat = InspectorControl::Format::Integer;
     schema.push_back(velRandCtrl);
 
-    schema.push_back(
-        MappingDefinition::createSeparator("Dead zones", juce::Justification::centredLeft));
-
-    InspectorControl dzLeft;
-    dzLeft.propertyId = "drumPadDeadZoneLeft";
-    dzLeft.label = "Dead zone left";
-    dzLeft.controlType = InspectorControl::Type::Slider;
-    dzLeft.min = 0.0;
-    dzLeft.max = 0.5;
-    dzLeft.step = 0.01;
-    dzLeft.sameLine = false;
-    dzLeft.widthWeight = 0.5f;
-    schema.push_back(dzLeft);
-
-    InspectorControl dzRight;
-    dzRight.propertyId = "drumPadDeadZoneRight";
-    dzRight.label = "Dead zone right";
-    dzRight.controlType = InspectorControl::Type::Slider;
-    dzRight.min = 0.0;
-    dzRight.max = 0.5;
-    dzRight.step = 0.01;
-    dzRight.sameLine = true;
-    dzRight.widthWeight = 0.5f;
-    schema.push_back(dzRight);
-
-    InspectorControl dzTop;
-    dzTop.propertyId = "drumPadDeadZoneTop";
-    dzTop.label = "Dead zone top";
-    dzTop.controlType = InspectorControl::Type::Slider;
-    dzTop.min = 0.0;
-    dzTop.max = 0.5;
-    dzTop.step = 0.01;
-    dzTop.sameLine = false;
-    dzTop.widthWeight = 0.5f;
-    schema.push_back(dzTop);
-
-    InspectorControl dzBottom;
-    dzBottom.propertyId = "drumPadDeadZoneBottom";
-    dzBottom.label = "Dead zone bottom";
-    dzBottom.controlType = InspectorControl::Type::Slider;
-    dzBottom.min = 0.0;
-    dzBottom.max = 0.5;
-    dzBottom.step = 0.01;
-    dzBottom.sameLine = true;
-    dzBottom.widthWeight = 0.5f;
-    schema.push_back(dzBottom);
-
-    InspectorControl chCtrl;
-    chCtrl.propertyId = "midiChannel";
-    chCtrl.label = "Channel";
-    chCtrl.controlType = InspectorControl::Type::Slider;
-    chCtrl.min = 1.0;
-    chCtrl.max = 16.0;
-    chCtrl.step = 1.0;
-    chCtrl.valueFormat = InspectorControl::Format::Integer;
-    schema.push_back(chCtrl);
+    for (const auto &c : getCommonLayoutControls())
+      schema.push_back(c);
 
     return schema;
   }
@@ -193,16 +207,6 @@ InspectorSchema TouchpadMixerDefinition::getSchema(TouchpadType type) {
   ccStartCtrl.step = 1.0;
   ccStartCtrl.valueFormat = InspectorControl::Format::Integer;
   schema.push_back(ccStartCtrl);
-
-  InspectorControl chCtrl;
-  chCtrl.propertyId = "midiChannel";
-  chCtrl.label = "Channel";
-  chCtrl.controlType = InspectorControl::Type::Slider;
-  chCtrl.min = 1.0;
-  chCtrl.max = 16.0;
-  chCtrl.step = 1.0;
-  chCtrl.valueFormat = InspectorControl::Format::Integer;
-  schema.push_back(chCtrl);
 
   schema.push_back(
       MappingDefinition::createSeparator("", juce::Justification::centred));
@@ -259,6 +263,9 @@ InspectorSchema TouchpadMixerDefinition::getSchema(TouchpadType type) {
   muteCtrl.label = "Mute buttons";
   muteCtrl.controlType = InspectorControl::Type::Toggle;
   schema.push_back(muteCtrl);
+
+  for (const auto &c : getCommonLayoutControls())
+    schema.push_back(c);
 
   return schema;
 }

@@ -2849,3 +2849,209 @@ TEST_F(InputProcessorTest, TouchpadDrumPadFinger1UpMappingCoexists) {
   EXPECT_GE(noteOffCount, 1)
       << "Drum pad (or shared release) should send note off when finger lifts";
 }
+
+// --- Region-based dispatch: touch only active inside region ---
+TEST_F(InputProcessorTest, TouchpadMixerRegionOnlyActiveInRegion) {
+  MockMidiEngine mockEng;
+  TouchpadMixerManager touchpadMixerMgr;
+  VoiceManager voiceMgr(mockEng, settingsMgr);
+  InputProcessor proc(voiceMgr, presetMgr, deviceMgr, scaleLib, mockEng,
+                      settingsMgr, touchpadMixerMgr);
+
+  presetMgr.getLayersList().removeAllChildren(nullptr);
+  presetMgr.ensureStaticLayers();
+  settingsMgr.setMidiModeActive(true);
+
+  TouchpadMixerConfig cfg;
+  cfg.type = TouchpadType::Mixer;
+  cfg.quickPrecision = TouchpadMixerQuickPrecision::Quick;
+  cfg.absRel = TouchpadMixerAbsRel::Absolute;
+  cfg.lockFree = TouchpadMixerLockFree::Free;
+  cfg.ccStart = 50;
+  cfg.midiChannel = 1;
+  cfg.numFaders = 5;
+  cfg.region.left = 0.2f;
+  cfg.region.top = 0.2f;
+  cfg.region.right = 0.8f;
+  cfg.region.bottom = 0.8f;
+  touchpadMixerMgr.addLayout(cfg);
+
+  proc.initialize();
+  proc.forceRebuildMappings();
+
+  uintptr_t deviceHandle = 0x1234;
+  mockEng.clear();
+  proc.processTouchpadContacts(deviceHandle, {{0, 0, 0, 0.5f, 0.5f, true}});
+  ASSERT_GE(mockEng.ccEvents.size(), 1u) << "Touch inside region (0.5,0.5) should send CC";
+
+  mockEng.clear();
+  proc.processTouchpadContacts(deviceHandle, {{0, 0, 0, 0.1f, 0.5f, true}});
+  EXPECT_TRUE(mockEng.ccEvents.empty())
+      << "Touch outside region (0.1 < left 0.2) should not send CC";
+
+  mockEng.clear();
+  proc.processTouchpadContacts(deviceHandle, {{0, 0, 0, 0.9f, 0.5f, true}});
+  EXPECT_TRUE(mockEng.ccEvents.empty())
+      << "Touch outside region (0.9 > right 0.8) should not send CC";
+}
+
+TEST_F(InputProcessorTest, TouchpadDrumPadRegionOnlyActiveInRegion) {
+  MockMidiEngine mockEng;
+  TouchpadMixerManager touchpadMixerMgr;
+  VoiceManager voiceMgr(mockEng, settingsMgr);
+  InputProcessor proc(voiceMgr, presetMgr, deviceMgr, scaleLib, mockEng,
+                      settingsMgr, touchpadMixerMgr);
+
+  presetMgr.getLayersList().removeAllChildren(nullptr);
+  presetMgr.ensureStaticLayers();
+  presetMgr.getMappingsListForLayer(0).removeAllChildren(nullptr);
+  settingsMgr.setMidiModeActive(true);
+
+  TouchpadMixerConfig cfg;
+  cfg.type = TouchpadType::DrumPad;
+  cfg.layerId = 0;
+  cfg.drumPadRows = 2;
+  cfg.drumPadColumns = 4;
+  cfg.drumPadMidiNoteStart = 60;
+  cfg.midiChannel = 1;
+  cfg.region.left = 0.3f;
+  cfg.region.top = 0.2f;
+  cfg.region.right = 0.9f;
+  cfg.region.bottom = 0.9f;
+  touchpadMixerMgr.addLayout(cfg);
+
+  proc.initialize();
+  proc.forceRebuildMappings();
+
+  uintptr_t deviceHandle = 0x1234;
+  mockEng.clear();
+  proc.processTouchpadContacts(deviceHandle, {{0, 0, 0, 0.0f, 0.5f, true}});
+  EXPECT_TRUE(mockEng.events.empty())
+      << "Touch outside region (0.0 < left 0.3) should not send note";
+
+  mockEng.clear();
+  proc.processTouchpadContacts(deviceHandle, {{0, 0, 0, 0.5f, 0.5f, true}});
+  ASSERT_GE(mockEng.events.size(), 1u)
+      << "Touch inside region should send drum pad note";
+}
+
+// --- Z-index: when regions overlap, higher z-index wins ---
+TEST_F(InputProcessorTest, TouchpadZIndexOverlapHigherWins) {
+  MockMidiEngine mockEng;
+  TouchpadMixerManager touchpadMixerMgr;
+  VoiceManager voiceMgr(mockEng, settingsMgr);
+  InputProcessor proc(voiceMgr, presetMgr, deviceMgr, scaleLib, mockEng,
+                      settingsMgr, touchpadMixerMgr);
+
+  presetMgr.getLayersList().removeAllChildren(nullptr);
+  presetMgr.ensureStaticLayers();
+  settingsMgr.setMidiModeActive(true);
+
+  TouchpadMixerConfig mixerCfg;
+  mixerCfg.type = TouchpadType::Mixer;
+  mixerCfg.quickPrecision = TouchpadMixerQuickPrecision::Quick;
+  mixerCfg.absRel = TouchpadMixerAbsRel::Absolute;
+  mixerCfg.lockFree = TouchpadMixerLockFree::Free;
+  mixerCfg.ccStart = 50;
+  mixerCfg.midiChannel = 1;
+  mixerCfg.numFaders = 5;
+  mixerCfg.zIndex = 0;
+  touchpadMixerMgr.addLayout(mixerCfg);
+
+  TouchpadMixerConfig drumCfg;
+  drumCfg.type = TouchpadType::DrumPad;
+  drumCfg.layerId = 0;
+  drumCfg.drumPadRows = 2;
+  drumCfg.drumPadColumns = 4;
+  drumCfg.drumPadMidiNoteStart = 60;
+  drumCfg.midiChannel = 2;
+  drumCfg.zIndex = 5;
+  touchpadMixerMgr.addLayout(drumCfg);
+
+  proc.initialize();
+  proc.forceRebuildMappings();
+  mockEng.clear();
+
+  uintptr_t deviceHandle = 0x1234;
+  proc.processTouchpadContacts(deviceHandle, {{0, 0, 0, 0.5f, 0.5f, true}});
+
+  EXPECT_TRUE(mockEng.ccEvents.empty())
+      << "Drum pad (z=5) on top of mixer (z=0); drum pad consumes, no CC";
+  ASSERT_GE(mockEng.events.size(), 1u) << "Drum pad should receive note";
+  EXPECT_EQ(mockEng.events[0].channel, 2);
+  EXPECT_EQ(mockEng.events[0].note, 66);
+}
+
+// --- Sub-region: coordinate remapping (touch in left half maps to layout local) ---
+TEST_F(InputProcessorTest, TouchpadMixerSubRegionCoordinateRemapping) {
+  MockMidiEngine mockEng;
+  TouchpadMixerManager touchpadMixerMgr;
+  VoiceManager voiceMgr(mockEng, settingsMgr);
+  InputProcessor proc(voiceMgr, presetMgr, deviceMgr, scaleLib, mockEng,
+                      settingsMgr, touchpadMixerMgr);
+
+  presetMgr.getLayersList().removeAllChildren(nullptr);
+  presetMgr.ensureStaticLayers();
+  settingsMgr.setMidiModeActive(true);
+
+  TouchpadMixerConfig cfg;
+  cfg.type = TouchpadType::Mixer;
+  cfg.quickPrecision = TouchpadMixerQuickPrecision::Quick;
+  cfg.absRel = TouchpadMixerAbsRel::Absolute;
+  cfg.lockFree = TouchpadMixerLockFree::Free;
+  cfg.ccStart = 50;
+  cfg.midiChannel = 1;
+  cfg.numFaders = 4;
+  cfg.region.left = 0.0f;
+  cfg.region.top = 0.0f;
+  cfg.region.right = 0.5f;
+  cfg.region.bottom = 1.0f;
+  touchpadMixerMgr.addLayout(cfg);
+
+  proc.initialize();
+  proc.forceRebuildMappings();
+  mockEng.clear();
+
+  uintptr_t deviceHandle = 0x1234;
+  proc.processTouchpadContacts(deviceHandle, {{0, 0, 0, 0.05f, 0.0f, true}});
+
+  ASSERT_GE(mockEng.ccEvents.size(), 1u);
+  EXPECT_EQ(mockEng.ccEvents[0].controller, 50)
+      << "0.05 in [0,0.5] region -> local X=0.1 -> fader 0, CC 50";
+}
+
+TEST_F(InputProcessorTest, TouchpadDrumPadSubRegionCoordinateRemapping) {
+  MockMidiEngine mockEng;
+  TouchpadMixerManager touchpadMixerMgr;
+  VoiceManager voiceMgr(mockEng, settingsMgr);
+  InputProcessor proc(voiceMgr, presetMgr, deviceMgr, scaleLib, mockEng,
+                      settingsMgr, touchpadMixerMgr);
+
+  presetMgr.getLayersList().removeAllChildren(nullptr);
+  presetMgr.ensureStaticLayers();
+  settingsMgr.setMidiModeActive(true);
+
+  TouchpadMixerConfig cfg;
+  cfg.type = TouchpadType::DrumPad;
+  cfg.layerId = 0;
+  cfg.drumPadRows = 2;
+  cfg.drumPadColumns = 4;
+  cfg.drumPadMidiNoteStart = 60;
+  cfg.midiChannel = 1;
+  cfg.region.left = 0.5f;
+  cfg.region.top = 0.0f;
+  cfg.region.right = 1.0f;
+  cfg.region.bottom = 1.0f;
+  touchpadMixerMgr.addLayout(cfg);
+
+  proc.initialize();
+  proc.forceRebuildMappings();
+  mockEng.clear();
+
+  uintptr_t deviceHandle = 0x1234;
+  proc.processTouchpadContacts(deviceHandle, {{0, 0, 0, 0.5f, 0.5f, true}});
+
+  ASSERT_GE(mockEng.events.size(), 1u);
+  EXPECT_EQ(mockEng.events[0].note, 64)
+      << "Right half [0.5,1] region: (0.5,0.5) -> local (0,0.5) -> col=0 row=1 -> pad 4, note 64";
+}

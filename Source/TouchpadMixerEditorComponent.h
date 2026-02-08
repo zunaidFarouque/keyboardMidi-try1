@@ -16,6 +16,9 @@ public:
 
   void setLayout(int index, const TouchpadMixerConfig *config);
 
+  /// Height needed to show all schema rows (used by parent for viewport sizing).
+  int getPreferredContentHeight() const;
+
 private:
   struct UiItem {
     std::unique_ptr<juce::Component> component;

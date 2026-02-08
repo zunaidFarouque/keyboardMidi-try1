@@ -50,12 +50,10 @@ void TouchpadTabComponent::resized() {
   juce::Component *comps[] = {&listPanel, &resizerBar, &editorViewport};
   layout.layOutComponents(comps, 3, area.getX(), area.getY(), area.getWidth(),
                           area.getHeight(), false, true);
-  // Content size: fixed height + min width so all params (e.g. Output range)
-  // are visible
-  static constexpr int kEditorContentHeight = 480;
   static constexpr int kEditorMinWidth = 400;
+  static constexpr int kEditorMinHeight = 120;
   int scrollW = 10;
   int cw = juce::jmax(kEditorMinWidth, editorViewport.getWidth() - scrollW);
-  int ch = kEditorContentHeight;
+  int ch = juce::jmax(kEditorMinHeight, editorPanel.getPreferredContentHeight());
   editorPanel.setSize(cw, ch);
 }

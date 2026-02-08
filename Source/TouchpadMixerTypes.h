@@ -57,6 +57,8 @@ struct TouchpadMixerConfig {
 
   // Universal: where this layout is active on the touchpad (default: full pad)
   TouchpadLayoutRegion region;
+  // Z-index for stacking when regions overlap on same layer (higher = on top)
+  int zIndex = 0;
 
   // DrumPad fields (used when type == DrumPad)
   int drumPadRows = 2;

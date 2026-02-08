@@ -903,8 +903,14 @@ std::shared_ptr<CompiledMapContext> GridCompiler::compile(
                             &context->touchpadMappings);
   }
 
-  // 2b. Collect touchpad mixer and drum pad strips
-  for (const auto &cfg : touchpadMixerMgr.getLayouts()) {
+  // 2b. Collect touchpad mixer and drum pad strips. Sort by z-index descending
+  // (higher = on top when regions overlap on same layer).
+  auto layouts = touchpadMixerMgr.getLayouts();
+  std::sort(layouts.begin(), layouts.end(),
+            [](const TouchpadMixerConfig &a, const TouchpadMixerConfig &b) {
+              return a.zIndex > b.zIndex;
+            });
+  for (const auto &cfg : layouts) {
     if (cfg.type == TouchpadType::Mixer) {
       TouchpadMixerEntry entry;
       entry.layerId = juce::jlimit(0, 8, cfg.layerId);
@@ -930,6 +936,18 @@ std::shared_ptr<CompiledMapContext> GridCompiler::compile(
           (cfg.muteButtonsEnabled ? kMixerModeMuteButtons : 0);
       entry.effectiveYScale =
           cfg.muteButtonsEnabled ? (1.0f / kMuteButtonRegionTop) : 1.0f;
+      float rL = juce::jlimit(0.0f, 0.99f, cfg.region.left);
+      float rR = juce::jlimit(rL + 0.01f, 1.0f, cfg.region.right);
+      float rT = juce::jlimit(0.0f, 0.99f, cfg.region.top);
+      float rB = juce::jlimit(rT + 0.01f, 1.0f, cfg.region.bottom);
+      entry.regionLeft = rL;
+      entry.regionTop = rT;
+      entry.regionRight = rR;
+      entry.regionBottom = rB;
+      float rW = rR - rL;
+      float rH = rB - rT;
+      entry.invRegionWidth = (rW > 1e-6f) ? (1.0f / rW) : 1.0f;
+      entry.invRegionHeight = (rH > 1e-6f) ? (1.0f / rH) : 1.0f;
       context->touchpadMixerStrips.push_back(entry);
       context->touchpadLayoutOrder.push_back(
           {TouchpadType::Mixer, context->touchpadMixerStrips.size() - 1});
@@ -944,19 +962,33 @@ std::shared_ptr<CompiledMapContext> GridCompiler::compile(
       dpEntry.baseVelocity = juce::jlimit(1, 127, cfg.drumPadBaseVelocity);
       dpEntry.velocityRandom =
           juce::jlimit(0, 127, cfg.drumPadVelocityRandom);
-      dpEntry.deadZoneLeft =
-          juce::jlimit(0.0f, 0.5f, cfg.drumPadDeadZoneLeft);
-      dpEntry.deadZoneRight =
-          juce::jlimit(0.0f, 0.5f, cfg.drumPadDeadZoneRight);
-      dpEntry.deadZoneTop = juce::jlimit(0.0f, 0.5f, cfg.drumPadDeadZoneTop);
-      dpEntry.deadZoneBottom =
-          juce::jlimit(0.0f, 0.5f, cfg.drumPadDeadZoneBottom);
-      float activeW = 1.0f - dpEntry.deadZoneLeft - dpEntry.deadZoneRight;
-      float activeH = 1.0f - dpEntry.deadZoneTop - dpEntry.deadZoneBottom;
-      dpEntry.invActiveWidth =
-          (activeW > 1e-6f) ? (1.0f / activeW) : 1.0f;
-      dpEntry.invActiveHeight =
-          (activeH > 1e-6f) ? (1.0f / activeH) : 1.0f;
+      float rL, rT, rR, rB;
+      bool hasExplicitRegion =
+          (cfg.region.left != 0.0f || cfg.region.top != 0.0f ||
+           cfg.region.right != 1.0f || cfg.region.bottom != 1.0f);
+      if (hasExplicitRegion) {
+        rL = cfg.region.left;
+        rT = cfg.region.top;
+        rR = cfg.region.right;
+        rB = cfg.region.bottom;
+      } else {
+        rL = juce::jlimit(0.0f, 0.5f, cfg.drumPadDeadZoneLeft);
+        rT = juce::jlimit(0.0f, 0.5f, cfg.drumPadDeadZoneTop);
+        rR = 1.0f - juce::jlimit(0.0f, 0.5f, cfg.drumPadDeadZoneRight);
+        rB = 1.0f - juce::jlimit(0.0f, 0.5f, cfg.drumPadDeadZoneBottom);
+      }
+      rL = juce::jlimit(0.0f, 0.99f, rL);
+      rR = juce::jlimit(rL + 0.01f, 1.0f, rR);
+      rT = juce::jlimit(0.0f, 0.99f, rT);
+      rB = juce::jlimit(rT + 0.01f, 1.0f, rB);
+      dpEntry.regionLeft = rL;
+      dpEntry.regionTop = rT;
+      dpEntry.regionRight = rR;
+      dpEntry.regionBottom = rB;
+      float rW = rR - rL;
+      float rH = rB - rT;
+      dpEntry.invRegionWidth = (rW > 1e-6f) ? (1.0f / rW) : 1.0f;
+      dpEntry.invRegionHeight = (rH > 1e-6f) ? (1.0f / rH) : 1.0f;
       context->touchpadDrumPadStrips.push_back(dpEntry);
       context->touchpadLayoutOrder.push_back(
           {TouchpadType::DrumPad, context->touchpadDrumPadStrips.size() - 1});

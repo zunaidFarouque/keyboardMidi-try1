@@ -256,39 +256,25 @@ void TouchpadVisualizerPanel::paint(juce::Graphics &g) {
     g.drawEllipse(px - 5.0f, py - 5.0f, 10.0f, 10.0f, 1.0f);
   }
 
-  // When no layout is explicitly selected (-1), use first layout for current
-  // layer so the touchpad shows the active layout when following the active layer.
-  int displayLayoutIndex = selectedLayoutIndex_;
-  if (displayLayoutIndex < 0 && inputProcessor) {
+  // Draw all layouts for the current layer (ordered by z-index from touchpadLayoutOrder).
+  if (inputProcessor) {
     auto ctx = inputProcessor->getContext();
     if (ctx) {
-      for (size_t i = 0; i < ctx->touchpadLayoutOrder.size(); ++i) {
-        const auto &ref = ctx->touchpadLayoutOrder[i];
-        int layoutLayer = -1;
-        if (ref.type == TouchpadType::Mixer &&
-            ref.index < ctx->touchpadMixerStrips.size())
-          layoutLayer = ctx->touchpadMixerStrips[ref.index].layerId;
-        else if (ref.type == TouchpadType::DrumPad &&
-                 ref.index < ctx->touchpadDrumPadStrips.size())
-          layoutLayer = ctx->touchpadDrumPadStrips[ref.index].layerId;
-        if (layoutLayer == currentVisualizedLayer) {
-          displayLayoutIndex = static_cast<int>(i);
-          break;
-        }
-      }
-    }
-  }
-
-  if (inputProcessor && displayLayoutIndex >= 0) {
-    auto ctx = inputProcessor->getContext();
-    if (ctx) {
-      size_t listIdx = static_cast<size_t>(displayLayoutIndex);
-      if (listIdx < ctx->touchpadLayoutOrder.size()) {
+      for (size_t listIdx = 0; listIdx < ctx->touchpadLayoutOrder.size();
+           ++listIdx) {
         const auto &ref = ctx->touchpadLayoutOrder[listIdx];
         if (ref.type == TouchpadType::Mixer &&
             ref.index < ctx->touchpadMixerStrips.size()) {
           const auto &strip = ctx->touchpadMixerStrips[ref.index];
           if (strip.layerId == currentVisualizedLayer && strip.numFaders > 0) {
+            juce::Rectangle<float> layoutRect(
+                touchpadRect.getX() +
+                    strip.regionLeft * touchpadRect.getWidth(),
+                touchpadRect.getY() +
+                    strip.regionTop * touchpadRect.getHeight(),
+                (strip.regionRight - strip.regionLeft) * touchpadRect.getWidth(),
+                (strip.regionBottom - strip.regionTop) *
+                    touchpadRect.getHeight());
             uintptr_t dev =
                 lastDeviceHandle_.load(std::memory_order_acquire);
             auto state = inputProcessor->getTouchpadMixerStripState(
@@ -296,12 +282,12 @@ void TouchpadVisualizerPanel::paint(juce::Graphics &g) {
             const auto &displayValues = state.displayValues;
             const auto &muted = state.muted;
             const int N = strip.numFaders;
-            const float fw = touchpadRect.getWidth() / static_cast<float>(N);
-            const float h = touchpadRect.getHeight();
+            const float fw = layoutRect.getWidth() / static_cast<float>(N);
+            const float h = layoutRect.getHeight();
             const float muteRegionH =
                 (strip.modeFlags & kMixerModeMuteButtons) ? (h * 0.15f) : 0.0f;
             const float faderH = h - muteRegionH;
-            const float faderTop = touchpadRect.getY();
+            const float faderTop = layoutRect.getY();
             const float faderBottom = faderTop + faderH;
             const float inMin =
                 juce::jlimit(0.0f, 1.0f, strip.inputMin);
@@ -311,7 +297,7 @@ void TouchpadVisualizerPanel::paint(juce::Graphics &g) {
 
             for (int i = 0; i < N; ++i) {
               float stripX =
-                  touchpadRect.getX() + static_cast<float>(i) * fw;
+                  layoutRect.getX() + static_cast<float>(i) * fw;
               if (hasDeadZones) {
                 if (inMin > 0.0f) {
                   float topDeadH = inMin * faderH;
@@ -358,16 +344,16 @@ void TouchpadVisualizerPanel::paint(juce::Graphics &g) {
               if (isMuted) {
                 g.setColour(juce::Colours::white);
                 g.setFont(juce::jmin(10.0f, fw * 0.6f));
-                g.drawText("M", stripX, touchpadRect.getY(), fw, 14.0f,
+                g.drawText("M", stripX, layoutRect.getY(), fw, 14.0f,
                            juce::Justification::centred, false);
                 g.setFont(juce::jmin(9.0f, fw * 0.5f));
                 g.drawText(juce::String(displayVal), stripX,
-                           touchpadRect.getY() + 14.0f, fw, 12.0f,
+                           layoutRect.getY() + 14.0f, fw, 12.0f,
                            juce::Justification::centred, false);
               } else {
                 g.setColour(juce::Colours::white);
                 g.setFont(juce::jmin(10.0f, fw * 0.6f));
-                g.drawText(juce::String(displayVal), stripX, touchpadRect.getY(),
+                g.drawText(juce::String(displayVal), stripX, layoutRect.getY(),
                            fw, 14.0f, juce::Justification::centred, false);
               }
               g.setColour(juce::Colours::white);
@@ -377,14 +363,14 @@ void TouchpadVisualizerPanel::paint(juce::Graphics &g) {
                          juce::Justification::centred, false);
             }
             if (strip.muteButtonsEnabled && muteRegionH > 0) {
-              float muteTop = touchpadRect.getY() + faderH;
+              float muteTop = layoutRect.getY() + faderH;
               g.setColour(juce::Colour(0xff303050).withAlpha(0.8f));
-              g.fillRect(touchpadRect.getX(), muteTop, touchpadRect.getWidth(),
+              g.fillRect(layoutRect.getX(), muteTop, layoutRect.getWidth(),
                          muteRegionH);
               g.setColour(juce::Colours::lightgrey.withAlpha(0.6f));
               g.setFont(8.0f);
               for (int i = 0; i < N; ++i) {
-                float mx = touchpadRect.getX() + static_cast<float>(i) * fw;
+                float mx = layoutRect.getX() + static_cast<float>(i) * fw;
                 g.drawText("M", mx, muteTop, fw, muteRegionH,
                            juce::Justification::centred, false);
               }
@@ -393,8 +379,8 @@ void TouchpadVisualizerPanel::paint(juce::Graphics &g) {
             g.setFont(9.0f);
             g.drawText("Mixer: CC" + juce::String(strip.ccStart) + "-" +
                            juce::String(strip.ccStart + N - 1),
-                       touchpadRect.getX(), touchpadRect.getBottom() + 2.0f,
-                       touchpadRect.getWidth(), 10,
+                       layoutRect.getX(), layoutRect.getBottom() + 2.0f,
+                       layoutRect.getWidth(), 10,
                        juce::Justification::centredLeft, false);
           }
         } else if (ref.type == TouchpadType::DrumPad &&
@@ -402,48 +388,27 @@ void TouchpadVisualizerPanel::paint(juce::Graphics &g) {
           const auto &strip = ctx->touchpadDrumPadStrips[ref.index];
           if (strip.layerId == currentVisualizedLayer &&
               strip.numPads > 0) {
+            juce::Rectangle<float> layoutRect(
+                touchpadRect.getX() +
+                    strip.regionLeft * touchpadRect.getWidth(),
+                touchpadRect.getY() +
+                    strip.regionTop * touchpadRect.getHeight(),
+                (strip.regionRight - strip.regionLeft) * touchpadRect.getWidth(),
+                (strip.regionBottom - strip.regionTop) *
+                    touchpadRect.getHeight());
             const int R = strip.rows;
             const int C = strip.columns;
-            const float inL = strip.deadZoneLeft;
-            const float inR = strip.deadZoneRight;
-            const float inT = strip.deadZoneTop;
-            const float inB = strip.deadZoneBottom;
-            const float activeW = 1.0f - inL - inR;
-            const float activeH = 1.0f - inT - inB;
-            const float padW = activeW / static_cast<float>(C);
-            const float padH = activeH / static_cast<float>(R);
-            if (inL > 0.0f || inR > 0.0f || inT > 0.0f || inB > 0.0f) {
-              g.setColour(juce::Colour(0xff383838).withAlpha(0.75f));
-              if (inL > 0.0f)
-                g.fillRect(touchpadRect.getX(), touchpadRect.getY(),
-                           inL * touchpadRect.getWidth(),
-                           touchpadRect.getHeight());
-              if (inR > 0.0f)
-                g.fillRect(
-                    touchpadRect.getRight() - inR * touchpadRect.getWidth(),
-                    touchpadRect.getY(), inR * touchpadRect.getWidth(),
-                    touchpadRect.getHeight());
-              if (inT > 0.0f)
-                g.fillRect(touchpadRect.getX(), touchpadRect.getY(),
-                           touchpadRect.getWidth(),
-                           inT * touchpadRect.getHeight());
-              if (inB > 0.0f)
-                g.fillRect(
-                    touchpadRect.getX(),
-                    touchpadRect.getBottom() -
-                        inB * touchpadRect.getHeight(),
-                    touchpadRect.getWidth(), inB * touchpadRect.getHeight());
-            }
+            const float padW = 1.0f / static_cast<float>(C);
+            const float padH = 1.0f / static_cast<float>(R);
             for (int row = 0; row < R; ++row) {
               for (int col = 0; col < C; ++col) {
-                float x = touchpadRect.getX() + inL * touchpadRect.getWidth() +
-                          static_cast<float>(col) * padW *
-                              touchpadRect.getWidth();
-                float y = touchpadRect.getY() + inT * touchpadRect.getHeight() +
+                float x = layoutRect.getX() +
+                          static_cast<float>(col) * padW * layoutRect.getWidth();
+                float y = layoutRect.getY() +
                           static_cast<float>(row) * padH *
-                              touchpadRect.getHeight();
-                float cw = padW * touchpadRect.getWidth();
-                float ch = padH * touchpadRect.getHeight();
+                              layoutRect.getHeight();
+                float cw = padW * layoutRect.getWidth();
+                float ch = padH * layoutRect.getHeight();
                 g.setColour(juce::Colour(0xff405060).withAlpha(0.6f));
                 g.fillRect(x + 1.0f, y + 1.0f, cw - 2.0f, ch - 2.0f);
                 g.setColour(juce::Colours::lightgrey.withAlpha(0.5f));
@@ -466,8 +431,8 @@ void TouchpadVisualizerPanel::paint(juce::Graphics &g) {
                                strip.midiNoteStart) +
                            "-" +
                            MidiNoteUtilities::getMidiNoteName(lastNote),
-                       touchpadRect.getX(), touchpadRect.getBottom() + 2.0f,
-                       touchpadRect.getWidth(), 10,
+                       layoutRect.getX(), layoutRect.getBottom() + 2.0f,
+                       layoutRect.getWidth(), 10,
                        juce::Justification::centredLeft, false);
           }
         }

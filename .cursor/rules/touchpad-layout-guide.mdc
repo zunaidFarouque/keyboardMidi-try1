@@ -1,0 +1,74 @@
+---
+description: Guide for adding new touchpad layout types (Mixer, DrumPad, etc.)
+globs: Source/Touchpad*.cpp,Source/Touchpad*.h,Source/GridCompiler.cpp,Source/InputProcessor.cpp,Source/MappingTypes.h
+alwaysApply: false
+---
+
+# Touchpad Layout Type Guide
+
+Use this guide when adding a new touchpad layout type (e.g. X-Y Pad, XY Grid, etc.).
+
+## Architecture Overview
+
+1. **Config** (`TouchpadMixerConfig`) – serialized in preset; holds user-editable params
+2. **Compiled entries** – runtime structs (e.g. `TouchpadMixerEntry`, `TouchpadDrumPadEntry`) in `CompiledContext`
+3. **Layout order** – `touchpadLayoutOrder` in `CompiledContext`; sorted by z-index (higher = on top)
+4. **InputProcessor** – `findLayoutForPoint(nx,ny)` returns first layout whose region contains the point (reverse z-order)
+5. **TouchpadVisualizerPanel** – draws all layouts for current layer in z-order
+
+## Mandatory Fields (All Layout Types)
+
+Every layout must have:
+
+- `name`, `type`, `layerId`, `midiChannel`, `zIndex`
+- `region` (left/top/right/bottom, 0–1 normalized) – where on the touchpad this layout is active
+
+## Checklist: Files to Modify
+
+| File | Add/Change |
+|------|-------------|
+| `TouchpadMixerTypes.h` | Add enum value; add config fields; add compiled entry struct |
+| `TouchpadMixerDefinition.cpp` | Add `getSchema(TouchpadType::NewType)`; add type to combo; append `getCommonLayoutControls()` |
+| `TouchpadMixerEditorComponent.cpp` | `getConfigValue` / `applyConfigValue` for new propertyIds |
+| `TouchpadMixerManager.cpp` | `typeToString` / `parseType`; `toValueTree` / `fromValueTree` for new fields |
+| `GridCompiler.cpp` | `else if (cfg.type == TouchpadType::NewType)` – compile config → compiled entry; push to `touchpadLayoutOrder` |
+| `InputProcessor.cpp` | `findLayoutForPoint` – handle `TouchpadType::NewType`; touch handling for new layout |
+| `TouchpadVisualizerPanel.cpp` | `else if (ref.type == TouchpadType::NewType)` – draw the layout in its region |
+| `MappingTypes.h` | Add `TouchpadLayoutRef` handling for new type (if needed) |
+
+## Schema Order (Editor UI)
+
+1. **Header** (`getCommonLayoutHeader`): Name, Type, Layer, Channel, Z-index  
+2. **Separator**  
+3. **Type-specific controls** (from `getSchema(type)`)  
+4. **Region controls** (`getCommonLayoutControls`): Region left/right, Region top/bottom  
+
+`getSchema(type)` = header + separator + type-specific + region controls.
+
+## Region Handling
+
+- **Config**: `TouchpadLayoutRegion` (left, top, right, bottom)
+- **Compiled**: `regionLeft`, `regionTop`, `regionRight`, `regionBottom`; `invRegionWidth`, `invRegionHeight` for O(1) remap
+- **InputProcessor**: `(nx, ny)` in 0–1 touchpad space → remap to layout-local 0–1 via `(nx - regionLeft) * invRegionWidth`
+- **Visualizer**: `layoutRect` = touchpad rect scaled by region
+
+## Z-Index & touchpadLayoutOrder
+
+- Layouts are sorted by `zIndex` descending before compilation (higher = on top).
+- `touchpadLayoutOrder` preserves that order.
+- `findLayoutForPoint` iterates in reverse (top to bottom) so highest z-index wins.
+- Visualizer draws all layouts for current layer in order (lower z first, higher on top).
+
+## Serialization
+
+- Preset: `TouchpadMixerManager::toValueTree` / `fromValueTree`
+- Add `juce::Identifier` for each new property.
+- Type string: `typeToString` and `parseType` must handle the new type.
+
+## Example: Adding "XY Pad"
+
+1. `TouchpadMixerTypes.h`: `TouchpadType::XYPad = 2`, `TouchpadMixerConfig` fields, `TouchpadXYPadEntry`
+2. `TouchpadMixerDefinition.cpp`: `kTypeXYPadId = 3`, combo entry, `getSchema(TouchpadType::XYPad)` with XY-specific controls + `getCommonLayoutControls()`
+3. `GridCompiler.cpp`: `else if (cfg.type == TouchpadType::XYPad)` – fill `TouchpadXYPadEntry`, push to `touchpad XYPadStrips` and `touchpadLayoutOrder`
+4. `InputProcessor.cpp`: `findLayoutForPoint` returns `{TouchpadType::XYPad, index}`; add XY pad touch handling
+5. `TouchpadVisualizerPanel.cpp`: draw XY pad in `layoutRect` when `ref.type == TouchpadType::XYPad`

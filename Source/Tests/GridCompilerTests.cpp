@@ -1342,6 +1342,78 @@ TEST_F(GridCompilerTest, TouchpadMixerToValueTreeRestoreRoundTripsAllFields) {
   EXPECT_TRUE(r.muteButtonsEnabled);
 }
 
+TEST_F(GridCompilerTest, TouchpadMixerExplicitRegionCompiled) {
+  TouchpadMixerConfig cfg;
+  cfg.type = TouchpadType::Mixer;
+  cfg.layerId = 0;
+  cfg.region.left = 0.2f;
+  cfg.region.top = 0.1f;
+  cfg.region.right = 0.8f;
+  cfg.region.bottom = 0.9f;
+  cfg.zIndex = 5;
+  touchpadMixerMgr.addLayout(cfg);
+
+  auto context = GridCompiler::compile(presetMgr, deviceMgr, zoneMgr,
+                                       touchpadMixerMgr, settingsMgr);
+
+  ASSERT_EQ(context->touchpadMixerStrips.size(), 1u);
+  const auto &entry = context->touchpadMixerStrips[0];
+  EXPECT_FLOAT_EQ(entry.regionLeft, 0.2f);
+  EXPECT_FLOAT_EQ(entry.regionTop, 0.1f);
+  EXPECT_FLOAT_EQ(entry.regionRight, 0.8f);
+  EXPECT_FLOAT_EQ(entry.regionBottom, 0.9f);
+  EXPECT_GT(entry.invRegionWidth, 1.0f);
+  EXPECT_GT(entry.invRegionHeight, 1.0f);
+}
+
+TEST_F(GridCompilerTest, TouchpadLayoutOrderSortedByZIndex) {
+  TouchpadMixerConfig lowZ;
+  lowZ.type = TouchpadType::Mixer;
+  lowZ.zIndex = -10;
+  touchpadMixerMgr.addLayout(lowZ);
+
+  TouchpadMixerConfig highZ;
+  highZ.type = TouchpadType::DrumPad;
+  highZ.drumPadRows = 2;
+  highZ.drumPadColumns = 4;
+  highZ.zIndex = 10;
+  touchpadMixerMgr.addLayout(highZ);
+
+  auto context = GridCompiler::compile(presetMgr, deviceMgr, zoneMgr,
+                                       touchpadMixerMgr, settingsMgr);
+
+  // Higher z-index first (descending sort)
+  ASSERT_EQ(context->touchpadLayoutOrder.size(), 2u);
+  EXPECT_EQ(context->touchpadLayoutOrder[0].type, TouchpadType::DrumPad)
+      << "Higher z-index (10) should appear first";
+  EXPECT_EQ(context->touchpadLayoutOrder[1].type, TouchpadType::Mixer)
+      << "Lower z-index (-10) should appear second";
+}
+
+TEST_F(GridCompilerTest, TouchpadMixerRegionAndZIndexRoundTrip) {
+  TouchpadMixerConfig cfg;
+  cfg.type = TouchpadType::Mixer;
+  cfg.region.left = 0.15f;
+  cfg.region.top = 0.25f;
+  cfg.region.right = 0.85f;
+  cfg.region.bottom = 0.75f;
+  cfg.zIndex = 3;
+  touchpadMixerMgr.addLayout(cfg);
+
+  juce::ValueTree vt = touchpadMixerMgr.toValueTree();
+  TouchpadMixerManager restored;
+  restored.restoreFromValueTree(vt);
+
+  auto layouts = restored.getLayouts();
+  ASSERT_EQ(layouts.size(), 1u);
+  const auto &r = layouts[0];
+  EXPECT_FLOAT_EQ(r.region.left, 0.15f);
+  EXPECT_FLOAT_EQ(r.region.top, 0.25f);
+  EXPECT_FLOAT_EQ(r.region.right, 0.85f);
+  EXPECT_FLOAT_EQ(r.region.bottom, 0.75f);
+  EXPECT_EQ(r.zIndex, 3);
+}
+
 TEST_F(GridCompilerTest, TouchpadMixerRestoreIgnoresInvalidChildren) {
   juce::ValueTree vt("TouchpadMixers");
   juce::ValueTree valid("TouchpadMixer");
@@ -1492,12 +1564,12 @@ TEST_F(GridCompilerTest, TouchpadDrumPadLayoutPropertiesMapped) {
   EXPECT_EQ(entry.midiNoteStart, 36);
   EXPECT_EQ(entry.baseVelocity, 100);
   EXPECT_EQ(entry.velocityRandom, 10);
-  EXPECT_FLOAT_EQ(entry.deadZoneLeft, 0.05f);
-  EXPECT_FLOAT_EQ(entry.deadZoneRight, 0.05f);
-  EXPECT_FLOAT_EQ(entry.deadZoneTop, 0.1f);
-  EXPECT_FLOAT_EQ(entry.deadZoneBottom, 0.1f);
-  EXPECT_GT(entry.invActiveWidth, 1.0f);
-  EXPECT_GT(entry.invActiveHeight, 1.0f);
+  EXPECT_FLOAT_EQ(entry.regionLeft, 0.05f);
+  EXPECT_FLOAT_EQ(entry.regionTop, 0.1f);
+  EXPECT_FLOAT_EQ(entry.regionRight, 0.95f);
+  EXPECT_FLOAT_EQ(entry.regionBottom, 0.9f);
+  EXPECT_GT(entry.invRegionWidth, 1.0f);
+  EXPECT_GT(entry.invRegionHeight, 1.0f);
 }
 
 TEST_F(GridCompilerTest, TouchpadDrumPadAndMixerBothCompiled) {

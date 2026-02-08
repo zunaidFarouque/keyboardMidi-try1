@@ -11,4 +11,8 @@ public:
   static InspectorSchema getSchema(TouchpadType type);
   /// Backward compat: returns Mixer schema.
   static InspectorSchema getSchema() { return getSchema(TouchpadType::Mixer); }
+  /// Mandatory header for all layout types: Name, Type, Layer, Channel, Z-index.
+  static InspectorSchema getCommonLayoutHeader();
+  /// Mandatory Region controls for all layout types. Always appended last.
+  static InspectorSchema getCommonLayoutControls();
 };
