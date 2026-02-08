@@ -256,6 +256,24 @@ void TouchpadVisualizerPanel::paint(juce::Graphics &g) {
     g.drawEllipse(px - 5.0f, py - 5.0f, 10.0f, 10.0f, 1.0f);
   }
 
+  // Region lock: draw ghost at effective position when finger is outside region
+  if (inputProcessor) {
+    auto ghosts =
+        inputProcessor->getEffectiveContactPositions(
+            lastDeviceHandle_.load(std::memory_order_acquire), contactsSnapshot);
+    juce::Colour ghostCol = juce::Colours::white.withAlpha(0.5f);
+    for (const auto &gh : ghosts) {
+      float gx = juce::jlimit(0.0f, 1.0f, gh.normX);
+      float gy = juce::jlimit(0.0f, 1.0f, gh.normY);
+      float gpx = touchpadRect.getX() + gx * touchpadRect.getWidth();
+      float gpy = touchpadRect.getY() + gy * touchpadRect.getHeight();
+      g.setColour(ghostCol);
+      g.fillEllipse(gpx - 5.0f, gpy - 5.0f, 10.0f, 10.0f);
+      g.setColour(juce::Colours::white.withAlpha(0.6f));
+      g.drawEllipse(gpx - 5.0f, gpy - 5.0f, 10.0f, 10.0f, 1.0f);
+    }
+  }
+
   // Draw all layouts for the current layer (ordered by z-index from touchpadLayoutOrder).
   if (inputProcessor) {
     auto ctx = inputProcessor->getContext();

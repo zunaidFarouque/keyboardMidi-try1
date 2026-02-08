@@ -948,6 +948,8 @@ std::shared_ptr<CompiledMapContext> GridCompiler::compile(
       float rH = rB - rT;
       entry.invRegionWidth = (rW > 1e-6f) ? (1.0f / rW) : 1.0f;
       entry.invRegionHeight = (rH > 1e-6f) ? (1.0f / rH) : 1.0f;
+      entry.regionLock = cfg.regionLock;
+      entry.modeFlags |= (cfg.regionLock ? kMixerModeRegionLock : 0);
       context->touchpadMixerStrips.push_back(entry);
       context->touchpadLayoutOrder.push_back(
           {TouchpadType::Mixer, context->touchpadMixerStrips.size() - 1});
@@ -989,6 +991,7 @@ std::shared_ptr<CompiledMapContext> GridCompiler::compile(
       float rH = rB - rT;
       dpEntry.invRegionWidth = (rW > 1e-6f) ? (1.0f / rW) : 1.0f;
       dpEntry.invRegionHeight = (rH > 1e-6f) ? (1.0f / rH) : 1.0f;
+      dpEntry.regionLock = cfg.regionLock;
       context->touchpadDrumPadStrips.push_back(dpEntry);
       context->touchpadLayoutOrder.push_back(
           {TouchpadType::DrumPad, context->touchpadDrumPadStrips.size() - 1});

@@ -137,6 +137,17 @@ public:
                                                      int stripIndex,
                                                      int numFaders) const;
 
+  // Region lock: effective positions for ghosts. Returns (contactId, normX,
+  // normY) for locked contacts whose raw position is outside their region.
+  // Visualizer draws ghost at (normX, normY).
+  struct EffectiveContactPosition {
+    int contactId = 0;
+    float normX = 0.0f, normY = 0.0f;
+  };
+  std::vector<EffectiveContactPosition> getEffectiveContactPositions(
+      uintptr_t deviceHandle,
+      const std::vector<TouchpadContact> &contacts) const;
+
   // True if any manual mapping exists for this keyCode (for conflict highlight
   // in visualizer)
   bool hasManualMappingForKey(int keyCode);
@@ -245,6 +256,20 @@ private:
   std::set<std::tuple<uintptr_t, int, int>> touchpadNoteOnSent;
   // Touchpad BoolToCC Expression: active envelopes to release when finger lifts
   std::set<std::tuple<uintptr_t, int, int>> touchpadExpressionActive;
+
+  // Touchpad mixer: per-strip per-contact prev state for edge detection
+  struct TouchpadContactPrev {
+    bool tipDown = false;
+    float x = 0.0f, y = 0.0f;
+  };
+  std::unordered_map<std::tuple<uintptr_t, int, int>, TouchpadContactPrev,
+                    Tuple3Hash>
+      touchpadMixerContactPrev;
+
+  // Region lock: (deviceHandle, contactId) -> (TouchpadType, stripIndex)
+  std::unordered_map<std::tuple<uintptr_t, int>, std::pair<TouchpadType, size_t>,
+                    Tuple2Hash>
+      contactLayoutLock;
 
   // Touchpad mixer strips: lock mode (device, stripIndex) -> locked fader index
   // (-1 = none). unordered_map for O(1) lookups.

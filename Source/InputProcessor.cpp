@@ -137,6 +137,8 @@ void InputProcessor::rebuildGrid() {
   touchpadPrevState.clear();
   {
     juce::ScopedWriteLock wl(mixerStateLock);
+    touchpadMixerContactPrev.clear();
+    contactLayoutLock.clear();
     touchpadMixerLockedFader.clear();
     touchpadMixerRelativeValue.clear();
     touchpadMixerMuteState.clear();
@@ -1141,6 +1143,57 @@ InputProcessor::getTouchpadMixerStripState(uintptr_t deviceHandle,
   return out;
 }
 
+std::vector<InputProcessor::EffectiveContactPosition>
+InputProcessor::getEffectiveContactPositions(
+    uintptr_t deviceHandle,
+    const std::vector<TouchpadContact> &contacts) const {
+  std::vector<EffectiveContactPosition> result;
+  std::shared_ptr<const CompiledMapContext> ctx;
+  {
+    juce::ScopedReadLock rl(mapLock);
+    ctx = activeContext;
+  }
+  if (!ctx)
+    return result;
+
+  juce::ScopedReadLock rl(mixerStateLock);
+  for (const auto &c : contacts) {
+    if (!c.tipDown)
+      continue;
+    auto lockKey = std::make_tuple(deviceHandle, c.contactId);
+    auto itLock = contactLayoutLock.find(lockKey);
+    if (itLock == contactLayoutLock.end())
+      continue;
+
+    TouchpadType type = itLock->second.first;
+    size_t idx = itLock->second.second;
+    float left, top, right, bottom;
+    if (type == TouchpadType::Mixer &&
+        idx < ctx->touchpadMixerStrips.size()) {
+      const auto &s = ctx->touchpadMixerStrips[idx];
+      left = s.regionLeft;
+      top = s.regionTop;
+      right = s.regionRight;
+      bottom = s.regionBottom;
+    } else if (type == TouchpadType::DrumPad &&
+               idx < ctx->touchpadDrumPadStrips.size()) {
+      const auto &s = ctx->touchpadDrumPadStrips[idx];
+      left = s.regionLeft;
+      top = s.regionTop;
+      right = s.regionRight;
+      bottom = s.regionBottom;
+    } else {
+      continue;
+    }
+
+    float ex = std::clamp(c.normX, left, right);
+    float ey = std::clamp(c.normY, top, bottom);
+    if (ex != c.normX || ey != c.normY)
+      result.push_back({c.contactId, ex, ey});
+  }
+  return result;
+}
+
 bool InputProcessor::hasManualMappingForKey(int keyCode) {
   std::array<bool, 9> activeLayersSnapshot{};
   {
@@ -1591,14 +1644,48 @@ void InputProcessor::processTouchpadContacts(
     return std::nullopt;
   };
 
-  // When finger is in a drum pad region, skip Finger1Down/Finger2Down Note
-  // mappings so the drum pad emits the position-based note (not a fixed note).
-  auto layout1 = findLayoutForPoint(x1, y1);
-  auto layout2 = findLayoutForPoint(x2, y2);
-  bool drumPadConsumesFinger1Down =
-      tip1 && layout1.has_value() && layout1->first == TouchpadType::DrumPad;
-  bool drumPadConsumesFinger2Down =
-      tip2 && layout2.has_value() && layout2->first == TouchpadType::DrumPad;
+  // Helper: does layout have region lock enabled?
+  auto layoutHasRegionLock = [&](TouchpadType type, size_t idx) -> bool {
+    if (type == TouchpadType::Mixer && idx < ctx->touchpadMixerStrips.size())
+      return ctx->touchpadMixerStrips[idx].regionLock;
+    if (type == TouchpadType::DrumPad &&
+        idx < ctx->touchpadDrumPadStrips.size())
+      return ctx->touchpadDrumPadStrips[idx].regionLock;
+    return false;
+  };
+
+  // Region lock: add on first touch (in layout with regionLock), remove on lift.
+  // Also build layoutPerContact (use locked layout when in contactLayoutLock).
+  std::vector<std::optional<std::pair<TouchpadType, size_t>>> layoutPerContact;
+  layoutPerContact.reserve(contacts.size());
+  {
+    juce::ScopedWriteLock wl(mixerStateLock);
+    for (size_t i = 0; i < contacts.size(); ++i) {
+      const auto &c = contacts[i];
+      auto lockKey = std::make_tuple(deviceHandle, c.contactId);
+      if (c.tipDown) {
+        if (contactLayoutLock.find(lockKey) == contactLayoutLock.end()) {
+          auto layout = findLayoutForPoint(c.normX, c.normY);
+          if (layout && layoutHasRegionLock(layout->first, layout->second))
+            contactLayoutLock[lockKey] = *layout;
+        }
+      } else {
+        contactLayoutLock.erase(lockKey);
+      }
+      auto itLock = contactLayoutLock.find(lockKey);
+      if (itLock != contactLayoutLock.end())
+        layoutPerContact.push_back(itLock->second);
+      else
+        layoutPerContact.push_back(findLayoutForPoint(c.normX, c.normY));
+    }
+  }
+
+  // When finger is in any layout region (mixer or drum), skip Finger1Down/
+  // Finger2Down Note mappings so the layout owns that finger.
+  auto layout1 = contacts.size() >= 1 ? layoutPerContact[0] : std::nullopt;
+  auto layout2 = contacts.size() >= 2 ? layoutPerContact[1] : std::nullopt;
+  bool layoutConsumesFinger1Down = tip1 && layout1.has_value();
+  bool layoutConsumesFinger2Down = tip2 && layout2.has_value();
 
   if (!ctx->touchpadMappings.empty()) {
     for (const auto &entry : ctx->touchpadMappings) {
@@ -1654,13 +1741,13 @@ void InputProcessor::processTouchpadContacts(
         if (act.type == ActionType::Note) {
           bool isDownEvent = (entry.eventId == TouchpadEvent::Finger1Down ||
                               entry.eventId == TouchpadEvent::Finger2Down);
-          bool drumConsumes =
+          bool layoutConsumes =
               (entry.eventId == TouchpadEvent::Finger1Down &&
-               drumPadConsumesFinger1Down) ||
+               layoutConsumesFinger1Down) ||
               (entry.eventId == TouchpadEvent::Finger2Down &&
-               drumPadConsumesFinger2Down);
-          if (isDownEvent && drumConsumes)
-            continue; // Drum pad emits position-based notes; skip fixed-note mapping
+               layoutConsumesFinger2Down);
+          if (isDownEvent && layoutConsumes)
+            continue; // Layout (mixer/drum) owns finger; skip fixed-note mapping
           bool releaseThisFrame =
               (entry.eventId == TouchpadEvent::Finger1Down && finger1Up) ||
               (entry.eventId == TouchpadEvent::Finger2Down && finger2Up);
@@ -1940,8 +2027,8 @@ void InputProcessor::processTouchpadContacts(
     }
   }
 
-  // Touchpad mixer layouts (CC faders) - mixerStateLock only (reduces mapLock
-  // contention). Region-based: only process when applier finger is in strip's region.
+  // Touchpad mixer layouts (CC faders). Per-layout: count fingers only in this
+  // strip's region. 1 finger = Quick; 2+ = Precision (F1=target, F2=apply).
   bool touchpadMixerStateChanged = false;
   if (!ctx->touchpadMixerStrips.empty()) {
     juce::ScopedWriteLock wl(mixerStateLock);
@@ -1954,15 +2041,84 @@ void InputProcessor::processTouchpadContacts(
       if (N <= 0)
         continue;
 
-      // First touch is primary (position); second touch is trigger/activator.
-      bool useFinger1 = (strip.modeFlags & kMixerModeUseFinger1) != 0;
-      if (!useFinger1 && !tip2)
-        continue; // Precision: need second finger down to apply
-      float applierX = useFinger1 ? x1 : x2;
-      float applierY = useFinger1 ? y1 : y2;
-      bool applierDown = useFinger1 ? tip1 : tip2;
-      bool applierDownEdge = useFinger1 ? finger1Down : finger2Down;
-      bool applierUpEdge = useFinger1 ? finger1Up : finger2Up;
+      // Get contacts in this strip's region, ordered by contactId
+      std::vector<std::pair<size_t, const TouchpadContact *>> inRegion;
+      for (size_t i = 0; i < contacts.size(); ++i) {
+        const auto &c = contacts[i];
+        auto layout = i < layoutPerContact.size() ? layoutPerContact[i]
+                                                   : findLayoutForPoint(c.normX, c.normY);
+        if (!layout || layout->first != TouchpadType::Mixer ||
+            layout->second != stripIdx)
+          continue;
+        inRegion.push_back({i, &c});
+      }
+      std::sort(inRegion.begin(), inRegion.end(),
+                [](const auto &a, const auto &b) {
+                  return a.second->contactId < b.second->contactId;
+                });
+
+      // Filter to tipDown for applier; 1 = Quick, 2+ = Precision
+      std::vector<std::pair<size_t, const TouchpadContact *>> active;
+      for (const auto &p : inRegion) {
+        if (p.second->tipDown)
+          active.push_back(p);
+      }
+
+      bool usePrecision = (strip.modeFlags & kMixerModeUseFinger1) == 0;
+      if (usePrecision && active.size() < 2)
+        continue;
+      if (active.empty())
+        continue;
+
+      // First finger = position (drives fader/CC). Second finger = mode switch
+      // (enables first finger to act in Precision). Quick: F1 does both.
+      const TouchpadContact *positionContact = active[0].second;
+      const TouchpadContact *applierContact =
+          usePrecision ? (active.size() >= 2 ? active[1].second : nullptr)
+                       : active[0].second;
+      if (!applierContact)
+        continue;
+
+      // Region lock: when strip has regionLock, clamp position to region bounds
+      auto getEffectivePos = [&](int contactId, float nx, float ny)
+          -> std::pair<float, float> {
+        if (!strip.regionLock)
+          return {nx, ny};
+        auto lockKey = std::make_tuple(deviceHandle, contactId);
+        auto itLock = contactLayoutLock.find(lockKey);
+        if (itLock == contactLayoutLock.end())
+          return {nx, ny};
+        if (itLock->second.first != TouchpadType::Mixer ||
+            itLock->second.second != stripIdx)
+          return {nx, ny};
+        float ex = std::clamp(nx, strip.regionLeft, strip.regionRight);
+        float ey = std::clamp(ny, strip.regionTop, strip.regionBottom);
+        return {ex, ey};
+      };
+
+      auto [posX, posY] =
+          getEffectivePos(positionContact->contactId, positionContact->normX,
+                          positionContact->normY);
+      float positionX = posX;
+      float positionY = posY;
+      bool applierDown = applierContact->tipDown;
+
+      auto prevApplierKey =
+          std::make_tuple(deviceHandle, static_cast<int>(stripIdx),
+                         applierContact->contactId);
+      auto itPrevApplier = touchpadMixerContactPrev.find(prevApplierKey);
+      bool prevApplierDown =
+          itPrevApplier != touchpadMixerContactPrev.end() &&
+          itPrevApplier->second.tipDown;
+      bool applierDownEdge = applierDown && !prevApplierDown;
+      bool applierUpEdge = !applierDown && prevApplierDown;
+
+      // In Precision: first finger drives value; second finger only enables.
+      // In Quick: first finger = only finger, drives value.
+      auto prevPositionKey =
+          std::make_tuple(deviceHandle, static_cast<int>(stripIdx),
+                         positionContact->contactId);
+      auto itPrevPosition = touchpadMixerContactPrev.find(prevPositionKey);
 
       if (!applierDown) {
         auto lockKey =
@@ -1971,21 +2127,21 @@ void InputProcessor::processTouchpadContacts(
         if (itLock != touchpadMixerLockedFader.end()) {
           touchpadMixerLockedFader.erase(itLock);
         }
+        for (const auto &p : inRegion) {
+          auto k = std::make_tuple(deviceHandle, static_cast<int>(stripIdx),
+                                  p.second->contactId);
+          auto [ex, ey] = getEffectivePos(p.second->contactId, p.second->normX,
+                                          p.second->normY);
+          touchpadMixerContactPrev[k] = {p.second->tipDown, ex, ey};
+        }
         continue;
       }
 
-      // Region-based: only process if this strip is the layout for this point.
-      // Reuse cached layout1/layout2 (no per-strip findLayoutForPoint).
-      auto layoutMatch = useFinger1 ? layout1 : layout2;
-      if (!layoutMatch || layoutMatch->first != TouchpadType::Mixer ||
-          layoutMatch->second != stripIdx)
-        continue;
-
-      // Remap to local coords [0,1] within region
+      // First finger position drives fader index and CC value (both modes)
       float localX =
-          (applierX - strip.regionLeft) * strip.invRegionWidth;
+          (positionX - strip.regionLeft) * strip.invRegionWidth;
       float localY =
-          (applierY - strip.regionTop) * strip.invRegionHeight;
+          (positionY - strip.regionTop) * strip.invRegionHeight;
       localX = std::clamp(localX, 0.0f, 1.0f);
       localY = std::clamp(localY, 0.0f, 1.0f);
 
@@ -2005,17 +2161,13 @@ void InputProcessor::processTouchpadContacts(
         }
       }
 
-      // Mute: first touch in mute region defines column; second touch
-      // (anywhere) triggers toggle. Use finger 1 local coords for mute region.
-      float localX1 = (x1 - strip.regionLeft) * strip.invRegionWidth;
-      float localY1 = (y1 - strip.regionTop) * strip.invRegionHeight;
-      localX1 = std::clamp(localX1, 0.0f, 1.0f);
-      localY1 = std::clamp(localY1, 0.0f, 1.0f);
-      if ((strip.modeFlags & kMixerModeMuteButtons) != 0 && finger2Down &&
-          tip1 && localY1 >= kMuteButtonRegionTop &&
-          x1 >= strip.regionLeft && x1 < strip.regionRight &&
-          y1 >= strip.regionTop && y1 < strip.regionBottom) {
-        float sx = std::clamp(localX1, 0.0f, 1.0f - 1e-6f);
+      // Mute: first finger dictates which fader; second finger down = apply mute
+      bool posContactDown = positionContact->tipDown;
+      if ((strip.modeFlags & kMixerModeMuteButtons) != 0 && applierDownEdge &&
+          posContactDown && localY >= kMuteButtonRegionTop &&
+          positionX >= strip.regionLeft && positionX < strip.regionRight &&
+          positionY >= strip.regionTop && positionY < strip.regionBottom) {
+        float sx = std::clamp(localX, 0.0f, 1.0f - 1e-6f);
         int col = static_cast<int>(sx * static_cast<float>(N));
         if (col >= N)
           col = N - 1;
@@ -2037,8 +2189,16 @@ void InputProcessor::processTouchpadContacts(
 
       // Fader area: finger in mute zone must not drive fader.
       if ((strip.modeFlags & kMixerModeMuteButtons) != 0 &&
-          localY >= kMuteButtonRegionTop)
+          localY >= kMuteButtonRegionTop) {
+        for (const auto &p : inRegion) {
+          auto k = std::make_tuple(deviceHandle, static_cast<int>(stripIdx),
+                                  p.second->contactId);
+          auto [ex, ey] = getEffectivePos(p.second->contactId, p.second->normX,
+                                          p.second->normY);
+          touchpadMixerContactPrev[k] = {p.second->tipDown, ex, ey};
+        }
         continue;
+      }
 
       auto muteKey =
           std::make_tuple(deviceHandle, static_cast<int>(stripIdx), faderIndex);
@@ -2048,8 +2208,16 @@ void InputProcessor::processTouchpadContacts(
         if (itMute != touchpadMixerMuteState.end())
           isMuted = itMute->second;
       }
-      if (isMuted)
+      if (isMuted) {
+        for (const auto &p : inRegion) {
+          auto k = std::make_tuple(deviceHandle, static_cast<int>(stripIdx),
+                                  p.second->contactId);
+          auto [ex, ey] = getEffectivePos(p.second->contactId, p.second->normX,
+                                          p.second->normY);
+          touchpadMixerContactPrev[k] = {p.second->tipDown, ex, ey};
+        }
         continue;
+      }
 
       float effectiveY = localY * strip.effectiveYScale;
 
@@ -2086,8 +2254,12 @@ void InputProcessor::processTouchpadContacts(
           else
             acc = static_cast<float>(strip.outputMin + strip.outputMax) * 0.5f;
         } else {
-          float prevApplierY = useFinger1 ? prev.y1 : prev.y2;
-          float prevLocalY = (prevApplierY - strip.regionTop) * strip.invRegionHeight;
+          float prevPositionY =
+              itPrevPosition != touchpadMixerContactPrev.end()
+                  ? itPrevPosition->second.y
+                  : positionY;
+          float prevLocalY =
+              (prevPositionY - strip.regionTop) * strip.invRegionHeight;
           prevLocalY = std::clamp(prevLocalY, 0.0f, 1.0f);
           float prevEffectiveY =
               juce::jmin(1.0f, prevLocalY * strip.effectiveYScale);
@@ -2106,11 +2278,27 @@ void InputProcessor::processTouchpadContacts(
       auto lastKey =
           std::make_tuple(deviceHandle, static_cast<int>(stripIdx), faderIndex);
       auto itLast = lastTouchpadMixerCCValues.find(lastKey);
-      if (itLast != lastTouchpadMixerCCValues.end() && itLast->second == ccVal)
+      if (itLast != lastTouchpadMixerCCValues.end() && itLast->second == ccVal) {
+        for (const auto &p : inRegion) {
+          auto k = std::make_tuple(deviceHandle, static_cast<int>(stripIdx),
+                                  p.second->contactId);
+          auto [ex, ey] = getEffectivePos(p.second->contactId, p.second->normX,
+                                          p.second->normY);
+          touchpadMixerContactPrev[k] = {p.second->tipDown, ex, ey};
+        }
         continue;
+      }
       voiceManager.sendCC(strip.midiChannel, ccNum, ccVal);
       lastTouchpadMixerCCValues[lastKey] = ccVal;
       touchpadMixerStateChanged = true;
+
+      for (const auto &p : inRegion) {
+        auto k = std::make_tuple(deviceHandle, static_cast<int>(stripIdx),
+                                p.second->contactId);
+        auto [ex, ey] = getEffectivePos(p.second->contactId, p.second->normX,
+                                        p.second->normY);
+        touchpadMixerContactPrev[k] = {p.second->tipDown, ex, ey};
+      }
     }
     if (touchpadMixerStateChanged) {
       int64_t now = juce::Time::getMillisecondCounter();
@@ -2126,12 +2314,6 @@ void InputProcessor::processTouchpadContacts(
   // process contacts in this strip's region. Content stretched to fit region.
   if (!ctx->touchpadDrumPadStrips.empty()) {
     juce::ScopedWriteLock wl(mixerStateLock);
-    // Cache layout per contact (avoids C*D findLayoutForPoint calls)
-    std::vector<std::optional<std::pair<TouchpadType, size_t>>> layoutPerContact;
-    layoutPerContact.reserve(contacts.size());
-    for (const auto &c : contacts)
-      layoutPerContact.push_back(findLayoutForPoint(c.normX, c.normY));
-
     for (size_t stripIdx = 0; stripIdx < ctx->touchpadDrumPadStrips.size();
          ++stripIdx) {
       const auto &strip = ctx->touchpadDrumPadStrips[stripIdx];
@@ -2162,6 +2344,23 @@ void InputProcessor::processTouchpadContacts(
         return {padIndex, midiNote};
       };
 
+      // Region lock: get effective position (clamped to region when locked)
+      auto getDrumEffectivePos = [&](int contactId, float nx, float ny)
+          -> std::pair<float, float> {
+        if (!strip.regionLock)
+          return {nx, ny};
+        auto lockKey = std::make_tuple(deviceHandle, contactId);
+        auto itLock = contactLayoutLock.find(lockKey);
+        if (itLock == contactLayoutLock.end())
+          return {nx, ny};
+        if (itLock->second.first != TouchpadType::DrumPad ||
+            itLock->second.second != stripIdx)
+          return {nx, ny};
+        float ex = std::clamp(nx, strip.regionLeft, strip.regionRight);
+        float ey = std::clamp(ny, strip.regionTop, strip.regionBottom);
+        return {ex, ey};
+      };
+
       // Process contacts that are tipDown and in this strip's region
       size_t ci = 0;
       for (const auto &c : contacts) {
@@ -2176,7 +2375,15 @@ void InputProcessor::processTouchpadContacts(
         if (!layoutMatch || layoutMatch->first != TouchpadType::DrumPad ||
             layoutMatch->second != stripIdx)
           continue;
-        auto [padIndex, midiNote] = contactToPad(c.normX, c.normY);
+        // Region lock: if locked to different layout, skip
+        auto lockKey = std::make_tuple(deviceHandle, c.contactId);
+        auto itLock = contactLayoutLock.find(lockKey);
+        if (itLock != contactLayoutLock.end() &&
+            (itLock->second.first != TouchpadType::DrumPad ||
+             itLock->second.second != stripIdx))
+          continue; // Locked to different layout
+        auto [effX, effY] = getDrumEffectivePos(c.contactId, c.normX, c.normY);
+        auto [padIndex, midiNote] = contactToPad(effX, effY);
         if (padIndex < 0)
           continue; // Outside pad area
         auto key = std::make_tuple(deviceHandle, static_cast<int>(stripIdx),
@@ -2217,7 +2424,9 @@ void InputProcessor::processTouchpadContacts(
             continue;
           if (!c.tipDown)
             break; // Finger lifted
-          auto [padIndex, _] = contactToPad(c.normX, c.normY);
+          auto [effX, effY] =
+              getDrumEffectivePos(c.contactId, c.normX, c.normY);
+          auto [padIndex, _] = contactToPad(effX, effY);
           if (padIndex >= 0 && padIndex == it->second.padIndex) {
             stillValid = true;
             break;

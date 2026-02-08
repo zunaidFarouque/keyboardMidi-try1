@@ -172,6 +172,8 @@ juce::var TouchpadMixerEditorComponent::getConfigValue(
     return juce::var(static_cast<double>(currentConfig.region.bottom));
   if (propertyId == "zIndex")
     return juce::var(currentConfig.zIndex);
+  if (propertyId == "regionLock")
+    return juce::var(currentConfig.regionLock);
   return juce::var();
 }
 
@@ -248,6 +250,8 @@ void TouchpadMixerEditorComponent::applyConfigValue(
         static_cast<float>(juce::jlimit(0.0, 1.0, static_cast<double>(value)));
   else if (propertyId == "zIndex")
     currentConfig.zIndex = juce::jlimit(-100, 100, static_cast<int>(value));
+  else if (propertyId == "regionLock")
+    currentConfig.regionLock = static_cast<bool>(value);
   else
     return;
   manager->updateLayout(selectedIndex, currentConfig);

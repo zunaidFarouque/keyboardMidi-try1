@@ -3055,3 +3055,116 @@ TEST_F(InputProcessorTest, TouchpadDrumPadSubRegionCoordinateRemapping) {
   EXPECT_EQ(mockEng.events[0].note, 64)
       << "Right half [0.5,1] region: (0.5,0.5) -> local (0,0.5) -> col=0 row=1 -> pad 4, note 64";
 }
+
+// --- Per-layout finger counting: mixer counts only fingers in its region ---
+TEST_F(InputProcessorTest, PerLayoutMixerF1MixerF2Drum_QuickMode) {
+  MockMidiEngine mockEng;
+  TouchpadMixerManager touchpadMixerMgr;
+  VoiceManager voiceMgr(mockEng, settingsMgr);
+  InputProcessor proc(voiceMgr, presetMgr, deviceMgr, scaleLib, mockEng,
+                      settingsMgr, touchpadMixerMgr);
+
+  presetMgr.getLayersList().removeAllChildren(nullptr);
+  presetMgr.ensureStaticLayers();
+  settingsMgr.setMidiModeActive(true);
+
+  TouchpadMixerConfig mixerCfg;
+  mixerCfg.type = TouchpadType::Mixer;
+  mixerCfg.quickPrecision = TouchpadMixerQuickPrecision::Quick;
+  mixerCfg.ccStart = 50;
+  mixerCfg.midiChannel = 1;
+  mixerCfg.numFaders = 5;
+  mixerCfg.region.left = 0.0f;
+  mixerCfg.region.top = 0.0f;
+  mixerCfg.region.right = 0.5f;
+  mixerCfg.region.bottom = 1.0f;
+  touchpadMixerMgr.addLayout(mixerCfg);
+
+  TouchpadMixerConfig drumCfg;
+  drumCfg.type = TouchpadType::DrumPad;
+  drumCfg.layerId = 0;
+  drumCfg.drumPadRows = 2;
+  drumCfg.drumPadColumns = 4;
+  drumCfg.drumPadMidiNoteStart = 60;
+  drumCfg.midiChannel = 2;
+  drumCfg.region.left = 0.5f;
+  drumCfg.region.top = 0.0f;
+  drumCfg.region.right = 1.0f;
+  drumCfg.region.bottom = 1.0f;
+  touchpadMixerMgr.addLayout(drumCfg);
+
+  proc.initialize();
+  proc.forceRebuildMappings();
+  mockEng.clear();
+
+  uintptr_t deviceHandle = 0x1234;
+  // F1 on mixer (0.25, 0.5), F2 on drum (0.75, 0.5)
+  proc.processTouchpadContacts(deviceHandle,
+      {{0, 0, 0, 0.25f, 0.5f, true}, {1, 0, 0, 0.75f, 0.5f, true}});
+
+  EXPECT_GE(mockEng.ccEvents.size(), 1u)
+      << "Mixer sees 1 finger in region -> Quick mode, sends CC";
+  ASSERT_GE(mockEng.events.size(), 1u) << "Drum pad receives note";
+  EXPECT_EQ(mockEng.events[0].channel, 2);
+}
+
+// --- Region lock: finger locked to layout until release; ghost when outside ---
+TEST_F(InputProcessorTest, RegionLockMixerSwipeToDrum_GhostAtEdge) {
+  MockMidiEngine mockEng;
+  TouchpadMixerManager touchpadMixerMgr;
+  VoiceManager voiceMgr(mockEng, settingsMgr);
+  InputProcessor proc(voiceMgr, presetMgr, deviceMgr, scaleLib, mockEng,
+                      settingsMgr, touchpadMixerMgr);
+
+  presetMgr.getLayersList().removeAllChildren(nullptr);
+  presetMgr.ensureStaticLayers();
+  settingsMgr.setMidiModeActive(true);
+
+  TouchpadMixerConfig mixerCfg;
+  mixerCfg.type = TouchpadType::Mixer;
+  mixerCfg.quickPrecision = TouchpadMixerQuickPrecision::Quick;
+  mixerCfg.ccStart = 50;
+  mixerCfg.midiChannel = 1;
+  mixerCfg.numFaders = 5;
+  mixerCfg.region.left = 0.0f;
+  mixerCfg.region.top = 0.0f;
+  mixerCfg.region.right = 0.5f;
+  mixerCfg.region.bottom = 1.0f;
+  mixerCfg.regionLock = true;
+  touchpadMixerMgr.addLayout(mixerCfg);
+
+  TouchpadMixerConfig drumCfg;
+  drumCfg.type = TouchpadType::DrumPad;
+  drumCfg.layerId = 0;
+  drumCfg.drumPadRows = 2;
+  drumCfg.drumPadColumns = 4;
+  drumCfg.drumPadMidiNoteStart = 60;
+  drumCfg.midiChannel = 2;
+  drumCfg.region.left = 0.5f;
+  drumCfg.region.top = 0.0f;
+  drumCfg.region.right = 1.0f;
+  drumCfg.region.bottom = 1.0f;
+  touchpadMixerMgr.addLayout(drumCfg);
+
+  proc.initialize();
+  proc.forceRebuildMappings();
+  mockEng.clear();
+
+  uintptr_t deviceHandle = 0x1234;
+  // F1 down in mixer region
+  proc.processTouchpadContacts(deviceHandle, {{0, 0, 0, 0.25f, 0.5f, true}});
+  ASSERT_GE(mockEng.ccEvents.size(), 1u) << "Initial touch in mixer sends CC";
+
+  mockEng.clear();
+  // F1 swipes to drum region (still down) - region lock: effective pos at edge
+  proc.processTouchpadContacts(deviceHandle, {{0, 0, 0, 0.75f, 0.5f, true}});
+  EXPECT_GE(mockEng.ccEvents.size(), 1u)
+      << "Mixer still sees F1 at effective pos (clamped to 0.5); drum ignores";
+
+  auto ghosts = proc.getEffectiveContactPositions(
+      deviceHandle, {{0, 0, 0, 0.75f, 0.5f, true}});
+  EXPECT_EQ(ghosts.size(), 1u) << "Ghost at region edge when locked and outside";
+  EXPECT_FLOAT_EQ(ghosts[0].normX, 0.5f)
+      << "Ghost X clamped to mixer right edge";
+  EXPECT_FLOAT_EQ(ghosts[0].normY, 0.5f);
+}

@@ -59,6 +59,8 @@ struct TouchpadMixerConfig {
   TouchpadLayoutRegion region;
   // Z-index for stacking when regions overlap on same layer (higher = on top)
   int zIndex = 0;
+  // Region lock: finger locked to this layout until release; shows ghost at edge when outside
+  bool regionLock = false;
 
   // DrumPad fields (used when type == DrumPad)
   int drumPadRows = 2;
@@ -75,8 +77,9 @@ struct TouchpadMixerConfig {
 // Precomputed mode flags (avoids per-frame branching)
 static constexpr uint8_t kMixerModeUseFinger1 = 1 << 0;  // Quick vs Precision
 static constexpr uint8_t kMixerModeLock = 1 << 1;        // Lock vs Free
-static constexpr uint8_t kMixerModeRelative = 1 << 2;    // Absolute vs Relative
+static constexpr uint8_t kMixerModeRelative = 1 << 2;   // Absolute vs Relative
 static constexpr uint8_t kMixerModeMuteButtons = 1 << 3; // Mute buttons enabled
+static constexpr uint8_t kMixerModeRegionLock = 1 << 4;  // Region lock enabled
 static constexpr float kMuteButtonRegionTop = 0.85f;     // Bottom 15% = mute
 
 // Compiled entry for runtime (no ValueTree in hot path).
@@ -101,6 +104,7 @@ struct TouchpadMixerEntry {
   float regionLeft = 0.0f, regionTop = 0.0f, regionRight = 1.0f,
         regionBottom = 1.0f;
   float invRegionWidth = 1.0f, invRegionHeight = 1.0f;
+  bool regionLock = false;
 };
 
 // Compiled entry for DrumPad strip (O(1) runtime).
@@ -117,4 +121,5 @@ struct TouchpadDrumPadEntry {
   float regionLeft = 0.0f, regionTop = 0.0f, regionRight = 1.0f,
         regionBottom = 1.0f;
   float invRegionWidth = 1.0f, invRegionHeight = 1.0f;
+  bool regionLock = false;
 };

@@ -92,6 +92,11 @@ InspectorSchema TouchpadMixerDefinition::getCommonLayoutControls() {
   regionBottom.sameLine = true;
   regionBottom.widthWeight = 0.5f;
   schema.push_back(regionBottom);
+  InspectorControl regionLockCtrl;
+  regionLockCtrl.propertyId = "regionLock";
+  regionLockCtrl.label = "Region lock";
+  regionLockCtrl.controlType = InspectorControl::Type::Toggle;
+  schema.push_back(regionLockCtrl);
   return schema;
 }
 
