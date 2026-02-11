@@ -53,7 +53,14 @@ enum class CommandID : int {
   GlobalRootSet = 14,   // Set root (rootNote in action)
   GlobalScaleNext = 15, // Next scale in library
   GlobalScalePrev = 16, // Previous scale in library
-  GlobalScaleSet = 17   // Set scale by index (scaleIndex in action)
+  GlobalScaleSet = 17,  // Set scale by index (scaleIndex in action)
+
+  // Touchpad layout group solo (visibility override for touchpad layouts).
+  // data2 / extra MidiAction fields carry group + scope config.
+  TouchpadLayoutGroupSoloMomentary = 18, // Hold: solo while held
+  TouchpadLayoutGroupSoloToggle = 19,    // Toggle solo on/off
+  TouchpadLayoutGroupSoloSet = 20,       // Set solo on (idempotent)
+  TouchpadLayoutGroupSoloClear = 21      // Clear solo state
 };
 }
 
@@ -153,6 +160,13 @@ struct MidiAction {
   // Global scale: 0=next, 1=prev, 2=set
   int scaleModify = 0;
   int scaleIndex = 0; // for set (0-based index in scale library)
+
+  // Touchpad layout group solo parameters (for CommandID::TouchpadLayoutGroupSolo*)
+  // layoutGroupId: 0 = none/default, >0 = user-defined group id
+  int touchpadLayoutGroupId = 0;
+  // soloScope: 0 = Global, 1 = Layer (forget on layer change),
+  //            2 = Layer (remember until cleared)
+  int touchpadSoloScope = 0;
 };
 
 // Represents a unique input source (device + key)

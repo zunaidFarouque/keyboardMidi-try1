@@ -64,21 +64,20 @@ use PRN to send pitch bend range.
 
 `F11` = Global performance mode
 
-**Laptop keyboard**
-
-`Del` = MIDI panic\
-&emsp; Make this in Layer 0 -> Global (ignores layering system.)
-
 ## 1-keyboard, Piano Style
 
 ### Layer-agnostic
 
-> Add later
+**Laptop keyboard**
+
+`Del` = MIDI panic
 
 ### Layer zero (Base layer)
 
 Pros: You play EVERYTHING. No scale change/reconfigure on song change. Most varsatile.
 Cons: most keyboards cannot handle multiple keypresses/key holds at once. it is their physical limitation. this sometimes might affect performance.
+
+#### Performance
 
 Map keyboard rows:\
 `1 2 3 ... - +` and\
@@ -89,3 +88,49 @@ Similarly, map keyboard rows:\
 `a s d ... ; '` and\
 `z x c ... . /`\
 to left hand piano part. No chord mapping or stuff. pure piano.
+
+#### Tempo Related
+
+`PgUp` = Tempo Up
+
+`PgDn` = Tempo Down
+
+#### Transpose
+
+We will Only add transpose settings in the MIDIQy, not Giglad.
+
+`Left Arrow` = Transpose Down
+
+`Right Arrow` = Transpose up
+
+### Layer 7 (Giglad 1)
+
+`Backspace` = Start
+
+`Home` = Tap Tempo
+
+`Page Up` = Fade in
+
+`Page Down` = Fade out
+
+`End` = Stop
+
+`Enter` = Synchro Start
+
+### Layer 8 (Giglad 2)
+
+`1` = Styles
+
+`2` = Instruments
+
+`3` = Presets
+
+`4` = Banks
+
+`5` = Songs
+
+`6` = Audio
+
+`7` = Lyrics
+
+`8` = Patterns

@@ -114,6 +114,7 @@ private:
   // Touchpad contact display (forwarded to touchpadPanel_; kept for backward
   // compat during refactor, can be removed if panel owns all)
   std::vector<TouchpadContact> lastTouchpadContacts;
+  std::vector<TouchpadContact> lastSentToPanelContacts_; // for lift-priority throttle bypass
   mutable juce::CriticalSection contactsLock;
   std::atomic<uintptr_t> lastTouchpadDeviceHandle{0};
   int64_t lastTouchpadPanelUpdateMs = 0; // throttle to cap-30-FPS setting

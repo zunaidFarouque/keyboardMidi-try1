@@ -5,6 +5,7 @@
 #include "MappingTypes.h"
 #include "MidiNoteUtilities.h"
 #include "ScaleUtilities.h"
+#include "TouchpadTypes.h"
 #include "Zone.h"
 
 // Windows header needed for cursor locking and window state checks
@@ -36,7 +37,7 @@ MainComponent::MainComponent()
       &inputProcessor.getZoneManager(), &deviceManager, voiceManager,
       &settingsManager, &presetManager, &inputProcessor, &scaleLibrary);
   mappingEditor = std::make_unique<MappingEditorComponent>(
-      presetManager, *rawInputManager, deviceManager, settingsManager);
+      presetManager, *rawInputManager, deviceManager, settingsManager, &touchpadMixerManager);
   zoneEditor = std::make_unique<ZoneEditorComponent>(
       &inputProcessor.getZoneManager(), &deviceManager, rawInputManager.get(),
       &scaleLibrary);
@@ -763,8 +764,11 @@ void MainComponent::handleTouchpadContacts(
   if (miniWindow && settingsManager.getShowTouchpadVisualizerInMiniWindow()) {
     int throttleMs = settingsManager.getWindowRefreshIntervalMs();
     int64_t now = juce::Time::getMillisecondCounter();
-    if (now - lastMiniWindowTouchpadUpdateMs >= throttleMs) {
+    bool throttleOk = (now - lastMiniWindowTouchpadUpdateMs >= throttleMs);
+    bool liftDetected = touchpadContactsHaveLift(lastMiniWindowContacts_, contacts);
+    if (throttleOk || liftDetected) {
       lastMiniWindowTouchpadUpdateMs = now;
+      lastMiniWindowContacts_ = contacts;
       auto contactsCopy = contacts;
       auto deviceHandleCopy = deviceHandle;
       juce::Component::SafePointer<MainComponent> weakThis(this);

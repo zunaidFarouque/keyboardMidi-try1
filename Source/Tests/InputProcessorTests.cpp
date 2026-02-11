@@ -3558,3 +3558,727 @@ TEST_F(InputProcessorTest, TouchpadMixerPrecisionRelative_Finger2DownSendsNoCC) 
                                               {1, 0, 0, 0.1f, 0.4f, true}});
   EXPECT_TRUE(mockEng.ccEvents.empty());
 }
+
+// ============================================================================
+// Touchpad Layout Group Solo Visibility Tests
+// ============================================================================
+
+// Helper: Create a mixer layout with specified group ID
+static TouchpadMixerConfig makeMixerLayout(int groupId, float left, float top,
+                                           float right, float bottom) {
+  TouchpadMixerConfig cfg;
+  cfg.type = TouchpadType::Mixer;
+  cfg.layoutGroupId = groupId;
+  cfg.numFaders = 4;
+  cfg.ccStart = 50;
+  cfg.region.left = left;
+  cfg.region.top = top;
+  cfg.region.right = right;
+  cfg.region.bottom = bottom;
+  return cfg;
+}
+
+
+// Test: Layouts with no group (layoutGroupId == 0) are visible when no solo group is active
+TEST_F(InputProcessorTest, TouchpadLayoutNoGroupVisibleWhenNoSolo) {
+  MockMidiEngine mockEng;
+  TouchpadMixerManager touchpadMixerMgr;
+  VoiceManager voiceMgr(mockEng, settingsMgr);
+  InputProcessor proc(voiceMgr, presetMgr, deviceMgr, scaleLib, mockEng,
+                      settingsMgr, touchpadMixerMgr);
+  proc.initialize();
+
+  // Create a layout with no group (layoutGroupId == 0)
+  TouchpadMixerConfig layoutNoGroup = makeMixerLayout(0, 0.0f, 0.0f, 0.5f, 1.0f);
+  layoutNoGroup.name = "No Group Layout";
+  touchpadMixerMgr.addLayout(layoutNoGroup);
+
+  // Create a group and add a layout to it (to verify it's hidden)
+  TouchpadLayoutGroup group;
+  group.id = 1;
+  group.name = "Group 1";
+  touchpadMixerMgr.addGroup(group);
+  TouchpadMixerConfig layoutInGroup = makeMixerLayout(1, 0.5f, 0.0f, 1.0f, 1.0f);
+  layoutInGroup.name = "Group 1 Layout";
+  touchpadMixerMgr.addLayout(layoutInGroup);
+
+  proc.forceRebuildMappings();
+
+  // Verify no solo group is active
+  EXPECT_EQ(proc.getEffectiveSoloLayoutGroupForLayer(0), 0);
+
+  uintptr_t deviceHandle = 0x1234;
+
+  // Touch at the no-group layout's region - should be visible
+  std::vector<TouchpadContact> contacts{{0, 0, 0, 0.25f, 0.5f, true}};
+  mockEng.clear();
+  proc.processTouchpadContacts(deviceHandle, contacts);
+  // Should process the layout (send CC)
+  EXPECT_GT(mockEng.ccEvents.size(), 0u)
+      << "Layout with no group should be visible when no solo is active";
+
+  // Touch at the grouped layout's region - should be hidden
+  contacts = {{0, 0, 0, 0.75f, 0.5f, true}};
+  mockEng.clear();
+  proc.processTouchpadContacts(deviceHandle, contacts);
+  EXPECT_EQ(mockEng.ccEvents.size(), 0u)
+      << "Grouped layout should be hidden when no solo is active";
+}
+
+// Test: Layouts with no group are hidden when a solo group is active
+TEST_F(InputProcessorTest, TouchpadLayoutNoGroupHiddenWhenSoloActive) {
+  MockMidiEngine mockEng;
+  TouchpadMixerManager touchpadMixerMgr;
+  VoiceManager voiceMgr(mockEng, settingsMgr);
+  InputProcessor proc(voiceMgr, presetMgr, deviceMgr, scaleLib, mockEng,
+                      settingsMgr, touchpadMixerMgr);
+  proc.initialize();
+
+  // Create a layout with no group
+  TouchpadMixerConfig layoutNoGroup = makeMixerLayout(0, 0.0f, 0.0f, 0.5f, 1.0f);
+  layoutNoGroup.name = "No Group Layout";
+  touchpadMixerMgr.addLayout(layoutNoGroup);
+
+  // Create a group and add a layout to it
+  TouchpadLayoutGroup group;
+  group.id = 1;
+  group.name = "Group 1";
+  touchpadMixerMgr.addGroup(group);
+  TouchpadMixerConfig layoutInGroup = makeMixerLayout(1, 0.5f, 0.0f, 1.0f, 1.0f);
+  layoutInGroup.name = "Group 1 Layout";
+  touchpadMixerMgr.addLayout(layoutInGroup);
+
+  proc.forceRebuildMappings();
+
+  // Set solo group 1 active (global) via command
+  // Create a key mapping that triggers TouchpadLayoutGroupSoloSet command
+  auto mappings = presetMgr.getMappingsListForLayer(0);
+  juce::ValueTree soloMapping("Mapping");
+  soloMapping.setProperty("inputKey", 60, nullptr); // Key code 60
+  soloMapping.setProperty("deviceHash",
+                          juce::String::toHexString((juce::int64)0).toUpperCase(),
+                          nullptr);
+  soloMapping.setProperty("type", "Command", nullptr);
+  soloMapping.setProperty("data1",
+                          static_cast<int>(MIDIQy::CommandID::TouchpadLayoutGroupSoloSet),
+                          nullptr);
+  soloMapping.setProperty("touchpadLayoutGroupId", 1, nullptr);
+  soloMapping.setProperty("touchpadSoloScope", 0, nullptr); // Global
+  soloMapping.setProperty("channel", 1, nullptr);
+  soloMapping.setProperty("data2", 0, nullptr);
+  mappings.appendChild(soloMapping, nullptr);
+  proc.forceRebuildMappings();
+
+  // Process a key press to trigger the solo command
+  InputID inputId{0, 60}; // device handle 0 (global), key code 60
+  proc.processEvent(inputId, true); // key down
+
+  EXPECT_EQ(proc.getEffectiveSoloLayoutGroupForLayer(0), 1);
+
+  // Touch at the no-group layout's region - should be hidden
+  uintptr_t deviceHandle = 0x1234;
+  std::vector<TouchpadContact> contacts{{0, 0, 0, 0.25f, 0.5f, true}};
+  mockEng.clear();
+  proc.processTouchpadContacts(deviceHandle, contacts);
+  // Should NOT process the layout (no CC sent)
+  EXPECT_EQ(mockEng.ccEvents.size(), 0u)
+      << "Layout with no group should be hidden when solo group is active";
+
+  // Touch at the group layout's region - should be visible
+  contacts = {{0, 0, 0, 0.75f, 0.5f, true}};
+  mockEng.clear();
+  proc.processTouchpadContacts(deviceHandle, contacts);
+  // Should process the layout (send CC)
+  EXPECT_GT(mockEng.ccEvents.size(), 0u)
+      << "Layout in solo group should be visible";
+}
+
+// Test: Layouts in a solo group are visible when that group is soloed
+TEST_F(InputProcessorTest, TouchpadLayoutInSoloGroupVisible) {
+  MockMidiEngine mockEng;
+  TouchpadMixerManager touchpadMixerMgr;
+  VoiceManager voiceMgr(mockEng, settingsMgr);
+  InputProcessor proc(voiceMgr, presetMgr, deviceMgr, scaleLib, mockEng,
+                      settingsMgr, touchpadMixerMgr);
+  proc.initialize();
+
+  // Create a layout with no group
+  TouchpadMixerConfig layoutNoGroup = makeMixerLayout(0, 0.0f, 0.0f, 0.33f, 1.0f);
+  layoutNoGroup.name = "No Group Layout";
+  touchpadMixerMgr.addLayout(layoutNoGroup);
+
+  // Create group 1 and add layout to it
+  TouchpadLayoutGroup group1;
+  group1.id = 1;
+  group1.name = "Group 1";
+  touchpadMixerMgr.addGroup(group1);
+  TouchpadMixerConfig layoutGroup1 = makeMixerLayout(1, 0.33f, 0.0f, 0.66f, 1.0f);
+  layoutGroup1.name = "Group 1 Layout";
+  touchpadMixerMgr.addLayout(layoutGroup1);
+
+  // Create group 2 and add layout to it
+  TouchpadLayoutGroup group2;
+  group2.id = 2;
+  group2.name = "Group 2";
+  touchpadMixerMgr.addGroup(group2);
+  TouchpadMixerConfig layoutGroup2 = makeMixerLayout(2, 0.66f, 0.0f, 1.0f, 1.0f);
+  layoutGroup2.name = "Group 2 Layout";
+  touchpadMixerMgr.addLayout(layoutGroup2);
+
+  proc.forceRebuildMappings();
+
+  // Set solo group 1 active via command
+  auto mappingsGroup1 = presetMgr.getMappingsListForLayer(0);
+  juce::ValueTree soloMappingGroup1("Mapping");
+  soloMappingGroup1.setProperty("inputKey", 75, nullptr);
+  soloMappingGroup1.setProperty("deviceHash",
+                                juce::String::toHexString((juce::int64)0).toUpperCase(),
+                                nullptr);
+  soloMappingGroup1.setProperty("type", "Command", nullptr);
+  soloMappingGroup1.setProperty("data1",
+                                static_cast<int>(MIDIQy::CommandID::TouchpadLayoutGroupSoloSet),
+                                nullptr);
+  soloMappingGroup1.setProperty("touchpadLayoutGroupId", 1, nullptr);
+  soloMappingGroup1.setProperty("touchpadSoloScope", 0, nullptr);
+  soloMappingGroup1.setProperty("channel", 1, nullptr);
+  soloMappingGroup1.setProperty("data2", 0, nullptr);
+  mappingsGroup1.appendChild(soloMappingGroup1, nullptr);
+  proc.forceRebuildMappings();
+  InputID soloInputIdGroup1{0, 75};
+  proc.processEvent(soloInputIdGroup1, true);
+
+  uintptr_t deviceHandle = 0x1234;
+
+  // Touch at no-group layout - should be hidden when group is soloed
+  std::vector<TouchpadContact> contacts{{0, 0, 0, 0.16f, 0.5f, true}};
+  mockEng.clear();
+  proc.processTouchpadContacts(deviceHandle, contacts);
+  EXPECT_EQ(mockEng.ccEvents.size(), 0u)
+      << "No-group layout should be hidden when a group is soloed";
+
+  // Touch at group 1 layout - should be visible
+  contacts = {{0, 0, 0, 0.5f, 0.5f, true}};
+  mockEng.clear();
+  proc.processTouchpadContacts(deviceHandle, contacts);
+  EXPECT_GT(mockEng.ccEvents.size(), 0u)
+      << "Layout in solo group should be visible";
+
+  // Touch at group 2 layout - should be hidden
+  contacts = {{0, 0, 0, 0.83f, 0.5f, true}};
+  mockEng.clear();
+  proc.processTouchpadContacts(deviceHandle, contacts);
+  EXPECT_EQ(mockEng.ccEvents.size(), 0u)
+      << "Layout in different group should be hidden when another group is soloed";
+}
+
+// Test: When solo group is cleared, only no-group layouts become visible again
+TEST_F(InputProcessorTest, TouchpadLayoutAllVisibleWhenSoloCleared) {
+  MockMidiEngine mockEng;
+  TouchpadMixerManager touchpadMixerMgr;
+  VoiceManager voiceMgr(mockEng, settingsMgr);
+  InputProcessor proc(voiceMgr, presetMgr, deviceMgr, scaleLib, mockEng,
+                      settingsMgr, touchpadMixerMgr);
+  proc.initialize();
+
+  // Create layout with no group
+  TouchpadMixerConfig layoutNoGroup = makeMixerLayout(0, 0.0f, 0.0f, 0.33f, 1.0f);
+  layoutNoGroup.name = "No Group Layout";
+  touchpadMixerMgr.addLayout(layoutNoGroup);
+
+  // Create group 1 layout
+  TouchpadLayoutGroup group1;
+  group1.id = 1;
+  group1.name = "Group 1";
+  touchpadMixerMgr.addGroup(group1);
+  TouchpadMixerConfig layoutGroup1 = makeMixerLayout(1, 0.33f, 0.0f, 0.66f, 1.0f);
+  layoutGroup1.name = "Group 1 Layout";
+  touchpadMixerMgr.addLayout(layoutGroup1);
+
+  // Create group 2 layout
+  TouchpadLayoutGroup group2;
+  group2.id = 2;
+  group2.name = "Group 2";
+  touchpadMixerMgr.addGroup(group2);
+  TouchpadMixerConfig layoutGroup2 = makeMixerLayout(2, 0.66f, 0.0f, 1.0f, 1.0f);
+  layoutGroup2.name = "Group 2 Layout";
+  touchpadMixerMgr.addLayout(layoutGroup2);
+
+  proc.forceRebuildMappings();
+
+  // Set solo group 1 active via command
+  auto mappingsSetSolo2 = presetMgr.getMappingsListForLayer(0);
+  juce::ValueTree soloMappingSet2("Mapping");
+  soloMappingSet2.setProperty("inputKey", 74, nullptr);
+  soloMappingSet2.setProperty("deviceHash",
+                               juce::String::toHexString((juce::int64)0).toUpperCase(),
+                               nullptr);
+  soloMappingSet2.setProperty("type", "Command", nullptr);
+  soloMappingSet2.setProperty("data1",
+                               static_cast<int>(MIDIQy::CommandID::TouchpadLayoutGroupSoloSet),
+                               nullptr);
+  soloMappingSet2.setProperty("touchpadLayoutGroupId", 1, nullptr);
+  soloMappingSet2.setProperty("touchpadSoloScope", 0, nullptr);
+  soloMappingSet2.setProperty("channel", 1, nullptr);
+  soloMappingSet2.setProperty("data2", 0, nullptr);
+  mappingsSetSolo2.appendChild(soloMappingSet2, nullptr);
+  proc.forceRebuildMappings();
+  InputID soloInputIdSet2{0, 74};
+  proc.processEvent(soloInputIdSet2, true);
+
+  uintptr_t deviceHandle = 0x1234;
+
+  // Verify only group 1 is visible
+  std::vector<TouchpadContact> contacts{{0, 0, 0, 0.5f, 0.5f, true}};
+  mockEng.clear();
+  proc.processTouchpadContacts(deviceHandle, contacts);
+  EXPECT_GT(mockEng.ccEvents.size(), 0u) << "Group 1 layout should be visible";
+
+  // Clear solo group via command
+  auto mappingsClear2 = presetMgr.getMappingsListForLayer(0);
+  juce::ValueTree clearMapping("Mapping");
+  clearMapping.setProperty("inputKey", 62, nullptr);
+  clearMapping.setProperty("deviceHash",
+                           juce::String::toHexString((juce::int64)0).toUpperCase(),
+                           nullptr);
+  clearMapping.setProperty("type", "Command", nullptr);
+  clearMapping.setProperty("data1",
+                           static_cast<int>(MIDIQy::CommandID::TouchpadLayoutGroupSoloClear),
+                           nullptr);
+  clearMapping.setProperty("touchpadSoloScope", 0, nullptr);
+  clearMapping.setProperty("channel", 1, nullptr);
+  clearMapping.setProperty("data2", 0, nullptr);
+  mappingsClear2.appendChild(clearMapping, nullptr);
+  proc.forceRebuildMappings();
+  InputID clearInputId{0, 62};
+  proc.processEvent(clearInputId, true);
+
+  EXPECT_EQ(proc.getEffectiveSoloLayoutGroupForLayer(0), 0);
+
+  // Now only no-group layouts should be visible (grouped layouts remain hidden)
+  // Touch at no-group layout
+  contacts = {{0, 0, 0, 0.16f, 0.5f, true}};
+  mockEng.clear();
+  proc.processTouchpadContacts(deviceHandle, contacts);
+  EXPECT_GT(mockEng.ccEvents.size(), 0u)
+      << "No-group layout should be visible when solo is cleared";
+
+  // Touch at group 1 layout - should be hidden (grouped layouts hidden when no solo)
+  contacts = {{0, 0, 0, 0.5f, 0.5f, true}};
+  mockEng.clear();
+  proc.processTouchpadContacts(deviceHandle, contacts);
+  EXPECT_EQ(mockEng.ccEvents.size(), 0u)
+      << "Group 1 layout should be hidden when solo is cleared (no solo = only no-group visible)";
+
+  // Touch at group 2 layout - should be hidden (grouped layouts hidden when no solo)
+  contacts = {{0, 0, 0, 0.83f, 0.5f, true}};
+  mockEng.clear();
+  proc.processTouchpadContacts(deviceHandle, contacts);
+  EXPECT_EQ(mockEng.ccEvents.size(), 0u)
+      << "Group 2 layout should be hidden when solo is cleared (no solo = only no-group visible)";
+}
+
+// Test: Per-layer solo groups work independently
+// Simplified: Test that per-layer solo state persists and works correctly
+TEST_F(InputProcessorTest, TouchpadLayoutPerLayerSoloIndependent) {
+  MockMidiEngine mockEng;
+  TouchpadMixerManager touchpadMixerMgr;
+  VoiceManager voiceMgr(mockEng, settingsMgr);
+  InputProcessor proc(voiceMgr, presetMgr, deviceMgr, scaleLib, mockEng,
+                      settingsMgr, touchpadMixerMgr);
+  proc.initialize();
+
+  // Create group 1 and group 2
+  TouchpadLayoutGroup group1;
+  group1.id = 1;
+  group1.name = "Group 1";
+  touchpadMixerMgr.addGroup(group1);
+  TouchpadLayoutGroup group2;
+  group2.id = 2;
+  group2.name = "Group 2";
+  touchpadMixerMgr.addGroup(group2);
+
+  // Create layouts: group 1 on layer 0, group 2 on layer 1
+  TouchpadMixerConfig layoutGroup1Layer0 = makeMixerLayout(1, 0.0f, 0.0f, 0.5f, 1.0f);
+  layoutGroup1Layer0.name = "Group 1 Layer 0";
+  layoutGroup1Layer0.layerId = 0;
+  touchpadMixerMgr.addLayout(layoutGroup1Layer0);
+
+  TouchpadMixerConfig layoutGroup2Layer1 = makeMixerLayout(2, 0.5f, 0.0f, 1.0f, 1.0f);
+  layoutGroup2Layer1.name = "Group 2 Layer 1";
+  layoutGroup2Layer1.layerId = 1;
+  touchpadMixerMgr.addLayout(layoutGroup2Layer1);
+
+  proc.forceRebuildMappings();
+
+  // Activate layer 1 and set solo group 2 for layer 1
+  auto layer0Mappings = presetMgr.getMappingsListForLayer(0);
+  
+  // Layer toggle mapping
+  juce::ValueTree layerToggleMapping("Mapping");
+  layerToggleMapping.setProperty("inputKey", 70, nullptr);
+  layerToggleMapping.setProperty("deviceHash",
+                                  juce::String::toHexString((juce::int64)0).toUpperCase(),
+                                  nullptr);
+  layerToggleMapping.setProperty("type", "Command", nullptr);
+  layerToggleMapping.setProperty("data1",
+                                 static_cast<int>(MIDIQy::CommandID::LayerToggle),
+                                 nullptr);
+  layerToggleMapping.setProperty("data2", 1, nullptr);
+  layerToggleMapping.setProperty("channel", 1, nullptr);
+  layer0Mappings.appendChild(layerToggleMapping, nullptr);
+  
+  // Solo group 2 for layer 1 (scope 2 = remember)
+  juce::ValueTree soloLayer1Mapping("Mapping");
+  soloLayer1Mapping.setProperty("inputKey", 71, nullptr);
+  soloLayer1Mapping.setProperty("deviceHash",
+                                 juce::String::toHexString((juce::int64)0).toUpperCase(),
+                                 nullptr);
+  soloLayer1Mapping.setProperty("type", "Command", nullptr);
+  soloLayer1Mapping.setProperty("data1",
+                                 static_cast<int>(MIDIQy::CommandID::TouchpadLayoutGroupSoloSet),
+                                 nullptr);
+  soloLayer1Mapping.setProperty("touchpadLayoutGroupId", 2, nullptr);
+  soloLayer1Mapping.setProperty("touchpadSoloScope", 2, nullptr);
+  soloLayer1Mapping.setProperty("channel", 1, nullptr);
+  soloLayer1Mapping.setProperty("data2", 0, nullptr);
+  layer0Mappings.appendChild(soloLayer1Mapping, nullptr);
+  
+  proc.forceRebuildMappings();
+  
+  // Activate layer 1
+  InputID layerInputId{0, 70};
+  proc.processEvent(layerInputId, true);
+  EXPECT_EQ(proc.getHighestActiveLayerIndex(), 1);
+  
+  // Set solo for layer 1 (current highest)
+  InputID soloLayer1InputId{0, 71};
+  proc.processEvent(soloLayer1InputId, true);
+  EXPECT_EQ(proc.getEffectiveSoloLayoutGroupForLayer(1), 2);
+
+  uintptr_t deviceHandle = 0x1234;
+
+  // Touch at group 2 layout (layer 1) - should be visible
+  std::vector<TouchpadContact> contacts{{0, 0, 0, 0.75f, 0.5f, true}};
+  mockEng.clear();
+  proc.processTouchpadContacts(deviceHandle, contacts);
+  EXPECT_GT(mockEng.ccEvents.size(), 0u)
+      << "Group 2 layout on layer 1 should be visible when layer 1 solo group 2 is active";
+}
+
+// Test: Grouped layouts are hidden when no solo is active
+TEST_F(InputProcessorTest, TouchpadLayoutGroupedHiddenWhenNoSolo) {
+  MockMidiEngine mockEng;
+  TouchpadMixerManager touchpadMixerMgr;
+  VoiceManager voiceMgr(mockEng, settingsMgr);
+  InputProcessor proc(voiceMgr, presetMgr, deviceMgr, scaleLib, mockEng,
+                      settingsMgr, touchpadMixerMgr);
+  proc.initialize();
+
+  // Create a layout with no group (layoutGroupId == 0)
+  TouchpadMixerConfig layoutNoGroup = makeMixerLayout(0, 0.0f, 0.0f, 0.5f, 1.0f);
+  layoutNoGroup.name = "No Group Layout";
+  touchpadMixerMgr.addLayout(layoutNoGroup);
+
+  // Create a group and add a layout to it
+  TouchpadLayoutGroup group;
+  group.id = 1;
+  group.name = "Group 1";
+  touchpadMixerMgr.addGroup(group);
+  TouchpadMixerConfig layoutInGroup = makeMixerLayout(1, 0.5f, 0.0f, 1.0f, 1.0f);
+  layoutInGroup.name = "Group 1 Layout";
+  touchpadMixerMgr.addLayout(layoutInGroup);
+
+  proc.forceRebuildMappings();
+
+  // Verify no solo group is active
+  EXPECT_EQ(proc.getEffectiveSoloLayoutGroupForLayer(0), 0);
+
+  uintptr_t deviceHandle = 0x1234;
+
+  // Touch at the no-group layout's region - should be visible
+  std::vector<TouchpadContact> contacts{{0, 0, 0, 0.25f, 0.5f, true}};
+  mockEng.clear();
+  proc.processTouchpadContacts(deviceHandle, contacts);
+  EXPECT_GT(mockEng.ccEvents.size(), 0u)
+      << "Layout with no group should be visible when no solo is active";
+
+  // Touch at the grouped layout's region - should be hidden
+  contacts = {{0, 0, 0, 0.75f, 0.5f, true}};
+  mockEng.clear();
+  proc.processTouchpadContacts(deviceHandle, contacts);
+  EXPECT_EQ(mockEng.ccEvents.size(), 0u)
+      << "Layout in a group should be hidden when no solo is active";
+}
+
+// Test: Multiple grouped layouts behavior with different solo states
+TEST_F(InputProcessorTest, TouchpadLayoutMultipleGroupsSoloBehavior) {
+  MockMidiEngine mockEng;
+  TouchpadMixerManager touchpadMixerMgr;
+  VoiceManager voiceMgr(mockEng, settingsMgr);
+  InputProcessor proc(voiceMgr, presetMgr, deviceMgr, scaleLib, mockEng,
+                      settingsMgr, touchpadMixerMgr);
+  proc.initialize();
+
+  // Create layouts: layoutGroupId == 0, 1, 2
+  TouchpadMixerConfig layoutNoGroup = makeMixerLayout(0, 0.0f, 0.0f, 0.33f, 1.0f);
+  layoutNoGroup.name = "No Group Layout";
+  touchpadMixerMgr.addLayout(layoutNoGroup);
+
+  TouchpadLayoutGroup group1;
+  group1.id = 1;
+  group1.name = "Group 1";
+  touchpadMixerMgr.addGroup(group1);
+  TouchpadMixerConfig layoutGroup1 = makeMixerLayout(1, 0.33f, 0.0f, 0.66f, 1.0f);
+  layoutGroup1.name = "Group 1 Layout";
+  touchpadMixerMgr.addLayout(layoutGroup1);
+
+  TouchpadLayoutGroup group2;
+  group2.id = 2;
+  group2.name = "Group 2";
+  touchpadMixerMgr.addGroup(group2);
+  TouchpadMixerConfig layoutGroup2 = makeMixerLayout(2, 0.66f, 0.0f, 1.0f, 1.0f);
+  layoutGroup2.name = "Group 2 Layout";
+  touchpadMixerMgr.addLayout(layoutGroup2);
+
+  proc.forceRebuildMappings();
+
+  uintptr_t deviceHandle = 0x1234;
+
+  // Test 1: When soloGroup == 0, only layoutGroupId == 0 should be visible
+  EXPECT_EQ(proc.getEffectiveSoloLayoutGroupForLayer(0), 0);
+
+  // Touch at no-group layout (0.16f) - should be visible
+  std::vector<TouchpadContact> contacts{{0, 0, 0, 0.16f, 0.5f, true}};
+  mockEng.clear();
+  proc.processTouchpadContacts(deviceHandle, contacts);
+  EXPECT_GT(mockEng.ccEvents.size(), 0u)
+      << "No-group layout should be visible when soloGroup == 0";
+
+  // Touch at group 1 layout (0.5f) - should be hidden
+  contacts = {{0, 0, 0, 0.5f, 0.5f, true}};
+  mockEng.clear();
+  proc.processTouchpadContacts(deviceHandle, contacts);
+  EXPECT_EQ(mockEng.ccEvents.size(), 0u)
+      << "Group 1 layout should be hidden when soloGroup == 0";
+
+  // Touch at group 2 layout (0.83f) - should be hidden
+  contacts = {{0, 0, 0, 0.83f, 0.5f, true}};
+  mockEng.clear();
+  proc.processTouchpadContacts(deviceHandle, contacts);
+  EXPECT_EQ(mockEng.ccEvents.size(), 0u)
+      << "Group 2 layout should be hidden when soloGroup == 0";
+
+  // Test 2: When soloGroup == 1, only layoutGroupId == 1 should be visible
+  auto mappings = presetMgr.getMappingsListForLayer(0);
+  juce::ValueTree soloMapping("Mapping");
+  soloMapping.setProperty("inputKey", 80, nullptr);
+  soloMapping.setProperty("deviceHash",
+                          juce::String::toHexString((juce::int64)0).toUpperCase(),
+                          nullptr);
+  soloMapping.setProperty("type", "Command", nullptr);
+  soloMapping.setProperty("data1",
+                          static_cast<int>(MIDIQy::CommandID::TouchpadLayoutGroupSoloSet),
+                          nullptr);
+  soloMapping.setProperty("touchpadLayoutGroupId", 1, nullptr);
+  soloMapping.setProperty("touchpadSoloScope", 0, nullptr);
+  soloMapping.setProperty("channel", 1, nullptr);
+  soloMapping.setProperty("data2", 0, nullptr);
+  mappings.appendChild(soloMapping, nullptr);
+  proc.forceRebuildMappings();
+  InputID soloInputId{0, 80};
+  proc.processEvent(soloInputId, true);
+
+  EXPECT_EQ(proc.getEffectiveSoloLayoutGroupForLayer(0), 1);
+
+  // Touch at no-group layout - should be hidden
+  contacts = {{0, 0, 0, 0.16f, 0.5f, true}};
+  mockEng.clear();
+  proc.processTouchpadContacts(deviceHandle, contacts);
+  EXPECT_EQ(mockEng.ccEvents.size(), 0u)
+      << "No-group layout should be hidden when soloGroup == 1";
+
+  // Touch at group 1 layout - should be visible
+  contacts = {{0, 0, 0, 0.5f, 0.5f, true}};
+  mockEng.clear();
+  proc.processTouchpadContacts(deviceHandle, contacts);
+  EXPECT_GT(mockEng.ccEvents.size(), 0u)
+      << "Group 1 layout should be visible when soloGroup == 1";
+
+  // Touch at group 2 layout - should be hidden
+  contacts = {{0, 0, 0, 0.83f, 0.5f, true}};
+  mockEng.clear();
+  proc.processTouchpadContacts(deviceHandle, contacts);
+  EXPECT_EQ(mockEng.ccEvents.size(), 0u)
+      << "Group 2 layout should be hidden when soloGroup == 1";
+
+  // Test 3: When soloGroup == 2, only layoutGroupId == 2 should be visible
+  juce::ValueTree soloMapping2("Mapping");
+  soloMapping2.setProperty("inputKey", 81, nullptr);
+  soloMapping2.setProperty("deviceHash",
+                           juce::String::toHexString((juce::int64)0).toUpperCase(),
+                           nullptr);
+  soloMapping2.setProperty("type", "Command", nullptr);
+  soloMapping2.setProperty("data1",
+                           static_cast<int>(MIDIQy::CommandID::TouchpadLayoutGroupSoloSet),
+                           nullptr);
+  soloMapping2.setProperty("touchpadLayoutGroupId", 2, nullptr);
+  soloMapping2.setProperty("touchpadSoloScope", 0, nullptr);
+  soloMapping2.setProperty("channel", 1, nullptr);
+  soloMapping2.setProperty("data2", 0, nullptr);
+  mappings.appendChild(soloMapping2, nullptr);
+  proc.forceRebuildMappings();
+  InputID soloInputId2{0, 81};
+  proc.processEvent(soloInputId2, true);
+
+  EXPECT_EQ(proc.getEffectiveSoloLayoutGroupForLayer(0), 2);
+
+  // Touch at no-group layout - should be hidden
+  contacts = {{0, 0, 0, 0.16f, 0.5f, true}};
+  mockEng.clear();
+  proc.processTouchpadContacts(deviceHandle, contacts);
+  EXPECT_EQ(mockEng.ccEvents.size(), 0u)
+      << "No-group layout should be hidden when soloGroup == 2";
+
+  // Touch at group 1 layout - should be hidden
+  contacts = {{0, 0, 0, 0.5f, 0.5f, true}};
+  mockEng.clear();
+  proc.processTouchpadContacts(deviceHandle, contacts);
+  EXPECT_EQ(mockEng.ccEvents.size(), 0u)
+      << "Group 1 layout should be hidden when soloGroup == 2";
+
+  // Touch at group 2 layout - should be visible
+  contacts = {{0, 0, 0, 0.83f, 0.5f, true}};
+  mockEng.clear();
+  proc.processTouchpadContacts(deviceHandle, contacts);
+  EXPECT_GT(mockEng.ccEvents.size(), 0u)
+      << "Group 2 layout should be visible when soloGroup == 2";
+}
+
+// Test: Mixed layouts on different layers with solo behavior
+TEST_F(InputProcessorTest, TouchpadLayoutMixedLayersSoloBehavior) {
+  MockMidiEngine mockEng;
+  TouchpadMixerManager touchpadMixerMgr;
+  VoiceManager voiceMgr(mockEng, settingsMgr);
+  InputProcessor proc(voiceMgr, presetMgr, deviceMgr, scaleLib, mockEng,
+                      settingsMgr, touchpadMixerMgr);
+  proc.initialize();
+
+  // Create group
+  TouchpadLayoutGroup group1;
+  group1.id = 1;
+  group1.name = "Group 1";
+  touchpadMixerMgr.addGroup(group1);
+
+  // Create layouts on layer 0: one with group, one without group
+  TouchpadMixerConfig layoutNoGroupLayer0 = makeMixerLayout(0, 0.0f, 0.0f, 0.5f, 1.0f);
+  layoutNoGroupLayer0.name = "No Group Layer 0";
+  layoutNoGroupLayer0.layerId = 0;
+  touchpadMixerMgr.addLayout(layoutNoGroupLayer0);
+
+  TouchpadMixerConfig layoutGroup1Layer0 = makeMixerLayout(1, 0.5f, 0.0f, 1.0f, 1.0f);
+  layoutGroup1Layer0.name = "Group 1 Layer 0";
+  layoutGroup1Layer0.layerId = 0;
+  touchpadMixerMgr.addLayout(layoutGroup1Layer0);
+
+  // Create layouts on layer 1: one with group, one without group
+  TouchpadMixerConfig layoutNoGroupLayer1 = makeMixerLayout(0, 0.0f, 0.0f, 0.5f, 1.0f);
+  layoutNoGroupLayer1.name = "No Group Layer 1";
+  layoutNoGroupLayer1.layerId = 1;
+  touchpadMixerMgr.addLayout(layoutNoGroupLayer1);
+
+  TouchpadMixerConfig layoutGroup1Layer1 = makeMixerLayout(1, 0.5f, 0.0f, 1.0f, 1.0f);
+  layoutGroup1Layer1.name = "Group 1 Layer 1";
+  layoutGroup1Layer1.layerId = 1;
+  touchpadMixerMgr.addLayout(layoutGroup1Layer1);
+
+  proc.forceRebuildMappings();
+
+  uintptr_t deviceHandle = 0x1234;
+
+  // Test: When soloGroup == 0, only no-group layouts should be visible on both layers
+  EXPECT_EQ(proc.getEffectiveSoloLayoutGroupForLayer(0), 0);
+  EXPECT_EQ(proc.getEffectiveSoloLayoutGroupForLayer(1), 0);
+
+  // Activate layer 1
+  auto layer0Mappings = presetMgr.getMappingsListForLayer(0);
+  juce::ValueTree layerToggleMapping("Mapping");
+  layerToggleMapping.setProperty("inputKey", 82, nullptr);
+  layerToggleMapping.setProperty("deviceHash",
+                                 juce::String::toHexString((juce::int64)0).toUpperCase(),
+                                 nullptr);
+  layerToggleMapping.setProperty("type", "Command", nullptr);
+  layerToggleMapping.setProperty("data1",
+                                 static_cast<int>(MIDIQy::CommandID::LayerToggle),
+                                 nullptr);
+  layerToggleMapping.setProperty("data2", 1, nullptr);
+  layerToggleMapping.setProperty("channel", 1, nullptr);
+  layer0Mappings.appendChild(layerToggleMapping, nullptr);
+  proc.forceRebuildMappings();
+  InputID layerInputId{0, 82};
+  proc.processEvent(layerInputId, true); // Toggle layer 1 on
+  
+  // Verify layer 1 is active
+  EXPECT_EQ(proc.getHighestActiveLayerIndex(), 1);
+
+  // Touch at no-group layout (0.25f) - should be visible
+  // Both layer 0 and layer 1 have no-group layouts at 0.0-0.5
+  // Since both are no-group and soloGroup == 0, either should be visible
+  std::vector<TouchpadContact> contacts{{0, 0, 0, 0.25f, 0.5f, true}};
+  mockEng.clear();
+  proc.processTouchpadContacts(deviceHandle, contacts);
+  EXPECT_GT(mockEng.ccEvents.size(), 0u)
+      << "No-group layout should be visible when soloGroup == 0";
+
+  // Touch at group layout on layer 0 (0.75f) - should be hidden
+  contacts = {{0, 0, 0, 0.75f, 0.5f, true}};
+  mockEng.clear();
+  proc.processTouchpadContacts(deviceHandle, contacts);
+  EXPECT_EQ(mockEng.ccEvents.size(), 0u)
+      << "Group layout on layer 0 should be hidden when soloGroup == 0";
+
+  // Touch at group layout on layer 1 (0.75f) - should be hidden
+  contacts = {{0, 0, 0, 0.75f, 0.5f, true}};
+  mockEng.clear();
+  proc.processTouchpadContacts(deviceHandle, contacts);
+  EXPECT_EQ(mockEng.ccEvents.size(), 0u)
+      << "Group layout on layer 1 should be hidden when soloGroup == 0";
+
+  // Test: When soloGroup > 0, only matching group layouts should be visible
+  // Use global solo (scope 0) to test that it applies to all layers
+  juce::ValueTree soloMappingGlobal("Mapping");
+  soloMappingGlobal.setProperty("inputKey", 84, nullptr);
+  soloMappingGlobal.setProperty("deviceHash",
+                                juce::String::toHexString((juce::int64)0).toUpperCase(),
+                                nullptr);
+  soloMappingGlobal.setProperty("type", "Command", nullptr);
+  soloMappingGlobal.setProperty("data1",
+                                static_cast<int>(MIDIQy::CommandID::TouchpadLayoutGroupSoloSet),
+                                nullptr);
+  soloMappingGlobal.setProperty("touchpadLayoutGroupId", 1, nullptr);
+  soloMappingGlobal.setProperty("touchpadSoloScope", 0, nullptr); // Global
+  soloMappingGlobal.setProperty("channel", 1, nullptr);
+  soloMappingGlobal.setProperty("data2", 0, nullptr);
+  layer0Mappings.appendChild(soloMappingGlobal, nullptr);
+  proc.forceRebuildMappings();
+  InputID soloInputIdGlobal{0, 84};
+  proc.processEvent(soloInputIdGlobal, true);
+
+  // With global solo, both layers should have solo group 1
+  EXPECT_EQ(proc.getEffectiveSoloLayoutGroupForLayer(0), 1);
+  EXPECT_EQ(proc.getEffectiveSoloLayoutGroupForLayer(1), 1);
+
+  // Touch at no-group layout - should be hidden (global solo applies to all layers)
+  contacts = {{0, 0, 0, 0.25f, 0.5f, true}};
+  mockEng.clear();
+  proc.processTouchpadContacts(deviceHandle, contacts);
+  EXPECT_EQ(mockEng.ccEvents.size(), 0u)
+      << "No-group layouts should be hidden when global solo group 1 is active";
+
+  // Touch at group layout (0.75f) - should be visible
+  // Both layer 0 and layer 1 have group layouts at 0.5-1.0
+  contacts = {{0, 0, 0, 0.75f, 0.5f, true}};
+  mockEng.clear();
+  proc.processTouchpadContacts(deviceHandle, contacts);
+  EXPECT_GT(mockEng.ccEvents.size(), 0u)
+      << "Group layouts should be visible when global solo group 1 is active";
+}

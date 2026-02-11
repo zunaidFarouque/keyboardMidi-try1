@@ -7,6 +7,7 @@
 #include "PresetManager.h"
 #include "SettingsManager.h"
 #include "MappingDefinition.h"
+#include "TouchpadMixerManager.h"
 
 namespace {
 // Phase 55.6: Invisible container for Label + Editor as one layout unit
@@ -59,16 +60,22 @@ private:
 MappingInspector::MappingInspector(juce::UndoManager &undoMgr,
                                    DeviceManager &deviceMgr,
                                    SettingsManager &settingsMgr,
-                                   PresetManager *presetMgr)
+                                   PresetManager *presetMgr,
+                                   TouchpadMixerManager *touchpadMixerMgr)
     : undoManager(undoMgr), deviceManager(deviceMgr),
-      settingsManager(settingsMgr), presetManager(presetMgr) {
+      settingsManager(settingsMgr), presetManager(presetMgr),
+      touchpadMixerManager(touchpadMixerMgr) {
   deviceManager.addChangeListener(this);
   settingsManager.addChangeListener(this);
+  if (touchpadMixerManager)
+    touchpadMixerManager->addChangeListener(this);
 }
 
 MappingInspector::~MappingInspector() {
   deviceManager.removeChangeListener(this);
   settingsManager.removeChangeListener(this);
+  if (touchpadMixerManager)
+    touchpadMixerManager->removeChangeListener(this);
   for (auto &tree : selectedTrees) {
     if (tree.isValid())
       tree.removeListener(this);
@@ -365,8 +372,18 @@ void MappingInspector::createControl(const InspectorControl &def,
   }
   case InspectorControl::Type::ComboBox: {
     auto cb = std::make_unique<juce::ComboBox>();
-    for (const auto &p : def.options)
-      cb->addItem(p.second, p.first);
+    // Populate touchpadLayoutGroupId dynamically from TouchpadMixerManager
+    if (def.propertyId == "touchpadLayoutGroupId" && touchpadMixerManager) {
+      // JUCE ComboBox uses id=0 for "no selection", so encode groupId+1.
+      cb->addItem("- No Group -", 1);
+      auto groups = touchpadMixerManager->getLayoutGroups();
+      for (const auto &group : groups) {
+        cb->addItem(group.second, group.first + 1);
+      }
+    } else {
+      for (const auto &p : def.options)
+        cb->addItem(p.second, p.first);
+    }
 
     if (def.propertyId == "type") {
       juce::String typeStr = currentVal.toString();
@@ -435,20 +452,59 @@ void MappingInspector::createControl(const InspectorControl &def,
       cb->setSelectedId(id, juce::dontSendNotification);
     } else if (def.propertyId == "commandCategory") {
       // Virtual: data1 0,1,2 -> Sustain (100); 5 -> Panic (4); 7 -> Transpose
-      // (6); 10,11 -> Layer (110)
+      // (6); 10,11 -> Layer (110); touchpad solo commands -> Touchpad (120)
       int data1 = static_cast<int>(getCommonValue("data1"));
-      if (data1 >= 0 && data1 <= 2)
+      const int sustainMin = 0, sustainMax = 2;
+      const int layerMomentary =
+          static_cast<int>(MIDIQy::CommandID::LayerMomentary);
+      const int layerToggle =
+          static_cast<int>(MIDIQy::CommandID::LayerToggle);
+      const int touchpadSoloMin =
+          static_cast<int>(MIDIQy::CommandID::TouchpadLayoutGroupSoloMomentary);
+      const int touchpadSoloMax =
+          static_cast<int>(MIDIQy::CommandID::TouchpadLayoutGroupSoloClear);
+      if (data1 >= sustainMin && data1 <= sustainMax)
         cb->setSelectedId(100, juce::dontSendNotification);
       else if (data1 == 5)
         cb->setSelectedId(4,
                           juce::dontSendNotification); // Panic Latch -> Panic
       else if (data1 == 7)
         cb->setSelectedId(6, juce::dontSendNotification); // Legacy -> Transpose
-      else if (data1 == 10 || data1 == 11)
+      else if (data1 == layerMomentary || data1 == layerToggle)
         cb->setSelectedId(110,
                           juce::dontSendNotification); // Layer (Hold/Toggle)
+      else if (data1 >= touchpadSoloMin && data1 <= touchpadSoloMax)
+        cb->setSelectedId(120,
+                          juce::dontSendNotification); // Touchpad solo group
       else if (data1 >= 3 && data1 <= 9)
         cb->setSelectedId(data1, juce::dontSendNotification);
+      else if (data1 >= static_cast<int>(MIDIQy::CommandID::TouchpadLayoutGroupSoloMomentary) &&
+               data1 <= static_cast<int>(MIDIQy::CommandID::TouchpadLayoutGroupSoloClear))
+        cb->setSelectedId(data1, juce::dontSendNotification);
+    } else if (def.propertyId == "touchpadSoloScope") {
+      int v = static_cast<int>(getCommonValue("touchpadSoloScope"));
+      int id = (v == 1) ? 2 : (v == 2) ? 3 : 1;
+      cb->setSelectedId(id, juce::dontSendNotification);
+    } else if (def.propertyId == "touchpadSoloType") {
+      int data1 = static_cast<int>(getCommonValue("data1"));
+      int id = 1;
+      if (data1 ==
+          static_cast<int>(
+              MIDIQy::CommandID::TouchpadLayoutGroupSoloToggle))
+        id = 2;
+      else if (data1 ==
+               static_cast<int>(
+                   MIDIQy::CommandID::TouchpadLayoutGroupSoloSet))
+        id = 3;
+      else if (data1 ==
+               static_cast<int>(
+                   MIDIQy::CommandID::TouchpadLayoutGroupSoloClear))
+        id = 4;
+      cb->setSelectedId(id, juce::dontSendNotification);
+    } else if (def.propertyId == "touchpadLayoutGroupId") {
+      int groupId = static_cast<int>(getCommonValue("touchpadLayoutGroupId"));
+      // Stored groupId (0 = none) -> combo id (1 = "- No Group -")
+      cb->setSelectedId(groupId + 1, juce::dontSendNotification);
     } else if (def.propertyId == "data1" && !def.options.count(5)) {
       // Panic Latch (5) -> 4; GlobalPitchDown (7) -> 6
       int data1 = static_cast<int>(currentVal);
@@ -478,7 +534,9 @@ void MappingInspector::createControl(const InspectorControl &def,
           def.propertyId == "commandCategory" ||
           def.propertyId == "sustainStyle" || def.propertyId == "panicMode" ||
           def.propertyId == "layerStyle" || def.propertyId == "transposeMode" ||
-          def.propertyId == "transposeModify")
+          def.propertyId == "transposeModify" ||
+          def.propertyId == "touchpadSoloType" ||
+          def.propertyId == "touchpadLayoutGroupId")
         juce::MessageManager::callAsync([this]() { rebuildUI(); });
     };
 
@@ -828,7 +886,8 @@ juce::var MappingInspector::getCommonValue(const juce::Identifier &property) {
 }
 
 void MappingInspector::changeListenerCallback(juce::ChangeBroadcaster *source) {
-  if (source == &deviceManager || source == &settingsManager)
+  if (source == &deviceManager || source == &settingsManager ||
+      source == touchpadMixerManager)
     rebuildUI();
 }
 

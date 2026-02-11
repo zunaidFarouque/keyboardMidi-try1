@@ -7,6 +7,7 @@
 class DeviceManager;
 class PresetManager;
 class SettingsManager;
+class TouchpadMixerManager;
 
 class MappingInspector : public juce::Component,
                          public juce::ValueTree::Listener,
@@ -14,7 +15,8 @@ class MappingInspector : public juce::Component,
 public:
   MappingInspector(juce::UndoManager &undoMgr, DeviceManager &deviceMgr,
                    SettingsManager &settingsMgr,
-                   PresetManager *presetMgr = nullptr);
+                   PresetManager *presetMgr = nullptr,
+                   TouchpadMixerManager *touchpadMixerMgr = nullptr);
   ~MappingInspector() override;
 
   void paint(juce::Graphics &) override;
@@ -33,6 +35,8 @@ private:
   SettingsManager &settingsManager;
   PresetManager *presetManager =
       nullptr; // optional: notify to trigger grid rebuild
+  TouchpadMixerManager *touchpadMixerManager =
+      nullptr; // optional: for layout group registry
   std::vector<juce::ValueTree> selectedTrees;
   bool isUpdatingFromTree = false;
 

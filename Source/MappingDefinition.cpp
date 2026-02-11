@@ -54,6 +54,14 @@ std::map<int, juce::String> MappingDefinition::getCommandOptions() {
       {static_cast<int>(Cmd::GlobalScaleSet), "Global Scale Set"},
       {static_cast<int>(Cmd::LayerMomentary), "Layer Momentary"},
       {static_cast<int>(Cmd::LayerToggle), "Layer Toggle"},
+      {static_cast<int>(Cmd::TouchpadLayoutGroupSoloMomentary),
+       "Touchpad Layout Group Solo (Hold)"},
+      {static_cast<int>(Cmd::TouchpadLayoutGroupSoloToggle),
+       "Touchpad Layout Group Solo (Toggle)"},
+      {static_cast<int>(Cmd::TouchpadLayoutGroupSoloSet),
+       "Touchpad Layout Group Solo (Set)"},
+      {static_cast<int>(Cmd::TouchpadLayoutGroupSoloClear),
+       "Touchpad Layout Group Solo (Clear)"},
   };
 }
 
@@ -497,13 +505,25 @@ InspectorSchema MappingDefinition::getSchema(const juce::ValueTree &mapping,
     // Sustain: one control with Style dropdown when Sustain; Layer: same
     static constexpr int kSustainCategoryId = 100;
     static constexpr int kLayerCategoryId = 110;
+    static constexpr int kTouchpadCategoryId = 120;
     int cmdId = (int)mapping.getProperty("data1", 0);
     const bool isSustain = (cmdId >= 0 && cmdId <= 2);
     const bool isLayer = (cmdId == 10 || cmdId == 11);
+    const int touchpadSoloMomentary =
+        static_cast<int>(MIDIQy::CommandID::TouchpadLayoutGroupSoloMomentary);
+    const int touchpadSoloToggle =
+        static_cast<int>(MIDIQy::CommandID::TouchpadLayoutGroupSoloToggle);
+    const int touchpadSoloSet =
+        static_cast<int>(MIDIQy::CommandID::TouchpadLayoutGroupSoloSet);
+    const int touchpadSoloClear =
+        static_cast<int>(MIDIQy::CommandID::TouchpadLayoutGroupSoloClear);
+    const bool isTouchpadSolo =
+        (cmdId >= touchpadSoloMomentary && cmdId <= touchpadSoloClear);
 
     InspectorControl cmdCtrl;
-    cmdCtrl.propertyId = (isSustain || isLayer) ? "commandCategory" : "data1";
-    cmdCtrl.label = isSustain ? "Sustain" : (isLayer ? "Layer" : "Command");
+    cmdCtrl.propertyId =
+        (isSustain || isLayer || isTouchpadSolo) ? "commandCategory" : "data1";
+    cmdCtrl.label = "Command";
     cmdCtrl.controlType = InspectorControl::Type::ComboBox;
     cmdCtrl.options[kSustainCategoryId] = "Sustain";
     cmdCtrl.options[3] = "Latch Toggle";
@@ -518,6 +538,7 @@ InspectorSchema MappingDefinition::getSchema(const juce::ValueTree &mapping,
     cmdCtrl.options[16] = "Global Scale Prev";
     cmdCtrl.options[17] = "Global Scale Set";
     cmdCtrl.options[kLayerCategoryId] = "Layer";
+    cmdCtrl.options[kTouchpadCategoryId] = "Touchpad";
     schema.push_back(cmdCtrl);
 
     if (isSustain) {
@@ -664,6 +685,40 @@ InspectorSchema MappingDefinition::getSchema(const juce::ValueTree &mapping,
         scaleIndexCtrl.valueFormat = InspectorControl::Format::Integer;
         schema.push_back(scaleIndexCtrl);
       }
+    }
+
+    if (isTouchpadSolo) {
+      // Solo type selector for touchpad commands
+      InspectorControl soloTypeCtrl;
+      soloTypeCtrl.propertyId = "touchpadSoloType"; // Virtual: maps to CommandID
+      soloTypeCtrl.label = "Solo type";
+      soloTypeCtrl.controlType = InspectorControl::Type::ComboBox;
+      soloTypeCtrl.options[1] = "Hold";
+      soloTypeCtrl.options[2] = "Toggle";
+      soloTypeCtrl.options[3] = "Set";
+      soloTypeCtrl.options[4] = "Clear";
+      schema.push_back(soloTypeCtrl);
+
+      schema.push_back(createSeparator("Touchpad Layout Group Solo",
+                                       juce::Justification::centredLeft));
+
+      InspectorControl groupIdCtrl;
+      groupIdCtrl.propertyId = "touchpadLayoutGroupId";
+      groupIdCtrl.label = "Layout group";
+      groupIdCtrl.controlType = InspectorControl::Type::ComboBox;
+      // Options will be populated dynamically in MappingInspector from TouchpadMixerManager
+      // Add "None" option (id=0) for ungrouped
+      groupIdCtrl.options[0] = "None";
+      schema.push_back(groupIdCtrl);
+
+      InspectorControl scopeCtrl;
+      scopeCtrl.propertyId = "touchpadSoloScope";
+      scopeCtrl.label = "Solo scope";
+      scopeCtrl.controlType = InspectorControl::Type::ComboBox;
+      scopeCtrl.options[1] = "Global";
+      scopeCtrl.options[2] = "Layer (forget on change)";
+      scopeCtrl.options[3] = "Layer (remember)";
+      schema.push_back(scopeCtrl);
     }
   }
 

@@ -135,6 +135,8 @@ juce::var TouchpadMixerEditorComponent::getConfigValue(
     return juce::var(juce::String(currentConfig.name));
   if (propertyId == "layerId")
     return juce::var(currentConfig.layerId + 1); // combo IDs 1..9
+  if (propertyId == "layoutGroupId")
+    return juce::var(currentConfig.layoutGroupId);
   if (propertyId == "numFaders")
     return juce::var(currentConfig.numFaders);
   if (propertyId == "ccStart")
@@ -243,6 +245,8 @@ void TouchpadMixerEditorComponent::applyConfigValue(
   else if (propertyId == "layerId")
     currentConfig.layerId =
         juce::jlimit(0, 8, static_cast<int>(value) - 1); // combo ID 1..9
+  else if (propertyId == "layoutGroupId")
+    currentConfig.layoutGroupId = juce::jmax(0, static_cast<int>(value));
   else if (propertyId == "numFaders")
     currentConfig.numFaders = juce::jlimit(1, 32, static_cast<int>(value));
   else if (propertyId == "ccStart")
@@ -389,13 +393,27 @@ void TouchpadMixerEditorComponent::createControl(
   }
   case InspectorControl::Type::ComboBox: {
     auto cb = std::make_unique<juce::ComboBox>();
-    for (const auto &p : def.options)
-      cb->addItem(p.second, p.first);
+    if (propId == "layoutGroupId" && manager) {
+      // JUCE ComboBox uses id=0 for \"no selection\", so encode groupId+1.
+      cb->addItem("- No Group -", 1);
+      for (const auto &g : manager->getGroups()) {
+        if (g.id > 0)
+          cb->addItem(g.name.empty() ? ("Group " + juce::String(g.id))
+                                     : juce::String(g.name),
+                      g.id + 1);
+      }
+    } else {
+      for (const auto &p : def.options)
+        cb->addItem(p.second, p.first);
+    }
     if (propId == "type")
       ; // Both Mixer and Drum Pad are enabled
     int id = static_cast<int>(currentVal);
-    if (id > 0)
+    if (propId == "layoutGroupId") {
+      cb->setSelectedId(id + 1, juce::dontSendNotification);
+    } else if (id > 0) {
       cb->setSelectedId(id, juce::dontSendNotification);
+    }
     if (propId == "quickPrecision")
       cb->setTooltip(
           "Quick: one finger directly controls a fader. Precision: one finger "
@@ -413,7 +431,11 @@ void TouchpadMixerEditorComponent::createControl(
                      "is selected.");
     juce::ComboBox *cbPtr = cb.get();
     cb->onChange = [this, propId, cbPtr]() {
-      applyConfigValue(propId, juce::var(cbPtr->getSelectedId()));
+      int sel = cbPtr->getSelectedId();
+      if (propId == "layoutGroupId")
+        applyConfigValue(propId, juce::var(sel - 1)); // map back to groupId
+      else
+        applyConfigValue(propId, juce::var(sel));
     };
     auto rowComp = std::make_unique<LabelEditorRow>();
     rowComp->label = std::make_unique<juce::Label>();

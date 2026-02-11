@@ -105,6 +105,14 @@ public:
   // Phase 50.9: Get highest active layer index (for Dynamic View following)
   int getHighestActiveLayerIndex() const;
 
+  // Effective touchpad layout group solo for a given layer. If a global solo
+  // group is active, that always wins; otherwise the per-layer solo is used.
+  int getEffectiveSoloLayoutGroupForLayer(int layerIdx) const;
+
+  // Clear touchpad solo states for layers that have scope=1 (forget) and are now inactive.
+  // Call this whenever layer state changes.
+  void clearForgetScopeSolosForInactiveLayers();
+
   // Thread-safe: return relative pitch-pad anchor X (normalized [0,1]) for the
   // given device/layer/event if set; nullopt if no touch has occurred yet.
   std::optional<float> getPitchPadRelativeAnchorNormX(uintptr_t deviceHandle,
@@ -193,6 +201,15 @@ private:
   // Phase 53.2: Layer state – Latched (persistent) vs Momentary (ref count).
   std::vector<bool> layerLatchedState; // 9 elements, from preset / Toggle/Solo
   std::vector<int> layerMomentaryCounts; // 9 elements, ref count for held keys
+
+  // Touchpad layout group solo state:
+  // - Global solo applies across all layers.
+  // - Per-layer solo applies only to that layer (behaviour on layer change is
+  //   controlled by commands; see touchpadSoloScope in MidiAction).
+  int touchpadSoloLayoutGroupGlobal = 0;
+  std::array<int, 9> touchpadSoloLayoutGroupPerLayer{{0, 0, 0, 0, 0, 0, 0, 0, 0}};
+  // Track which per-layer solos have scope=1 (forget on layer change)
+  std::array<bool, 9> touchpadSoloScopeForgetPerLayer{{false, false, false, false, false, false, false, false, false}};
 
   // Momentary layer chain: track which keys hold which layer (for Phantom Key)
   std::unordered_map<InputID, int>

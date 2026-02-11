@@ -213,6 +213,14 @@ juce::String getCommandLabel(int cmdId) {
     return "Scale Prev";
   case CommandID::GlobalScaleSet:
     return "Scale Set";
+  case CommandID::TouchpadLayoutGroupSoloMomentary:
+    return "Touchpad Solo (Hold)";
+  case CommandID::TouchpadLayoutGroupSoloToggle:
+    return "Touchpad Solo (Toggle)";
+  case CommandID::TouchpadLayoutGroupSoloSet:
+    return "Touchpad Solo (Set)";
+  case CommandID::TouchpadLayoutGroupSoloClear:
+    return "Touchpad Solo (Clear)";
   default:
     break;
   }
@@ -651,10 +659,28 @@ static void collectForcedMappings(
       action.releaseValue = (int)mapping.getProperty("releaseValue", 0);
     }
 
-    if (action.type == ActionType::Command &&
-        action.data1 == static_cast<int>(MIDIQy::CommandID::LatchToggle)) {
-      action.releaseLatchedOnLatchToggleOff =
-          (bool)mapping.getProperty("releaseLatchedOnToggleOff", true);
+    if (action.type == ActionType::Command) {
+      if (action.data1 == static_cast<int>(MIDIQy::CommandID::LatchToggle)) {
+        action.releaseLatchedOnLatchToggleOff =
+            (bool)mapping.getProperty("releaseLatchedOnToggleOff", true);
+      }
+
+      if (action.data1 ==
+              static_cast<int>(
+                  MIDIQy::CommandID::TouchpadLayoutGroupSoloMomentary) ||
+          action.data1 ==
+              static_cast<int>(
+                  MIDIQy::CommandID::TouchpadLayoutGroupSoloToggle) ||
+          action.data1 ==
+              static_cast<int>(MIDIQy::CommandID::TouchpadLayoutGroupSoloSet) ||
+          action.data1 ==
+              static_cast<int>(
+                  MIDIQy::CommandID::TouchpadLayoutGroupSoloClear)) {
+        action.touchpadLayoutGroupId =
+            (int)mapping.getProperty("touchpadLayoutGroupId", 0);
+        action.touchpadSoloScope =
+            juce::jlimit(0, 2, (int)mapping.getProperty("touchpadSoloScope", 0));
+      }
     }
 
     if (action.type == ActionType::Command &&
@@ -996,11 +1022,11 @@ void compileMappingsForLayer(
     }
 
     // Latch Toggle: release latched notes when toggling off
-    if (action.type == ActionType::Command &&
-        action.data1 == static_cast<int>(MIDIQy::CommandID::LatchToggle)) {
-      action.releaseLatchedOnLatchToggleOff =
-          (bool)mapping.getProperty("releaseLatchedOnToggleOff", true);
-    }
+    if (action.type == ActionType::Command) {
+      if (action.data1 == static_cast<int>(MIDIQy::CommandID::LatchToggle)) {
+        action.releaseLatchedOnLatchToggleOff =
+            (bool)mapping.getProperty("releaseLatchedOnToggleOff", true);
+      }
 
     // Transpose command: mode, modify, semitones (for set)
     if (action.type == ActionType::Command &&
@@ -1023,7 +1049,6 @@ void compileMappingsForLayer(
     }
 
     // Global root / scale commands
-    if (action.type == ActionType::Command) {
       const int cmd = action.data1;
       if (cmd == static_cast<int>(MIDIQy::CommandID::GlobalRootUp) ||
           cmd == static_cast<int>(MIDIQy::CommandID::GlobalRootDown) ||
@@ -1040,6 +1065,20 @@ void compileMappingsForLayer(
         action.scaleModify = juce::jlimit(0, 2, sm);
         action.scaleIndex =
             juce::jmax(0, (int)mapping.getProperty("scaleIndex", 0));
+      }
+
+      if (cmd == static_cast<int>(
+                    MIDIQy::CommandID::TouchpadLayoutGroupSoloMomentary) ||
+          cmd == static_cast<int>(
+                    MIDIQy::CommandID::TouchpadLayoutGroupSoloToggle) ||
+          cmd == static_cast<int>(
+                    MIDIQy::CommandID::TouchpadLayoutGroupSoloSet) ||
+          cmd == static_cast<int>(
+                    MIDIQy::CommandID::TouchpadLayoutGroupSoloClear)) {
+        action.touchpadLayoutGroupId =
+            (int)mapping.getProperty("touchpadLayoutGroupId", 0);
+        action.touchpadSoloScope =
+            juce::jlimit(0, 2, (int)mapping.getProperty("touchpadSoloScope", 0));
       }
     }
 
@@ -1095,6 +1134,7 @@ std::shared_ptr<CompiledMapContext> GridCompiler::compile(
     if (cfg.type == TouchpadType::Mixer) {
       TouchpadMixerEntry entry;
       entry.layerId = juce::jlimit(0, 8, cfg.layerId);
+      entry.layoutGroupId = juce::jmax(0, cfg.layoutGroupId);
       entry.numFaders = juce::jlimit(1, 32, cfg.numFaders);
       entry.ccStart = juce::jlimit(0, 127, cfg.ccStart);
       entry.midiChannel = juce::jlimit(1, 16, cfg.midiChannel);
@@ -1137,6 +1177,7 @@ std::shared_ptr<CompiledMapContext> GridCompiler::compile(
     } else if (cfg.type == TouchpadType::DrumPad) {
       TouchpadDrumPadEntry dpEntry;
       dpEntry.layerId = juce::jlimit(0, 8, cfg.layerId);
+      dpEntry.layoutGroupId = juce::jmax(0, cfg.layoutGroupId);
       dpEntry.rows = juce::jlimit(1, 8, cfg.drumPadRows);
       dpEntry.columns = juce::jlimit(1, 16, cfg.drumPadColumns);
       dpEntry.numPads = dpEntry.rows * dpEntry.columns;
@@ -1182,6 +1223,7 @@ std::shared_ptr<CompiledMapContext> GridCompiler::compile(
     } else if (cfg.type == TouchpadType::ChordPad) {
       TouchpadChordPadEntry cp;
       cp.layerId = juce::jlimit(0, 8, cfg.layerId);
+      cp.layoutGroupId = juce::jmax(0, cfg.layoutGroupId);
       cp.rows = juce::jlimit(1, 8, cfg.drumPadRows);
       cp.columns = juce::jlimit(1, 16, cfg.drumPadColumns);
       cp.midiChannel = juce::jlimit(1, 16, cfg.midiChannel);

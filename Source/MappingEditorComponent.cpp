@@ -1,6 +1,7 @@
 #include "MappingEditorComponent.h"
 #include "KeyNameUtilities.h"
 #include "MappingDefinition.h"
+#include "TouchpadMixerManager.h"
 #include <algorithm>
 #include <functional>
 
@@ -72,10 +73,11 @@ static uintptr_t parseDeviceHash(const juce::var &var) {
 MappingEditorComponent::MappingEditorComponent(PresetManager &pm,
                                                RawInputManager &rawInputMgr,
                                                DeviceManager &deviceMgr,
-                                               SettingsManager &settingsMgr)
+                                               SettingsManager &settingsMgr,
+                                               TouchpadMixerManager *touchpadMixerMgr)
     : presetManager(pm), rawInputManager(rawInputMgr), deviceManager(deviceMgr),
       settingsManager(settingsMgr), layerListPanel(pm),
-      inspector(undoManager, deviceManager, settingsManager, &presetManager),
+      inspector(undoManager, deviceManager, settingsManager, &presetManager, touchpadMixerMgr),
       resizerBar(&horizontalLayout, 1, true) { // Item index 1, vertical bar
 
   // Phase 41/45: Setup layer list panel callback with per-layer selection

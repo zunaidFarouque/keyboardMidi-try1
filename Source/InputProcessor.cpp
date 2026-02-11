@@ -48,7 +48,10 @@ InputProcessor::InputProcessor(VoiceManager &voiceMgr, PresetManager &presetMgr,
   for (int i = 0; i < 9; ++i) {
     layerLatchedState[(size_t)i] = false;
     layerMomentaryCounts[(size_t)i] = 0;
+    touchpadSoloLayoutGroupPerLayer[(size_t)i] = 0;
+    touchpadSoloScopeForgetPerLayer[(size_t)i] = false;
   }
+  touchpadSoloLayoutGroupGlobal = 0;
   activeContext = std::make_shared<CompiledMapContext>();
 }
 
@@ -59,6 +62,28 @@ bool InputProcessor::isLayerActive(int layerIdx) const {
     return false;
   return layerLatchedState[(size_t)layerIdx] ||
          (layerMomentaryCounts[(size_t)layerIdx] > 0);
+}
+
+int InputProcessor::getEffectiveSoloLayoutGroupForLayer(int layerIdx) const {
+  juce::ScopedLock sl(stateLock);
+  if (touchpadSoloLayoutGroupGlobal > 0)
+    return touchpadSoloLayoutGroupGlobal;
+  if (layerIdx < 0 || layerIdx >= 9)
+    return 0;
+  return touchpadSoloLayoutGroupPerLayer[(size_t)layerIdx];
+}
+
+void InputProcessor::clearForgetScopeSolosForInactiveLayers() {
+  juce::ScopedLock sl(stateLock);
+  for (int i = 0; i < 9; ++i) {
+    if (i == 0)
+      continue; // Base layer is always active
+    if (!isLayerActive(i) && touchpadSoloScopeForgetPerLayer[(size_t)i] &&
+        touchpadSoloLayoutGroupPerLayer[(size_t)i] > 0) {
+      touchpadSoloLayoutGroupPerLayer[(size_t)i] = 0;
+      touchpadSoloScopeForgetPerLayer[(size_t)i] = false;
+    }
+  }
 }
 
 void InputProcessor::initialize() {
@@ -160,7 +185,10 @@ void InputProcessor::rebuildGrid() {
             (bool)layerNode.getProperty("isActive", i == 0);
       else
         layerLatchedState[(size_t)i] = (i == 0);
+      touchpadSoloLayoutGroupPerLayer[(size_t)i] = 0;
+      touchpadSoloScopeForgetPerLayer[(size_t)i] = false;
     }
+    touchpadSoloLayoutGroupGlobal = 0;
   }
   sendChangeMessage();
 }
@@ -301,6 +329,7 @@ void InputProcessor::valueTreePropertyChanged(
             (bool)treeWhosePropertyHasChanged.getProperty("isActive",
                                                           layerId == 0);
       }
+      clearForgetScopeSolosForInactiveLayers();
       sendChangeMessage();
       return;
     }
@@ -529,14 +558,32 @@ void InputProcessor::processEvent(InputID input, bool isDown) {
               juce::ScopedLock sl(stateLock);
               if (layerMomentaryCounts[(size_t)target] > 0)
                 layerMomentaryCounts[(size_t)target]--;
-              sendChangeMessage();
             }
+            clearForgetScopeSolosForInactiveLayers();
+            sendChangeMessage();
             return;
           }
           if (cmd == static_cast<int>(MIDIQy::CommandID::SustainMomentary))
             voiceManager.setSustain(false);
           else if (cmd == static_cast<int>(MIDIQy::CommandID::SustainInverse))
             voiceManager.setSustain(true);
+          else if (cmd == static_cast<int>(
+                                 MIDIQy::CommandID::
+                                     TouchpadLayoutGroupSoloMomentary)) {
+            // Release for temporary solo: restore previous solo state for scope.
+            int scope = midiAction.touchpadSoloScope;
+            int currentLayer = getHighestActiveLayerIndex();
+            juce::ScopedLock sl(stateLock);
+            if (scope == 0) {
+              touchpadSoloLayoutGroupGlobal = 0;
+            } else if (scope == 1 || scope == 2) {
+              if (currentLayer >= 0 && currentLayer < 9) {
+                touchpadSoloLayoutGroupPerLayer[(size_t)currentLayer] = 0;
+                touchpadSoloScopeForgetPerLayer[(size_t)currentLayer] = false;
+              }
+            }
+            sendChangeMessage();
+          }
         }
         if (midiAction.type == ActionType::Expression) {
           expressionEngine.releaseEnvelope(input);
@@ -611,8 +658,9 @@ void InputProcessor::processEvent(InputID input, bool isDown) {
             juce::ScopedLock sl(stateLock);
             layerMomentaryCounts[(size_t)target]++;
             momentaryLayerHolds[held] = target;
-            sendChangeMessage();
           }
+          clearForgetScopeSolosForInactiveLayers();
+          sendChangeMessage();
           return;
         }
         if (cmd == static_cast<int>(MIDIQy::CommandID::LayerToggle)) {
@@ -622,8 +670,9 @@ void InputProcessor::processEvent(InputID input, bool isDown) {
               juce::ScopedLock sl(stateLock);
               layerLatchedState[(size_t)target] =
                   !layerLatchedState[(size_t)target];
-              sendChangeMessage();
             }
+            clearForgetScopeSolosForInactiveLayers();
+            sendChangeMessage();
             return;
           }
           return;
@@ -654,6 +703,78 @@ void InputProcessor::processEvent(InputID input, bool isDown) {
             voiceManager.panic();
         } else if (cmd == static_cast<int>(MIDIQy::CommandID::PanicLatch)) {
           voiceManager.panicLatch(); // Backward compat: old Panic Latch mapping
+        } else if (cmd ==
+                   static_cast<int>(MIDIQy::CommandID::TouchpadLayoutGroupSoloMomentary)) {
+          if (isDown) {
+            int groupId = midiAction.touchpadLayoutGroupId;
+            int scope = midiAction.touchpadSoloScope;
+            int currentLayer = getHighestActiveLayerIndex();
+            juce::ScopedLock sl(stateLock);
+            if (scope == 0) {
+              touchpadSoloLayoutGroupGlobal = groupId;
+            } else if (scope == 1 || scope == 2) {
+              if (currentLayer >= 0 && currentLayer < 9) {
+                touchpadSoloLayoutGroupPerLayer[(size_t)currentLayer] = groupId;
+                touchpadSoloScopeForgetPerLayer[(size_t)currentLayer] = (scope == 1);
+              }
+            }
+            sendChangeMessage();
+          }
+        } else if (cmd ==
+                   static_cast<int>(MIDIQy::CommandID::TouchpadLayoutGroupSoloToggle)) {
+          if (isDown) {
+            int groupId = midiAction.touchpadLayoutGroupId;
+            int scope = midiAction.touchpadSoloScope;
+            int currentLayer = getHighestActiveLayerIndex();
+            juce::ScopedLock sl(stateLock);
+            if (scope == 0) {
+              touchpadSoloLayoutGroupGlobal =
+                  (touchpadSoloLayoutGroupGlobal == groupId) ? 0 : groupId;
+            } else if (scope == 1 || scope == 2) {
+              if (currentLayer >= 0 && currentLayer < 9) {
+                int &slotRef =
+                    touchpadSoloLayoutGroupPerLayer[(size_t)currentLayer];
+                bool wasActive = (slotRef == groupId);
+                slotRef = (slotRef == groupId) ? 0 : groupId;
+                touchpadSoloScopeForgetPerLayer[(size_t)currentLayer] =
+                    (!wasActive && scope == 1);
+              }
+            }
+            sendChangeMessage();
+          }
+        } else if (cmd ==
+                   static_cast<int>(MIDIQy::CommandID::TouchpadLayoutGroupSoloSet)) {
+          if (isDown) {
+            int groupId = midiAction.touchpadLayoutGroupId;
+            int scope = midiAction.touchpadSoloScope;
+            int currentLayer = getHighestActiveLayerIndex();
+            juce::ScopedLock sl(stateLock);
+            if (scope == 0) {
+              touchpadSoloLayoutGroupGlobal = groupId;
+            } else if (scope == 1 || scope == 2) {
+              if (currentLayer >= 0 && currentLayer < 9) {
+                touchpadSoloLayoutGroupPerLayer[(size_t)currentLayer] = groupId;
+                touchpadSoloScopeForgetPerLayer[(size_t)currentLayer] = (scope == 1);
+              }
+            }
+            sendChangeMessage();
+          }
+        } else if (cmd ==
+                   static_cast<int>(MIDIQy::CommandID::TouchpadLayoutGroupSoloClear)) {
+          if (isDown) {
+            int scope = midiAction.touchpadSoloScope;
+            int currentLayer = getHighestActiveLayerIndex();
+            juce::ScopedLock sl(stateLock);
+            if (scope == 0) {
+              touchpadSoloLayoutGroupGlobal = 0;
+            } else if (scope == 1 || scope == 2) {
+              if (currentLayer >= 0 && currentLayer < 9) {
+                touchpadSoloLayoutGroupPerLayer[(size_t)currentLayer] = 0;
+                touchpadSoloScopeForgetPerLayer[(size_t)currentLayer] = false;
+              }
+            }
+            sendChangeMessage();
+          }
         } else if (cmd == static_cast<int>(MIDIQy::CommandID::Transpose) ||
                    cmd ==
                        static_cast<int>(MIDIQy::CommandID::GlobalPitchDown)) {
@@ -1647,6 +1768,11 @@ void InputProcessor::processTouchpadContacts(
         const auto &s = ctx->touchpadMixerStrips[ref.index];
         if (!activeLayersSnapshot[(size_t)s.layerId])
           continue;
+        int soloGroup =
+            getEffectiveSoloLayoutGroupForLayer(juce::jlimit(0, 8, s.layerId));
+        // Hide grouped layouts when no solo is active, or hide non-matching layouts when solo is active
+        if ((soloGroup == 0 && s.layoutGroupId != 0) || (soloGroup > 0 && s.layoutGroupId != soloGroup))
+          continue;
         if (nx >= s.regionLeft && nx < s.regionRight && ny >= s.regionTop &&
             ny < s.regionBottom)
           return {{TouchpadType::Mixer, ref.index}};
@@ -1655,6 +1781,11 @@ void InputProcessor::processTouchpadContacts(
         const auto &s = ctx->touchpadDrumPadStrips[ref.index];
         if (!activeLayersSnapshot[(size_t)s.layerId] || s.numPads <= 0)
           continue;
+        int soloGroup =
+            getEffectiveSoloLayoutGroupForLayer(juce::jlimit(0, 8, s.layerId));
+        // Hide grouped layouts when no solo is active, or hide non-matching layouts when solo is active
+        if ((soloGroup == 0 && s.layoutGroupId != 0) || (soloGroup > 0 && s.layoutGroupId != soloGroup))
+          continue;
         if (nx >= s.regionLeft && nx < s.regionRight && ny >= s.regionTop &&
             ny < s.regionBottom)
           return {{TouchpadType::DrumPad, ref.index}};
@@ -1662,6 +1793,11 @@ void InputProcessor::processTouchpadContacts(
                  ref.index < ctx->touchpadChordPads.size()) {
         const auto &s = ctx->touchpadChordPads[ref.index];
         if (!activeLayersSnapshot[(size_t)s.layerId])
+          continue;
+        int soloGroup =
+            getEffectiveSoloLayoutGroupForLayer(juce::jlimit(0, 8, s.layerId));
+        // Hide grouped layouts when no solo is active, or hide non-matching layouts when solo is active
+        if ((soloGroup == 0 && s.layoutGroupId != 0) || (soloGroup > 0 && s.layoutGroupId != soloGroup))
           continue;
         if (nx >= s.regionLeft && nx < s.regionRight && ny >= s.regionTop &&
             ny < s.regionBottom)

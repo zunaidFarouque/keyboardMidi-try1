@@ -3,8 +3,12 @@
 namespace {
 const juce::Identifier kTouchpadMixers("TouchpadMixers");
 const juce::Identifier kTouchpadMixer("TouchpadMixer");
+const juce::Identifier kLayoutGroupsNode("TouchpadLayoutGroups");
+const juce::Identifier kLayoutGroupNode("TouchpadLayoutGroup");
 const juce::Identifier kName("name");
 const juce::Identifier kLayerId("layerId");
+const juce::Identifier kLayoutGroupId("layoutGroupId");
+const juce::Identifier kLayoutGroupName("layoutGroupName");
 const juce::Identifier kNumFaders("numFaders");
 const juce::Identifier kCcStart("ccStart");
 const juce::Identifier kMidiChannel("midiChannel");
@@ -100,6 +104,8 @@ juce::ValueTree TouchpadMixerManager::toValueTree() const {
     child.setProperty(kType, typeToString(s.type), nullptr);
     child.setProperty(kName, juce::String(s.name), nullptr);
     child.setProperty(kLayerId, s.layerId, nullptr);
+    child.setProperty(kLayoutGroupId, s.layoutGroupId, nullptr);
+    child.setProperty(kLayoutGroupName, juce::String(s.layoutGroupName), nullptr);
     child.setProperty(kNumFaders, s.numFaders, nullptr);
     child.setProperty(kCcStart, s.ccStart, nullptr);
     child.setProperty(kMidiChannel, s.midiChannel, nullptr);
@@ -143,6 +149,17 @@ juce::ValueTree TouchpadMixerManager::toValueTree() const {
     }
     vt.addChild(child, -1, nullptr);
   }
+  // Serialize explicit layout groups (if any)
+  if (!groups_.empty()) {
+    juce::ValueTree groupsNode(kLayoutGroupsNode);
+    for (const auto &g : groups_) {
+      juce::ValueTree child(kLayoutGroupNode);
+      child.setProperty(kLayoutGroupId, g.id, nullptr);
+      child.setProperty(kLayoutGroupName, juce::String(g.name), nullptr);
+      groupsNode.addChild(child, -1, nullptr);
+    }
+    vt.addChild(groupsNode, -1, nullptr);
+  }
   return vt;
 }
 
@@ -162,104 +179,219 @@ void TouchpadMixerManager::restoreFromValueTree(const juce::ValueTree &vt) {
     return;
   juce::ScopedWriteLock lock(lock_);
   layouts_.clear();
+  groups_.clear();
   for (int i = 0; i < vt.getNumChildren(); ++i) {
     auto child = vt.getChild(i);
-    if (!child.hasType(kTouchpadMixer))
-      continue;
-    TouchpadMixerConfig s;
-    auto rawTypeVar = child.getProperty(kType, "mixer");
-    juce::String rawTypeStr = rawTypeVar.toString().trim();
-    bool typeWasHarmonic = rawTypeStr.equalsIgnoreCase("harmonicGrid");
-    s.type = parseType(rawTypeVar);
-    s.name = child.getProperty(kName, "Touchpad Mixer").toString().toStdString();
-    s.layerId = juce::jlimit(0, 8, (int)child.getProperty(kLayerId, 0));
-    s.numFaders =
-        juce::jlimit(1, 32, (int)child.getProperty(kNumFaders, 5));
-    s.ccStart = juce::jlimit(0, 127, (int)child.getProperty(kCcStart, 50));
-    s.midiChannel =
-        juce::jlimit(1, 16, (int)child.getProperty(kMidiChannel, 1));
-    s.inputMin = static_cast<float>(child.getProperty(kInputMin, 0.0));
-    s.inputMax = static_cast<float>(child.getProperty(kInputMax, 1.0));
-    s.outputMin = juce::jlimit(0, 127, (int)child.getProperty(kOutputMin, 0));
-    s.outputMax = juce::jlimit(0, 127, (int)child.getProperty(kOutputMax, 127));
-    int qp = (int)child.getProperty(kQuickPrecision, 0);
-    s.quickPrecision = (qp == 1) ? TouchpadMixerQuickPrecision::Precision
-                                 : TouchpadMixerQuickPrecision::Quick;
-    int ar = (int)child.getProperty(kAbsRel, 0);
-    s.absRel =
-        (ar == 1) ? TouchpadMixerAbsRel::Relative : TouchpadMixerAbsRel::Absolute;
-    int lf = (int)child.getProperty(kLockFree, 1);
-    s.lockFree = (lf == 0) ? TouchpadMixerLockFree::Lock
-                           : TouchpadMixerLockFree::Free;
-    s.muteButtonsEnabled = (bool)child.getProperty(kMuteButtonsEnabled, false);
-    if (child.hasProperty(kRegionLeft)) {
-      s.region.left =
-          static_cast<float>(child.getProperty(kRegionLeft, 0.0));
-      s.region.top =
-          static_cast<float>(child.getProperty(kRegionTop, 0.0));
-      s.region.right =
-          static_cast<float>(child.getProperty(kRegionRight, 1.0));
-      s.region.bottom =
-          static_cast<float>(child.getProperty(kRegionBottom, 1.0));
-    }
-    s.zIndex = juce::jlimit(-100, 100, (int)child.getProperty(kZIndex, 0));
-    s.regionLock = (bool)child.getProperty(kRegionLock, false);
-    if (s.type == TouchpadType::DrumPad ||
-        s.type == TouchpadType::ChordPad) {
-      s.drumPadRows =
-          juce::jlimit(1, 8, (int)child.getProperty(kDrumPadRows, 2));
-      s.drumPadColumns =
-          juce::jlimit(1, 16, (int)child.getProperty(kDrumPadColumns, 4));
-      s.drumPadMidiNoteStart = juce::jlimit(
-          0, 127, (int)child.getProperty(kDrumPadMidiNoteStart, 60));
-      s.drumPadBaseVelocity = juce::jlimit(
-          1, 127, (int)child.getProperty(kDrumPadBaseVelocity, 100));
-      s.drumPadVelocityRandom = juce::jlimit(
-          0, 127, (int)child.getProperty(kDrumPadVelocityRandom, 0));
-      s.drumPadDeadZoneLeft = static_cast<float>(
-          child.getProperty(kDrumPadDeadZoneLeft, 0.0));
-      s.drumPadDeadZoneRight = static_cast<float>(
-          child.getProperty(kDrumPadDeadZoneRight, 0.0));
-      s.drumPadDeadZoneTop = static_cast<float>(
-          child.getProperty(kDrumPadDeadZoneTop, 0.0));
-      s.drumPadDeadZoneBottom = static_cast<float>(
-          child.getProperty(kDrumPadDeadZoneBottom, 0.0));
-      if (!child.hasProperty(kRegionLeft)) {
-        s.region.left = s.drumPadDeadZoneLeft;
-        s.region.top = s.drumPadDeadZoneTop;
-        s.region.right = 1.0f - s.drumPadDeadZoneRight;
-        s.region.bottom = 1.0f - s.drumPadDeadZoneBottom;
+    if (child.hasType(kTouchpadMixer)) {
+      TouchpadMixerConfig s;
+      auto rawTypeVar = child.getProperty(kType, "mixer");
+      juce::String rawTypeStr = rawTypeVar.toString().trim();
+      bool typeWasHarmonic = rawTypeStr.equalsIgnoreCase("harmonicGrid");
+      s.type = parseType(rawTypeVar);
+      s.name =
+          child.getProperty(kName, "Touchpad Mixer").toString().toStdString();
+      s.layerId = juce::jlimit(0, 8, (int)child.getProperty(kLayerId, 0));
+      s.layoutGroupId =
+          juce::jlimit(0, 128, (int)child.getProperty(kLayoutGroupId, 0));
+      s.layoutGroupName = child
+                               .getProperty(kLayoutGroupName, juce::String())
+                               .toString()
+                               .trim()
+                               .toStdString();
+      s.numFaders = juce::jlimit(1, 32, (int)child.getProperty(kNumFaders, 5));
+      s.ccStart = juce::jlimit(0, 127, (int)child.getProperty(kCcStart, 50));
+      s.midiChannel =
+          juce::jlimit(1, 16, (int)child.getProperty(kMidiChannel, 1));
+      s.inputMin = static_cast<float>(child.getProperty(kInputMin, 0.0));
+      s.inputMax = static_cast<float>(child.getProperty(kInputMax, 1.0));
+      s.outputMin =
+          juce::jlimit(0, 127, (int)child.getProperty(kOutputMin, 0));
+      s.outputMax =
+          juce::jlimit(0, 127, (int)child.getProperty(kOutputMax, 127));
+      int qp = (int)child.getProperty(kQuickPrecision, 0);
+      s.quickPrecision = (qp == 1) ? TouchpadMixerQuickPrecision::Precision
+                                   : TouchpadMixerQuickPrecision::Quick;
+      int ar = (int)child.getProperty(kAbsRel, 0);
+      s.absRel = (ar == 1) ? TouchpadMixerAbsRel::Relative
+                           : TouchpadMixerAbsRel::Absolute;
+      int lf = (int)child.getProperty(kLockFree, 1);
+      s.lockFree = (lf == 0) ? TouchpadMixerLockFree::Lock
+                             : TouchpadMixerLockFree::Free;
+      s.muteButtonsEnabled =
+          (bool)child.getProperty(kMuteButtonsEnabled, false);
+      if (child.hasProperty(kRegionLeft)) {
+        s.region.left =
+            static_cast<float>(child.getProperty(kRegionLeft, 0.0));
+        s.region.top = static_cast<float>(child.getProperty(kRegionTop, 0.0));
+        s.region.right =
+            static_cast<float>(child.getProperty(kRegionRight, 1.0));
+        s.region.bottom =
+            static_cast<float>(child.getProperty(kRegionBottom, 1.0));
       }
-    }
-    if (s.type == TouchpadType::DrumPad) {
-      // Layout mode: persisted as int; fallback to legacy type name when absent.
-      int layoutRaw =
-          static_cast<int>(child.getProperty(kDrumPadLayoutMode, -1));
-      if (layoutRaw == static_cast<int>(DrumPadLayoutMode::Classic) ||
-          layoutRaw == static_cast<int>(DrumPadLayoutMode::HarmonicGrid)) {
-        s.drumPadLayoutMode = static_cast<DrumPadLayoutMode>(layoutRaw);
-      } else {
-        s.drumPadLayoutMode = typeWasHarmonic ? DrumPadLayoutMode::HarmonicGrid
-                                              : DrumPadLayoutMode::Classic;
+      s.zIndex = juce::jlimit(-100, 100, (int)child.getProperty(kZIndex, 0));
+      s.regionLock = (bool)child.getProperty(kRegionLock, false);
+      if (s.type == TouchpadType::DrumPad ||
+          s.type == TouchpadType::ChordPad) {
+        s.drumPadRows =
+            juce::jlimit(1, 8, (int)child.getProperty(kDrumPadRows, 2));
+        s.drumPadColumns =
+            juce::jlimit(1, 16, (int)child.getProperty(kDrumPadColumns, 4));
+        s.drumPadMidiNoteStart = juce::jlimit(
+            0, 127, (int)child.getProperty(kDrumPadMidiNoteStart, 60));
+        s.drumPadBaseVelocity = juce::jlimit(
+            1, 127, (int)child.getProperty(kDrumPadBaseVelocity, 100));
+        s.drumPadVelocityRandom = juce::jlimit(
+            0, 127, (int)child.getProperty(kDrumPadVelocityRandom, 0));
+        s.drumPadDeadZoneLeft = static_cast<float>(
+            child.getProperty(kDrumPadDeadZoneLeft, 0.0));
+        s.drumPadDeadZoneRight = static_cast<float>(
+            child.getProperty(kDrumPadDeadZoneRight, 0.0));
+        s.drumPadDeadZoneTop = static_cast<float>(
+            child.getProperty(kDrumPadDeadZoneTop, 0.0));
+        s.drumPadDeadZoneBottom = static_cast<float>(
+            child.getProperty(kDrumPadDeadZoneBottom, 0.0));
+        if (!child.hasProperty(kRegionLeft)) {
+          s.region.left = s.drumPadDeadZoneLeft;
+          s.region.top = s.drumPadDeadZoneTop;
+          s.region.right = 1.0f - s.drumPadDeadZoneRight;
+          s.region.bottom = 1.0f - s.drumPadDeadZoneBottom;
+        }
       }
+      if (s.type == TouchpadType::DrumPad) {
+        // Layout mode: persisted as int; fallback to legacy type name when
+        // absent.
+        int layoutRaw =
+            static_cast<int>(child.getProperty(kDrumPadLayoutMode, -1));
+        if (layoutRaw == static_cast<int>(DrumPadLayoutMode::Classic) ||
+            layoutRaw == static_cast<int>(DrumPadLayoutMode::HarmonicGrid)) {
+          s.drumPadLayoutMode = static_cast<DrumPadLayoutMode>(layoutRaw);
+        } else {
+          s.drumPadLayoutMode =
+              typeWasHarmonic ? DrumPadLayoutMode::HarmonicGrid
+                              : DrumPadLayoutMode::Classic;
+        }
 
-      s.harmonicRowInterval = (int)child.getProperty(
-          kHarmonicRowInterval, s.harmonicRowInterval);
-      s.harmonicUseScaleFilter = (bool)child.getProperty(
-          kHarmonicUseScaleFilter, s.harmonicUseScaleFilter);
-    } else if (s.type == TouchpadType::ChordPad) {
-      s.chordPadPreset =
-          (int)child.getProperty(kChordPadPreset, s.chordPadPreset);
-      s.chordPadLatchMode = (bool)child.getProperty(
-          kChordPadLatchMode, s.chordPadLatchMode);
+        s.harmonicRowInterval = (int)child.getProperty(
+            kHarmonicRowInterval, s.harmonicRowInterval);
+        s.harmonicUseScaleFilter = (bool)child.getProperty(
+            kHarmonicUseScaleFilter, s.harmonicUseScaleFilter);
+      } else if (s.type == TouchpadType::ChordPad) {
+        s.chordPadPreset =
+            (int)child.getProperty(kChordPadPreset, s.chordPadPreset);
+        s.chordPadLatchMode = (bool)child.getProperty(
+            kChordPadLatchMode, s.chordPadLatchMode);
+      }
+      if (s.type == TouchpadType::Mixer && !child.hasProperty(kRegionLeft)) {
+        s.region.left = 0.0f;
+        s.region.top = 0.0f;
+        s.region.right = 1.0f;
+        s.region.bottom = 1.0f;
+      }
+      layouts_.push_back(s);
+    } else if (child.hasType(kLayoutGroupsNode)) {
+      groups_.clear();
+      for (int j = 0; j < child.getNumChildren(); ++j) {
+        auto gNode = child.getChild(j);
+        if (!gNode.hasType(kLayoutGroupNode))
+          continue;
+        TouchpadLayoutGroup g;
+        g.id = (int)gNode.getProperty(kLayoutGroupId, 0);
+        g.name = gNode.getProperty(kLayoutGroupName, juce::String())
+                     .toString()
+                     .trim()
+                     .toStdString();
+        if (g.id > 0)
+          groups_.push_back(g);
+      }
     }
-    if (s.type == TouchpadType::Mixer && !child.hasProperty(kRegionLeft)) {
-      s.region.left = 0.0f;
-      s.region.top = 0.0f;
-      s.region.right = 1.0f;
-      s.region.bottom = 1.0f;
+  }
+
+  // Backward compatibility: if no groups were serialized but layouts refer to
+  // non-zero layoutGroupId values, synthesise groups from layouts.
+  if (groups_.empty()) {
+    std::map<int, juce::String> derived;
+    for (const auto &layout : layouts_) {
+      if (layout.layoutGroupId <= 0)
+        continue;
+      auto it = derived.find(layout.layoutGroupId);
+      juce::String name = layout.layoutGroupName.empty()
+                              ? ("Group " + juce::String(layout.layoutGroupId))
+                              : juce::String(layout.layoutGroupName);
+      if (it == derived.end())
+        derived[layout.layoutGroupId] = name;
     }
-    layouts_.push_back(s);
+    for (const auto &p : derived) {
+      TouchpadLayoutGroup g;
+      g.id = p.first;
+      g.name = p.second.toStdString();
+      groups_.push_back(g);
+    }
+  }
+
+  sendChangeMessage();
+}
+
+std::vector<TouchpadLayoutGroup> TouchpadMixerManager::getGroups() const {
+  juce::ScopedReadLock lock(lock_);
+  return groups_;
+}
+
+void TouchpadMixerManager::addGroup(const TouchpadLayoutGroup &group) {
+  juce::ScopedWriteLock lock(lock_);
+  if (group.id <= 0)
+    return;
+  // Avoid duplicates by id.
+  for (const auto &g : groups_) {
+    if (g.id == group.id)
+      return;
+  }
+  groups_.push_back(group);
+  sendChangeMessage();
+}
+
+void TouchpadMixerManager::removeGroup(int groupId) {
+  if (groupId <= 0)
+    return;
+  juce::ScopedWriteLock lock(lock_);
+  // Remove from groups_
+  groups_.erase(
+      std::remove_if(groups_.begin(), groups_.end(),
+                     [groupId](const TouchpadLayoutGroup &g) {
+                       return g.id == groupId;
+                     }),
+      groups_.end());
+  // Clear layout references
+  for (auto &layout : layouts_) {
+    if (layout.layoutGroupId == groupId) {
+      layout.layoutGroupId = 0;
+      layout.layoutGroupName.clear();
+    }
   }
   sendChangeMessage();
+}
+
+void TouchpadMixerManager::renameGroup(int groupId,
+                                       const juce::String &newName) {
+  if (groupId <= 0)
+    return;
+  juce::ScopedWriteLock lock(lock_);
+  for (auto &g : groups_) {
+    if (g.id == groupId) {
+      g.name = newName.toStdString();
+      break;
+    }
+  }
+  sendChangeMessage();
+}
+
+std::map<int, juce::String> TouchpadMixerManager::getLayoutGroups() const {
+  juce::ScopedReadLock lock(lock_);
+  std::map<int, juce::String> out;
+  for (const auto &g : groups_) {
+    if (g.id <= 0)
+      continue;
+    out[g.id] = juce::String(g.name.empty() ? ("Group " + juce::String(g.id))
+                                            : g.name);
+  }
+  return out;
 }

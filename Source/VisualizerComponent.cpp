@@ -773,8 +773,15 @@ void VisualizerComponent::handleTouchpadContacts(
     int throttleMs = settingsManager ? settingsManager->getWindowRefreshIntervalMs()
                                     : 34;
     int64_t now = juce::Time::getMillisecondCounter();
-    if (now - lastTouchpadPanelUpdateMs >= throttleMs) {
+    bool throttleOk = (now - lastTouchpadPanelUpdateMs >= throttleMs);
+    bool liftDetected = false;
+    {
+      juce::ScopedLock lock(contactsLock);
+      liftDetected = touchpadContactsHaveLift(lastSentToPanelContacts_, contacts);
+    }
+    if (throttleOk || liftDetected) {
       lastTouchpadPanelUpdateMs = now;
+      lastSentToPanelContacts_ = contacts;
       touchpadPanel_->setContacts(contacts, deviceHandle);
     }
   }

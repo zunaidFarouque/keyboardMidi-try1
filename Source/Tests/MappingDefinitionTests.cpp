@@ -158,6 +158,114 @@ TEST(MappingDefinitionTest, LayerUnifiedUI) {
   }
 }
 
+// Touchpad solo command: unified UI with category + scope + type + group id
+TEST(MappingDefinitionTest, TouchpadSoloCommandHasCategoryScopeTypeAndGroup) {
+  juce::ValueTree mapping("Mapping");
+  mapping.setProperty("type", "Command", nullptr);
+  mapping.setProperty(
+      "data1",
+      (int)MIDIQy::CommandID::TouchpadLayoutGroupSoloMomentary,
+      nullptr);
+
+  InspectorSchema schema = MappingDefinition::getSchema(mapping);
+
+  const InspectorControl *cmdCtrl = nullptr;
+  const InspectorControl *scopeCtrl = nullptr;
+  const InspectorControl *typeCtrl = nullptr;
+  const InspectorControl *groupCtrl = nullptr;
+  for (const auto &c : schema) {
+    if (c.propertyId == "commandCategory")
+      cmdCtrl = &c;
+    else if (c.propertyId == "touchpadSoloScope")
+      scopeCtrl = &c;
+    else if (c.propertyId == "touchpadSoloType")
+      typeCtrl = &c;
+    else if (c.propertyId == "touchpadLayoutGroupId")
+      groupCtrl = &c;
+  }
+
+  ASSERT_NE(cmdCtrl, nullptr);
+  EXPECT_EQ(cmdCtrl->label, "Command");
+  ASSERT_NE(scopeCtrl, nullptr);
+  ASSERT_NE(typeCtrl, nullptr);
+  ASSERT_NE(groupCtrl, nullptr);
+}
+
+// Verify touchpadSoloType has correct options
+TEST(MappingDefinitionTest, TouchpadSoloTypeHasCorrectOptions) {
+  juce::ValueTree mapping("Mapping");
+  mapping.setProperty("type", "Command", nullptr);
+  mapping.setProperty(
+      "data1",
+      (int)MIDIQy::CommandID::TouchpadLayoutGroupSoloMomentary,
+      nullptr);
+
+  InspectorSchema schema = MappingDefinition::getSchema(mapping);
+
+  const InspectorControl *typeCtrl = nullptr;
+  for (const auto &c : schema) {
+    if (c.propertyId == "touchpadSoloType") {
+      typeCtrl = &c;
+      break;
+    }
+  }
+
+  ASSERT_NE(typeCtrl, nullptr);
+  EXPECT_EQ(typeCtrl->label, "Solo type");
+  EXPECT_EQ(typeCtrl->controlType, InspectorControl::Type::ComboBox);
+  EXPECT_EQ(typeCtrl->options.size(), 4u) << "Should have 4 solo type options";
+  auto it1 = typeCtrl->options.find(1);
+  ASSERT_NE(it1, typeCtrl->options.end());
+  EXPECT_EQ(it1->second, "Hold");
+  auto it2 = typeCtrl->options.find(2);
+  ASSERT_NE(it2, typeCtrl->options.end());
+  EXPECT_EQ(it2->second, "Toggle");
+  auto it3 = typeCtrl->options.find(3);
+  ASSERT_NE(it3, typeCtrl->options.end());
+  EXPECT_EQ(it3->second, "Set");
+  auto it4 = typeCtrl->options.find(4);
+  ASSERT_NE(it4, typeCtrl->options.end());
+  EXPECT_EQ(it4->second, "Clear");
+}
+
+// Verify touchpad solo controls appear for all touchpad solo command IDs
+TEST(MappingDefinitionTest, TouchpadSoloControlsAppearForAllSoloTypes) {
+  using MIDIQy::CommandID;
+  std::vector<CommandID> soloCommands = {
+      CommandID::TouchpadLayoutGroupSoloMomentary,
+      CommandID::TouchpadLayoutGroupSoloToggle,
+      CommandID::TouchpadLayoutGroupSoloSet,
+      CommandID::TouchpadLayoutGroupSoloClear};
+
+  for (auto cmd : soloCommands) {
+    juce::ValueTree mapping("Mapping");
+    mapping.setProperty("type", "Command", nullptr);
+    mapping.setProperty("data1", static_cast<int>(cmd), nullptr);
+
+    InspectorSchema schema = MappingDefinition::getSchema(mapping);
+
+    bool hasSoloType = false;
+    bool hasSoloScope = false;
+    bool hasLayoutGroup = false;
+    for (const auto &c : schema) {
+      if (c.propertyId == "touchpadSoloType")
+        hasSoloType = true;
+      else if (c.propertyId == "touchpadSoloScope")
+        hasSoloScope = true;
+      else if (c.propertyId == "touchpadLayoutGroupId")
+        hasLayoutGroup = true;
+    }
+
+    EXPECT_TRUE(hasSoloType) << "Should have touchpadSoloType for command "
+                              << static_cast<int>(cmd);
+    EXPECT_TRUE(hasSoloScope) << "Should have touchpadSoloScope for command "
+                               << static_cast<int>(cmd);
+    EXPECT_TRUE(hasLayoutGroup)
+        << "Should have touchpadLayoutGroupId for command "
+        << static_cast<int>(cmd);
+  }
+}
+
 // CC Expression uses Value when On / Value when Off (no data2 peak slider)
 TEST(MappingDefinitionTest, EnvelopeContext) {
   juce::ValueTree mapping("Mapping");

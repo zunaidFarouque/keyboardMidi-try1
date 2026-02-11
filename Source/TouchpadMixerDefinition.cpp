@@ -29,6 +29,14 @@ InspectorSchema TouchpadMixerDefinition::getCommonLayoutHeader() {
   for (int i = 1; i <= 8; ++i)
     layerCtrl.options[i + 1] = "Layer " + juce::String(i);
   schema.push_back(layerCtrl);
+
+  // Optional layout group (drop-down, populated from registry).
+  InspectorControl groupIdCtrl;
+  groupIdCtrl.propertyId = "layoutGroupId";
+  groupIdCtrl.label = "Layout group";
+  groupIdCtrl.controlType = InspectorControl::Type::ComboBox;
+  groupIdCtrl.options[0] = "- No Group -"; // Actual group list filled in editor
+  schema.push_back(groupIdCtrl);
   InspectorControl chCtrl;
   chCtrl.propertyId = "midiChannel";
   chCtrl.label = "Channel";

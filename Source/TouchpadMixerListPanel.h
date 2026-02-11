@@ -31,6 +31,7 @@ private:
   juce::ListBox listBox;
   juce::TextButton addButton;
   juce::TextButton removeButton;
+  juce::TextButton groupsButton;
 
   JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(TouchpadMixerListPanel)
 };

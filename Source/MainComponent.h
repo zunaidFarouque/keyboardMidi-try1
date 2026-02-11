@@ -155,6 +155,7 @@ private:
   // Throttle + async: mini window touchpad updates run on message thread, never
   // block MIDI/audio input path. Uses cap-30-FPS setting (30 or 60 fps).
   int64_t lastMiniWindowTouchpadUpdateMs = 0;
+  std::vector<TouchpadContact> lastMiniWindowContacts_; // for lift-priority throttle bypass
 
   // ChangeListener implementation
   void changeListenerCallback(juce::ChangeBroadcaster *source) override;

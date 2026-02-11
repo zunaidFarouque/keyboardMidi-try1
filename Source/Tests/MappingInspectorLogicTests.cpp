@@ -120,6 +120,38 @@ static InspectorControl makeData1CommandControl() {
   return c;
 }
 
+static InspectorControl makeTouchpadSoloScopeControl() {
+  InspectorControl c;
+  c.propertyId = "touchpadSoloScope";
+  c.controlType = InspectorControl::Type::ComboBox;
+  c.options[1] = "Global";
+  c.options[2] = "Layer (forget on change)";
+  c.options[3] = "Layer (remember)";
+  return c;
+}
+
+static InspectorControl makeTouchpadSoloTypeControl() {
+  InspectorControl c;
+  c.propertyId = "touchpadSoloType";
+  c.controlType = InspectorControl::Type::ComboBox;
+  c.options[1] = "Hold";
+  c.options[2] = "Toggle";
+  c.options[3] = "Set";
+  c.options[4] = "Clear";
+  return c;
+}
+
+static InspectorControl makeTouchpadLayoutGroupIdControl() {
+  InspectorControl c;
+  c.propertyId = "touchpadLayoutGroupId";
+  c.controlType = InspectorControl::Type::ComboBox;
+  // IDs are virtual; MappingInspectorLogic maps combo id -> stored group id.
+  c.options[1] = "- No Group -";
+  c.options[2] = "Group 1";
+  c.options[3] = "Group 2";
+  return c;
+}
+
 // --- type ---
 TEST(MappingInspectorLogicTest, ApplyType_Note) {
   juce::ValueTree mapping("Mapping");
@@ -373,6 +405,152 @@ TEST(MappingInspectorLogicTest, ApplyData1Command_TransposeId) {
   auto def = makeData1CommandControl();
   MappingInspectorLogic::applyComboSelectionToMapping(mapping, def, 6, &undo);
   EXPECT_EQ(static_cast<int>(mapping.getProperty("data1")), 6);
+}
+
+// --- touchpadSoloScope (1,2,3 -> 0,1,2) ---
+TEST(MappingInspectorLogicTest, ApplyTouchpadSoloScope_Global) {
+  juce::ValueTree mapping("Mapping");
+  juce::UndoManager undo;
+  auto def = makeTouchpadSoloScopeControl();
+  MappingInspectorLogic::applyComboSelectionToMapping(mapping, def, 1, &undo);
+  EXPECT_EQ(static_cast<int>(mapping.getProperty("touchpadSoloScope")), 0);
+}
+
+TEST(MappingInspectorLogicTest, ApplyTouchpadSoloScope_LayerForget) {
+  juce::ValueTree mapping("Mapping");
+  juce::UndoManager undo;
+  auto def = makeTouchpadSoloScopeControl();
+  MappingInspectorLogic::applyComboSelectionToMapping(mapping, def, 2, &undo);
+  EXPECT_EQ(static_cast<int>(mapping.getProperty("touchpadSoloScope")), 1);
+}
+
+TEST(MappingInspectorLogicTest, ApplyTouchpadSoloScope_LayerRemember) {
+  juce::ValueTree mapping("Mapping");
+  juce::UndoManager undo;
+  auto def = makeTouchpadSoloScopeControl();
+  MappingInspectorLogic::applyComboSelectionToMapping(mapping, def, 3, &undo);
+  EXPECT_EQ(static_cast<int>(mapping.getProperty("touchpadSoloScope")), 2);
+}
+
+// --- touchpadSoloType (1..4 -> CommandID enum values) ---
+TEST(MappingInspectorLogicTest, ApplyTouchpadSoloType_Momentary) {
+  juce::ValueTree mapping("Mapping");
+  juce::UndoManager undo;
+  auto def = makeTouchpadSoloTypeControl();
+  MappingInspectorLogic::applyComboSelectionToMapping(mapping, def, 1, &undo);
+  EXPECT_EQ(static_cast<int>(mapping.getProperty("data1")),
+            static_cast<int>(MIDIQy::CommandID::TouchpadLayoutGroupSoloMomentary));
+}
+
+TEST(MappingInspectorLogicTest, ApplyTouchpadSoloType_Toggle) {
+  juce::ValueTree mapping("Mapping");
+  juce::UndoManager undo;
+  auto def = makeTouchpadSoloTypeControl();
+  MappingInspectorLogic::applyComboSelectionToMapping(mapping, def, 2, &undo);
+  EXPECT_EQ(static_cast<int>(mapping.getProperty("data1")),
+            static_cast<int>(MIDIQy::CommandID::TouchpadLayoutGroupSoloToggle));
+}
+
+TEST(MappingInspectorLogicTest, ApplyTouchpadSoloType_Set) {
+  juce::ValueTree mapping("Mapping");
+  juce::UndoManager undo;
+  auto def = makeTouchpadSoloTypeControl();
+  MappingInspectorLogic::applyComboSelectionToMapping(mapping, def, 3, &undo);
+  EXPECT_EQ(static_cast<int>(mapping.getProperty("data1")),
+            static_cast<int>(MIDIQy::CommandID::TouchpadLayoutGroupSoloSet));
+}
+
+TEST(MappingInspectorLogicTest, ApplyTouchpadSoloType_Clear) {
+  juce::ValueTree mapping("Mapping");
+  juce::UndoManager undo;
+  auto def = makeTouchpadSoloTypeControl();
+  MappingInspectorLogic::applyComboSelectionToMapping(mapping, def, 4, &undo);
+  EXPECT_EQ(static_cast<int>(mapping.getProperty("data1")),
+            static_cast<int>(MIDIQy::CommandID::TouchpadLayoutGroupSoloClear));
+}
+
+// Verify touchpadSoloType round-trip: set data1, change solo type, verify data1 updates
+TEST(MappingInspectorLogicTest, TouchpadSoloTypeRoundTrip_MomentaryToToggle) {
+  juce::ValueTree mapping("Mapping");
+  juce::UndoManager undo;
+  mapping.setProperty("type", "Command", &undo);
+  mapping.setProperty("data1",
+                      static_cast<int>(MIDIQy::CommandID::TouchpadLayoutGroupSoloMomentary),
+                      &undo);
+
+  auto def = makeTouchpadSoloTypeControl();
+  // Change from Momentary (1) to Toggle (2)
+  MappingInspectorLogic::applyComboSelectionToMapping(mapping, def, 2, &undo);
+
+  EXPECT_EQ(static_cast<int>(mapping.getProperty("data1")),
+            static_cast<int>(MIDIQy::CommandID::TouchpadLayoutGroupSoloToggle));
+  // Verify touchpadSoloType property doesn't exist (it's virtual, maps to data1)
+  EXPECT_TRUE(mapping.getProperty("touchpadSoloType").isVoid());
+}
+
+TEST(MappingInspectorLogicTest, TouchpadSoloTypeRoundTrip_ToggleToSet) {
+  juce::ValueTree mapping("Mapping");
+  juce::UndoManager undo;
+  mapping.setProperty("type", "Command", &undo);
+  mapping.setProperty("data1",
+                      static_cast<int>(MIDIQy::CommandID::TouchpadLayoutGroupSoloToggle),
+                      &undo);
+
+  auto def = makeTouchpadSoloTypeControl();
+  // Change from Toggle (2) to Set (3)
+  MappingInspectorLogic::applyComboSelectionToMapping(mapping, def, 3, &undo);
+
+  EXPECT_EQ(static_cast<int>(mapping.getProperty("data1")),
+            static_cast<int>(MIDIQy::CommandID::TouchpadLayoutGroupSoloSet));
+}
+
+TEST(MappingInspectorLogicTest, TouchpadSoloTypeRoundTrip_SetToClear) {
+  juce::ValueTree mapping("Mapping");
+  juce::UndoManager undo;
+  mapping.setProperty("type", "Command", &undo);
+  mapping.setProperty("data1",
+                      static_cast<int>(MIDIQy::CommandID::TouchpadLayoutGroupSoloSet),
+                      &undo);
+
+  auto def = makeTouchpadSoloTypeControl();
+  // Change from Set (3) to Clear (4)
+  MappingInspectorLogic::applyComboSelectionToMapping(mapping, def, 4, &undo);
+
+  EXPECT_EQ(static_cast<int>(mapping.getProperty("data1")),
+            static_cast<int>(MIDIQy::CommandID::TouchpadLayoutGroupSoloClear));
+}
+
+TEST(MappingInspectorLogicTest, TouchpadSoloTypeRoundTrip_ClearToMomentary) {
+  juce::ValueTree mapping("Mapping");
+  juce::UndoManager undo;
+  mapping.setProperty("type", "Command", &undo);
+  mapping.setProperty("data1",
+                      static_cast<int>(MIDIQy::CommandID::TouchpadLayoutGroupSoloClear),
+                      &undo);
+
+  auto def = makeTouchpadSoloTypeControl();
+  // Change from Clear (4) back to Momentary (1)
+  MappingInspectorLogic::applyComboSelectionToMapping(mapping, def, 1, &undo);
+
+  EXPECT_EQ(static_cast<int>(mapping.getProperty("data1")),
+            static_cast<int>(MIDIQy::CommandID::TouchpadLayoutGroupSoloMomentary));
+}
+
+// --- touchpadLayoutGroupId (combo 1..N -> stored 0..N-1) ---
+TEST(MappingInspectorLogicTest, ApplyTouchpadLayoutGroupId_NoGroupStoresZero) {
+  juce::ValueTree mapping("Mapping");
+  juce::UndoManager undo;
+  auto def = makeTouchpadLayoutGroupIdControl();
+  MappingInspectorLogic::applyComboSelectionToMapping(mapping, def, 1, &undo);
+  EXPECT_EQ(static_cast<int>(mapping.getProperty("touchpadLayoutGroupId")), 0);
+}
+
+TEST(MappingInspectorLogicTest, ApplyTouchpadLayoutGroupId_Group1StoresOne) {
+  juce::ValueTree mapping("Mapping");
+  juce::UndoManager undo;
+  auto def = makeTouchpadLayoutGroupIdControl();
+  MappingInspectorLogic::applyComboSelectionToMapping(mapping, def, 2, &undo);
+  EXPECT_EQ(static_cast<int>(mapping.getProperty("touchpadLayoutGroupId")), 1);
 }
 
 // --- invalid mapping is no-op ---

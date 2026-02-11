@@ -1,10 +1,20 @@
-Now, we need to extend the types in touchpad entries.
+Migrate from Mappings Tab to Touchpad Tab.
+> already discussing
 
-1. we have the touchpad mixer entry (DONT CHANGE IT).
-2. we will add a new entry: drum pad/launcher: user can determine how many rows/columns they want, and the midi note it should send (starting position). they will be able to do finger drumming. There will be base velocity and velocity random too.  customizable grid with customizable dead zones (if user wants to have dead zones on the edges of grid to prevent accidental triggers)
-
-!!!DONE!!!
 ===
 
+We need to add a new type of touchpad layout: Encoders.
+Encoders are important for many navigation stuff and other stuff.
+We need to implement it
 
-now, add more layout types
+===
+
+Currently, there is no way to visualize the other layers of mapping if not physically went there.
+So, create a switch/checkbox that when enabled, shows the specific layer that has been selected.
+
+example:
+if this checkbox is selected:
+if currently in the mappings tab, visualizer will show the currently selected layer in that tab
+if currently in the zones tab, visualizer will show the layer which currently selected zone is bound to
+
+so, add the checkbox/toggle swtich in appropriate place...

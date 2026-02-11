@@ -52,6 +52,13 @@ enum class DrumPadLayoutMode {
   HarmonicGrid = 1  // Isomorphic harmonic grid (rowInterval + scale filter)
 };
 
+// Named layout group for touchpad layouts. Groups live in TouchpadMixerManager
+// and layouts refer to them by ID.
+struct TouchpadLayoutGroup {
+  int id = 0;
+  std::string name;
+};
+
 // Config for one touchpad strip (serialized in preset / session).
 // type determines which controls apply:
 // - Mixer       = vertical CC faders
@@ -60,6 +67,10 @@ struct TouchpadMixerConfig {
   TouchpadType type = TouchpadType::Mixer;
   std::string name = "Touchpad Mixer";
   int layerId = 0;
+  // Optional layout group: 0 = none (follows layer only), >0 = group ID
+  // Layout groups are used for conditional visibility / soloing.
+  int layoutGroupId = 0;
+  std::string layoutGroupName;
   // Mixer fields (used when type == Mixer)
   int numFaders = 5;
   int ccStart = 50;
@@ -126,6 +137,7 @@ static constexpr float kMuteButtonRegionTop = 0.85f;     // Bottom 15% = mute
 // Compiled entry for runtime (no ValueTree in hot path).
 struct TouchpadMixerEntry {
   int layerId = 0;
+  int layoutGroupId = 0;
   int numFaders = 0;
   int ccStart = 0;
   int midiChannel = 1;
@@ -153,6 +165,7 @@ struct TouchpadMixerEntry {
 // layoutMode selects between Classic and Harmonic behaviours.
 struct TouchpadDrumPadEntry {
   int layerId = 0;
+  int layoutGroupId = 0;
   int rows = 0;
   int columns = 0;
   int numPads = 0;
@@ -176,6 +189,7 @@ struct TouchpadDrumPadEntry {
 // generated at runtime from (preset, baseNote, pad index).
 struct TouchpadChordPadEntry {
   int layerId = 0;
+  int layoutGroupId = 0;
   int rows = 0;
   int columns = 0;
   int midiChannel = 1;
@@ -194,6 +208,7 @@ struct TouchpadChordPadEntry {
 // Bottom rows = drums (note grid), top rows = FX pads (CC toggles/momentary).
 struct TouchpadDrumFxSplitEntry {
   int layerId = 0;
+  int layoutGroupId = 0;
   int rows = 0;
   int columns = 0;
   int splitRow = 1; // FX region starts at this row index (0..rows)

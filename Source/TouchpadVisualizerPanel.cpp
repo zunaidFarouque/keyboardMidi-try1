@@ -5,6 +5,7 @@
 #include "TouchpadMixerTypes.h"
 #include <algorithm>
 #include <optional>
+#include <set>
 
 TouchpadVisualizerPanel::TouchpadVisualizerPanel(InputProcessor *inputProc,
                                                  SettingsManager *settingsMgr)
@@ -15,9 +16,46 @@ TouchpadVisualizerPanel::~TouchpadVisualizerPanel() { stopTimer(); }
 void TouchpadVisualizerPanel::setContacts(
     const std::vector<TouchpadContact> &contacts, uintptr_t deviceHandle) {
   juce::ScopedLock lock(contactsLock_);
+  int64_t now = juce::Time::getMillisecondCounter();
+  
+  // Update timestamps for all contacts in the new list
+  std::set<int> currentContactIds;
+  for (const auto &contact : contacts) {
+    contactLastUpdateTime_[contact.contactId] = now;
+    currentContactIds.insert(contact.contactId);
+  }
+  
+  // Remove entries for contacts that are no longer present
+  // (clean up old contactIds that are no longer active)
+  for (auto it = contactLastUpdateTime_.begin(); it != contactLastUpdateTime_.end();) {
+    if (currentContactIds.find(it->first) == currentContactIds.end()) {
+      it = contactLastUpdateTime_.erase(it);
+    } else {
+      ++it;
+    }
+  }
+  
   contacts_ = contacts;
   lastDeviceHandle_.store(deviceHandle, std::memory_order_release);
+
+  // Track last time we had at least one finger down (for timer efficiency)
+  bool hasTipDown = false;
+  for (const auto &c : contacts)
+    if (c.tipDown) { hasTipDown = true; break; }
+  if (hasTipDown)
+    lastTimeHadContactsMs_ = now;
+
   repaint();
+
+  // Only run timer when there's something to update: contacts active or in timeout window
+  if (isVisible()) {
+    if (hasTipDown || (now - lastTimeHadContactsMs_ <= kContactTimeoutMs)) {
+      int interval = settingsManager ? settingsManager->getWindowRefreshIntervalMs()
+                                     : kDefaultRefreshIntervalMs;
+      if (!isTimerRunning())
+        startTimer(interval);
+    }
+  }
 }
 
 void TouchpadVisualizerPanel::setVisualizedLayer(int layerId) {
@@ -36,22 +74,80 @@ void TouchpadVisualizerPanel::setShowContactCoordinates(bool show) {
 
 void TouchpadVisualizerPanel::restartTimerWithInterval(int intervalMs) {
   stopTimer();
-  if (isVisible())
+  if (!isVisible()) return;
+  int64_t now = juce::Time::getMillisecondCounter();
+  juce::ScopedLock lock(contactsLock_);
+  bool hasTipDown = false;
+  for (const auto &c : contacts_)
+    if (c.tipDown) { hasTipDown = true; break; }
+  if (hasTipDown || (now - lastTimeHadContactsMs_ <= kContactTimeoutMs))
     startTimer(intervalMs);
 }
 
 void TouchpadVisualizerPanel::visibilityChanged() {
   if (isVisible()) {
-    int interval = settingsManager
-                       ? settingsManager->getWindowRefreshIntervalMs()
-                       : kDefaultRefreshIntervalMs;
-    startTimer(interval);
+    int64_t now = juce::Time::getMillisecondCounter();
+    juce::ScopedLock lock(contactsLock_);
+    bool hasTipDown = false;
+    for (const auto &c : contacts_)
+      if (c.tipDown) { hasTipDown = true; break; }
+    bool inTimeoutWindow = (now - lastTimeHadContactsMs_ <= kContactTimeoutMs);
+    if (hasTipDown || inTimeoutWindow) {
+      int interval = settingsManager
+                         ? settingsManager->getWindowRefreshIntervalMs()
+                         : kDefaultRefreshIntervalMs;
+      startTimer(interval);
+    }
   } else {
     stopTimer();
   }
 }
 
-void TouchpadVisualizerPanel::timerCallback() { repaint(); }
+void TouchpadVisualizerPanel::timerCallback() {
+  int64_t now = juce::Time::getMillisecondCounter();
+  std::vector<TouchpadContact> contactsSnapshot;
+  std::unordered_map<int, int64_t> timestampSnapshot;
+  {
+    juce::ScopedLock lock(contactsLock_);
+    contactsSnapshot = contacts_;
+    timestampSnapshot = contactLastUpdateTime_;
+  }
+
+  // If no contacts and past timeout window, stop timer and do one final repaint to clear
+  bool anyTipDown = false;
+  for (const auto &c : contactsSnapshot)
+    if (c.tipDown) { anyTipDown = true; break; }
+  if (!anyTipDown && (now - lastTimeHadContactsMs_ > kContactTimeoutMs)) {
+    stopTimer();
+    repaint();
+    return;
+  }
+
+  // Build effective (filtered) contacts for change detection
+  std::vector<TouchpadContact> filtered;
+  filtered.reserve(contactsSnapshot.size());
+  for (const auto &contact : contactsSnapshot) {
+    if (!contact.tipDown) continue;
+    auto it = timestampSnapshot.find(contact.contactId);
+    if (it == timestampSnapshot.end()) continue;
+    if (now - it->second > kContactTimeoutMs) continue;
+    filtered.push_back(contact);
+  }
+
+  // Skip repaint if nothing changed
+  int count = static_cast<int>(filtered.size());
+  uint32_t hash = 0;
+  for (const auto &c : filtered)
+    hash = (hash * 31u) + static_cast<uint32_t>(c.contactId)
+         + static_cast<uint32_t>(c.normX * 1000.f)
+         + static_cast<uint32_t>(c.normY * 1000.f) * 7u;
+  if (count == lastPaintedContactCount_ && hash == lastPaintedStateHash_)
+    return;
+  lastPaintedContactCount_ = count;
+  lastPaintedStateHash_ = hash;
+
+  repaint();
+}
 
 void TouchpadVisualizerPanel::paint(juce::Graphics &g) {
   auto bounds = getLocalBounds().toFloat();
@@ -64,10 +160,38 @@ void TouchpadVisualizerPanel::paint(juce::Graphics &g) {
     return;
 
   std::vector<TouchpadContact> contactsSnapshot;
+  std::unordered_map<int, int64_t> timestampSnapshot;
+  int64_t now = juce::Time::getMillisecondCounter();
+  
   {
     juce::ScopedLock lock(contactsLock_);
     contactsSnapshot = contacts_;
+    timestampSnapshot = contactLastUpdateTime_;
   }
+  
+  // Filter out stale contacts: remove tipDown==false and contacts older than timeout
+  contactsSnapshot.erase(
+      std::remove_if(contactsSnapshot.begin(), contactsSnapshot.end(),
+                     [&timestampSnapshot, now](const TouchpadContact &contact) {
+                       // Remove if tipDown is false (finger lifted)
+                       if (!contact.tipDown)
+                         return true;
+                       
+                       // Remove if contact hasn't been updated in the last timeout period
+                       auto it = timestampSnapshot.find(contact.contactId);
+                       if (it != timestampSnapshot.end()) {
+                         int64_t age = now - it->second;
+                         if (age > TouchpadVisualizerPanel::kContactTimeoutMs) {
+                           return true; // Stale contact, remove it
+                         }
+                       } else {
+                         // Contact not in timestamp map, treat as stale
+                         return true;
+                       }
+                       
+                       return false; // Keep this contact
+                     }),
+      contactsSnapshot.end());
 
   std::optional<PitchPadConfig> configX;
   std::optional<PitchPadConfig> configY;
@@ -281,10 +405,14 @@ void TouchpadVisualizerPanel::paint(juce::Graphics &g) {
       for (size_t listIdx = 0; listIdx < ctx->touchpadLayoutOrder.size();
            ++listIdx) {
         const auto &ref = ctx->touchpadLayoutOrder[listIdx];
+        int soloGroupId =
+            inputProcessor->getEffectiveSoloLayoutGroupForLayer(currentVisualizedLayer);
         if (ref.type == TouchpadType::Mixer &&
             ref.index < ctx->touchpadMixerStrips.size()) {
           const auto &strip = ctx->touchpadMixerStrips[ref.index];
-          if (strip.layerId == currentVisualizedLayer && strip.numFaders > 0) {
+          if (strip.layerId == currentVisualizedLayer &&
+              strip.numFaders > 0 &&
+              ((soloGroupId == 0 && strip.layoutGroupId == 0) || (soloGroupId > 0 && strip.layoutGroupId == soloGroupId))) {
             juce::Rectangle<float> layoutRect(
                 touchpadRect.getX() +
                     strip.regionLeft * touchpadRect.getWidth(),
@@ -409,7 +537,8 @@ void TouchpadVisualizerPanel::paint(juce::Graphics &g) {
                    ref.index < ctx->touchpadDrumPadStrips.size()) {
           const auto &strip = ctx->touchpadDrumPadStrips[ref.index];
           if (strip.layerId == currentVisualizedLayer && strip.rows > 0 &&
-              strip.columns > 0) {
+              strip.columns > 0 &&
+              ((soloGroupId == 0 && strip.layoutGroupId == 0) || (soloGroupId > 0 && strip.layoutGroupId == soloGroupId))) {
             juce::Rectangle<float> layoutRect(
                 touchpadRect.getX() +
                     strip.regionLeft * touchpadRect.getWidth(),
@@ -495,7 +624,8 @@ void TouchpadVisualizerPanel::paint(juce::Graphics &g) {
                    ref.index < ctx->touchpadChordPads.size()) {
           const auto &strip = ctx->touchpadChordPads[ref.index];
           if (strip.layerId == currentVisualizedLayer && strip.rows > 0 &&
-              strip.columns > 0) {
+              strip.columns > 0 &&
+              ((soloGroupId == 0 && strip.layoutGroupId == 0) || (soloGroupId > 0 && strip.layoutGroupId == soloGroupId))) {
             juce::Rectangle<float> layoutRect(
                 touchpadRect.getX() +
                     strip.regionLeft * touchpadRect.getWidth(),

@@ -4,6 +4,7 @@
 #include "TouchpadTypes.h"
 #include <JuceHeader.h>
 #include <atomic>
+#include <unordered_map>
 #include <vector>
 
 /// Shared touchpad visualizer component. Used by both the main VisualizerComponent
@@ -42,9 +43,18 @@ private:
   std::atomic<uintptr_t> lastDeviceHandle_{0};
   mutable juce::CriticalSection contactsLock_;
 
+  // Track last update time for each contact to detect stale contacts
+  std::unordered_map<int, int64_t> contactLastUpdateTime_;
+  // Last time we had at least one tipDown contact (for timer efficiency)
+  int64_t lastTimeHadContactsMs_ = 0;
+  // Last painted state (to skip repaint when unchanged)
+  int lastPaintedContactCount_ = -1;
+  uint32_t lastPaintedStateHash_ = 0;
+
   static constexpr float kTouchpadAspectW = 3.0f;
   static constexpr float kTouchpadAspectH = 2.0f;
   static constexpr int kDefaultRefreshIntervalMs = 34;
+  static constexpr int kContactTimeoutMs = 1000; // 1 second timeout for stale contacts
 
   JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(TouchpadVisualizerPanel)
 };

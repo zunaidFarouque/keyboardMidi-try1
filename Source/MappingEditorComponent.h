@@ -11,6 +11,8 @@
 
 class InputCaptureOverlay;
 
+class TouchpadMixerManager;
+
 class MappingEditorComponent : public juce::Component,
                                public juce::TableListBoxModel,
                                public juce::ValueTree::Listener,
@@ -19,7 +21,8 @@ class MappingEditorComponent : public juce::Component,
 public:
   MappingEditorComponent(PresetManager &pm, RawInputManager &rawInputMgr,
                          DeviceManager &deviceMgr,
-                         SettingsManager &settingsMgr);
+                         SettingsManager &settingsMgr,
+                         TouchpadMixerManager *touchpadMixerMgr = nullptr);
   ~MappingEditorComponent() override;
 
   // Get undo manager for command handling
