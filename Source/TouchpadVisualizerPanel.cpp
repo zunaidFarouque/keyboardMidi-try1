@@ -302,8 +302,11 @@ void TouchpadVisualizerPanel::paint(juce::Graphics &g) {
             const int N = strip.numFaders;
             const float fw = layoutRect.getWidth() / static_cast<float>(N);
             const float h = layoutRect.getHeight();
+            // Use same constant as processor so fader fill aligns with finger when mute on
             const float muteRegionH =
-                (strip.modeFlags & kMixerModeMuteButtons) ? (h * 0.15f) : 0.0f;
+                (strip.modeFlags & kMixerModeMuteButtons)
+                    ? (h * (1.0f - kMuteButtonRegionTop))
+                    : 0.0f;
             const float faderH = h - muteRegionH;
             const float faderTop = layoutRect.getY();
             const float faderBottom = faderTop + faderH;
@@ -350,6 +353,7 @@ void TouchpadVisualizerPanel::paint(juce::Graphics &g) {
               float fill =
                   static_cast<float>(juce::jlimit(0, 127, displayVal)) /
                   127.0f;
+              // Use faderH only (never full h) so fill aligns with finger when mute on
               float fillH = fill * faderH;
               g.setColour(isMuted
                               ? juce::Colour(0xff505070).withAlpha(0.85f)

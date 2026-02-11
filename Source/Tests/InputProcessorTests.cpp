@@ -10,8 +10,8 @@
 #include "../TouchpadTypes.h"
 #include "../VoiceManager.h"
 #include "../Zone.h"
-#include <gtest/gtest.h>
 #include <cmath>
+#include <gtest/gtest.h>
 #include <set>
 
 // Records MIDI note on/off for release behaviour and Note type tests
@@ -2273,10 +2273,11 @@ TEST_F(InputProcessorTest, TouchpadDrumPadNoteOffWhenFingerMovesOutside) {
   EXPECT_EQ(mockEng.events[0].note, 66);
 
   mockEng.clear();
-  // Finger still down (tipDown=true) but moved outside active area (e.g. left of dead zone)
-  // Use normX/normY that map outside the pad grid
+  // Finger still down (tipDown=true) but moved outside active area (e.g. left
+  // of dead zone) Use normX/normY that map outside the pad grid
   proc.processTouchpadContacts(deviceHandle, {{0, 0, 0, -0.1f, 0.5f, true}});
-  ASSERT_GE(mockEng.events.size(), 1u) << "Expected Note Off when finger moves outside";
+  ASSERT_GE(mockEng.events.size(), 1u)
+      << "Expected Note Off when finger moves outside";
   EXPECT_FALSE(mockEng.events[0].isNoteOn);
   EXPECT_EQ(mockEng.events[0].note, 66);
 }
@@ -2404,7 +2405,8 @@ TEST_F(InputProcessorTest, TouchpadDrumPadVelocityRandomProducesVariation) {
       << "Velocity random should produce different velocities across hits";
 }
 
-// --- Drum pad: finger moves from pad A to pad B sends note off A, note on B ---
+// --- Drum pad: finger moves from pad A to pad B sends note off A, note on B
+// ---
 TEST_F(InputProcessorTest, TouchpadDrumPadFingerMovesToDifferentPad) {
   MockMidiEngine mockEng;
   TouchpadMixerManager touchpadMixerMgr;
@@ -2502,7 +2504,8 @@ TEST_F(InputProcessorTest, TouchpadDrumPadFirstTouchUsesPositionNotFixedNote) {
   ASSERT_GE(mockEng.events.size(), 1u) << "Expected at least one Note On";
   EXPECT_TRUE(mockEng.events[0].isNoteOn);
   EXPECT_EQ(mockEng.events[0].note, 39)
-      << "Drum pad should emit position-based note 39, not fixed Finger1Down note 60";
+      << "Drum pad should emit position-based note 39, not fixed Finger1Down "
+         "note 60";
 }
 
 // --- Drum pad: Finger2Down Note mapping also skipped when drum pad active ---
@@ -2548,14 +2551,14 @@ TEST_F(InputProcessorTest, TouchpadDrumPadFinger2DownMappingSkipped) {
   // First touch (finger 1), then second touch (finger 2) at pad 5
   proc.processTouchpadContacts(deviceHandle, {{0, 0, 0, 0.5f, 0.5f, true}});
   proc.processTouchpadContacts(
-      deviceHandle,
-      {{0, 0, 0, 0.5f, 0.5f, true}, {1, 0, 0, 0.3f, 0.7f, true}});
+      deviceHandle, {{0, 0, 0, 0.5f, 0.5f, true}, {1, 0, 0, 0.3f, 0.7f, true}});
   ASSERT_GE(mockEng.events.size(), 2u);
   EXPECT_TRUE(mockEng.events[0].isNoteOn);
   EXPECT_EQ(mockEng.events[0].note, 42); // pad 6 (0.5, 0.5) -> 36+6=42
   EXPECT_TRUE(mockEng.events[1].isNoteOn);
   EXPECT_EQ(mockEng.events[1].note, 41)
-      << "Second finger should get pad 5 (note 41), not fixed Finger2Down note 72";
+      << "Second finger should get pad 5 (note 41), not fixed Finger2Down note "
+         "72";
 }
 
 // --- Drum pad: multiple simultaneous contacts, independent release ---
@@ -2587,8 +2590,7 @@ TEST_F(InputProcessorTest, TouchpadDrumPadMultipleContactsIndependentRelease) {
   uintptr_t deviceHandle = 0x1234;
   // Two fingers on two pads: contact 0 on pad 0, contact 1 on pad 3
   proc.processTouchpadContacts(
-      deviceHandle,
-      {{0, 0, 0, 0.1f, 0.1f, true}, {1, 0, 0, 0.9f, 0.1f, true}});
+      deviceHandle, {{0, 0, 0, 0.1f, 0.1f, true}, {1, 0, 0, 0.9f, 0.1f, true}});
   ASSERT_GE(mockEng.events.size(), 2u);
   std::set<int> notesOn;
   for (const auto &e : mockEng.events)
@@ -2599,9 +2601,8 @@ TEST_F(InputProcessorTest, TouchpadDrumPadMultipleContactsIndependentRelease) {
 
   mockEng.clear();
   // Release contact 0 only; contact 1 still down
-  proc.processTouchpadContacts(
-      deviceHandle,
-      {{0, 0, 0, 0.1f, 0.1f, false}, {1, 0, 0, 0.9f, 0.1f, true}});
+  proc.processTouchpadContacts(deviceHandle, {{0, 0, 0, 0.1f, 0.1f, false},
+                                              {1, 0, 0, 0.9f, 0.1f, true}});
   ASSERT_GE(mockEng.events.size(), 1u);
   EXPECT_FALSE(mockEng.events[0].isNoteOn);
   EXPECT_EQ(mockEng.events[0].note, 36) << "Note off for released finger only";
@@ -2644,10 +2645,12 @@ TEST_F(InputProcessorTest, TouchpadDrumPadLayerFiltering) {
   proc.processTouchpadContacts(deviceHandle, {{0, 0, 0, 0.5f, 0.5f, true}});
   ASSERT_GE(mockEng.events.size(), 1u);
   EXPECT_TRUE(mockEng.events[0].isNoteOn);
-  EXPECT_EQ(mockEng.events[0].note, 66) << "When layer 1 active, drum pad fires";
+  EXPECT_EQ(mockEng.events[0].note, 66)
+      << "When layer 1 active, drum pad fires";
 }
 
-// --- Drum pad: dead zones - no trigger in dead zone, note off when move into ---
+// --- Drum pad: dead zones - no trigger in dead zone, note off when move into
+// ---
 TEST_F(InputProcessorTest, TouchpadDrumPadDeadZones) {
   MockMidiEngine mockEng;
   TouchpadMixerManager touchpadMixerMgr;
@@ -2726,7 +2729,8 @@ TEST_F(InputProcessorTest, TouchpadDrumPadBoundaryMapping) {
   proc.processTouchpadContacts(deviceHandle, {{0, 0, 0, 0.01f, 0.01f, true}});
   proc.processTouchpadContacts(deviceHandle, {{0, 0, 0, 0.01f, 0.01f, false}});
   ASSERT_GE(mockEng.events.size(), 1u);
-  EXPECT_EQ(mockEng.events[0].note, 36) << "Top-left (0.01,0.01) -> pad 0, note 36";
+  EXPECT_EQ(mockEng.events[0].note, 36)
+      << "Top-left (0.01,0.01) -> pad 0, note 36";
 
   mockEng.clear();
   proc.processTouchpadContacts(deviceHandle, {{0, 0, 0, 0.99f, 0.99f, true}});
@@ -2767,7 +2771,8 @@ TEST_F(InputProcessorTest, TouchpadDrumPadVelocityClamped) {
     proc.processTouchpadContacts(0x1234, {{i, 0, 0, 0.5f, 0.5f, true}});
     proc.processTouchpadContacts(0x1234, {{i, 0, 0, 0.5f, 0.5f, false}});
     if (!mockEng.events.empty() && mockEng.events[0].isNoteOn) {
-      int vel127 = static_cast<int>(std::round(mockEng.events[0].velocity * 127.0f));
+      int vel127 =
+          static_cast<int>(std::round(mockEng.events[0].velocity * 127.0f));
       EXPECT_GE(vel127, 1) << "Velocity must be at least 1";
       EXPECT_LE(vel127, 127) << "Velocity must be at most 127";
     }
@@ -2784,7 +2789,8 @@ TEST_F(InputProcessorTest, TouchpadDrumPadVelocityClamped) {
     proc.processTouchpadContacts(0x1234, {{i + 100, 0, 0, 0.5f, 0.5f, true}});
     proc.processTouchpadContacts(0x1234, {{i + 100, 0, 0, 0.5f, 0.5f, false}});
     if (!mockEng.events.empty() && mockEng.events[0].isNoteOn) {
-      int vel127 = static_cast<int>(std::round(mockEng.events[0].velocity * 127.0f));
+      int vel127 =
+          static_cast<int>(std::round(mockEng.events[0].velocity * 127.0f));
       EXPECT_GE(vel127, 1) << "Velocity must be at least 1 with base=1";
       EXPECT_LE(vel127, 127) << "Velocity must be at most 127";
     }
@@ -2882,7 +2888,8 @@ TEST_F(InputProcessorTest, TouchpadMixerRegionOnlyActiveInRegion) {
   uintptr_t deviceHandle = 0x1234;
   mockEng.clear();
   proc.processTouchpadContacts(deviceHandle, {{0, 0, 0, 0.5f, 0.5f, true}});
-  ASSERT_GE(mockEng.ccEvents.size(), 1u) << "Touch inside region (0.5,0.5) should send CC";
+  ASSERT_GE(mockEng.ccEvents.size(), 1u)
+      << "Touch inside region (0.5,0.5) should send CC";
 
   mockEng.clear();
   proc.processTouchpadContacts(deviceHandle, {{0, 0, 0, 0.1f, 0.5f, true}});
@@ -2982,7 +2989,8 @@ TEST_F(InputProcessorTest, TouchpadZIndexOverlapHigherWins) {
   EXPECT_EQ(mockEng.events[0].note, 66);
 }
 
-// --- Sub-region: coordinate remapping (touch in left half maps to layout local) ---
+// --- Sub-region: coordinate remapping (touch in left half maps to layout
+// local) ---
 TEST_F(InputProcessorTest, TouchpadMixerSubRegionCoordinateRemapping) {
   MockMidiEngine mockEng;
   TouchpadMixerManager touchpadMixerMgr;
@@ -3053,7 +3061,8 @@ TEST_F(InputProcessorTest, TouchpadDrumPadSubRegionCoordinateRemapping) {
 
   ASSERT_GE(mockEng.events.size(), 1u);
   EXPECT_EQ(mockEng.events[0].note, 64)
-      << "Right half [0.5,1] region: (0.5,0.5) -> local (0,0.5) -> col=0 row=1 -> pad 4, note 64";
+      << "Right half [0.5,1] region: (0.5,0.5) -> local (0,0.5) -> col=0 row=1 "
+         "-> pad 4, note 64";
 }
 
 // --- Per-layout finger counting: mixer counts only fingers in its region ---
@@ -3099,8 +3108,8 @@ TEST_F(InputProcessorTest, PerLayoutMixerF1MixerF2Drum_QuickMode) {
 
   uintptr_t deviceHandle = 0x1234;
   // F1 on mixer (0.25, 0.5), F2 on drum (0.75, 0.5)
-  proc.processTouchpadContacts(deviceHandle,
-      {{0, 0, 0, 0.25f, 0.5f, true}, {1, 0, 0, 0.75f, 0.5f, true}});
+  proc.processTouchpadContacts(deviceHandle, {{0, 0, 0, 0.25f, 0.5f, true},
+                                              {1, 0, 0, 0.75f, 0.5f, true}});
 
   EXPECT_GE(mockEng.ccEvents.size(), 1u)
       << "Mixer sees 1 finger in region -> Quick mode, sends CC";
@@ -3108,7 +3117,8 @@ TEST_F(InputProcessorTest, PerLayoutMixerF1MixerF2Drum_QuickMode) {
   EXPECT_EQ(mockEng.events[0].channel, 2);
 }
 
-// --- Region lock: finger locked to layout until release; ghost when outside ---
+// --- Region lock: finger locked to layout until release; ghost when outside
+// ---
 TEST_F(InputProcessorTest, RegionLockMixerSwipeToDrum_GhostAtEdge) {
   MockMidiEngine mockEng;
   TouchpadMixerManager touchpadMixerMgr;
@@ -3163,8 +3173,245 @@ TEST_F(InputProcessorTest, RegionLockMixerSwipeToDrum_GhostAtEdge) {
 
   auto ghosts = proc.getEffectiveContactPositions(
       deviceHandle, {{0, 0, 0, 0.75f, 0.5f, true}});
-  EXPECT_EQ(ghosts.size(), 1u) << "Ghost at region edge when locked and outside";
+  EXPECT_EQ(ghosts.size(), 1u)
+      << "Ghost at region edge when locked and outside";
   EXPECT_FLOAT_EQ(ghosts[0].normX, 0.5f)
       << "Ghost X clamped to mixer right edge";
   EXPECT_FLOAT_EQ(ghosts[0].normY, 0.5f);
+}
+
+// --- Mute + absolute mode: fader value must match finger position in fader
+// area ---
+TEST_F(InputProcessorTest,
+       TouchpadMixerMuteAbsoluteMode_FaderValueMatchesFingerPosition) {
+  MockMidiEngine mockEng;
+  TouchpadMixerManager touchpadMixerMgr;
+  VoiceManager voiceMgr(mockEng, settingsMgr);
+  InputProcessor proc(voiceMgr, presetMgr, deviceMgr, scaleLib, mockEng,
+                      settingsMgr, touchpadMixerMgr);
+
+  presetMgr.getLayersList().removeAllChildren(nullptr);
+  presetMgr.ensureStaticLayers();
+  settingsMgr.setMidiModeActive(true);
+
+  TouchpadMixerConfig cfg;
+  cfg.type = TouchpadType::Mixer;
+  cfg.quickPrecision = TouchpadMixerQuickPrecision::Quick;
+  cfg.absRel = TouchpadMixerAbsRel::Absolute;
+  cfg.lockFree = TouchpadMixerLockFree::Free;
+  cfg.ccStart = 50;
+  cfg.midiChannel = 1;
+  cfg.numFaders = 5;
+  cfg.muteButtonsEnabled = true; // Mute on: fader area is top 85%
+  cfg.region.left = 0.2f;
+  cfg.region.top = 0.2f;
+  cfg.region.right = 0.8f;
+  cfg.region.bottom = 0.8f;
+  touchpadMixerMgr.addLayout(cfg);
+
+  proc.initialize();
+  proc.forceRebuildMappings();
+  uintptr_t deviceHandle = 0x1234;
+
+  // In region (0.5, 0.5): localY = (0.5-0.2)/(0.8-0.2) = 0.5. With mute,
+  // effectiveY = 0.5/0.85, t = 1 - effectiveY ~ 0.41, CC ~ 52.
+  mockEng.clear();
+  proc.processTouchpadContacts(deviceHandle, {{0, 0, 0, 0.5f, 0.5f, true}});
+  ASSERT_GE(mockEng.ccEvents.size(), 1u)
+      << "Touch in region with mute on should send CC";
+  // Finger at top of fader area (localY=0) -> normY=0.2 -> CC 127
+  mockEng.clear();
+  proc.processTouchpadContacts(deviceHandle, {{0, 0, 0, 0.5f, 0.2f, true}});
+  ASSERT_GE(mockEng.ccEvents.size(), 1u);
+  EXPECT_EQ(mockEng.ccEvents[0].value, 127)
+      << "Finger at top of fader area (normY=0.2) with mute on should send CC "
+         "127";
+  // Finger at bottom of fader area (localY=0.85): normY = 0.2 + 0.85*0.6 = 0.71
+  mockEng.clear();
+  proc.processTouchpadContacts(deviceHandle, {{0, 0, 0, 0.5f, 0.71f, true}});
+  ASSERT_GE(mockEng.ccEvents.size(), 1u);
+  EXPECT_EQ(mockEng.ccEvents[0].value, 0)
+      << "Finger at bottom of fader area with mute on should send CC 0";
+}
+
+// --- Precision + Relative: finger2 down sets anchor; finger1 movement = delta
+// ---
+TEST_F(InputProcessorTest, TouchpadMixerPrecisionRelative_AnchorOnFinger2Down) {
+  MockMidiEngine mockEng;
+  TouchpadMixerManager touchpadMixerMgr;
+  VoiceManager voiceMgr(mockEng, settingsMgr);
+  InputProcessor proc(voiceMgr, presetMgr, deviceMgr, scaleLib, mockEng,
+                      settingsMgr, touchpadMixerMgr);
+
+  presetMgr.getLayersList().removeAllChildren(nullptr);
+  presetMgr.ensureStaticLayers();
+  settingsMgr.setMidiModeActive(true);
+
+  TouchpadMixerConfig cfg;
+  cfg.type = TouchpadType::Mixer;
+  cfg.quickPrecision = TouchpadMixerQuickPrecision::Precision;
+  cfg.absRel = TouchpadMixerAbsRel::Relative;
+  cfg.lockFree = TouchpadMixerLockFree::Lock;
+  cfg.ccStart = 50;
+  cfg.midiChannel = 1;
+  cfg.numFaders = 5;
+  cfg.region.left = 0.2f;
+  cfg.region.top = 0.2f;
+  cfg.region.right = 0.8f;
+  cfg.region.bottom = 0.8f;
+  touchpadMixerMgr.addLayout(cfg);
+
+  proc.initialize();
+  proc.forceRebuildMappings();
+  uintptr_t deviceHandle = 0x1234;
+
+  // Frame 1: finger2 down establishes anchor/base only; must NOT emit CC.
+  mockEng.clear();
+  proc.processTouchpadContacts(
+      deviceHandle, {{0, 0, 0, 0.5f, 0.5f, true}, {1, 0, 0, 0.5f, 0.5f, true}});
+  EXPECT_TRUE(mockEng.ccEvents.empty())
+      << "Finger2 down should not emit CC (anchor/base only)";
+
+  // Frame 2: finger1 moves down to 0.7 (delta +0.2), finger2 still down -> CC
+  // should decrease
+  mockEng.clear();
+  proc.processTouchpadContacts(
+      deviceHandle, {{0, 0, 0, 0.5f, 0.7f, true}, {1, 0, 0, 0.5f, 0.5f, true}});
+  ASSERT_GE(mockEng.ccEvents.size(), 1u);
+  int afterDown = mockEng.ccEvents[0].value;
+
+  // Frame 3: finger1 moves up to 0.3 (delta -0.4 from anchor 0.5), finger2
+  // still down -> CC should increase
+  mockEng.clear();
+  proc.processTouchpadContacts(
+      deviceHandle, {{0, 0, 0, 0.5f, 0.3f, true}, {1, 0, 0, 0.5f, 0.5f, true}});
+  ASSERT_GE(mockEng.ccEvents.size(), 1u);
+  int afterUp = mockEng.ccEvents[0].value;
+  EXPECT_GT(afterUp, afterDown)
+      << "Finger1 moved up => fader value should increase";
+}
+
+// --- Precision + Relative + Free: switching fader applies to old, anchor at
+// entry for new ---
+TEST_F(InputProcessorTest,
+       TouchpadMixerPrecisionRelativeFree_SwitchFaderAppliesThenEntryAnchor) {
+  MockMidiEngine mockEng;
+  TouchpadMixerManager touchpadMixerMgr;
+  VoiceManager voiceMgr(mockEng, settingsMgr);
+  InputProcessor proc(voiceMgr, presetMgr, deviceMgr, scaleLib, mockEng,
+                      settingsMgr, touchpadMixerMgr);
+
+  presetMgr.getLayersList().removeAllChildren(nullptr);
+  presetMgr.ensureStaticLayers();
+  settingsMgr.setMidiModeActive(true);
+
+  TouchpadMixerConfig cfg;
+  cfg.type = TouchpadType::Mixer;
+  cfg.quickPrecision = TouchpadMixerQuickPrecision::Precision;
+  cfg.absRel = TouchpadMixerAbsRel::Relative;
+  cfg.lockFree = TouchpadMixerLockFree::Free;
+  cfg.ccStart = 50;
+  cfg.midiChannel = 1;
+  cfg.numFaders = 4;
+  cfg.region.left = 0.0f;
+  cfg.region.top = 0.0f;
+  cfg.region.right = 1.0f;
+  cfg.region.bottom = 1.0f;
+  touchpadMixerMgr.addLayout(cfg);
+
+  proc.initialize();
+  proc.forceRebuildMappings();
+  uintptr_t deviceHandle = 0x1234;
+
+  // Establish on fader 0: finger2 down should NOT emit CC.
+  mockEng.clear();
+  proc.processTouchpadContacts(deviceHandle, {{0, 0, 0, 0.15f, 0.5f, true},
+                                              {1, 0, 0, 0.15f, 0.5f, true}});
+  EXPECT_TRUE(mockEng.ccEvents.empty());
+
+  // Move finger1 within fader 0: should emit CC for fader 0.
+  mockEng.clear();
+  proc.processTouchpadContacts(deviceHandle, {{0, 0, 0, 0.15f, 0.6f, true},
+                                              {1, 0, 0, 0.15f, 0.5f, true}});
+  ASSERT_GE(mockEng.ccEvents.size(), 1u);
+  EXPECT_EQ(mockEng.ccEvents[0].controller, 50) << "Fader 0 = CC 50";
+
+  // Move finger1 to fader 1 (e.g. 0.4, 0.6): should send to fader 0 (final
+  // value), but NOT send to fader 1 until finger1 moves within fader 1.
+  mockEng.clear();
+  proc.processTouchpadContacts(deviceHandle, {{0, 0, 0, 0.4f, 0.6f, true},
+                                              {1, 0, 0, 0.15f, 0.5f, true}});
+  ASSERT_GE(mockEng.ccEvents.size(), 1u)
+      << "Should send at least one CC (to old fader and/or new fader)";
+  bool hasFader0 = false, hasFader1 = false;
+  for (const auto &e : mockEng.ccEvents) {
+    if (e.controller == 50)
+      hasFader0 = true;
+    if (e.controller == 51)
+      hasFader1 = true;
+  }
+  EXPECT_TRUE(hasFader0) << "Switch frame must commit old fader (50)";
+  EXPECT_FALSE(hasFader1) << "Switch frame must NOT emit CC for new fader (51)";
+
+  // First movement within fader 1 should emit CC for fader 1.
+  mockEng.clear();
+  proc.processTouchpadContacts(deviceHandle, {{0, 0, 0, 0.4f, 0.65f, true},
+                                              {1, 0, 0, 0.15f, 0.5f, true}});
+  ASSERT_GE(mockEng.ccEvents.size(), 1u);
+  EXPECT_EQ(mockEng.ccEvents[0].controller, 51);
+}
+
+// --- Precision + Relative: finger2-down must not emit CC; first CC only after movement ---
+TEST_F(InputProcessorTest, TouchpadMixerPrecisionRelative_Finger2DownSendsNoCC) {
+  MockMidiEngine mockEng;
+  TouchpadMixerManager touchpadMixerMgr;
+  VoiceManager voiceMgr(mockEng, settingsMgr);
+  InputProcessor proc(voiceMgr, presetMgr, deviceMgr, scaleLib, mockEng,
+                      settingsMgr, touchpadMixerMgr);
+
+  presetMgr.getLayersList().removeAllChildren(nullptr);
+  presetMgr.ensureStaticLayers();
+  settingsMgr.setMidiModeActive(true);
+
+  TouchpadMixerConfig cfg;
+  cfg.type = TouchpadType::Mixer;
+  cfg.quickPrecision = TouchpadMixerQuickPrecision::Precision;
+  cfg.absRel = TouchpadMixerAbsRel::Relative;
+  cfg.lockFree = TouchpadMixerLockFree::Lock;
+  cfg.ccStart = 50;
+  cfg.midiChannel = 1;
+  cfg.numFaders = 4;
+  cfg.region.left = 0.0f;
+  cfg.region.top = 0.0f;
+  cfg.region.right = 1.0f;
+  cfg.region.bottom = 1.0f;
+  touchpadMixerMgr.addLayout(cfg);
+
+  proc.initialize();
+  proc.forceRebuildMappings();
+  uintptr_t deviceHandle = 0x1234;
+
+  // Finger2 down: no CC.
+  mockEng.clear();
+  proc.processTouchpadContacts(deviceHandle, {{0, 0, 0, 0.1f, 0.5f, true},
+                                              {1, 0, 0, 0.1f, 0.5f, true}});
+  EXPECT_TRUE(mockEng.ccEvents.empty());
+
+  // First movement after finger2 down: must emit CC.
+  mockEng.clear();
+  proc.processTouchpadContacts(deviceHandle, {{0, 0, 0, 0.1f, 0.6f, true},
+                                              {1, 0, 0, 0.1f, 0.5f, true}});
+  ASSERT_GE(mockEng.ccEvents.size(), 1u);
+  EXPECT_EQ(mockEng.ccEvents[0].controller, 50);
+
+  // Lift finger2 (1 active contact): should not emit CC.
+  mockEng.clear();
+  proc.processTouchpadContacts(deviceHandle, {{0, 0, 0, 0.1f, 0.6f, true}});
+  EXPECT_TRUE(mockEng.ccEvents.empty());
+
+  // Finger2 down again: no CC.
+  mockEng.clear();
+  proc.processTouchpadContacts(deviceHandle, {{0, 0, 0, 0.1f, 0.4f, true},
+                                              {1, 0, 0, 0.1f, 0.4f, true}});
+  EXPECT_TRUE(mockEng.ccEvents.empty());
 }

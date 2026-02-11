@@ -275,8 +275,19 @@ private:
   // (-1 = none). unordered_map for O(1) lookups.
   std::unordered_map<std::tuple<uintptr_t, int>, int, Tuple2Hash>
       touchpadMixerLockedFader;
+  // Touchpad mixer: per-strip applier (finger2) down state for edge detection.
+  // Needed so Precision mode can detect finger2 down/up even when we have <2
+  // active contacts (where the main mixer processing early-outs).
+  std::unordered_map<std::tuple<uintptr_t, int>, bool, Tuple2Hash>
+      touchpadMixerApplierDownPrev;
   std::unordered_map<std::tuple<uintptr_t, int, int>, float, Tuple3Hash>
       touchpadMixerRelativeValue;
+  // Relative mode: anchor Y (effectiveYClamped) when gesture started or entered fader
+  std::unordered_map<std::tuple<uintptr_t, int, int>, float, Tuple3Hash>
+      touchpadMixerRelativeAnchor;
+  // (device, stripIdx) -> last fader index for free-mode switch detection (-1 = none)
+  std::unordered_map<std::tuple<uintptr_t, int>, int, Tuple2Hash>
+      touchpadMixerLastFaderIndex;
   std::unordered_map<std::tuple<uintptr_t, int, int>, bool, Tuple3Hash>
       touchpadMixerMuteState;
   std::unordered_map<std::tuple<uintptr_t, int, int>, int, Tuple3Hash>
