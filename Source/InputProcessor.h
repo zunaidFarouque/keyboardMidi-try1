@@ -295,9 +295,9 @@ private:
   std::unordered_map<std::tuple<uintptr_t, int, int>, int, Tuple3Hash>
       touchpadMixerValueBeforeMute;
 
-  // Drum pad: active notes per (deviceHandle, stripIdx, contactId).
-  // Value stores InputID and padIndex so we can send note off when finger moves
-  // outside or to a different pad.
+  // Drum pad / Harmonic grid: active notes per (deviceHandle, stripIdx,
+  // contactId). Value stores InputID and padIndex so we can send note off when
+  // finger moves outside or to a different pad.
   struct DrumPadKeyHash {
     size_t operator()(const std::tuple<uintptr_t, int, int> &t) const {
       return Tuple3Hash{}(t);
@@ -310,6 +310,23 @@ private:
   std::unordered_map<std::tuple<uintptr_t, int, int>, DrumPadActiveEntry,
                     DrumPadKeyHash>
       drumPadActiveNotes;
+
+  // Chord Pad: active chords per (deviceHandle, stripIdx, contactId) in
+  // momentary mode. Each entry represents an InputID that currently holds a
+  // chord on voiceManager; handleKeyUp releases the entire chord.
+  std::unordered_map<std::tuple<uintptr_t, int, int>, DrumPadActiveEntry,
+                     DrumPadKeyHash>
+      chordPadActiveChords;
+
+  // Chord Pad latch: per-pad latched chords (deviceHandle, stripIdx, padIndex).
+  // Used when latch mode is enabled; toggling a pad on/off corresponds to
+  // noteOn / handleKeyUp for the stored InputID.
+  std::unordered_map<std::tuple<uintptr_t, int, int>, DrumPadActiveEntry,
+                     DrumPadKeyHash>
+      chordPadLatchedPads;
+  // Last seen latchMode per compiled Chord Pad strip index (for clearing
+  // latched chords when latch is turned off).
+  std::unordered_map<int, bool> chordPadLastLatchMode;
 
   // Throttle sendChangeMessage for mixer (~60 Hz)
   std::atomic<int64_t> lastMixerChangeNotifyMs{0};

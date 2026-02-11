@@ -2,6 +2,7 @@
 #include "MappingDefinition.h"
 #include "TouchpadMixerManager.h"
 #include "TouchpadMixerTypes.h"
+#include "TouchpadRelayoutDialog.h"
 #include <JuceHeader.h>
 #include <memory>
 #include <vector>
@@ -41,6 +42,8 @@ private:
   TouchpadMixerConfig currentConfig;
 
   std::vector<UiRow> uiRows;
+
+  std::unique_ptr<TouchpadRelayoutDialog> relayoutDialog;
 
   class SeparatorComponent : public juce::Component {
   public:

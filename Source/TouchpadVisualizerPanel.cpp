@@ -408,8 +408,94 @@ void TouchpadVisualizerPanel::paint(juce::Graphics &g) {
         } else if (ref.type == TouchpadType::DrumPad &&
                    ref.index < ctx->touchpadDrumPadStrips.size()) {
           const auto &strip = ctx->touchpadDrumPadStrips[ref.index];
-          if (strip.layerId == currentVisualizedLayer &&
-              strip.numPads > 0) {
+          if (strip.layerId == currentVisualizedLayer && strip.rows > 0 &&
+              strip.columns > 0) {
+            juce::Rectangle<float> layoutRect(
+                touchpadRect.getX() +
+                    strip.regionLeft * touchpadRect.getWidth(),
+                touchpadRect.getY() +
+                    strip.regionTop * touchpadRect.getHeight(),
+                (strip.regionRight - strip.regionLeft) * touchpadRect.getWidth(),
+                (strip.regionBottom - strip.regionTop) *
+                    touchpadRect.getHeight());
+            const int R = strip.rows;
+            const int C = strip.columns;
+            const float padW = 1.0f / static_cast<float>(C);
+            const float padH = 1.0f / static_cast<float>(R);
+
+            if (strip.layoutMode == DrumPadLayoutMode::Classic) {
+              for (int row = 0; row < R; ++row) {
+                for (int col = 0; col < C; ++col) {
+                  float x =
+                      layoutRect.getX() +
+                      static_cast<float>(col) * padW * layoutRect.getWidth();
+                  float y =
+                      layoutRect.getY() +
+                      static_cast<float>(row) * padH * layoutRect.getHeight();
+                  float cw = padW * layoutRect.getWidth();
+                  float ch = padH * layoutRect.getHeight();
+                  g.setColour(juce::Colour(0xff405060).withAlpha(0.6f));
+                  g.fillRect(x + 1.0f, y + 1.0f, cw - 2.0f, ch - 2.0f);
+                  g.setColour(juce::Colours::lightgrey.withAlpha(0.5f));
+                  g.drawRect(x, y, cw, ch, 0.5f);
+                  int note =
+                      strip.midiNoteStart + row * C + col;
+                  note = juce::jlimit(0, 127, note);
+                  g.setColour(juce::Colours::white);
+                  g.setFont(juce::jmin(9.0f, cw * 0.4f));
+                  g.drawText(MidiNoteUtilities::getMidiNoteName(note), x, y, cw,
+                             ch, juce::Justification::centred, false);
+                }
+              }
+              int lastNote = juce::jlimit(
+                  0, 127, strip.midiNoteStart + strip.numPads - 1);
+              g.setColour(juce::Colours::white);
+              g.setFont(9.0f);
+              g.drawText("Drum Pad: " +
+                             MidiNoteUtilities::getMidiNoteName(
+                                 strip.midiNoteStart) +
+                             "-" +
+                             MidiNoteUtilities::getMidiNoteName(lastNote),
+                         layoutRect.getX(), layoutRect.getBottom() + 2.0f,
+                         layoutRect.getWidth(), 10,
+                         juce::Justification::centredLeft, false);
+            } else if (strip.layoutMode == DrumPadLayoutMode::HarmonicGrid) {
+              for (int row = 0; row < R; ++row) {
+                for (int col = 0; col < C; ++col) {
+                  float x =
+                      layoutRect.getX() +
+                      static_cast<float>(col) * padW * layoutRect.getWidth();
+                  float y =
+                      layoutRect.getY() +
+                      static_cast<float>(row) * padH * layoutRect.getHeight();
+                  float cw = padW * layoutRect.getWidth();
+                  float ch = padH * layoutRect.getHeight();
+                  // Slightly different color to hint "Harmonic" mode.
+                  g.setColour(juce::Colour(0xff405045).withAlpha(0.6f));
+                  g.fillRect(x + 1.0f, y + 1.0f, cw - 2.0f, ch - 2.0f);
+                  g.setColour(juce::Colours::lightgrey.withAlpha(0.5f));
+                  g.drawRect(x, y, cw, ch, 0.5f);
+                  int note = strip.midiNoteStart +
+                             col + row * strip.harmonicRowInterval;
+                  note = juce::jlimit(0, 127, note);
+                  g.setColour(juce::Colours::white);
+                  g.setFont(juce::jmin(9.0f, cw * 0.4f));
+                  g.drawText(MidiNoteUtilities::getMidiNoteName(note), x, y, cw,
+                             ch, juce::Justification::centred, false);
+                }
+              }
+              g.setColour(juce::Colours::white);
+              g.setFont(9.0f);
+              g.drawText("Harmonic Grid", layoutRect.getX(),
+                         layoutRect.getBottom() + 2.0f, layoutRect.getWidth(),
+                         10, juce::Justification::centredLeft, false);
+            }
+          }
+        } else if (ref.type == TouchpadType::ChordPad &&
+                   ref.index < ctx->touchpadChordPads.size()) {
+          const auto &strip = ctx->touchpadChordPads[ref.index];
+          if (strip.layerId == currentVisualizedLayer && strip.rows > 0 &&
+              strip.columns > 0) {
             juce::Rectangle<float> layoutRect(
                 touchpadRect.getX() +
                     strip.regionLeft * touchpadRect.getWidth(),
@@ -431,30 +517,20 @@ void TouchpadVisualizerPanel::paint(juce::Graphics &g) {
                               layoutRect.getHeight();
                 float cw = padW * layoutRect.getWidth();
                 float ch = padH * layoutRect.getHeight();
-                g.setColour(juce::Colour(0xff405060).withAlpha(0.6f));
+                g.setColour(juce::Colour(0xff504050).withAlpha(0.6f));
                 g.fillRect(x + 1.0f, y + 1.0f, cw - 2.0f, ch - 2.0f);
                 g.setColour(juce::Colours::lightgrey.withAlpha(0.5f));
                 g.drawRect(x, y, cw, ch, 0.5f);
-                int note =
-                    strip.midiNoteStart + row * C + col;
-                note = juce::jlimit(0, 127, note);
                 g.setColour(juce::Colours::white);
                 g.setFont(juce::jmin(9.0f, cw * 0.4f));
-                g.drawText(MidiNoteUtilities::getMidiNoteName(note), x, y, cw,
-                           ch, juce::Justification::centred, false);
+                g.drawText("Chord", x, y, cw, ch,
+                           juce::Justification::centred, false);
               }
             }
-            int lastNote = juce::jlimit(
-                0, 127, strip.midiNoteStart + strip.numPads - 1);
             g.setColour(juce::Colours::white);
             g.setFont(9.0f);
-            g.drawText("Drum Pad: " +
-                           MidiNoteUtilities::getMidiNoteName(
-                               strip.midiNoteStart) +
-                           "-" +
-                           MidiNoteUtilities::getMidiNoteName(lastNote),
-                       layoutRect.getX(), layoutRect.getBottom() + 2.0f,
-                       layoutRect.getWidth(), 10,
+            g.drawText("Chord Pad", layoutRect.getX(),
+                       layoutRect.getBottom() + 2.0f, layoutRect.getWidth(), 10,
                        juce::Justification::centredLeft, false);
           }
         }

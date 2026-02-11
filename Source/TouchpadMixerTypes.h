@@ -3,8 +3,17 @@
 #include <string>
 #include <vector>
 
-// Touchpad tab type selector. Mixer = vertical CC faders; DrumPad = finger drumming grid.
-enum class TouchpadType { Mixer = 0, DrumPad = 1 };
+// Touchpad tab type selector.
+// - Mixer      = vertical CC faders
+// - DrumPad    = classic finger-drumming / pad grid
+// - ChordPad   = chord trigger grid
+// Harmonic-style behaviour is implemented as a DrumPad layout mode rather
+// than a separate type.
+enum class TouchpadType {
+  Mixer = 0,
+  DrumPad = 1,
+  ChordPad = 2
+};
 
 // Universal region for touchpad layouts. Defines where on the touchpad (0-1 normalized)
 // this layout is active. Content is stretched to fit within the region.
@@ -34,8 +43,19 @@ enum class TouchpadMixerLockFree {
   Free = 1  // Finger can swipe to another fader
 };
 
+// Per-layout mode for DrumPad-derived layouts (note / performance grids).
+// This lets us keep legacy "Drum Pad / Launcher" sessions working while
+// adding richer grid behaviours without changing the high-level TouchpadType
+// used in presets.
+enum class DrumPadLayoutMode {
+  Classic = 0,      // Legacy drum pad: chromatic grid from midiNoteStart
+  HarmonicGrid = 1  // Isomorphic harmonic grid (rowInterval + scale filter)
+};
+
 // Config for one touchpad strip (serialized in preset / session).
-// type determines which controls apply; Mixer = vertical CC faders; DrumPad = finger drumming.
+// type determines which controls apply:
+// - Mixer       = vertical CC faders
+// - DrumPad*    = finger drumming / note / performance grid family
 struct TouchpadMixerConfig {
   TouchpadType type = TouchpadType::Mixer;
   std::string name = "Touchpad Mixer";
@@ -62,7 +82,8 @@ struct TouchpadMixerConfig {
   // Region lock: finger locked to this layout until release; shows ghost at edge when outside
   bool regionLock = false;
 
-  // DrumPad fields (used when type == DrumPad)
+  // DrumPad-style grid fields (used when type is a grid layout:
+  // DrumPad/HarmonicGrid/ChordPad).
   int drumPadRows = 2;
   int drumPadColumns = 4;
   int drumPadMidiNoteStart = 60;
@@ -72,6 +93,26 @@ struct TouchpadMixerConfig {
   float drumPadDeadZoneRight = 0.0f;
   float drumPadDeadZoneTop = 0.0f;
   float drumPadDeadZoneBottom = 0.0f;
+  DrumPadLayoutMode drumPadLayoutMode = DrumPadLayoutMode::Classic;
+
+  // Harmonic Grid specific (used when DrumPad layoutMode == HarmonicGrid)
+  // Rows/columns come from drumPadRows/drumPadColumns.
+  // Base note comes from drumPadMidiNoteStart.
+  int harmonicRowInterval = 5;          // semitones between rows (e.g. 5 = P4)
+  bool harmonicUseScaleFilter = false;  // future: constrain to global scale
+
+  // Chord Pad specific (used when type == ChordPad)
+  // Rows/columns come from drumPadRows/drumPadColumns.
+  // Root for first pad comes from drumPadMidiNoteStart.
+  int chordPadPreset = 0;              // 0=Diatonic I–VII, 1=Pop, 2=Extended
+  bool chordPadLatchMode = true;       // true=Latch, false=Momentary
+
+  // Legacy Drum+FX Split-specific fields (no longer used).
+  int drumFxSplitSplitRow = 1;
+  int fxCcStart = 20;
+  int fxOutputMin = 0;
+  int fxOutputMax = 127;
+  bool fxToggleMode = true;
 };
 
 // Precomputed mode flags (avoids per-frame branching)
@@ -109,6 +150,7 @@ struct TouchpadMixerEntry {
 
 // Compiled entry for DrumPad strip (O(1) runtime).
 // Grid is stretched to fit within region; region defines active area.
+// layoutMode selects between Classic and Harmonic behaviours.
 struct TouchpadDrumPadEntry {
   int layerId = 0;
   int rows = 0;
@@ -118,6 +160,59 @@ struct TouchpadDrumPadEntry {
   int midiChannel = 1;
   int baseVelocity = 100;
   int velocityRandom = 0;
+  float regionLeft = 0.0f, regionTop = 0.0f, regionRight = 1.0f,
+        regionBottom = 1.0f;
+  float invRegionWidth = 1.0f, invRegionHeight = 1.0f;
+  bool regionLock = false;
+  DrumPadLayoutMode layoutMode = DrumPadLayoutMode::Classic;
+
+  // Harmonic mode parameters (only used when layoutMode == HarmonicGrid)
+  int harmonicRowInterval = 5;
+  bool harmonicUseScaleFilter = false;
+};
+
+// Compiled entry for Chord Pad layout.
+// For Phase 1 we support a small set of factory chord presets; chords are
+// generated at runtime from (preset, baseNote, pad index).
+struct TouchpadChordPadEntry {
+  int layerId = 0;
+  int rows = 0;
+  int columns = 0;
+  int midiChannel = 1;
+  int baseVelocity = 100;
+  int velocityRandom = 0;
+  int baseRootNote = 60; // root for pad 0; others derived from this
+  int presetId = 0;
+  bool latchMode = true;
+  float regionLeft = 0.0f, regionTop = 0.0f, regionRight = 1.0f,
+        regionBottom = 1.0f;
+  float invRegionWidth = 1.0f, invRegionHeight = 1.0f;
+  bool regionLock = false;
+};
+
+// Compiled entry for Drum+FX Split layout.
+// Bottom rows = drums (note grid), top rows = FX pads (CC toggles/momentary).
+struct TouchpadDrumFxSplitEntry {
+  int layerId = 0;
+  int rows = 0;
+  int columns = 0;
+  int splitRow = 1; // FX region starts at this row index (0..rows)
+
+  // Drum section
+  int drumMidiNoteStart = 36;
+  int drumMidiChannel = 1;
+  int drumBaseVelocity = 100;
+  int drumVelocityRandom = 0;
+
+  // FX section
+  int fxMidiChannel = 1;
+  int fxCcStart = 20;
+  int fxCcCount = 8;
+  int fxOutputMin = 0;
+  int fxOutputMax = 127;
+  bool fxToggleMode = true;
+
+  // Region
   float regionLeft = 0.0f, regionTop = 0.0f, regionRight = 1.0f,
         regionBottom = 1.0f;
   float invRegionWidth = 1.0f, invRegionHeight = 1.0f;

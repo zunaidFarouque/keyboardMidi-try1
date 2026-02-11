@@ -144,6 +144,7 @@ target_sources(MIDIQy PRIVATE
     Source/StartupManager.cpp
     Source/ScaleEditorComponent.cpp
     Source/MusicalKeyboardComponent.cpp
+    Source/TouchpadRelayoutDialog.cpp
 )
 
 # 7. Definitions (Fixes Macro Hell globally)

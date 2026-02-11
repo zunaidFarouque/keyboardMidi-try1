@@ -363,8 +363,14 @@ struct CompiledContext {
   // InputProcessor
   std::vector<TouchpadMixerEntry> touchpadMixerStrips;
 
-  // 5. Touchpad drum pad strips (grid of note pads); applied by InputProcessor
+  // 5. Touchpad drum pad strips (grid of note pads / harmonic grids); applied
+  // by InputProcessor
   std::vector<TouchpadDrumPadEntry> touchpadDrumPadStrips;
+  // 6. Chord Pad layouts; applied by InputProcessor
+  std::vector<TouchpadChordPadEntry> touchpadChordPads;
+
+  // 7. Drum+FX Split layouts (legacy; no longer used at runtime)
+  std::vector<TouchpadDrumFxSplitEntry> touchpadDrumFxSplits;
 
   // Maps layout index (from TouchpadMixerManager.getLayouts) to (type, index in
   // that type's vector). Used by visualizer for overlay selection.

@@ -26,12 +26,22 @@ const juce::Identifier kDrumPadDeadZoneLeft("drumPadDeadZoneLeft");
 const juce::Identifier kDrumPadDeadZoneRight("drumPadDeadZoneRight");
 const juce::Identifier kDrumPadDeadZoneTop("drumPadDeadZoneTop");
 const juce::Identifier kDrumPadDeadZoneBottom("drumPadDeadZoneBottom");
+const juce::Identifier kDrumPadLayoutMode("drumPadLayoutMode");
 const juce::Identifier kRegionLeft("regionLeft");
 const juce::Identifier kRegionTop("regionTop");
 const juce::Identifier kRegionRight("regionRight");
 const juce::Identifier kRegionBottom("regionBottom");
 const juce::Identifier kZIndex("zIndex");
 const juce::Identifier kRegionLock("regionLock");
+const juce::Identifier kHarmonicRowInterval("harmonicRowInterval");
+const juce::Identifier kHarmonicUseScaleFilter("harmonicUseScaleFilter");
+const juce::Identifier kChordPadPreset("chordPadPreset");
+const juce::Identifier kChordPadLatchMode("chordPadLatchMode");
+const juce::Identifier kDrumFxSplitSplitRow("drumFxSplitSplitRow");
+const juce::Identifier kFxCcStart("fxCcStart");
+const juce::Identifier kFxOutputMin("fxOutputMin");
+const juce::Identifier kFxOutputMax("fxOutputMax");
+const juce::Identifier kFxToggleMode("fxToggleMode");
 } // namespace
 
 void TouchpadMixerManager::addLayout(const TouchpadMixerConfig &config) {
@@ -70,7 +80,16 @@ static int enumToInt(TouchpadMixerAbsRel v) { return static_cast<int>(v); }
 static int enumToInt(TouchpadMixerLockFree v) { return static_cast<int>(v); }
 
 static juce::String typeToString(TouchpadType t) {
-  return (t == TouchpadType::DrumPad) ? "drumPad" : "mixer";
+  switch (t) {
+  case TouchpadType::Mixer:
+    return "mixer";
+  case TouchpadType::DrumPad:
+    return "drumPad";
+  case TouchpadType::ChordPad:
+    return "chordPad";
+  default:
+    return "mixer";
+  }
 }
 
 juce::ValueTree TouchpadMixerManager::toValueTree() const {
@@ -98,16 +117,29 @@ juce::ValueTree TouchpadMixerManager::toValueTree() const {
     child.setProperty(kRegionBottom, s.region.bottom, nullptr);
     child.setProperty(kZIndex, s.zIndex, nullptr);
     child.setProperty(kRegionLock, s.regionLock, nullptr);
-    if (s.type == TouchpadType::DrumPad) {
+    if (s.type == TouchpadType::DrumPad ||
+        s.type == TouchpadType::ChordPad) {
       child.setProperty(kDrumPadRows, s.drumPadRows, nullptr);
       child.setProperty(kDrumPadColumns, s.drumPadColumns, nullptr);
       child.setProperty(kDrumPadMidiNoteStart, s.drumPadMidiNoteStart, nullptr);
       child.setProperty(kDrumPadBaseVelocity, s.drumPadBaseVelocity, nullptr);
-      child.setProperty(kDrumPadVelocityRandom, s.drumPadVelocityRandom, nullptr);
+      child.setProperty(kDrumPadVelocityRandom, s.drumPadVelocityRandom,
+                        nullptr);
       child.setProperty(kDrumPadDeadZoneLeft, s.drumPadDeadZoneLeft, nullptr);
       child.setProperty(kDrumPadDeadZoneRight, s.drumPadDeadZoneRight, nullptr);
       child.setProperty(kDrumPadDeadZoneTop, s.drumPadDeadZoneTop, nullptr);
-      child.setProperty(kDrumPadDeadZoneBottom, s.drumPadDeadZoneBottom, nullptr);
+      child.setProperty(kDrumPadDeadZoneBottom, s.drumPadDeadZoneBottom,
+                        nullptr);
+    }
+    if (s.type == TouchpadType::DrumPad) {
+      child.setProperty(kDrumPadLayoutMode,
+                        static_cast<int>(s.drumPadLayoutMode), nullptr);
+      child.setProperty(kHarmonicRowInterval, s.harmonicRowInterval, nullptr);
+      child.setProperty(kHarmonicUseScaleFilter, s.harmonicUseScaleFilter,
+                        nullptr);
+    } else if (s.type == TouchpadType::ChordPad) {
+      child.setProperty(kChordPadPreset, s.chordPadPreset, nullptr);
+      child.setProperty(kChordPadLatchMode, s.chordPadLatchMode, nullptr);
     }
     vt.addChild(child, -1, nullptr);
   }
@@ -116,8 +148,13 @@ juce::ValueTree TouchpadMixerManager::toValueTree() const {
 
 static TouchpadType parseType(const juce::var &v) {
   juce::String s = v.toString().trim();
-  return s.equalsIgnoreCase("drumPad") ? TouchpadType::DrumPad
-                                       : TouchpadType::Mixer;
+  if (s.equalsIgnoreCase("drumPad"))
+    return TouchpadType::DrumPad;
+  if (s.equalsIgnoreCase("harmonicGrid"))
+    return TouchpadType::DrumPad;
+  if (s.equalsIgnoreCase("chordPad"))
+    return TouchpadType::ChordPad;
+  return TouchpadType::Mixer;
 }
 
 void TouchpadMixerManager::restoreFromValueTree(const juce::ValueTree &vt) {
@@ -130,7 +167,10 @@ void TouchpadMixerManager::restoreFromValueTree(const juce::ValueTree &vt) {
     if (!child.hasType(kTouchpadMixer))
       continue;
     TouchpadMixerConfig s;
-    s.type = parseType(child.getProperty(kType, "mixer"));
+    auto rawTypeVar = child.getProperty(kType, "mixer");
+    juce::String rawTypeStr = rawTypeVar.toString().trim();
+    bool typeWasHarmonic = rawTypeStr.equalsIgnoreCase("harmonicGrid");
+    s.type = parseType(rawTypeVar);
     s.name = child.getProperty(kName, "Touchpad Mixer").toString().toStdString();
     s.layerId = juce::jlimit(0, 8, (int)child.getProperty(kLayerId, 0));
     s.numFaders =
@@ -164,7 +204,8 @@ void TouchpadMixerManager::restoreFromValueTree(const juce::ValueTree &vt) {
     }
     s.zIndex = juce::jlimit(-100, 100, (int)child.getProperty(kZIndex, 0));
     s.regionLock = (bool)child.getProperty(kRegionLock, false);
-    if (s.type == TouchpadType::DrumPad) {
+    if (s.type == TouchpadType::DrumPad ||
+        s.type == TouchpadType::ChordPad) {
       s.drumPadRows =
           juce::jlimit(1, 8, (int)child.getProperty(kDrumPadRows, 2));
       s.drumPadColumns =
@@ -189,7 +230,30 @@ void TouchpadMixerManager::restoreFromValueTree(const juce::ValueTree &vt) {
         s.region.right = 1.0f - s.drumPadDeadZoneRight;
         s.region.bottom = 1.0f - s.drumPadDeadZoneBottom;
       }
-    } else if (!child.hasProperty(kRegionLeft)) {
+    }
+    if (s.type == TouchpadType::DrumPad) {
+      // Layout mode: persisted as int; fallback to legacy type name when absent.
+      int layoutRaw =
+          static_cast<int>(child.getProperty(kDrumPadLayoutMode, -1));
+      if (layoutRaw == static_cast<int>(DrumPadLayoutMode::Classic) ||
+          layoutRaw == static_cast<int>(DrumPadLayoutMode::HarmonicGrid)) {
+        s.drumPadLayoutMode = static_cast<DrumPadLayoutMode>(layoutRaw);
+      } else {
+        s.drumPadLayoutMode = typeWasHarmonic ? DrumPadLayoutMode::HarmonicGrid
+                                              : DrumPadLayoutMode::Classic;
+      }
+
+      s.harmonicRowInterval = (int)child.getProperty(
+          kHarmonicRowInterval, s.harmonicRowInterval);
+      s.harmonicUseScaleFilter = (bool)child.getProperty(
+          kHarmonicUseScaleFilter, s.harmonicUseScaleFilter);
+    } else if (s.type == TouchpadType::ChordPad) {
+      s.chordPadPreset =
+          (int)child.getProperty(kChordPadPreset, s.chordPadPreset);
+      s.chordPadLatchMode = (bool)child.getProperty(
+          kChordPadLatchMode, s.chordPadLatchMode);
+    }
+    if (s.type == TouchpadType::Mixer && !child.hasProperty(kRegionLeft)) {
       s.region.left = 0.0f;
       s.region.top = 0.0f;
       s.region.right = 1.0f;

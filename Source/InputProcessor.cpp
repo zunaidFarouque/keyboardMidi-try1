@@ -1184,6 +1184,13 @@ InputProcessor::getEffectiveContactPositions(
       top = s.regionTop;
       right = s.regionRight;
       bottom = s.regionBottom;
+    } else if (type == TouchpadType::ChordPad &&
+               idx < ctx->touchpadChordPads.size()) {
+      const auto &s = ctx->touchpadChordPads[idx];
+      left = s.regionLeft;
+      top = s.regionTop;
+      right = s.regionRight;
+      bottom = s.regionBottom;
     } else {
       continue;
     }
@@ -1540,9 +1547,16 @@ bool InputProcessor::hasPointerMappings() {
     }
   }
 
-  // Check for touchpad drum pad layouts
+  // Check for touchpad drum pad / harmonic grid layouts
   for (const auto &strip : ctx->touchpadDrumPadStrips) {
     if (activeLayersSnapshot[(size_t)strip.layerId]) {
+      return true;
+    }
+  }
+
+  // Check for Chord Pad layouts
+  for (const auto &cp : ctx->touchpadChordPads) {
+    if (activeLayersSnapshot[(size_t)cp.layerId]) {
       return true;
     }
   }
@@ -1567,8 +1581,10 @@ bool InputProcessor::hasPointerMappings() {
 
 bool InputProcessor::hasTouchpadLayouts() const {
   juce::ScopedReadLock rl(mapLock);
-  return activeContext && (!activeContext->touchpadMixerStrips.empty() ||
-                           !activeContext->touchpadDrumPadStrips.empty());
+  return activeContext &&
+         (!activeContext->touchpadMixerStrips.empty() ||
+          !activeContext->touchpadDrumPadStrips.empty() ||
+          !activeContext->touchpadChordPads.empty());
 }
 
 void InputProcessor::processTouchpadContacts(
@@ -1642,6 +1658,14 @@ void InputProcessor::processTouchpadContacts(
         if (nx >= s.regionLeft && nx < s.regionRight && ny >= s.regionTop &&
             ny < s.regionBottom)
           return {{TouchpadType::DrumPad, ref.index}};
+      } else if (ref.type == TouchpadType::ChordPad &&
+                 ref.index < ctx->touchpadChordPads.size()) {
+        const auto &s = ctx->touchpadChordPads[ref.index];
+        if (!activeLayersSnapshot[(size_t)s.layerId])
+          continue;
+        if (nx >= s.regionLeft && nx < s.regionRight && ny >= s.regionTop &&
+            ny < s.regionBottom)
+          return {{TouchpadType::ChordPad, ref.index}};
       }
     }
     return std::nullopt;
@@ -1654,6 +1678,9 @@ void InputProcessor::processTouchpadContacts(
     if (type == TouchpadType::DrumPad &&
         idx < ctx->touchpadDrumPadStrips.size())
       return ctx->touchpadDrumPadStrips[idx].regionLock;
+    if (type == TouchpadType::ChordPad &&
+        idx < ctx->touchpadChordPads.size())
+      return ctx->touchpadChordPads[idx].regionLock;
     return false;
   };
 
@@ -2375,6 +2402,323 @@ void InputProcessor::processTouchpadContacts(
     }
   }
 
+  // Chord Pad layouts: each pad triggers a chord. Behaviour depends on
+  // latchMode: momentary (finger-held) vs toggle (pad latches chord on/off).
+  if (!ctx->touchpadChordPads.empty()) {
+    juce::ScopedWriteLock wl(mixerStateLock);
+    for (size_t stripIdx = 0; stripIdx < ctx->touchpadChordPads.size();
+         ++stripIdx) {
+      const auto &strip = ctx->touchpadChordPads[stripIdx];
+      if (!activeLayersSnapshot[(size_t)strip.layerId])
+        continue;
+      if (strip.rows <= 0 || strip.columns <= 0)
+        continue;
+
+      auto contactToPad = [&strip](float nx,
+                                   float ny) -> int {
+        float localX = (nx - strip.regionLeft) * strip.invRegionWidth;
+        float localY = (ny - strip.regionTop) * strip.invRegionHeight;
+        if (localX < 0.0f || localX >= 1.0f || localY < 0.0f || localY >= 1.0f)
+          return -1;
+        int col = static_cast<int>(localX * static_cast<float>(strip.columns));
+        int row = static_cast<int>(localY * static_cast<float>(strip.rows));
+        col = juce::jlimit(0, strip.columns - 1, col);
+        row = juce::jlimit(0, strip.rows - 1, row);
+        return row * strip.columns + col;
+      };
+
+      auto getEffectivePos = [&](int contactId, float nx,
+                                 float ny) -> std::pair<float, float> {
+        if (!strip.regionLock)
+          return {nx, ny};
+        auto lockKey = std::make_tuple(deviceHandle, contactId);
+        auto itLock = contactLayoutLock.find(lockKey);
+        if (itLock == contactLayoutLock.end())
+          return {nx, ny};
+        if (itLock->second.first != TouchpadType::ChordPad ||
+            itLock->second.second != stripIdx)
+          return {nx, ny};
+        float ex = std::clamp(nx, strip.regionLeft, strip.regionRight);
+        float ey = std::clamp(ny, strip.regionTop, strip.regionBottom);
+        return {ex, ey};
+      };
+
+      auto buildChordForPad = [&](int padIndex) -> std::vector<int> {
+        std::vector<int> notes;
+        if (padIndex < 0)
+          return notes;
+
+        // Use global scale intervals to build chords relative to baseRootNote.
+        std::vector<int> intervals = zoneManager.getGlobalScaleIntervals();
+        if (intervals.empty())
+          intervals = {0, 2, 4, 5, 7, 9, 11}; // Major fallback
+
+        const int numDeg = static_cast<int>(intervals.size());
+        int degreeIndex = padIndex % juce::jmax(1, numDeg);
+        int octaveOffset = padIndex / juce::jmax(1, numDeg);
+        degreeIndex = juce::jlimit(0, numDeg - 1, degreeIndex);
+
+        auto degreeToNote = [&](int baseDegree, int offset) -> int {
+          int deg = baseDegree + offset;
+          int octaveAdj = 0;
+          if (deg >= 0) {
+            octaveAdj = deg / numDeg;
+          } else {
+            octaveAdj = (deg - (numDeg - 1)) / numDeg;
+          }
+          int idx = ((deg % numDeg) + numDeg) % numDeg;
+          int semitone =
+              intervals[idx] + 12 * (octaveOffset + octaveAdj);
+          int base = strip.baseRootNote;
+          return juce::jlimit(0, 127, base + semitone);
+        };
+
+        int presetId = strip.presetId;
+        if (presetId < 0)
+          presetId = 0;
+
+        // Preset 0: diatonic triads (root, 3rd, 5th).
+        if (presetId == 0) {
+          int n0 = degreeToNote(degreeIndex, 0);
+          int n1 = degreeToNote(degreeIndex, 2);
+          int n2 = degreeToNote(degreeIndex, 4);
+          notes = {n0, n1, n2};
+        }
+        // Preset 1: diatonic 7ths (root, 3rd, 5th, 7th).
+        else if (presetId == 1) {
+          int n0 = degreeToNote(degreeIndex, 0);
+          int n1 = degreeToNote(degreeIndex, 2);
+          int n2 = degreeToNote(degreeIndex, 4);
+          int n3 = degreeToNote(degreeIndex, 6);
+          notes = {n0, n1, n2, n3};
+        }
+        // Preset 2: pop extended – root, fifth, add9.
+        else {
+          int n0 = degreeToNote(degreeIndex, 0);
+          int n1 = degreeToNote(degreeIndex, 4);
+          int n2 = degreeToNote(degreeIndex, 7); // roughly add9 colour
+          notes = {n0, n1, n2};
+        }
+
+        // Clamp and dedupe.
+        std::sort(notes.begin(), notes.end());
+        notes.erase(std::unique(notes.begin(), notes.end()), notes.end());
+        return notes;
+      };
+
+      // Clear latched pads if latchMode was turned off since last frame.
+      {
+        int stripKey = static_cast<int>(stripIdx);
+        bool prevLatch =
+            chordPadLastLatchMode.count(stripKey)
+                ? chordPadLastLatchMode[stripKey]
+                : strip.latchMode;
+        if (prevLatch && !strip.latchMode) {
+          for (auto it = chordPadLatchedPads.begin();
+               it != chordPadLatchedPads.end();) {
+            uintptr_t dev = std::get<0>(it->first);
+            int sIdx = std::get<1>(it->first);
+            if (sIdx == stripKey) {
+              voiceManager.handleKeyUp(it->second.inputId);
+              it = chordPadLatchedPads.erase(it);
+            } else {
+              ++it;
+            }
+          }
+        }
+        chordPadLastLatchMode[stripKey] = strip.latchMode;
+      }
+
+      if (strip.latchMode) {
+        // Latch mode: pad toggles chord on/off; contacts only drive toggle
+        // edges.
+        size_t ci = 0;
+        for (const auto &c : contacts) {
+          if (!c.tipDown) {
+            ++ci;
+            continue;
+          }
+          auto layoutMatch = ci < layoutPerContact.size()
+                                 ? layoutPerContact[ci]
+                                 : findLayoutForPoint(c.normX, c.normY);
+          ++ci;
+          if (!layoutMatch || layoutMatch->first != TouchpadType::ChordPad ||
+              layoutMatch->second != stripIdx)
+            continue;
+          auto lockKey = std::make_tuple(deviceHandle, c.contactId);
+          auto itLock = contactLayoutLock.find(lockKey);
+          if (itLock != contactLayoutLock.end() &&
+              (itLock->second.first != TouchpadType::ChordPad ||
+               itLock->second.second != stripIdx))
+            continue;
+
+          auto keyContact = std::make_tuple(deviceHandle,
+                                            static_cast<int>(stripIdx),
+                                            c.contactId);
+          // Only toggle on the first frame this contact appears.
+          if (chordPadActiveChords.find(keyContact) !=
+              chordPadActiveChords.end())
+            continue;
+
+          auto [effX, effY] = getEffectivePos(c.contactId, c.normX, c.normY);
+          int padIndex = contactToPad(effX, effY);
+          if (padIndex < 0)
+            continue;
+
+          auto padKey = std::make_tuple(deviceHandle,
+                                        static_cast<int>(stripIdx), padIndex);
+          auto itPad = chordPadLatchedPads.find(padKey);
+          if (itPad == chordPadLatchedPads.end()) {
+            // Toggle ON – build chord and noteOn.
+            auto chordNotes = buildChordForPad(padIndex);
+            if (chordNotes.empty())
+              continue;
+            std::vector<int> velocities;
+            velocities.reserve(chordNotes.size());
+            for (size_t i = 0; i < chordNotes.size(); ++i) {
+              int vel = calculateVelocity(strip.baseVelocity,
+                                          strip.velocityRandom);
+              velocities.push_back(vel);
+            }
+            int keyCode =
+                static_cast<int>((stripIdx << 8) | (padIndex & 0xFF));
+            InputID padInput{deviceHandle, keyCode};
+            voiceManager.noteOn(padInput, chordNotes, velocities,
+                                strip.midiChannel, 0, true, 0,
+                                PolyphonyMode::Poly, 50);
+            if (!chordNotes.empty())
+              lastTriggeredNote = chordNotes.front();
+            chordPadLatchedPads[padKey] = {padInput, padIndex};
+          } else {
+            // Toggle OFF – release latched chord.
+            voiceManager.handleKeyUp(itPad->second.inputId);
+            chordPadLatchedPads.erase(itPad);
+          }
+
+          // Mark this contact as having triggered a toggle so we don't retrigger
+          // while it stays down.
+          chordPadActiveChords[keyContact] = {InputID{deviceHandle, 0},
+                                              padIndex};
+        }
+
+        // Clean up contact-based toggle markers when fingers lift.
+        for (auto it = chordPadActiveChords.begin();
+             it != chordPadActiveChords.end();) {
+          uintptr_t kDev = std::get<0>(it->first);
+          int kStrip = std::get<1>(it->first);
+          int kContact = std::get<2>(it->first);
+          if (kDev != deviceHandle ||
+              kStrip != static_cast<int>(stripIdx)) {
+            ++it;
+            continue;
+          }
+          bool stillDown = false;
+          for (const auto &c : contacts) {
+            if (c.contactId == kContact && c.tipDown) {
+              stillDown = true;
+              break;
+            }
+          }
+          if (!stillDown)
+            it = chordPadActiveChords.erase(it);
+          else
+            ++it;
+        }
+      } else {
+        // Momentary mode: chord lives while finger stays down on pad.
+        size_t ci = 0;
+        for (const auto &c : contacts) {
+          if (!c.tipDown) {
+            ++ci;
+            continue;
+          }
+          auto layoutMatch = ci < layoutPerContact.size()
+                                 ? layoutPerContact[ci]
+                                 : findLayoutForPoint(c.normX, c.normY);
+          ++ci;
+          if (!layoutMatch || layoutMatch->first != TouchpadType::ChordPad ||
+              layoutMatch->second != stripIdx)
+            continue;
+          auto lockKey = std::make_tuple(deviceHandle, c.contactId);
+          auto itLock = contactLayoutLock.find(lockKey);
+          if (itLock != contactLayoutLock.end() &&
+              (itLock->second.first != TouchpadType::ChordPad ||
+               itLock->second.second != stripIdx))
+            continue;
+          auto [effX, effY] = getEffectivePos(c.contactId, c.normX, c.normY);
+          int padIndex = contactToPad(effX, effY);
+          if (padIndex < 0)
+            continue;
+          auto chordNotes = buildChordForPad(padIndex);
+          if (chordNotes.empty())
+            continue;
+
+          auto key = std::make_tuple(deviceHandle,
+                                     static_cast<int>(stripIdx),
+                                     c.contactId);
+          int keyCode =
+              static_cast<int>((stripIdx << 8) | (c.contactId & 0xFF));
+          InputID input{deviceHandle, keyCode};
+
+          auto it = chordPadActiveChords.find(key);
+          if (it != chordPadActiveChords.end()) {
+            if (it->second.padIndex == padIndex)
+              continue;
+            voiceManager.handleKeyUp(it->second.inputId);
+            chordPadActiveChords.erase(it);
+          }
+
+          std::vector<int> velocities;
+          velocities.reserve(chordNotes.size());
+          for (size_t i = 0; i < chordNotes.size(); ++i) {
+            int vel =
+                calculateVelocity(strip.baseVelocity, strip.velocityRandom);
+            velocities.push_back(vel);
+          }
+          voiceManager.noteOn(input, chordNotes, velocities, strip.midiChannel,
+                              0, true, 0, PolyphonyMode::Poly, 50);
+          if (!chordNotes.empty())
+            lastTriggeredNote = chordNotes.front();
+          chordPadActiveChords[key] = {input, padIndex};
+        }
+
+        for (auto it = chordPadActiveChords.begin();
+             it != chordPadActiveChords.end();) {
+          uintptr_t kDev = std::get<0>(it->first);
+          int kStrip = std::get<1>(it->first);
+          int kContact = std::get<2>(it->first);
+          if (kDev != deviceHandle ||
+              kStrip != static_cast<int>(stripIdx)) {
+            ++it;
+            continue;
+          }
+          bool stillValid = false;
+          for (const auto &c : contacts) {
+            if (c.contactId != kContact)
+              continue;
+            if (!c.tipDown)
+              break;
+            auto [effX, effY] = getEffectivePos(c.contactId, c.normX, c.normY);
+            int padIndex = contactToPad(effX, effY);
+            if (padIndex >= 0 && padIndex == it->second.padIndex) {
+              stillValid = true;
+              break;
+            }
+            if (padIndex >= 0)
+              stillValid = true;
+            break;
+          }
+          if (!stillValid) {
+            voiceManager.handleKeyUp(it->second.inputId);
+            it = chordPadActiveChords.erase(it);
+          } else {
+            ++it;
+          }
+        }
+      }
+  }
+  }
+
   // Drum pad layouts: grid -> Note On/Off per contact. Region-based: only
   // process contacts in this strip's region. Content stretched to fit region.
   if (!ctx->touchpadDrumPadStrips.empty()) {
@@ -2393,8 +2737,11 @@ void InputProcessor::processTouchpadContacts(
       actTemplate.releaseBehavior = NoteReleaseBehavior::SendNoteOff;
 
       // Helper: compute pad index and MIDI note from contact position (local
-      // coords within region), or -1 if outside region
-      auto contactToPad = [&strip](float nx, float ny) -> std::pair<int, int> {
+      // coords within region), or -1 if outside region. Note mapping depends on
+      // layoutMode (Classic vs HarmonicGrid).
+      auto contactToPad = [this, &strip](
+                              float nx,
+                              float ny) -> std::pair<int, int> {
         float localX = (nx - strip.regionLeft) * strip.invRegionWidth;
         float localY = (ny - strip.regionTop) * strip.invRegionHeight;
         if (localX < 0.0f || localX >= 1.0f || localY < 0.0f || localY >= 1.0f)
@@ -2404,7 +2751,45 @@ void InputProcessor::processTouchpadContacts(
         col = juce::jlimit(0, strip.columns - 1, col);
         row = juce::jlimit(0, strip.rows - 1, row);
         int padIndex = row * strip.columns + col;
-        int midiNote = juce::jlimit(0, 127, strip.midiNoteStart + padIndex);
+
+        // Classic: chromatic grid from midiNoteStart.
+        if (strip.layoutMode == DrumPadLayoutMode::Classic) {
+          int midiNote =
+              juce::jlimit(0, 127, strip.midiNoteStart + padIndex);
+          return {padIndex, midiNote};
+        }
+
+        // HarmonicGrid: isomorphic harmonic grid with optional scale filter.
+        int rawNote = juce::jlimit(
+            0, 127,
+            strip.midiNoteStart + col + row * strip.harmonicRowInterval);
+
+        int midiNote = rawNote;
+        if (strip.harmonicUseScaleFilter) {
+          int root = zoneManager.getGlobalRootNote();
+          std::vector<int> intervals = zoneManager.getGlobalScaleIntervals();
+          if (intervals.empty())
+            intervals = {0, 2, 4, 5, 7, 9, 11}; // Major fallback
+
+          int rel = rawNote - root;
+          int octave = (rel >= 0) ? (rel / 12) : ((rel - 11) / 12);
+          int within = rel - octave * 12;
+          if (within < 0) {
+            within += 12;
+            --octave;
+          }
+
+          int chosen = intervals.back();
+          for (int iv : intervals) {
+            if (within <= iv) {
+              chosen = iv;
+              break;
+            }
+          }
+          int snapped = root + octave * 12 + chosen;
+          midiNote = juce::jlimit(0, 127, snapped);
+        }
+
         return {padIndex, midiNote};
       };
 

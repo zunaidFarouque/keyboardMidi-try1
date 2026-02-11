@@ -992,9 +992,39 @@ std::shared_ptr<CompiledMapContext> GridCompiler::compile(
       dpEntry.invRegionWidth = (rW > 1e-6f) ? (1.0f / rW) : 1.0f;
       dpEntry.invRegionHeight = (rH > 1e-6f) ? (1.0f / rH) : 1.0f;
       dpEntry.regionLock = cfg.regionLock;
+      dpEntry.layoutMode = cfg.drumPadLayoutMode;
+      dpEntry.harmonicRowInterval = cfg.harmonicRowInterval;
+      dpEntry.harmonicUseScaleFilter = cfg.harmonicUseScaleFilter;
       context->touchpadDrumPadStrips.push_back(dpEntry);
       context->touchpadLayoutOrder.push_back(
           {TouchpadType::DrumPad, context->touchpadDrumPadStrips.size() - 1});
+    } else if (cfg.type == TouchpadType::ChordPad) {
+      TouchpadChordPadEntry cp;
+      cp.layerId = juce::jlimit(0, 8, cfg.layerId);
+      cp.rows = juce::jlimit(1, 8, cfg.drumPadRows);
+      cp.columns = juce::jlimit(1, 16, cfg.drumPadColumns);
+      cp.midiChannel = juce::jlimit(1, 16, cfg.midiChannel);
+      cp.baseVelocity = juce::jlimit(1, 127, cfg.drumPadBaseVelocity);
+      cp.velocityRandom = juce::jlimit(0, 127, cfg.drumPadVelocityRandom);
+      cp.baseRootNote = juce::jlimit(0, 127, cfg.drumPadMidiNoteStart);
+      cp.presetId = juce::jmax(0, cfg.chordPadPreset);
+      cp.latchMode = cfg.chordPadLatchMode;
+      float rL = juce::jlimit(0.0f, 0.99f, cfg.region.left);
+      float rR = juce::jlimit(rL + 0.01f, 1.0f, cfg.region.right);
+      float rT = juce::jlimit(0.0f, 0.99f, cfg.region.top);
+      float rB = juce::jlimit(rT + 0.01f, 1.0f, cfg.region.bottom);
+      cp.regionLeft = rL;
+      cp.regionTop = rT;
+      cp.regionRight = rR;
+      cp.regionBottom = rB;
+      float rW = rR - rL;
+      float rH = rB - rT;
+      cp.invRegionWidth = (rW > 1e-6f) ? (1.0f / rW) : 1.0f;
+      cp.invRegionHeight = (rH > 1e-6f) ? (1.0f / rH) : 1.0f;
+      cp.regionLock = cfg.regionLock;
+      context->touchpadChordPads.push_back(cp);
+      context->touchpadLayoutOrder.push_back(
+          {TouchpadType::ChordPad, context->touchpadChordPads.size() - 1});
     }
   }
 

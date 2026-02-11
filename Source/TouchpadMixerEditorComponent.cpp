@@ -119,8 +119,18 @@ void TouchpadMixerEditorComponent::setLayout(int index,
 
 juce::var TouchpadMixerEditorComponent::getConfigValue(
     const juce::String &propertyId) const {
-  if (propertyId == "type")
-    return juce::var(currentConfig.type == TouchpadType::DrumPad ? 2 : 1);
+  if (propertyId == "type") {
+    switch (currentConfig.type) {
+    case TouchpadType::Mixer:
+      return juce::var(1);
+    case TouchpadType::DrumPad:
+      return juce::var(2);
+    case TouchpadType::ChordPad:
+      return juce::var(3);
+    default:
+      return juce::var(1);
+    }
+  }
   if (propertyId == "name")
     return juce::var(juce::String(currentConfig.name));
   if (propertyId == "layerId")
@@ -162,6 +172,34 @@ juce::var TouchpadMixerEditorComponent::getConfigValue(
     return juce::var(currentConfig.drumPadBaseVelocity);
   if (propertyId == "drumPadVelocityRandom")
     return juce::var(currentConfig.drumPadVelocityRandom);
+  if (propertyId == "drumPadLayoutMode") {
+    switch (currentConfig.drumPadLayoutMode) {
+    case DrumPadLayoutMode::Classic:
+      return juce::var(1);
+    case DrumPadLayoutMode::HarmonicGrid:
+      return juce::var(2);
+    default:
+      return juce::var(1);
+    }
+  }
+  if (propertyId == "harmonicRowInterval")
+    return juce::var(currentConfig.harmonicRowInterval);
+  if (propertyId == "harmonicUseScaleFilter")
+    return juce::var(currentConfig.harmonicUseScaleFilter);
+  if (propertyId == "chordPadPreset")
+    return juce::var(currentConfig.chordPadPreset);
+  if (propertyId == "chordPadLatchMode")
+    return juce::var(currentConfig.chordPadLatchMode);
+  if (propertyId == "drumFxSplitSplitRow")
+    return juce::var(currentConfig.drumFxSplitSplitRow);
+  if (propertyId == "fxCcStart")
+    return juce::var(currentConfig.fxCcStart);
+  if (propertyId == "fxOutputMin")
+    return juce::var(currentConfig.fxOutputMin);
+  if (propertyId == "fxOutputMax")
+    return juce::var(currentConfig.fxOutputMax);
+  if (propertyId == "fxToggleMode")
+    return juce::var(currentConfig.fxToggleMode);
   if (propertyId == "regionLeft")
     return juce::var(static_cast<double>(currentConfig.region.left));
   if (propertyId == "regionTop")
@@ -183,10 +221,20 @@ void TouchpadMixerEditorComponent::applyConfigValue(
     return;
   if (propertyId == "type") {
     int id = static_cast<int>(value);
-    if (id == 2)
-      currentConfig.type = TouchpadType::DrumPad;
-    else
+    switch (id) {
+    case 1:
       currentConfig.type = TouchpadType::Mixer;
+      break;
+    case 2:
+      currentConfig.type = TouchpadType::DrumPad;
+      break;
+    case 3:
+      currentConfig.type = TouchpadType::ChordPad;
+      break;
+    default:
+      currentConfig.type = TouchpadType::Mixer;
+      break;
+    }
     manager->updateLayout(selectedIndex, currentConfig);
     rebuildUI();
     return;
@@ -236,6 +284,32 @@ void TouchpadMixerEditorComponent::applyConfigValue(
   else if (propertyId == "drumPadVelocityRandom")
     currentConfig.drumPadVelocityRandom =
         juce::jlimit(0, 127, static_cast<int>(value));
+  else if (propertyId == "drumPadLayoutMode") {
+    int id = static_cast<int>(value);
+    currentConfig.drumPadLayoutMode =
+        (id == 2) ? DrumPadLayoutMode::HarmonicGrid
+                  : DrumPadLayoutMode::Classic;
+  }
+  else if (propertyId == "harmonicRowInterval")
+    currentConfig.harmonicRowInterval =
+        juce::jlimit(-12, 12, static_cast<int>(value));
+  else if (propertyId == "harmonicUseScaleFilter")
+    currentConfig.harmonicUseScaleFilter = static_cast<bool>(value);
+  else if (propertyId == "chordPadPreset")
+    currentConfig.chordPadPreset = juce::jmax(0, static_cast<int>(value));
+  else if (propertyId == "chordPadLatchMode")
+    currentConfig.chordPadLatchMode = static_cast<bool>(value);
+  else if (propertyId == "drumFxSplitSplitRow")
+    currentConfig.drumFxSplitSplitRow =
+        juce::jlimit(0, 8, static_cast<int>(value));
+  else if (propertyId == "fxCcStart")
+    currentConfig.fxCcStart = juce::jlimit(0, 127, static_cast<int>(value));
+  else if (propertyId == "fxOutputMin")
+    currentConfig.fxOutputMin = juce::jlimit(0, 127, static_cast<int>(value));
+  else if (propertyId == "fxOutputMax")
+    currentConfig.fxOutputMax = juce::jlimit(0, 127, static_cast<int>(value));
+  else if (propertyId == "fxToggleMode")
+    currentConfig.fxToggleMode = static_cast<bool>(value);
   else if (propertyId == "regionLeft")
     currentConfig.region.left =
         static_cast<float>(juce::jlimit(0.0, 1.0, static_cast<double>(value)));
@@ -363,6 +437,49 @@ void TouchpadMixerEditorComponent::createControl(
     auto container =
         std::make_unique<LabeledControl>(std::move(lbl), std::move(tb));
     addItem(std::move(container), def.widthWeight, def.autoWidth);
+    break;
+  }
+  case InspectorControl::Type::Button: {
+    auto btn = std::make_unique<juce::TextButton>(def.label);
+    juce::TextButton *btnPtr = btn.get();
+    btnPtr->onClick = [this, propId]() {
+      if (propId == "relayoutRegion" && manager && selectedIndex >= 0) {
+        // Create a temporary dialog for this invocation; the callback applies
+        // the chosen region and rebuilds the UI.
+        auto *dialog = new TouchpadRelayoutDialog(
+            [this](float left, float top, float right, float bottom) {
+              if (selectedIndex < 0 || !manager)
+                return;
+              currentConfig.region.left = left;
+              currentConfig.region.top = top;
+              currentConfig.region.right = right;
+              currentConfig.region.bottom = bottom;
+              manager->updateLayout(selectedIndex, currentConfig);
+              rebuildUI();
+            });
+
+        juce::DialogWindow::LaunchOptions opts;
+        opts.content.setOwned(dialog);
+        opts.dialogTitle = "Re-layout region";
+        opts.dialogBackgroundColour = juce::Colour(0xff222222);
+        opts.escapeKeyTriggersCloseButton = true;
+        opts.useNativeTitleBar = true;
+        opts.resizable = false;
+       #if JUCE_MODAL_LOOPS_PERMITTED
+        opts.runModal();
+       #else
+        opts.launchAsync();
+       #endif
+      }
+    };
+
+    auto rowComp = std::make_unique<LabelEditorRow>();
+    rowComp->label = std::make_unique<juce::Label>();
+    rowComp->label->setText("", juce::dontSendNotification);
+    rowComp->editor = std::move(btn);
+    rowComp->addAndMakeVisible(*rowComp->label);
+    rowComp->addAndMakeVisible(*rowComp->editor);
+    addItem(std::move(rowComp), def.widthWeight, def.autoWidth);
     break;
   }
   case InspectorControl::Type::Separator:

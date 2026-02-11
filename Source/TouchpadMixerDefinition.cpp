@@ -3,6 +3,7 @@
 namespace {
 constexpr int kTypeMixerId = 1;
 constexpr int kTypeDrumPadId = 2;
+constexpr int kTypeChordPadId = 3;
 } // namespace
 
 InspectorSchema TouchpadMixerDefinition::getCommonLayoutHeader() {
@@ -18,6 +19,7 @@ InspectorSchema TouchpadMixerDefinition::getCommonLayoutHeader() {
   typeCtrl.controlType = InspectorControl::Type::ComboBox;
   typeCtrl.options[kTypeMixerId] = "Mixer";
   typeCtrl.options[kTypeDrumPadId] = "Drum Pad / Launcher";
+  typeCtrl.options[kTypeChordPadId] = "Chord Pad";
   schema.push_back(typeCtrl);
   InspectorControl layerCtrl;
   layerCtrl.propertyId = "layerId";
@@ -52,6 +54,8 @@ InspectorSchema TouchpadMixerDefinition::getCommonLayoutControls() {
   InspectorSchema schema;
   schema.push_back(
       MappingDefinition::createSeparator("Region", juce::Justification::centredLeft));
+  // Region sliders and a convenience relayout button (handled specially by the
+  // editor component).
   InspectorControl regionLeft;
   regionLeft.propertyId = "regionLeft";
   regionLeft.label = "Region left";
@@ -97,6 +101,14 @@ InspectorSchema TouchpadMixerDefinition::getCommonLayoutControls() {
   regionLockCtrl.label = "Region lock";
   regionLockCtrl.controlType = InspectorControl::Type::Toggle;
   schema.push_back(regionLockCtrl);
+
+  // Pseudo-control used by TouchpadMixerEditorComponent to show a relayout
+  // button. It is not bound directly to a config property.
+  InspectorControl relayoutCtrl;
+  relayoutCtrl.propertyId = "relayoutRegion";
+  relayoutCtrl.label = "Quick relayout";
+  relayoutCtrl.controlType = InspectorControl::Type::Button;
+  schema.push_back(relayoutCtrl);
   return schema;
 }
 
@@ -108,7 +120,7 @@ InspectorSchema TouchpadMixerDefinition::getSchema(TouchpadType type) {
       MappingDefinition::createSeparator("", juce::Justification::centred));
 
   if (type == TouchpadType::DrumPad) {
-    // Drum Pad controls
+    // Drum Pad / Harmonic Grid controls
     InspectorControl rowsCtrl;
     rowsCtrl.propertyId = "drumPadRows";
     rowsCtrl.label = "Rows";
@@ -158,6 +170,84 @@ InspectorSchema TouchpadMixerDefinition::getSchema(TouchpadType type) {
     velRandCtrl.step = 1.0;
     velRandCtrl.valueFormat = InspectorControl::Format::Integer;
     schema.push_back(velRandCtrl);
+
+    // Note layout / Grid mode
+    InspectorControl layoutModeCtrl;
+    layoutModeCtrl.propertyId = "drumPadLayoutMode";
+    layoutModeCtrl.label = "Note layout";
+    layoutModeCtrl.controlType = InspectorControl::Type::ComboBox;
+    layoutModeCtrl.options[1] = "Classic";
+    layoutModeCtrl.options[2] = "Harmonic";
+    schema.push_back(layoutModeCtrl);
+
+    // Harmonic parameters (used when layoutMode == Harmonic)
+    InspectorControl intervalCtrl;
+    intervalCtrl.propertyId = "harmonicRowInterval";
+    intervalCtrl.label = "Row interval (semitones)";
+    intervalCtrl.controlType = InspectorControl::Type::Slider;
+    intervalCtrl.min = -12.0;
+    intervalCtrl.max = 12.0;
+    intervalCtrl.step = 1.0;
+    intervalCtrl.valueFormat = InspectorControl::Format::Integer;
+    schema.push_back(intervalCtrl);
+
+    InspectorControl scaleFilterCtrl;
+    scaleFilterCtrl.propertyId = "harmonicUseScaleFilter";
+    scaleFilterCtrl.label = "Use scale filter";
+    scaleFilterCtrl.controlType = InspectorControl::Type::Toggle;
+    schema.push_back(scaleFilterCtrl);
+
+    for (const auto &c : getCommonLayoutControls())
+      schema.push_back(c);
+
+    return schema;
+  } else if (type == TouchpadType::ChordPad) {
+    // Chord Pad controls
+    InspectorControl rowsCtrl;
+    rowsCtrl.propertyId = "drumPadRows";
+    rowsCtrl.label = "Rows";
+    rowsCtrl.controlType = InspectorControl::Type::Slider;
+    rowsCtrl.min = 1.0;
+    rowsCtrl.max = 8.0;
+    rowsCtrl.step = 1.0;
+    rowsCtrl.valueFormat = InspectorControl::Format::Integer;
+    schema.push_back(rowsCtrl);
+
+    InspectorControl colsCtrl;
+    colsCtrl.propertyId = "drumPadColumns";
+    colsCtrl.label = "Columns";
+    colsCtrl.controlType = InspectorControl::Type::Slider;
+    colsCtrl.min = 1.0;
+    colsCtrl.max = 16.0;
+    colsCtrl.step = 1.0;
+    colsCtrl.valueFormat = InspectorControl::Format::Integer;
+    schema.push_back(colsCtrl);
+
+    InspectorControl rootCtrl;
+    rootCtrl.propertyId = "drumPadMidiNoteStart";
+    rootCtrl.label = "Base root note";
+    rootCtrl.controlType = InspectorControl::Type::Slider;
+    rootCtrl.min = 0.0;
+    rootCtrl.max = 127.0;
+    rootCtrl.step = 1.0;
+    rootCtrl.valueFormat = InspectorControl::Format::NoteName;
+    schema.push_back(rootCtrl);
+
+    InspectorControl presetCtrl;
+    presetCtrl.propertyId = "chordPadPreset";
+    presetCtrl.label = "Preset";
+    presetCtrl.controlType = InspectorControl::Type::Slider;
+    presetCtrl.min = 0.0;
+    presetCtrl.max = 2.0;
+    presetCtrl.step = 1.0;
+    presetCtrl.valueFormat = InspectorControl::Format::Integer;
+    schema.push_back(presetCtrl);
+
+    InspectorControl latchCtrl;
+    latchCtrl.propertyId = "chordPadLatchMode";
+    latchCtrl.label = "Latch mode";
+    latchCtrl.controlType = InspectorControl::Type::Toggle;
+    schema.push_back(latchCtrl);
 
     for (const auto &c : getCommonLayoutControls())
       schema.push_back(c);
