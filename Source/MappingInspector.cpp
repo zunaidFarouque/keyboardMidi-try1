@@ -532,12 +532,16 @@ void MappingInspector::createControl(const InspectorControl &def,
       }
       if (def.propertyId == "type" || def.propertyId == "data1" ||
           def.propertyId == "commandCategory" ||
-          def.propertyId == "sustainStyle" || def.propertyId == "panicMode" ||
-          def.propertyId == "layerStyle" || def.propertyId == "transposeMode" ||
+          def.propertyId == "sustainStyle" ||
+          def.propertyId == "panicMode" ||
+          def.propertyId == "layerStyle" ||
+          def.propertyId == "transposeMode" ||
           def.propertyId == "transposeModify" ||
           def.propertyId == "touchpadSoloType" ||
-          def.propertyId == "touchpadLayoutGroupId")
+          def.propertyId == "touchpadLayoutGroupId" ||
+          def.propertyId == "touchpadSoloScope") {
         juce::MessageManager::callAsync([this]() { rebuildUI(); });
+      }
     };
 
     auto rowComp = std::make_unique<LabelEditorRow>();
@@ -929,8 +933,9 @@ void MappingInspector::valueTreePropertyChanged(
     needsRebuild = true;
   } else if (property == juce::Identifier("data1")) {
     if (allTreesHaveSameValue("type") &&
-        getCommonValue("type").toString() == "Command")
+        getCommonValue("type").toString() == "Command") {
       needsRebuild = true;
+    }
   }
   if (needsRebuild) {
     juce::MessageManager::callAsync([this]() {

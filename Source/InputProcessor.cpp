@@ -151,6 +151,7 @@ void InputProcessor::applySustainDefaultFromPreset() {
 }
 
 void InputProcessor::rebuildGrid() {
+  ++rebuildCount_;
   auto newContext =
       GridCompiler::compile(presetManager, deviceManager, zoneManager,
                             touchpadMixerManager, settingsManager);
@@ -396,7 +397,9 @@ void InputProcessor::valueTreePropertyChanged(
       property == juce::Identifier("useCustomEnvelope") ||
       property == juce::Identifier("sendReleaseValue") ||
       property == juce::Identifier("releaseValue") ||
-      property == juce::Identifier("releaseLatchedOnToggleOff")) {
+      property == juce::Identifier("releaseLatchedOnToggleOff") ||
+      property == juce::Identifier("touchpadLayoutGroupId") ||
+      property == juce::Identifier("touchpadSoloScope")) {
     if (isLayerMapping || parent.isEquivalentTo(mappingsNode) ||
         treeWhosePropertyHasChanged.isEquivalentTo(mappingsNode)) {
       // SAFER: Rebuild everything.

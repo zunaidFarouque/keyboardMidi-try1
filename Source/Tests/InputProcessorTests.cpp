@@ -4282,3 +4282,96 @@ TEST_F(InputProcessorTest, TouchpadLayoutMixedLayersSoloBehavior) {
   EXPECT_GT(mockEng.ccEvents.size(), 0u)
       << "Group layouts should be visible when global solo group 1 is active";
 }
+
+// --- Recompile on dependency change (plan: recompile on every dependency change) ---
+
+// Test: Changing touchpadLayoutGroupId on a mapping triggers grid rebuild and
+// compiled action reflects new value.
+TEST_F(InputProcessorTest, RecompileWhenTouchpadLayoutGroupIdChanges) {
+  TouchpadLayoutGroup g1;
+  g1.id = 1;
+  g1.name = "G1";
+  touchpadMixerMgr.addGroup(g1);
+  TouchpadLayoutGroup g2;
+  g2.id = 2;
+  g2.name = "G2";
+  touchpadMixerMgr.addGroup(g2);
+
+  auto mappings = presetMgr.getMappingsListForLayer(0);
+  juce::ValueTree soloMapping("Mapping");
+  soloMapping.setProperty("inputKey", 60, nullptr);
+  soloMapping.setProperty(
+      "deviceHash",
+      juce::String::toHexString((juce::int64)0).toUpperCase(),
+      nullptr);
+  soloMapping.setProperty("type", "Command", nullptr);
+  soloMapping.setProperty(
+      "data1",
+      static_cast<int>(MIDIQy::CommandID::TouchpadLayoutGroupSoloMomentary),
+      nullptr);
+  soloMapping.setProperty("touchpadLayoutGroupId", 1, nullptr);
+  soloMapping.setProperty("touchpadSoloScope", 0, nullptr);
+  soloMapping.setProperty("layerID", 0, nullptr);
+  mappings.appendChild(soloMapping, nullptr);
+  proc.forceRebuildMappings();
+
+  int countAfterSetup = proc.getRebuildCountForTest();
+  auto opt1 = proc.getMappingForInput(InputID{0, 60});
+  ASSERT_TRUE(opt1.has_value());
+  EXPECT_EQ(opt1->touchpadLayoutGroupId, 1);
+
+  soloMapping.setProperty("touchpadLayoutGroupId", 2, nullptr);
+
+  EXPECT_GT(proc.getRebuildCountForTest(), countAfterSetup)
+      << "Changing touchpadLayoutGroupId must trigger grid rebuild";
+  auto opt2 = proc.getMappingForInput(InputID{0, 60});
+  ASSERT_TRUE(opt2.has_value());
+  EXPECT_EQ(opt2->touchpadLayoutGroupId, 2);
+}
+
+// Test: Changing touchpadSoloScope on a mapping triggers grid rebuild and
+// compiled action reflects new value.
+TEST_F(InputProcessorTest, RecompileWhenTouchpadSoloScopeChanges) {
+  TouchpadLayoutGroup g1;
+  g1.id = 1;
+  g1.name = "G1";
+  touchpadMixerMgr.addGroup(g1);
+
+  auto mappings = presetMgr.getMappingsListForLayer(0);
+  juce::ValueTree soloMapping("Mapping");
+  soloMapping.setProperty("inputKey", 61, nullptr);
+  soloMapping.setProperty(
+      "deviceHash",
+      juce::String::toHexString((juce::int64)0).toUpperCase(),
+      nullptr);
+  soloMapping.setProperty("type", "Command", nullptr);
+  soloMapping.setProperty(
+      "data1",
+      static_cast<int>(MIDIQy::CommandID::TouchpadLayoutGroupSoloToggle),
+      nullptr);
+  soloMapping.setProperty("touchpadLayoutGroupId", 1, nullptr);
+  soloMapping.setProperty("touchpadSoloScope", 0, nullptr); // Global
+  soloMapping.setProperty("layerID", 0, nullptr);
+  mappings.appendChild(soloMapping, nullptr);
+  proc.forceRebuildMappings();
+
+  int countAfterSetup = proc.getRebuildCountForTest();
+  auto opt1 = proc.getMappingForInput(InputID{0, 61});
+  ASSERT_TRUE(opt1.has_value());
+  EXPECT_EQ(opt1->touchpadSoloScope, 0);
+
+  soloMapping.setProperty("touchpadSoloScope", 1, nullptr); // Layer forget
+
+  EXPECT_GT(proc.getRebuildCountForTest(), countAfterSetup)
+      << "Changing touchpadSoloScope must trigger grid rebuild";
+  auto opt2 = proc.getMappingForInput(InputID{0, 61});
+  ASSERT_TRUE(opt2.has_value());
+  EXPECT_EQ(opt2->touchpadSoloScope, 1);
+}
+
+// Layout group list changes: InputProcessor::changeListenerCallback already
+// calls rebuildGrid() when source == &touchpadMixerManager. TouchpadMixerManager
+// sends change messages on addGroup/removeGroup/renameGroup. No separate test
+// here because sendChangeMessage() is async and test would be flaky; the two
+// tests above (RecompileWhenTouchpadLayoutGroupIdChanges, RecompileWhenTouchpadSoloScopeChanges)
+// prove that mapping property changes trigger rebuild.

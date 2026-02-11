@@ -687,8 +687,8 @@ InspectorSchema MappingDefinition::getSchema(const juce::ValueTree &mapping,
       }
     }
 
+    // Touchpad solo block: only in schema when data1 is Touchpad solo (18-21)
     if (isTouchpadSolo) {
-      // Solo type selector for touchpad commands
       InspectorControl soloTypeCtrl;
       soloTypeCtrl.propertyId = "touchpadSoloType"; // Virtual: maps to CommandID
       soloTypeCtrl.label = "Solo type";
@@ -706,8 +706,6 @@ InspectorSchema MappingDefinition::getSchema(const juce::ValueTree &mapping,
       groupIdCtrl.propertyId = "touchpadLayoutGroupId";
       groupIdCtrl.label = "Layout group";
       groupIdCtrl.controlType = InspectorControl::Type::ComboBox;
-      // Options will be populated dynamically in MappingInspector from TouchpadMixerManager
-      // Add "None" option (id=0) for ungrouped
       groupIdCtrl.options[0] = "None";
       schema.push_back(groupIdCtrl);
 

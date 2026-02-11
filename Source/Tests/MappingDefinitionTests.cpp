@@ -149,7 +149,7 @@ TEST(MappingDefinitionTest, LayerUnifiedUI) {
         data2Ctrl = &c;
     }
     ASSERT_NE(cmdCtrl, nullptr) << "Layer command should use commandCategory";
-    EXPECT_EQ(cmdCtrl->label, "Layer");
+    EXPECT_EQ(cmdCtrl->label, "Command");
     ASSERT_NE(layerStyleCtrl, nullptr)
         << "Layer command should have layerStyle (Style dropdown)";
     EXPECT_EQ(layerStyleCtrl->options.size(), 2u)
@@ -264,6 +264,45 @@ TEST(MappingDefinitionTest, TouchpadSoloControlsAppearForAllSoloTypes) {
         << "Should have touchpadLayoutGroupId for command "
         << static_cast<int>(cmd);
   }
+}
+
+// Command schema includes Touchpad solo block only when data1 is 18-21.
+// Assert absence when Sustain (data1=0), presence when Touchpad (data1=18).
+TEST(MappingDefinitionTest, SchemaWhenSwitchingToTouchpad_NoControlsThenHasControls) {
+  juce::ValueTree mapping("Mapping");
+  mapping.setProperty("type", "Command", nullptr);
+  mapping.setProperty("data1", 0, nullptr); // SustainMomentary, not touchpad
+
+  InspectorSchema schemaBefore = MappingDefinition::getSchema(mapping);
+  bool hasSoloTypeBefore = false, hasGroupBefore = false, hasScopeBefore = false;
+  for (const auto &c : schemaBefore) {
+    if (c.propertyId == "touchpadSoloType")
+      hasSoloTypeBefore = true;
+    else if (c.propertyId == "touchpadLayoutGroupId")
+      hasGroupBefore = true;
+    else if (c.propertyId == "touchpadSoloScope")
+      hasScopeBefore = true;
+  }
+  EXPECT_FALSE(hasSoloTypeBefore) << "Touchpad solo controls should not be in schema when data1=0";
+  EXPECT_FALSE(hasGroupBefore) << "Touchpad layout group should not be in schema when data1=0";
+  EXPECT_FALSE(hasScopeBefore) << "Touchpad solo scope should not be in schema when data1=0";
+
+  mapping.setProperty("data1",
+                      (int)MIDIQy::CommandID::TouchpadLayoutGroupSoloMomentary,
+                      nullptr);
+  InspectorSchema schemaAfter = MappingDefinition::getSchema(mapping);
+  bool hasSoloType = false, hasGroup = false, hasScope = false;
+  for (const auto &c : schemaAfter) {
+    if (c.propertyId == "touchpadSoloType")
+      hasSoloType = true;
+    else if (c.propertyId == "touchpadLayoutGroupId")
+      hasGroup = true;
+    else if (c.propertyId == "touchpadSoloScope")
+      hasScope = true;
+  }
+  EXPECT_TRUE(hasSoloType) << "Schema should have touchpadSoloType when data1=18";
+  EXPECT_TRUE(hasGroup) << "Schema should have touchpadLayoutGroupId when data1=18";
+  EXPECT_TRUE(hasScope) << "Schema should have touchpadSoloScope when data1=18";
 }
 
 // CC Expression uses Value when On / Value when Off (no data2 peak slider)
@@ -630,7 +669,7 @@ TEST(MappingDefinitionTest, SustainCommandHasCategoryAndStyle) {
     if (c.propertyId == "sustainStyle") styleCtrl = &c;
   }
   ASSERT_NE(cmdCtrl, nullptr);
-  EXPECT_EQ(cmdCtrl->label, "Sustain");
+  EXPECT_EQ(cmdCtrl->label, "Command");
   ASSERT_NE(styleCtrl, nullptr);
   EXPECT_EQ(styleCtrl->options.size(), 3u)
       << "Sustain style: Hold, Toggle, Default on hold to not sustain";

@@ -174,6 +174,10 @@ public:
   // Phase 42: Two-stage init – call after object graph is built
   void initialize();
 
+  // Test support: number of times rebuildGrid() has been called (for asserting
+  // recompile on dependency change).
+  int getRebuildCountForTest() const { return rebuildCount_.load(); }
+
   // ChangeListener implementation
   void changeListenerCallback(juce::ChangeBroadcaster *source) override;
 
@@ -347,6 +351,9 @@ private:
 
   // Throttle sendChangeMessage for mixer (~60 Hz)
   std::atomic<int64_t> lastMixerChangeNotifyMs{0};
+
+  // Test support: incremented in rebuildGrid()
+  mutable std::atomic<int> rebuildCount_{0};
 
   // ValueTree Callbacks
   void valueTreeChildAdded(juce::ValueTree &parentTree,

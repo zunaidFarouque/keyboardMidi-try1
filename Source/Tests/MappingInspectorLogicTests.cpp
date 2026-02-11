@@ -53,6 +53,7 @@ static InspectorControl makeCommandCategoryControl() {
   c.options[8] = "Global Mode Up";
   c.options[9] = "Global Mode Down";
   c.options[110] = "Layer";
+  c.options[120] = "Touchpad";
   return c;
 }
 
@@ -117,6 +118,7 @@ static InspectorControl makeData1CommandControl() {
   c.options[8] = "Global Mode Up";
   c.options[9] = "Global Mode Down";
   c.options[110] = "Layer";
+  c.options[120] = "Touchpad";
   return c;
 }
 
@@ -278,6 +280,32 @@ TEST(MappingInspectorLogicTest, ApplyCommandCategory_Transpose) {
   EXPECT_EQ(static_cast<int>(mapping.getProperty("data1")), 6);
 }
 
+// Applying Touchpad (120) sets data1 to touchpad solo; schema then has touchpad
+// controls (ensures first-select Touchpad UI has correct state for rebuildUI).
+TEST(MappingInspectorLogicTest, ApplyCommandCategory_Touchpad_ThenSchemaHasTouchpadControls) {
+  juce::ValueTree mapping("Mapping");
+  mapping.setProperty("type", "Command", nullptr);
+  juce::UndoManager undo;
+  auto def = makeCommandCategoryControl();
+  MappingInspectorLogic::applyComboSelectionToMapping(mapping, def, 120, &undo);
+  EXPECT_EQ(static_cast<int>(mapping.getProperty("data1")),
+            static_cast<int>(MIDIQy::CommandID::TouchpadLayoutGroupSoloMomentary));
+
+  InspectorSchema schema = MappingDefinition::getSchema(mapping);
+  bool hasSoloType = false, hasGroup = false, hasScope = false;
+  for (const auto &c : schema) {
+    if (c.propertyId == "touchpadSoloType")
+      hasSoloType = true;
+    else if (c.propertyId == "touchpadLayoutGroupId")
+      hasGroup = true;
+    else if (c.propertyId == "touchpadSoloScope")
+      hasScope = true;
+  }
+  EXPECT_TRUE(hasSoloType);
+  EXPECT_TRUE(hasGroup);
+  EXPECT_TRUE(hasScope);
+}
+
 // --- sustainStyle (virtual -> data1 0,1,2) ---
 TEST(MappingInspectorLogicTest, ApplySustainStyle_HoldToSustain) {
   juce::ValueTree mapping("Mapping");
@@ -405,6 +433,85 @@ TEST(MappingInspectorLogicTest, ApplyData1Command_TransposeId) {
   auto def = makeData1CommandControl();
   MappingInspectorLogic::applyComboSelectionToMapping(mapping, def, 6, &undo);
   EXPECT_EQ(static_cast<int>(mapping.getProperty("data1")), 6);
+}
+
+// Selecting Touchpad (120) from data1 combo sets data1=18; schema then has
+// Touchpad controls (fixes first-time Touchpad not showing when from Latch Toggle, etc.).
+TEST(MappingInspectorLogicTest, ApplyData1Command_Touchpad_ThenSchemaHasTouchpadControls) {
+  juce::ValueTree mapping("Mapping");
+  mapping.setProperty("type", "Command", nullptr);
+  juce::UndoManager undo;
+  auto def = makeData1CommandControl();
+  MappingInspectorLogic::applyComboSelectionToMapping(mapping, def, 120, &undo);
+  EXPECT_EQ(static_cast<int>(mapping.getProperty("data1")),
+            static_cast<int>(MIDIQy::CommandID::TouchpadLayoutGroupSoloMomentary));
+
+  InspectorSchema schema = MappingDefinition::getSchema(mapping);
+  bool hasSoloType = false, hasGroup = false, hasScope = false;
+  for (const auto &c : schema) {
+    if (c.propertyId == "touchpadSoloType")
+      hasSoloType = true;
+    else if (c.propertyId == "touchpadLayoutGroupId")
+      hasGroup = true;
+    else if (c.propertyId == "touchpadSoloScope")
+      hasScope = true;
+  }
+  EXPECT_TRUE(hasSoloType);
+  EXPECT_TRUE(hasGroup);
+  EXPECT_TRUE(hasScope);
+}
+
+// Enforces the fix: when Command uses data1 combo (Latch Toggle, Panic, etc.),
+// selecting Touchpad must set data1=18 so the Touchpad block appears. Before
+// the fix, data1 was incorrectly set to 120, so isTouchpadSolo stayed false.
+TEST(MappingInspectorLogicTest, FirstTimeTouchpadFromLatchToggle_UsesRealSchema_ShowsTouchpadBlock) {
+  juce::ValueTree mapping("Mapping");
+  mapping.setProperty("type", "Command", nullptr);
+  mapping.setProperty("data1", 3, nullptr);  // Latch Toggle -> schema uses propertyId "data1"
+
+  InspectorSchema schemaBefore = MappingDefinition::getSchema(mapping);
+  const InspectorControl *cmdCtrl = nullptr;
+  for (const auto &c : schemaBefore) {
+    if (c.propertyId == "data1" && c.options.count(120) > 0) {
+      cmdCtrl = &c;
+      break;
+    }
+  }
+  ASSERT_NE(cmdCtrl, nullptr)
+      << "Latch Toggle uses data1 combo; must have Touchpad (120) option";
+
+  // Before: schema has no Touchpad block (data1=3, not in 18-21)
+  bool hadTouchpadBefore = false;
+  for (const auto &c : schemaBefore) {
+    if (c.propertyId == "touchpadSoloType") {
+      hadTouchpadBefore = true;
+      break;
+    }
+  }
+  EXPECT_FALSE(hadTouchpadBefore) << "Latch Toggle must not show Touchpad block";
+
+  // Simulate user selecting Touchpad from the Command dropdown
+  juce::UndoManager undo;
+  MappingInspectorLogic::applyComboSelectionToMapping(mapping, *cmdCtrl, 120,
+                                                      &undo);
+
+  EXPECT_EQ(static_cast<int>(mapping.getProperty("data1")),
+            static_cast<int>(MIDIQy::CommandID::TouchpadLayoutGroupSoloMomentary))
+      << "Must set data1=18, not 120; otherwise Touchpad block stays hidden";
+
+  InspectorSchema schemaAfter = MappingDefinition::getSchema(mapping);
+  bool hasSoloType = false, hasGroup = false, hasScope = false;
+  for (const auto &c : schemaAfter) {
+    if (c.propertyId == "touchpadSoloType")
+      hasSoloType = true;
+    else if (c.propertyId == "touchpadLayoutGroupId")
+      hasGroup = true;
+    else if (c.propertyId == "touchpadSoloScope")
+      hasScope = true;
+  }
+  EXPECT_TRUE(hasSoloType) << "Touchpad block must appear after selecting Touchpad";
+  EXPECT_TRUE(hasGroup);
+  EXPECT_TRUE(hasScope);
 }
 
 // --- touchpadSoloScope (1,2,3 -> 0,1,2) ---

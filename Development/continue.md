@@ -18,3 +18,9 @@ if currently in the mappings tab, visualizer will show the currently selected la
 if currently in the zones tab, visualizer will show the layer which currently selected zone is bound to
 
 so, add the checkbox/toggle swtich in appropriate place...
+
+
+===
+
+We need to add groups in keyboard mapping too.
+hold a key to enable that group.

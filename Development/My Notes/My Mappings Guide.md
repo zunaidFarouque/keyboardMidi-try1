@@ -81,12 +81,12 @@ Cons: most keyboards cannot handle multiple keypresses/key holds at once. it is 
 
 Map keyboard rows:\
 `1 2 3 ... - +` and\
-`q w e ... [ ]`\
+`Q W E ... [ ]`\
 to right hand piano part. No scale mapping or stuff. pure piano.
 
 Similarly, map keyboard rows:\
-`a s d ... ; '` and\
-`z x c ... . /`\
+`A S D ... ; '` and\
+`Z X C ... . /`\
 to left hand piano part. No chord mapping or stuff. pure piano.
 
 #### Tempo Related
@@ -103,7 +103,11 @@ We will Only add transpose settings in the MIDIQy, not Giglad.
 
 `Right Arrow` = Transpose up
 
-### Layer 7 (Giglad 1)
+### Layer 6 (Giglad 1)
+
+`Shift` = Momentary switch to Layer 7 (Giglad 2)
+
+#### Player
 
 `Backspace` = Start
 
@@ -117,7 +121,73 @@ We will Only add transpose settings in the MIDIQy, not Giglad.
 
 `Enter` = Synchro Start
 
-### Layer 8 (Giglad 2)
+#### Style Sections
+
+_Intro and Ending_
+
+`Z X` = Intro 1 & 2
+
+`C` = Fade in (Manually Mapped)
+
+`B` = Fade out (Manually Mapped)
+
+`N M` = Ending 2 & 1
+
+_Main and Fills_
+
+Row `A S D ... K` = Main 1-8 (Auto-filled)
+
+> Note: You need to change a setting in Giglad.
+>
+> Settings window -> (Modules) Arranger -> (Style section Switch)\
+> Auto Fill = `Yes (Delayed)`
+>
+> This will do this:
+>
+> 1. Press `S` to transition to Main 2 WITH a Fill (plays Fill 2, then plays Main 2)
+> 2. Double Press `S` to directly play Main 2 WITHOUT any Fill.
+
+#### Bank Memories and other triggers
+
+`Q W E ... I` = Bank Memories 1-8
+
+Shift + `Q W E ... I` = Bank Memories 9-16\
+(Bound to Layer 7)
+
+`1 2 3 4` = Pad 1-4
+
+Shift + `1 2 3 4` = Pad Synchro 1-4\
+(Bound to Layer 7)
+
+`5 6 7 8` = Style Memory 1-4
+
+Shift + `5 6 7 8` = ?
+
+#### Style Track & Melody Track Layers
+
+Shift + `Z X C ... ,` = T1-8 Mute\
+(Bound to Layer 7)
+
+> TODO: Volume control using touchpad
+
+Shift + `A S D F` = Melody tracks Mute\
+(Bound to Layer 7)
+
+Shift + `H J K` = Melody tracks octave up (ignore RH3)\
+(Bound to Layer 7)
+
+Shift + `L ; '` = Melody tracks octave down (ignore RH3)\
+(Bound to Layer 7)
+
+#### Lyrics
+
+`Up Arrow` = Lyrics Scroll Up
+
+`Down Arrow` = Lyrics Scroll Down
+
+`\` = Show/Hide Lyrics
+
+### Layer 8 (Giglad 3)
 
 `1` = Styles
 
@@ -134,3 +204,20 @@ We will Only add transpose settings in the MIDIQy, not Giglad.
 `7` = Lyrics
 
 `8` = Patterns
+
+`9` = Melody
+
+`0` = Physical
+
+`-` = Pads
+
+`+` = Lyrics Viewer
+
+`Backspace` = Back
+
+`[` = Page Prev
+
+`]` = Page Next
+
+> TODO: Try to migrate on encoders navigation.
+> like this: hold a button to make arrow buttons the encoder. left and right should normally navigate, up button to press on encoder. Select with enter, back using backspace. It is not a layer, it is a very specific group.

@@ -100,8 +100,17 @@ void applyComboSelectionToMapping(juce::ValueTree &mapping,
       groupId = 0;
     valueToSet = juce::var(groupId);
   } else if (def.propertyId == "data1" &&
-             (def.options.count(100) > 0 || def.options.count(110) > 0)) {
-    valueToSet = juce::var((selectedId == 100) ? 0 : (selectedId == 110) ? 10 : selectedId);
+             (def.options.count(100) > 0 || def.options.count(110) > 0 ||
+              def.options.count(120) > 0)) {
+    int data1 = selectedId;
+    if (selectedId == 100)
+      data1 = 0;
+    else if (selectedId == 110)
+      data1 = 10;
+    else if (selectedId == 120)
+      data1 = static_cast<int>(
+          MIDIQy::CommandID::TouchpadLayoutGroupSoloMomentary);
+    valueToSet = juce::var(data1);
   } else {
     valueToSet = juce::var(selectedId);
   }
