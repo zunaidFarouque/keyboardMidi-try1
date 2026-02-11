@@ -3,255 +3,80 @@
 #include <windows.h>
 
 namespace {
+struct LabelEditorRow : juce::Component {
+  std::unique_ptr<juce::Label> label;
+  std::unique_ptr<juce::Component> editor;
+  static constexpr int labelWidth = 220;
+  void resized() override {
+    auto r = getLocalBounds();
+    if (label)
+      label->setBounds(r.removeFromLeft(labelWidth));
+    if (editor)
+      editor->setBounds(r);
+  }
+};
+
 const std::array<ActionType, 3> kMappingTypeOrder = {
     ActionType::Note, ActionType::Expression, ActionType::Command};
 const char *kMappingTypeNames[] = {"Note", "Expression", "Command"};
 } // namespace
+
+SettingsPanel::SeparatorComponent::SeparatorComponent(
+    const juce::String &label, juce::Justification justification)
+    : labelText(label), textAlign(justification) {}
+
+void SettingsPanel::SeparatorComponent::paint(juce::Graphics &g) {
+  auto bounds = getLocalBounds();
+  const float centreY = bounds.getCentreY();
+  const int lineY = static_cast<int>(centreY - 0.5f);
+  const int lineHeight = 1;
+  const int pad = 5;
+
+  g.setColour(juce::Colours::grey);
+
+  if (labelText.isEmpty()) {
+    g.fillRect(bounds.getX(), lineY, bounds.getWidth(), lineHeight);
+    return;
+  }
+
+  juce::Font font(14.0f, juce::Font::bold);
+  const int textBlockWidth = font.getStringWidth(labelText) + pad * 2;
+  int textLeft;
+  int textRight;
+
+  if ((textAlign.getFlags() & juce::Justification::centredLeft) != 0) {
+    textLeft = bounds.getX();
+    textRight = textLeft + textBlockWidth;
+  } else if ((textAlign.getFlags() & juce::Justification::centredRight) != 0) {
+    textRight = bounds.getRight();
+    textLeft = textRight - textBlockWidth;
+  } else {
+    textLeft = bounds.getCentreX() - textBlockWidth / 2;
+    textRight = textLeft + textBlockWidth;
+  }
+
+  g.setColour(juce::Colours::lightgrey);
+  g.setFont(font);
+  g.drawText(labelText, textLeft, bounds.getY(), textBlockWidth,
+             bounds.getHeight(), textAlign, true);
+
+  g.setColour(juce::Colours::grey);
+  if (textLeft - pad > bounds.getX())
+    g.fillRect(bounds.getX(), lineY, textLeft - pad - bounds.getX(),
+               lineHeight);
+  if (textRight + pad < bounds.getRight())
+    g.fillRect(textRight + pad, lineY, bounds.getRight() - (textRight + pad),
+               lineHeight);
+}
 
 void SettingsPanel::initialize() { settingsManager.addChangeListener(this); }
 
 SettingsPanel::SettingsPanel(SettingsManager &settingsMgr, MidiEngine &midiEng,
                              RawInputManager &rawInputMgr)
     : settingsManager(settingsMgr), midiEngine(midiEng),
-      rawInputManager(rawInputMgr),
-      mappingColorsGroup("Mapping Colors", "Mapping Colors") {
+      rawInputManager(rawInputMgr) {
   // Phase 42: addChangeListener moved to initialize()
-
-  // Setup PB Range Slider
-  pbRangeLabel.setText("Global Pitch Bend Range (+/- semitones):",
-                       juce::dontSendNotification);
-  pbRangeLabel.attachToComponent(&pbRangeSlider, true);
-  addAndMakeVisible(pbRangeLabel);
-  addAndMakeVisible(pbRangeSlider);
-
-  pbRangeSlider.setRange(1, 96, 1);
-  pbRangeSlider.setTextValueSuffix(" semitones");
-  pbRangeSlider.setValue(settingsManager.getPitchBendRange(),
-                         juce::dontSendNotification);
-
-  pbRangeSlider.onValueChange = [this] {
-    int value = static_cast<int>(pbRangeSlider.getValue());
-    settingsManager.setPitchBendRange(value);
-  };
-
-  // Visualizer settings: X/Y opacity (0–100%)
-  addAndMakeVisible(visualizerGroup);
-  visXOpacityLabel.setText("Touchpad X bands opacity:",
-                           juce::dontSendNotification);
-  visYOpacityLabel.setText("Touchpad Y bands opacity:",
-                           juce::dontSendNotification);
-  addAndMakeVisible(visXOpacityLabel);
-  addAndMakeVisible(visXOpacitySlider);
-  addAndMakeVisible(visYOpacityLabel);
-  addAndMakeVisible(visYOpacitySlider);
-
-  visXOpacitySlider.setRange(0.0, 100.0, 1.0);
-  visYOpacitySlider.setRange(0.0, 100.0, 1.0);
-  visXOpacitySlider.setSliderStyle(juce::Slider::LinearHorizontal);
-  visYOpacitySlider.setSliderStyle(juce::Slider::LinearHorizontal);
-  visXOpacitySlider.setTextValueSuffix(" %");
-  visYOpacitySlider.setTextValueSuffix(" %");
-  visXOpacitySlider.setValue(settingsManager.getVisualizerXOpacity() * 100.0,
-                             juce::dontSendNotification);
-  visYOpacitySlider.setValue(settingsManager.getVisualizerYOpacity() * 100.0,
-                             juce::dontSendNotification);
-
-  visXOpacitySlider.onValueChange = [this] {
-    float v = static_cast<float>(visXOpacitySlider.getValue() / 100.0);
-    settingsManager.setVisualizerXOpacity(v);
-  };
-  visYOpacitySlider.onValueChange = [this] {
-    float v = static_cast<float>(visYOpacitySlider.getValue() / 100.0);
-    settingsManager.setVisualizerYOpacity(v);
-  };
-
-  showTouchpadInMiniWindowToggle.setButtonText(
-      "Show touchpad visualizer in mini window");
-  showTouchpadInMiniWindowToggle.setToggleState(
-      settingsManager.getShowTouchpadVisualizerInMiniWindow(),
-      juce::dontSendNotification);
-  showTouchpadInMiniWindowToggle.onClick = [this] {
-    settingsManager.setShowTouchpadVisualizerInMiniWindow(
-        showTouchpadInMiniWindowToggle.getToggleState());
-  };
-  addAndMakeVisible(showTouchpadInMiniWindowToggle);
-
-  hideCursorInPerformanceModeToggle.setButtonText(
-      "Hide cursor in performance mode");
-  hideCursorInPerformanceModeToggle.setToggleState(
-      settingsManager.getHideCursorInPerformanceMode(),
-      juce::dontSendNotification);
-  hideCursorInPerformanceModeToggle.onClick = [this] {
-    settingsManager.setHideCursorInPerformanceMode(
-        hideCursorInPerformanceModeToggle.getToggleState());
-  };
-  addAndMakeVisible(hideCursorInPerformanceModeToggle);
-
-  resetMiniWindowPositionButton.setButtonText("Reset mini window position");
-  resetMiniWindowPositionButton.onClick = [this] {
-    settingsManager.resetMiniWindowPosition();
-    if (onResetMiniWindowPosition)
-      onResetMiniWindowPosition();
-  };
-  addAndMakeVisible(resetMiniWindowPositionButton);
-
-  // Setup Send RPN Button (Phase 25.2)
-  addAndMakeVisible(sendRpnButton);
-  sendRpnButton.setButtonText("Sync Range to Synth");
-  sendRpnButton.onClick = [this] {
-    int range = settingsManager.getPitchBendRange();
-    DBG("Sending RPN Range " + juce::String(range) + " to all channels...");
-    // Send RPN to all 16 MIDI channels
-    for (int ch = 1; ch <= 16; ++ch) {
-      midiEngine.sendPitchBendRangeRPN(ch, range);
-    }
-    // Show feedback (optional - could use a toast or label)
-    sendRpnButton.setButtonText("Sent!");
-    juce::MessageManager::callAsync(
-        [this] { sendRpnButton.setButtonText("Sync Range to Synth"); });
-  };
-  sendRpnButton.setTooltip(
-      "Some VST plugins and synths rely on RPN (Registered Parameter Number) "
-      "messages for pitch bend range. This button sends the current pitch bend "
-      "range setting as RPN data to all 16 MIDI channels, so your synth will "
-      "use the same range.");
-
-  // Mapping Colors (Phase 37)
-  addAndMakeVisible(mappingColorsGroup);
-  for (size_t i = 0; i < typeColorButtons.size(); ++i) {
-    addAndMakeVisible(typeColorButtons[i]);
-    typeColorButtons[i].setButtonText(kMappingTypeNames[i]);
-    ActionType type = kMappingTypeOrder[i];
-    juce::TextButton *btn = &typeColorButtons[i];
-    typeColorButtons[i].onClick = [this, type, btn] {
-      launchColourSelectorForType(type, btn);
-    };
-  }
-  refreshTypeColorButtons();
-
-  // Setup Toggle Key Label and Button
-  toggleKeyLabel.setText("Global MIDI Toggle Key:", juce::dontSendNotification);
-  toggleKeyLabel.attachToComponent(&toggleKeyButton, true);
-  addAndMakeVisible(toggleKeyLabel);
-  addAndMakeVisible(toggleKeyButton);
-  updateToggleKeyButtonText();
-  toggleKeyButton.onClick = [this] {
-    if (!isLearningToggleKey) {
-      // Enter learn mode
-      isLearningToggleKey = true;
-      toggleKeyButton.setButtonText("Press any key...");
-      rawInputManager.addListener(this);
-    } else {
-      // Cancel learn mode
-      isLearningToggleKey = false;
-      rawInputManager.removeListener(this);
-      updateToggleKeyButtonText();
-    }
-  };
-
-  // Setup Reset Toggle Key Button
-  addAndMakeVisible(resetToggleKeyButton);
-  resetToggleKeyButton.setButtonText("Reset");
-  resetToggleKeyButton.onClick = [this] {
-    juce::AlertWindow::showOkCancelBox(
-        juce::AlertWindow::QuestionIcon, "Reset Toggle Key",
-        "Reset the MIDI toggle key to F12?", "Yes", "Cancel", this,
-        juce::ModalCallbackFunction::create([this](int result) {
-          if (result == 1) { // OK button
-            settingsManager.setToggleKey(VK_F12);
-            updateToggleKeyButtonText();
-          }
-        }));
-  };
-
-  // Setup Performance Mode Key Label and Button
-  performanceModeKeyLabel.setText("Performance Mode Shortcut:",
-                                  juce::dontSendNotification);
-  performanceModeKeyLabel.attachToComponent(&performanceModeKeyButton, true);
-  addAndMakeVisible(performanceModeKeyLabel);
-  addAndMakeVisible(performanceModeKeyButton);
-  updatePerformanceModeKeyButtonText();
-  performanceModeKeyButton.onClick = [this] {
-    if (!isLearningPerformanceModeKey) {
-      // Enter learn mode
-      isLearningPerformanceModeKey = true;
-      performanceModeKeyButton.setButtonText("Press any key...");
-      rawInputManager.addListener(this);
-    } else {
-      // Cancel learn mode
-      isLearningPerformanceModeKey = false;
-      rawInputManager.removeListener(this);
-      updatePerformanceModeKeyButtonText();
-    }
-  };
-
-  // Setup Reset Performance Mode Key Button
-  addAndMakeVisible(resetPerformanceModeKeyButton);
-  resetPerformanceModeKeyButton.setButtonText("Reset");
-  resetPerformanceModeKeyButton.onClick = [this] {
-    juce::AlertWindow::showOkCancelBox(
-        juce::AlertWindow::QuestionIcon, "Reset Performance Mode Key",
-        "Reset the Performance Mode shortcut to F11?", "Yes", "Cancel", this,
-        juce::ModalCallbackFunction::create([this](int result) {
-          if (result == 1) {                             // OK button
-            settingsManager.setPerformanceModeKey(0x7A); // VK_F11
-            updatePerformanceModeKeyButtonText();
-          }
-        }));
-  };
-
-  // Setup Studio Mode Toggle
-  studioModeToggle.setButtonText("Studio Mode (Multi-Device Support)");
-  studioModeToggle.setToggleState(settingsManager.isStudioMode(),
-                                  juce::dontSendNotification);
-  studioModeToggle.onClick = [this] {
-    settingsManager.setStudioMode(studioModeToggle.getToggleState());
-  };
-  addAndMakeVisible(studioModeToggle);
-
-  // Cap window refresh at 30 FPS
-  capRefresh30FpsToggle.setButtonText("Cap window refresh at 30 FPS");
-  capRefresh30FpsToggle.setToggleState(
-      settingsManager.isCapWindowRefresh30Fps(), juce::dontSendNotification);
-  capRefresh30FpsToggle.onClick = [this] {
-    settingsManager.setCapWindowRefresh30Fps(
-        capRefresh30FpsToggle.getToggleState());
-  };
-  addAndMakeVisible(capRefresh30FpsToggle);
-
-  // Delay MIDI message (for binding in other software)
-  delayMidiLabel.setText("Delay MIDI message (seconds):",
-                         juce::dontSendNotification);
-  delayMidiLabel.attachToComponent(&delayMidiCheckbox, true);
-  addAndMakeVisible(delayMidiLabel);
-  addAndMakeVisible(delayMidiCheckbox);
-  addAndMakeVisible(delayMidiSlider);
-
-  delayMidiCheckbox.setButtonText("Enable");
-  delayMidiCheckbox.setToggleState(settingsManager.isDelayMidiEnabled(),
-                                   juce::dontSendNotification);
-  delayMidiCheckbox.onClick = [this] {
-    bool enabled = delayMidiCheckbox.getToggleState();
-    settingsManager.setDelayMidiEnabled(enabled);
-    delayMidiSlider.setEnabled(enabled);
-  };
-
-  delayMidiSlider.setRange(1, 10, 1);
-  delayMidiSlider.setTextValueSuffix(" s");
-  delayMidiSlider.setValue(settingsManager.getDelayMidiSeconds(),
-                           juce::dontSendNotification);
-  delayMidiSlider.setEnabled(settingsManager.isDelayMidiEnabled());
-  delayMidiLabel.setTooltip(
-      "Useful when mapping MIDI in other software (e.g. DAW or MIDI learn): "
-      "press a key here, then within the delay time select the target control "
-      "in the other app; the MIDI message is sent after the delay so the "
-      "listener can capture it for mapping.");
-  delayMidiCheckbox.setTooltip(delayMidiLabel.getTooltip());
-  delayMidiSlider.setTooltip(delayMidiLabel.getTooltip());
-  delayMidiSlider.onValueChange = [this] {
-    int value = static_cast<int>(delayMidiSlider.getValue());
-    settingsManager.setDelayMidiSeconds(value);
-  };
+  rebuildUI();
 }
 
 SettingsPanel::~SettingsPanel() {
@@ -261,36 +86,271 @@ SettingsPanel::~SettingsPanel() {
   }
 }
 
+void SettingsPanel::rebuildUI() {
+  // Reset non-owning pointers
+  pbRangeSlider = nullptr;
+  visXOpacitySlider = nullptr;
+  visYOpacitySlider = nullptr;
+  showTouchpadInMiniWindowToggle = nullptr;
+  hideCursorInPerformanceModeToggle = nullptr;
+  studioModeToggle = nullptr;
+  capRefresh30FpsToggle = nullptr;
+  delayMidiCheckbox = nullptr;
+  delayMidiSlider = nullptr;
+  toggleKeyButton = nullptr;
+  resetToggleKeyButton = nullptr;
+  performanceModeKeyButton = nullptr;
+  resetPerformanceModeKeyButton = nullptr;
+  for (auto &btn : typeColorButtons)
+    btn = nullptr;
+
+  // Remove previous children owned via uiRows
+  for (auto &row : uiRows) {
+    for (auto &item : row.items) {
+      if (item.component)
+        removeChildComponent(item.component.get());
+    }
+  }
+  uiRows.clear();
+
+  // Build from schema
+  InspectorSchema schema = SettingsDefinition::getSchema();
+  bool addedSyncRow = false;
+  for (const auto &def : schema) {
+    if (def.controlType == InspectorControl::Type::Separator) {
+      UiRow row;
+      row.isSeparatorRow = true;
+      auto sep =
+          std::make_unique<SeparatorComponent>(def.label, def.separatorAlign);
+      addAndMakeVisible(*sep);
+      row.items.push_back({std::move(sep), 1.0f, false});
+      uiRows.push_back(std::move(row));
+      continue;
+    }
+
+    if (!def.sameLine || uiRows.empty() || uiRows.back().isSeparatorRow) {
+      UiRow row;
+      row.isSeparatorRow = false;
+      uiRows.push_back(std::move(row));
+    }
+
+    createControl(def, uiRows.back());
+
+    // Immediately after the pitch bend range slider, add the Sync button row
+    if (!addedSyncRow && def.propertyId == "pitchBendRange") {
+      UiRow syncRow;
+      syncRow.isSeparatorRow = false;
+      auto btn = std::make_unique<juce::TextButton>("Sync Range to Synth");
+      juce::TextButton *btnPtr = btn.get();
+      btn->onClick = [this, btnPtr]() {
+        int range = settingsManager.getPitchBendRange();
+        DBG("Sending RPN Range " + juce::String(range) + " to all channels...");
+        for (int ch = 1; ch <= 16; ++ch)
+          midiEngine.sendPitchBendRangeRPN(ch, range);
+        btnPtr->setButtonText("Sent!");
+        juce::MessageManager::callAsync(
+            [btnPtr]() { btnPtr->setButtonText("Sync Range to Synth"); });
+      };
+      btn->setTooltip(
+          "Some VST plugins and synths rely on RPN (Registered Parameter Number) "
+          "messages for pitch bend range. This button sends the current pitch "
+          "bend range setting as RPN data to all 16 MIDI channels.");
+      addAndMakeVisible(*btn);
+      syncRow.items.push_back({std::move(btn), 1.0f, false});
+      uiRows.push_back(std::move(syncRow));
+      addedSyncRow = true;
+    }
+  }
+
+  // --- Custom rows not described by schema ---
+
+  // Global Shortcuts section header
+  {
+    UiRow sepRow;
+    sepRow.isSeparatorRow = true;
+    auto sep = std::make_unique<SeparatorComponent>(
+        "Global Shortcuts", juce::Justification::centredLeft);
+    addAndMakeVisible(*sep);
+    sepRow.items.push_back({std::move(sep), 1.0f, false});
+    uiRows.push_back(std::move(sepRow));
+  }
+
+  // Key-learning rows (Toggle key + Performance mode key)
+  {
+    // Toggle key row: [label+button] [reset]
+    UiRow row;
+    row.isSeparatorRow = false;
+
+    auto rowComp = std::make_unique<LabelEditorRow>();
+    rowComp->label = std::make_unique<juce::Label>();
+    rowComp->label->setText("Global MIDI Toggle Key:",
+                            juce::dontSendNotification);
+    auto setBtn = std::make_unique<juce::TextButton>();
+    toggleKeyButton = setBtn.get();
+    updateToggleKeyButtonText();
+    setBtn->onClick = [this]() {
+      if (!isLearningToggleKey) {
+        isLearningToggleKey = true;
+        if (toggleKeyButton)
+          toggleKeyButton->setButtonText("Press any key...");
+        rawInputManager.addListener(this);
+      } else {
+        isLearningToggleKey = false;
+        rawInputManager.removeListener(this);
+        updateToggleKeyButtonText();
+      }
+    };
+    rowComp->editor = std::move(setBtn);
+    rowComp->addAndMakeVisible(*rowComp->label);
+    rowComp->addAndMakeVisible(*rowComp->editor);
+    addAndMakeVisible(*rowComp);
+    row.items.push_back({std::move(rowComp), 0.7f, false});
+
+    auto resetBtn = std::make_unique<juce::TextButton>("Reset");
+    resetToggleKeyButton = resetBtn.get();
+    resetBtn->onClick = [this]() {
+      juce::AlertWindow::showOkCancelBox(
+          juce::AlertWindow::QuestionIcon, "Reset Toggle Key",
+          "Reset the MIDI toggle key to F12?", "Yes", "Cancel", this,
+          juce::ModalCallbackFunction::create([this](int result) {
+            if (result == 1) {
+              settingsManager.setToggleKey(VK_F12);
+              updateToggleKeyButtonText();
+            }
+          }));
+    };
+    addAndMakeVisible(*resetBtn);
+    row.items.push_back({std::move(resetBtn), 0.3f, true});
+
+    uiRows.push_back(std::move(row));
+  }
+  {
+    // Performance mode key row: [label+button] [reset]
+    UiRow row;
+    row.isSeparatorRow = false;
+
+    auto rowComp = std::make_unique<LabelEditorRow>();
+    rowComp->label = std::make_unique<juce::Label>();
+    rowComp->label->setText("Performance Mode Shortcut:",
+                            juce::dontSendNotification);
+    auto setBtn = std::make_unique<juce::TextButton>();
+    performanceModeKeyButton = setBtn.get();
+    updatePerformanceModeKeyButtonText();
+    setBtn->onClick = [this]() {
+      if (!isLearningPerformanceModeKey) {
+        isLearningPerformanceModeKey = true;
+        if (performanceModeKeyButton)
+          performanceModeKeyButton->setButtonText("Press any key...");
+        rawInputManager.addListener(this);
+      } else {
+        isLearningPerformanceModeKey = false;
+        rawInputManager.removeListener(this);
+        updatePerformanceModeKeyButtonText();
+      }
+    };
+    rowComp->editor = std::move(setBtn);
+    rowComp->addAndMakeVisible(*rowComp->label);
+    rowComp->addAndMakeVisible(*rowComp->editor);
+    addAndMakeVisible(*rowComp);
+    row.items.push_back({std::move(rowComp), 0.7f, false});
+
+    auto resetBtn = std::make_unique<juce::TextButton>("Reset");
+    resetPerformanceModeKeyButton = resetBtn.get();
+    resetBtn->onClick = [this]() {
+      juce::AlertWindow::showOkCancelBox(
+          juce::AlertWindow::QuestionIcon, "Reset Performance Mode Key",
+          "Reset the Performance Mode shortcut to F11?", "Yes", "Cancel", this,
+          juce::ModalCallbackFunction::create([this](int result) {
+            if (result == 1) {
+              settingsManager.setPerformanceModeKey(0x7A); // VK_F11
+              updatePerformanceModeKeyButtonText();
+            }
+          }));
+    };
+    addAndMakeVisible(*resetBtn);
+    row.items.push_back({std::move(resetBtn), 0.3f, true});
+
+    uiRows.push_back(std::move(row));
+  }
+
+  // Mapping colors row
+  {
+    UiRow row;
+    row.isSeparatorRow = false;
+
+    auto sep =
+        std::make_unique<SeparatorComponent>("Mapping Colors",
+                                             juce::Justification::centredLeft);
+    addAndMakeVisible(*sep);
+    UiRow sepRow;
+    sepRow.isSeparatorRow = true;
+    sepRow.items.push_back({std::move(sep), 1.0f, false});
+    uiRows.push_back(std::move(sepRow));
+
+    UiRow buttonRow;
+    buttonRow.isSeparatorRow = false;
+    for (size_t i = 0; i < typeColorButtons.size(); ++i) {
+      auto btn = std::make_unique<juce::TextButton>(kMappingTypeNames[i]);
+      juce::TextButton *btnPtr = btn.get();
+      typeColorButtons[i] = btnPtr;
+      ActionType type = kMappingTypeOrder[i];
+      btn->onClick = [this, type, btnPtr]() {
+        launchColourSelectorForType(type, btnPtr);
+      };
+      addAndMakeVisible(*btn);
+      buttonRow.items.push_back({std::move(btn), 1.0f, false});
+    }
+    uiRows.push_back(std::move(buttonRow));
+    refreshTypeColorButtons();
+  }
+
+  resized();
+}
+
 void SettingsPanel::changeListenerCallback(juce::ChangeBroadcaster *source) {
   if (source == &settingsManager) {
     refreshTypeColorButtons();
-    studioModeToggle.setToggleState(settingsManager.isStudioMode(),
-                                    juce::dontSendNotification);
-    capRefresh30FpsToggle.setToggleState(
-        settingsManager.isCapWindowRefresh30Fps(), juce::dontSendNotification);
-    delayMidiCheckbox.setToggleState(settingsManager.isDelayMidiEnabled(),
-                                     juce::dontSendNotification);
-    delayMidiSlider.setValue(settingsManager.getDelayMidiSeconds(),
-                             juce::dontSendNotification);
-    delayMidiSlider.setEnabled(settingsManager.isDelayMidiEnabled());
-    visXOpacitySlider.setValue(settingsManager.getVisualizerXOpacity() * 100.0,
-                               juce::dontSendNotification);
-    visYOpacitySlider.setValue(settingsManager.getVisualizerYOpacity() * 100.0,
-                               juce::dontSendNotification);
-    showTouchpadInMiniWindowToggle.setToggleState(
-        settingsManager.getShowTouchpadVisualizerInMiniWindow(),
-        juce::dontSendNotification);
-    hideCursorInPerformanceModeToggle.setToggleState(
-        settingsManager.getHideCursorInPerformanceMode(),
-        juce::dontSendNotification);
+    if (studioModeToggle)
+      studioModeToggle->setToggleState(settingsManager.isStudioMode(),
+                                       juce::dontSendNotification);
+    if (capRefresh30FpsToggle)
+      capRefresh30FpsToggle->setToggleState(
+          settingsManager.isCapWindowRefresh30Fps(),
+          juce::dontSendNotification);
+    if (delayMidiCheckbox)
+      delayMidiCheckbox->setToggleState(settingsManager.isDelayMidiEnabled(),
+                                        juce::dontSendNotification);
+    if (delayMidiSlider) {
+      delayMidiSlider->setValue(settingsManager.getDelayMidiSeconds(),
+                                juce::dontSendNotification);
+      delayMidiSlider->setEnabled(settingsManager.isDelayMidiEnabled());
+    }
+    if (visXOpacitySlider)
+      visXOpacitySlider->setValue(
+          settingsManager.getVisualizerXOpacity() * 100.0,
+          juce::dontSendNotification);
+    if (visYOpacitySlider)
+      visYOpacitySlider->setValue(
+          settingsManager.getVisualizerYOpacity() * 100.0,
+          juce::dontSendNotification);
+    if (showTouchpadInMiniWindowToggle)
+      showTouchpadInMiniWindowToggle->setToggleState(
+          settingsManager.getShowTouchpadVisualizerInMiniWindow(),
+          juce::dontSendNotification);
+    if (hideCursorInPerformanceModeToggle)
+      hideCursorInPerformanceModeToggle->setToggleState(
+          settingsManager.getHideCursorInPerformanceMode(),
+          juce::dontSendNotification);
   }
 }
 
 void SettingsPanel::refreshTypeColorButtons() {
   for (size_t i = 0; i < typeColorButtons.size(); ++i) {
-    juce::Colour c = settingsManager.getTypeColor(kMappingTypeOrder[i]);
-    typeColorButtons[i].setColour(juce::TextButton::buttonColourId, c);
-    typeColorButtons[i].repaint();
+    if (auto *btn = typeColorButtons[i]) {
+      juce::Colour c = settingsManager.getTypeColor(kMappingTypeOrder[i]);
+      btn->setColour(juce::TextButton::buttonColourId, c);
+      btn->repaint();
+    }
   }
 }
 
@@ -361,16 +421,179 @@ void SettingsPanel::handleAxisEvent(uintptr_t deviceHandle, int inputCode,
   // Ignore axis events during key learning
 }
 
+juce::var SettingsPanel::getSettingsValue(const juce::String &propertyId) const {
+  if (propertyId == "pitchBendRange")
+    return juce::var(settingsManager.getPitchBendRange());
+  if (propertyId == "visualizerXOpacityPercent")
+    return juce::var(static_cast<double>(settingsManager.getVisualizerXOpacity() * 100.0f));
+  if (propertyId == "visualizerYOpacityPercent")
+    return juce::var(static_cast<double>(settingsManager.getVisualizerYOpacity() * 100.0f));
+  if (propertyId == "showTouchpadVisualizerInMiniWindow")
+    return juce::var(settingsManager.getShowTouchpadVisualizerInMiniWindow());
+  if (propertyId == "hideCursorInPerformanceMode")
+    return juce::var(settingsManager.getHideCursorInPerformanceMode());
+  if (propertyId == "studioMode")
+    return juce::var(settingsManager.isStudioMode());
+  if (propertyId == "capWindowRefresh30Fps")
+    return juce::var(settingsManager.isCapWindowRefresh30Fps());
+  if (propertyId == "delayMidiEnabled")
+    return juce::var(settingsManager.isDelayMidiEnabled());
+  if (propertyId == "delayMidiSeconds")
+    return juce::var(settingsManager.getDelayMidiSeconds());
+  return juce::var();
+}
+
+void SettingsPanel::applySettingsValue(const juce::String &propertyId,
+                                       const juce::var &value) {
+  if (propertyId == "pitchBendRange") {
+    int v = static_cast<int>(value);
+    settingsManager.setPitchBendRange(v);
+  } else if (propertyId == "visualizerXOpacityPercent") {
+    double v = static_cast<double>(value);
+    settingsManager.setVisualizerXOpacity(
+        static_cast<float>(juce::jlimit(0.0, 100.0, v) / 100.0));
+  } else if (propertyId == "visualizerYOpacityPercent") {
+    double v = static_cast<double>(value);
+    settingsManager.setVisualizerYOpacity(
+        static_cast<float>(juce::jlimit(0.0, 100.0, v) / 100.0));
+  } else if (propertyId == "showTouchpadVisualizerInMiniWindow") {
+    settingsManager.setShowTouchpadVisualizerInMiniWindow(
+        static_cast<bool>(value));
+  } else if (propertyId == "hideCursorInPerformanceMode") {
+    settingsManager.setHideCursorInPerformanceMode(static_cast<bool>(value));
+  } else if (propertyId == "studioMode") {
+    settingsManager.setStudioMode(static_cast<bool>(value));
+  } else if (propertyId == "capWindowRefresh30Fps") {
+    settingsManager.setCapWindowRefresh30Fps(static_cast<bool>(value));
+  } else if (propertyId == "delayMidiEnabled") {
+    bool enabled = static_cast<bool>(value);
+    settingsManager.setDelayMidiEnabled(enabled);
+    if (delayMidiSlider)
+      delayMidiSlider->setEnabled(enabled);
+  } else if (propertyId == "delayMidiSeconds") {
+    int v = static_cast<int>(value);
+    settingsManager.setDelayMidiSeconds(v);
+  }
+}
+
+void SettingsPanel::createControl(const InspectorControl &def, UiRow &currentRow) {
+  const juce::String propId = def.propertyId;
+  juce::var currentVal = getSettingsValue(propId);
+
+  auto addItem = [this, &currentRow](std::unique_ptr<juce::Component> comp,
+                                     float weight, bool isAuto = false) {
+    if (!comp)
+      return;
+    addAndMakeVisible(*comp);
+    currentRow.items.push_back({std::move(comp), weight, isAuto});
+  };
+
+  switch (def.controlType) {
+  case InspectorControl::Type::Slider: {
+    auto sl = std::make_unique<juce::Slider>();
+    sl->setRange(def.min, def.max, def.step);
+    if (def.suffix.isNotEmpty())
+      sl->setTextValueSuffix(" " + def.suffix);
+
+    if (!currentVal.isVoid())
+      sl->setValue(static_cast<double>(currentVal), juce::dontSendNotification);
+
+    juce::Slider *slPtr = sl.get();
+
+    if (propId == "pitchBendRange")
+      pbRangeSlider = slPtr;
+    else if (propId == "visualizerXOpacityPercent")
+      visXOpacitySlider = slPtr;
+    else if (propId == "visualizerYOpacityPercent")
+      visYOpacitySlider = slPtr;
+    else if (propId == "delayMidiSeconds")
+      delayMidiSlider = slPtr;
+
+    sl->onValueChange = [this, propId, def, slPtr]() {
+      double v = slPtr->getValue();
+      juce::var valueToSet =
+          (def.step >= 1.0) ? juce::var(static_cast<int>(std::round(v)))
+                            : juce::var(v);
+      applySettingsValue(propId, valueToSet);
+    };
+
+    auto rowComp = std::make_unique<LabelEditorRow>();
+    rowComp->label = std::make_unique<juce::Label>();
+    rowComp->label->setText(def.label + ":", juce::dontSendNotification);
+    rowComp->editor = std::move(sl);
+    rowComp->addAndMakeVisible(*rowComp->label);
+    rowComp->addAndMakeVisible(*rowComp->editor);
+
+    addItem(std::move(rowComp), def.widthWeight, def.autoWidth);
+    break;
+  }
+  case InspectorControl::Type::Toggle: {
+    auto tb = std::make_unique<juce::ToggleButton>();
+    bool state = (!currentVal.isVoid() && static_cast<bool>(currentVal));
+    tb->setToggleState(state, juce::dontSendNotification);
+    juce::ToggleButton *tbPtr = tb.get();
+
+    if (propId == "showTouchpadVisualizerInMiniWindow")
+      showTouchpadInMiniWindowToggle = tbPtr;
+    else if (propId == "hideCursorInPerformanceMode")
+      hideCursorInPerformanceModeToggle = tbPtr;
+    else if (propId == "studioMode")
+      studioModeToggle = tbPtr;
+    else if (propId == "capWindowRefresh30Fps")
+      capRefresh30FpsToggle = tbPtr;
+    else if (propId == "delayMidiEnabled")
+      delayMidiCheckbox = tbPtr;
+
+    tb->onClick = [this, propId, tbPtr]() {
+      applySettingsValue(propId, juce::var(tbPtr->getToggleState()));
+    };
+
+    auto rowComp = std::make_unique<LabelEditorRow>();
+    rowComp->label = std::make_unique<juce::Label>();
+    rowComp->label->setText(def.label + ":", juce::dontSendNotification);
+    rowComp->editor = std::move(tb);
+    rowComp->addAndMakeVisible(*rowComp->label);
+    rowComp->addAndMakeVisible(*rowComp->editor);
+
+    addItem(std::move(rowComp), def.widthWeight, def.autoWidth);
+    break;
+  }
+  default:
+    break;
+  }
+}
+
+int SettingsPanel::getRequiredHeight() const {
+  const int controlHeight = 25;
+  const int separatorHeight = 15;
+  const int separatorTopMargin = 12;
+  const int spacing = 4;
+  const int topPadding = 4;
+  const int bottomPadding = 4;
+
+  int total = topPadding + bottomPadding;
+  for (const auto &row : uiRows) {
+    if (row.items.empty())
+      continue;
+    if (row.isSeparatorRow)
+      total += separatorTopMargin;
+    total += (row.isSeparatorRow ? separatorHeight : controlHeight) + spacing;
+  }
+  return total;
+}
+
 void SettingsPanel::updateToggleKeyButtonText() {
   int toggleKey = settingsManager.getToggleKey();
   juce::String keyName = RawInputManager::getKeyName(toggleKey);
-  toggleKeyButton.setButtonText("Toggle Key: " + keyName);
+  if (toggleKeyButton)
+    toggleKeyButton->setButtonText("Toggle Key: " + keyName);
 }
 
 void SettingsPanel::updatePerformanceModeKeyButtonText() {
   int perfKey = settingsManager.getPerformanceModeKey();
   juce::String keyName = RawInputManager::getKeyName(perfKey);
-  performanceModeKeyButton.setButtonText("Shortcut: " + keyName);
+  if (performanceModeKeyButton)
+    performanceModeKeyButton->setButtonText("Shortcut: " + keyName);
 }
 
 void SettingsPanel::paint(juce::Graphics &g) {
@@ -378,114 +601,63 @@ void SettingsPanel::paint(juce::Graphics &g) {
 }
 
 void SettingsPanel::parentSizeChanged() {
-  // When inside a Viewport, ensure we have a size so we paint (viewport doesn't
-  // resize its viewed component)
+  // When inside a Viewport, ensure we match its width so we paint correctly.
   if (auto *vp = dynamic_cast<juce::Viewport *>(getParentComponent())) {
     int w = vp->getWidth();
     if (w > 0)
-      setSize(w, 520);
+      setSize(w, getRequiredHeight());
   }
 }
 
 void SettingsPanel::resized() {
-  // When inside a Viewport, use viewport width and set height to content height
-  // so scrollbar appears
-  int panelW = getWidth();
-  if (auto *vp = dynamic_cast<juce::Viewport *>(getParentComponent())) {
-    panelW = vp->getWidth();
-    int controlHeight = 25;
-    int spacing = 10;
-    int visGroupHeight = controlHeight * 4 + spacing * 5 + 28;
-    int groupHeight = controlHeight + spacing + 28;
-    int contentH = 10 + (controlHeight + spacing) * 7 + visGroupHeight +
-                   spacing + groupHeight + 24;
-    setSize(panelW, contentH);
+  const int rowHeight = 25;
+  const int separatorRowHeight = 15;
+  const int spacing = 4;
+  const int topPadding = 4;
+
+  auto bounds = getLocalBounds().reduced(8);
+
+  int y = bounds.getY() + topPadding;
+  for (auto &row : uiRows) {
+    if (row.items.empty())
+      continue;
+
+    if (row.isSeparatorRow)
+      y += 12;
+
+    const int h = row.isSeparatorRow ? separatorRowHeight : rowHeight;
+    const int totalAvailable = bounds.getWidth();
+    int usedWidth = 0;
+    float totalWeight = 0.0f;
+
+    for (auto &item : row.items) {
+      if (item.isAutoWidth) {
+        usedWidth += 100;
+      } else {
+        totalWeight += item.weight;
+      }
+    }
+
+    int remainingWidth = std::max(0, totalAvailable - usedWidth);
+    int x = bounds.getX();
+
+    for (auto &item : row.items) {
+      int w = 0;
+      if (item.isAutoWidth) {
+        w = 100;
+      } else {
+        if (totalWeight > 0.0f)
+          w = static_cast<int>((item.weight / totalWeight) * remainingWidth);
+        else
+          w = remainingWidth;
+      }
+      if (item.component)
+        item.component->setBounds(x, y, w, h);
+      x += w;
+    }
+
+    y += h + spacing;
   }
 
-  auto area = getLocalBounds().reduced(10);
-  int labelWidth = 200;
-  int controlHeight = 25;
-  int spacing = 10;
-  int topPadding = 10;
-  int leftMargin = area.getX() + labelWidth;
-  int width = area.getWidth() - labelWidth;
-
-  int y = topPadding;
-  pbRangeSlider.setBounds(leftMargin, y, width, controlHeight);
-  y += controlHeight + spacing;
-
-  sendRpnButton.setBounds(leftMargin, y, 200, controlHeight);
-  y += controlHeight + spacing;
-
-  // Toggle Key row: button and reset button side by side
-  int toggleKeyButtonWidth = 200;
-  int resetButtonWidth = 80;
-  toggleKeyButton.setBounds(leftMargin, y, toggleKeyButtonWidth, controlHeight);
-  resetToggleKeyButton.setBounds(leftMargin + toggleKeyButtonWidth + spacing, y,
-                                 resetButtonWidth, controlHeight);
-  y += controlHeight + spacing;
-
-  // Performance Mode Key row: button and reset button side by side
-  performanceModeKeyButton.setBounds(leftMargin, y, toggleKeyButtonWidth,
-                                     controlHeight);
-  resetPerformanceModeKeyButton.setBounds(leftMargin + toggleKeyButtonWidth +
-                                              spacing,
-                                          y, resetButtonWidth, controlHeight);
-  y += controlHeight + spacing;
-
-  // Studio Mode Toggle
-  studioModeToggle.setBounds(leftMargin, y, width, controlHeight);
-  y += controlHeight + spacing;
-
-  // Cap window refresh at 30 FPS
-  capRefresh30FpsToggle.setBounds(leftMargin, y, width, controlHeight);
-  y += controlHeight + spacing;
-
-  // Delay MIDI message: checkbox and slider row
-  int checkboxWidth = 80;
-  int sliderWidth = width - checkboxWidth - spacing;
-  delayMidiCheckbox.setBounds(leftMargin, y, checkboxWidth, controlHeight);
-  delayMidiSlider.setBounds(leftMargin + checkboxWidth + spacing, y,
-                            sliderWidth, controlHeight);
-  y += controlHeight + spacing;
-
-  // Visualizer group (X/Y opacity sliders + mini window toggle + hide cursor +
-  // reset button)
-  int visGroupHeight = controlHeight * 5 + spacing * 6 + 28;
-  visualizerGroup.setBounds(area.getX(), y, area.getWidth(), visGroupHeight);
-  int visInnerX = area.getX() + 10;
-  int visInnerY = y + 24;
-  int visInnerW = area.getWidth() - 20;
-
-  int visLabelW = 200;
-  int visSliderW = visInnerW - visLabelW;
-  visXOpacityLabel.setBounds(visInnerX, visInnerY, visLabelW, controlHeight);
-  visXOpacitySlider.setBounds(visInnerX + visLabelW, visInnerY, visSliderW,
-                              controlHeight);
-  visInnerY += controlHeight + spacing;
-  visYOpacityLabel.setBounds(visInnerX, visInnerY, visLabelW, controlHeight);
-  visYOpacitySlider.setBounds(visInnerX + visLabelW, visInnerY, visSliderW,
-                              controlHeight);
-  visInnerY += controlHeight + spacing;
-  showTouchpadInMiniWindowToggle.setBounds(visInnerX, visInnerY,
-                                           visInnerW, controlHeight);
-  visInnerY += controlHeight + spacing;
-  hideCursorInPerformanceModeToggle.setBounds(visInnerX, visInnerY,
-                                              visInnerW, controlHeight);
-  visInnerY += controlHeight + spacing;
-  resetMiniWindowPositionButton.setBounds(visInnerX, visInnerY, visInnerW,
-                                          controlHeight);
-  y += visGroupHeight + spacing;
-
-  // Mapping Colors group (panel coordinates)
-  int groupHeight = controlHeight + spacing + 28;
-  mappingColorsGroup.setBounds(area.getX(), y, area.getWidth(), groupHeight);
-  int innerX = area.getX() + 10;
-  int innerY = y + 24;
-  int innerW = area.getWidth() - 20;
-  int btnW = (innerW - 4 * spacing) / 5;
-  for (size_t i = 0; i < typeColorButtons.size(); ++i) {
-    typeColorButtons[i].setBounds(innerX + (int)i * (btnW + spacing), innerY,
-                                  btnW, controlHeight);
-  }
+  setSize(getWidth(), y + 4);
 }

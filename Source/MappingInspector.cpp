@@ -6,6 +6,7 @@
 #include "MidiNoteUtilities.h"
 #include "PresetManager.h"
 #include "SettingsManager.h"
+#include "MappingDefinition.h"
 
 namespace {
 // Phase 55.6: Invisible container for Label + Editor as one layout unit
@@ -116,7 +117,9 @@ void MappingInspector::rebuildUI() {
   createAliasRow();
   juce::String alias =
       selectedTrees[0].getProperty("inputAlias", "").toString().trim();
-  if (alias.equalsIgnoreCase("Touchpad"))
+  const bool isTouchpad =
+      alias.equalsIgnoreCase("Touchpad");
+  if (isTouchpad)
     createTouchpadEventRow();
   else
     createKeyRow();
@@ -155,9 +158,39 @@ void MappingInspector::rebuildUI() {
     }
   }
 
+  // Determine whether to show Base-layer-only \"Apply on all layers\" toggle.
+  bool showForceAllLayers = false;
+  if (!isTouchpad && presetManager && selectedTrees[0].isValid() &&
+      selectedTrees[0].hasType("Mapping")) {
+    int layerId = -1;
+    juce::ValueTree node = selectedTrees[0];
+    while (node.isValid()) {
+      if (node.hasType("Layer")) {
+        layerId = static_cast<int>(node.getProperty("id", -1));
+        break;
+      }
+      node = node.getParent();
+    }
+    if (layerId < 0 && selectedTrees[0].hasProperty("layerID"))
+      layerId =
+          static_cast<int>(selectedTrees[0].getProperty("layerID", -1));
+    showForceAllLayers = (layerId == 0);
+  }
+
   int pbRange = settingsManager.getPitchBendRange();
   InspectorSchema schema =
       MappingDefinition::getSchema(selectedTrees[0], pbRange);
+
+  if (showForceAllLayers) {
+    schema.push_back(MappingDefinition::createSeparator(
+        "Global behavior", juce::Justification::centredLeft));
+    InspectorControl force;
+    force.propertyId = "forceAllLayers";
+    force.label = "Apply on all layers";
+    force.controlType = InspectorControl::Type::Toggle;
+    force.widthWeight = 1.0f;
+    schema.push_back(force);
+  }
   for (const auto &def : schema) {
     // Phase 55.9: Handle explicit Separator items
     if (def.controlType == InspectorControl::Type::Separator) {
@@ -832,7 +865,8 @@ void MappingInspector::valueTreePropertyChanged(
       property == juce::Identifier("adsrTarget") ||
       property == juce::Identifier("sendReleaseValue") ||
       property == juce::Identifier("useCustomEnvelope") ||
-      property == juce::Identifier("releaseBehavior")) {
+      property == juce::Identifier("releaseBehavior") ||
+      property == juce::Identifier("forceAllLayers")) {
     needsRebuild = true;
   } else if (property == juce::Identifier("data1")) {
     if (allTreesHaveSameValue("type") &&
@@ -874,6 +908,7 @@ void MappingInspector::valueTreePropertyChanged(
        property == juce::Identifier("touchpadInputMax") ||
        property == juce::Identifier("touchpadOutputMin") ||
        property == juce::Identifier("touchpadOutputMax") ||
+       property == juce::Identifier("forceAllLayers") ||
        property == juce::Identifier("enabled"))) {
     presetManager->sendChangeMessage();
   }

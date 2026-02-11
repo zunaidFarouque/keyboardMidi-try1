@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <cmath>
 #include <numeric>
+#include <unordered_map>
 
 namespace {
 
@@ -535,6 +536,176 @@ static bool isTouchpadEventBoolean(int eventId) {
           eventId == TouchpadEvent::Finger2Up);
 }
 
+struct ForcedMapping {
+  int inputKey{};
+  MidiAction action{};
+  juce::Colour color;
+  juce::String label;
+  juce::String sourceName;
+};
+
+static void collectForcedMappings(
+    PresetManager &presetMgr, DeviceManager &deviceMgr, ZoneManager &zoneMgr,
+    SettingsManager &settingsMgr,
+    std::unordered_map<uintptr_t, std::vector<ForcedMapping>> &forcedByAlias) {
+  forcedByAlias.clear();
+
+  std::vector<juce::ValueTree> baseList =
+      presetMgr.getEnabledMappingsForLayer(0);
+  for (auto mapping : baseList) {
+    if (!mapping.isValid() || !mapping.hasType("Mapping"))
+      continue;
+
+    const bool forceAllLayers =
+        (bool)mapping.getProperty("forceAllLayers", false);
+    if (!forceAllLayers)
+      continue;
+
+    juce::String aliasName =
+        mapping.getProperty("inputAlias", "").toString().trim();
+    if (aliasName.equalsIgnoreCase("Touchpad"))
+      continue;
+
+    const int inputKey = (int)mapping.getProperty("inputKey", 0);
+    if (inputKey < 0 || inputKey > 0xFF)
+      continue;
+
+    uintptr_t mappingAliasHash = aliasNameToHash(aliasName);
+
+    juce::var deviceHashVar = mapping.getProperty("deviceHash");
+    bool hasDeviceHash =
+        !deviceHashVar.isVoid() && !deviceHashVar.toString().isEmpty();
+    uintptr_t deviceHash =
+        hasDeviceHash ? parseDeviceHash(deviceHashVar) : 0;
+
+    if (mappingAliasHash == 0 && hasDeviceHash && deviceHash != 0) {
+      juce::String resolvedAlias = deviceMgr.getAliasForHardware(deviceHash);
+      if (resolvedAlias != "Unassigned" && resolvedAlias.isNotEmpty()) {
+        mappingAliasHash = aliasNameToHash(resolvedAlias);
+      }
+      // Unresolved deviceHash: treat as device-specific (only apply when
+      // compiling that device). Tests use alias hash as deviceHash.
+      if (mappingAliasHash == 0)
+        mappingAliasHash = deviceHash;
+    }
+
+    MidiAction action = buildMidiActionFromMapping(mapping);
+    applyNoteOptionsFromMapping(mapping, zoneMgr, action);
+
+    if (action.type == ActionType::Expression) {
+      juce::String adsrTargetStr =
+          mapping.getProperty("adsrTarget", "CC").toString().trim();
+      bool useCustomEnvelope =
+          (bool)mapping.getProperty("useCustomEnvelope", false);
+
+      if (adsrTargetStr.equalsIgnoreCase("PitchBend"))
+        action.adsrSettings.target = AdsrTarget::PitchBend;
+      else if (adsrTargetStr.equalsIgnoreCase("SmartScaleBend"))
+        action.adsrSettings.target = AdsrTarget::SmartScaleBend;
+      else
+        action.adsrSettings.target = AdsrTarget::CC;
+
+      bool isPB = action.adsrSettings.target == AdsrTarget::PitchBend;
+      bool isSmartBend =
+          action.adsrSettings.target == AdsrTarget::SmartScaleBend;
+      action.adsrSettings.useCustomEnvelope =
+          useCustomEnvelope && !isPB && !isSmartBend;
+
+      if (!useCustomEnvelope) {
+        action.adsrSettings.attackMs = 0;
+        action.adsrSettings.decayMs = 0;
+        action.adsrSettings.sustainLevel = 1.0f;
+        action.adsrSettings.releaseMs = 0;
+      } else {
+        action.adsrSettings.attackMs =
+            (int)mapping.getProperty("adsrAttack", 10);
+        action.adsrSettings.decayMs =
+            (int)mapping.getProperty("adsrDecay", 10);
+        action.adsrSettings.sustainLevel =
+            (float)mapping.getProperty("adsrSustain", 0.7);
+        action.adsrSettings.releaseMs =
+            (int)mapping.getProperty("adsrRelease", 100);
+      }
+
+      if (action.adsrSettings.target == AdsrTarget::CC) {
+        action.adsrSettings.ccNumber = (int)mapping.getProperty("data1", 1);
+        action.adsrSettings.valueWhenOn =
+            (int)mapping.getProperty("touchpadValueWhenOn", 127);
+        action.adsrSettings.valueWhenOff =
+            (int)mapping.getProperty("touchpadValueWhenOff", 0);
+        action.data2 = action.adsrSettings.valueWhenOn;
+      } else if (action.adsrSettings.target == AdsrTarget::PitchBend) {
+        const int pbRange = settingsMgr.getPitchBendRange();
+        int semitones = (int)mapping.getProperty("data2", 0);
+        action.data2 = juce::jlimit(-juce::jmax(1, pbRange),
+                                    juce::jmax(1, pbRange), semitones);
+      } else if (action.adsrSettings.target == AdsrTarget::SmartScaleBend) {
+        buildSmartBendLookup(action, mapping, zoneMgr, settingsMgr);
+        action.data2 = 8192;
+      }
+      bool defaultResetPitch =
+          (action.adsrSettings.target == AdsrTarget::PitchBend ||
+           action.adsrSettings.target == AdsrTarget::SmartScaleBend);
+      action.sendReleaseValue =
+          (bool)mapping.getProperty("sendReleaseValue", defaultResetPitch);
+      action.releaseValue = (int)mapping.getProperty("releaseValue", 0);
+    }
+
+    if (action.type == ActionType::Command &&
+        action.data1 == static_cast<int>(MIDIQy::CommandID::LatchToggle)) {
+      action.releaseLatchedOnLatchToggleOff =
+          (bool)mapping.getProperty("releaseLatchedOnToggleOff", true);
+    }
+
+    if (action.type == ActionType::Command &&
+        (action.data1 == static_cast<int>(MIDIQy::CommandID::Transpose) ||
+         action.data1 ==
+             static_cast<int>(MIDIQy::CommandID::GlobalPitchDown))) {
+      juce::String modeStr =
+          mapping.getProperty("transposeMode", "Global").toString();
+      action.transposeLocal = modeStr.equalsIgnoreCase("Local");
+      int modify = (int)mapping.getProperty("transposeModify", 0);
+      if (action.data1 ==
+          static_cast<int>(MIDIQy::CommandID::GlobalPitchDown)) {
+        modify = 1;
+      }
+      action.transposeModify = juce::jlimit(0, 4, modify);
+      action.transposeSemitones =
+          (int)mapping.getProperty("transposeSemitones", 0);
+      action.transposeSemitones =
+          juce::jlimit(-48, 48, action.transposeSemitones);
+    }
+
+    if (action.type == ActionType::Command) {
+      const int cmd = action.data1;
+      if (cmd == static_cast<int>(MIDIQy::CommandID::GlobalRootUp) ||
+          cmd == static_cast<int>(MIDIQy::CommandID::GlobalRootDown) ||
+          cmd == static_cast<int>(MIDIQy::CommandID::GlobalRootSet)) {
+        int rm = (int)mapping.getProperty("rootModify", 0);
+        action.rootModify = juce::jlimit(0, 2, rm);
+        action.rootNote =
+            juce::jlimit(0, 127, (int)mapping.getProperty("rootNote", 60));
+      }
+      if (cmd == static_cast<int>(MIDIQy::CommandID::GlobalScaleNext) ||
+          cmd == static_cast<int>(MIDIQy::CommandID::GlobalScalePrev) ||
+          cmd == static_cast<int>(MIDIQy::CommandID::GlobalScaleSet)) {
+        int sm = (int)mapping.getProperty("scaleModify", 0);
+        action.scaleModify = juce::jlimit(0, 2, sm);
+        action.scaleIndex =
+            juce::jmax(0, (int)mapping.getProperty("scaleIndex", 0));
+      }
+    }
+
+    juce::Colour color = getColorForType(action.type, settingsMgr);
+    juce::String label = makeLabelForAction(action);
+    juce::String sourceName =
+        aliasName.isNotEmpty() ? ("Mapping: " + aliasName) : "Mapping";
+
+    forcedByAlias[mappingAliasHash].push_back(
+        ForcedMapping{inputKey, action, color, label, sourceName});
+  }
+}
+
 // Phase 51.4 / 53.5: Apply manual mappings for a single layer. targetState for
 // device Pass 2 (Inherited vs Active). If touchpadMappingsOut is non-null,
 // Touchpad mappings are appended there instead of writing to the grid.
@@ -569,6 +740,11 @@ void compileMappingsForLayer(
   for (int i : order) {
     auto mapping = enabledList[i];
     if (!mapping.isValid() || !mapping.hasType("Mapping"))
+      continue;
+
+    const bool forceAllLayers =
+        (bool)mapping.getProperty("forceAllLayers", false);
+    if (forceAllLayers && layerId == 0)
       continue;
 
     juce::String aliasName =
@@ -890,6 +1066,11 @@ std::shared_ptr<CompiledMapContext> GridCompiler::compile(
   // 1. Setup Context
   auto context = std::make_shared<CompiledMapContext>();
 
+  // Collect Base-layer mappings that should apply on all layers.
+  std::unordered_map<uintptr_t, std::vector<ForcedMapping>> forcedByAlias;
+  collectForcedMappings(presetMgr, deviceMgr, zoneMgr, settingsMgr,
+                        forcedByAlias);
+
   // 2. Collect touchpad mappings (one pass over all layers)
   const uintptr_t touchpadAliasHash = static_cast<uintptr_t>(
       std::hash<juce::String>{}(juce::String("Touchpad").trim()));
@@ -1037,6 +1218,20 @@ std::shared_ptr<CompiledMapContext> GridCompiler::compile(
                               VisualState targetState = VisualState::Active,
                               std::vector<bool> *keysWrittenOut = nullptr) {
     std::vector<bool> touchedKeys(256, false);
+
+    auto itForced = forcedByAlias.find(aliasHash);
+    if (itForced != forcedByAlias.end()) {
+      for (const auto &fm : itForced->second) {
+        const int key = fm.inputKey;
+        if (key < 0 || key >= (int)vGrid.size())
+          continue;
+        applyVisualWithModifiers(vGrid, key, fm.color, fm.label, fm.sourceName,
+                                 &touchedKeys, targetState);
+        if (vGrid[(size_t)key].state != VisualState::Conflict) {
+          writeAudioSlot(aGrid, key, fm.action);
+        }
+      }
+    }
 
     compileZonesForLayer(vGrid, aGrid, zoneMgr, deviceMgr, aliasHash, layerId,
                          touchedKeys, context->chordPool, targetState,

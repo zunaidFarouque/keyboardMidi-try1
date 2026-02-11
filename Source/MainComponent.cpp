@@ -1017,12 +1017,12 @@ void MainComponent::resized() {
   }
 
   // Viewport does not resize its viewed component: set settings panel size so
-  // it paints and scrolls
+  // it paints and scrolls based on its dynamic content height.
   if (settingsPanel &&
       settingsViewport.getViewedComponent() == settingsPanel.get()) {
     int w = settingsViewport.getWidth();
     if (w > 0)
-      settingsPanel->setSize(w, 520);
+      settingsPanel->setSize(w, settingsPanel->getRequiredHeight());
   }
 }
 

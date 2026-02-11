@@ -126,6 +126,7 @@ target_sources(MIDIQy PRIVATE
     Source/VisualizerComponent.cpp
     Source/ZoneEditorComponent.cpp
     Source/SettingsPanel.cpp
+    Source/SettingsDefinition.cpp
     Source/LayerListPanel.cpp
     Source/ZoneListPanel.cpp
     Source/ZonePropertiesPanel.cpp

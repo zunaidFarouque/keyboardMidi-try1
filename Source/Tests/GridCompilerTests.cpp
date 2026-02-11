@@ -55,6 +55,26 @@ protected:
     mappings.addChild(m, -1, nullptr);
   }
 
+  void addForceAllLayersMappingOnBase(int keyCode, uintptr_t deviceH,
+                                      ActionType type = ActionType::Command) {
+    auto mappings = presetMgr.getMappingsListForLayer(0);
+    juce::ValueTree m("Mapping");
+    m.setProperty("inputKey", keyCode, nullptr);
+    m.setProperty("deviceHash",
+                  juce::String::toHexString((juce::int64)deviceH)
+                      .toUpperCase(),
+                  nullptr);
+    juce::String typeStr = "Command";
+    if (type == ActionType::Note)
+      typeStr = "Note";
+    else if (type == ActionType::Expression)
+      typeStr = "Expression";
+    m.setProperty("type", typeStr, nullptr);
+    m.setProperty("layerID", 0, nullptr);
+    m.setProperty("forceAllLayers", true, nullptr);
+    mappings.addChild(m, -1, nullptr);
+  }
+
   // Helper to add a Command mapping (e.g. LayerMomentary)
   void addCommandMapping(int layerId, int keyCode, uintptr_t deviceH,
                          int commandId, int data2) {
@@ -561,6 +581,36 @@ TEST_F(GridCompilerTest, LayerInheritancePrivate_WithZone) {
   EXPECT_TRUE((*l2Audio)[81].isActive);
   EXPECT_FALSE((*l2Audio)[82].isActive);
   EXPECT_TRUE((*l2Audio)[83].isActive);
+}
+
+// Base-layer forceAllLayers mapping: present on all layers and blocks conflicts.
+TEST_F(GridCompilerTest, ForceAllLayersBaseMappingAppliesToAllLayersAndBlocksOthers) {
+  // Base-layer command mapping on key 81, global (deviceHash 0), forced.
+  addForceAllLayersMappingOnBase(81, 0, ActionType::Command);
+
+  // Add a conflicting mapping on Layer 2 for the same key; should become conflict.
+  addMapping(2, 81, 0, ActionType::Note);
+
+  auto context = GridCompiler::compile(presetMgr, deviceMgr, zoneMgr,
+                                       touchpadMixerMgr, settingsMgr);
+
+  // Forced mapping should be active on all global layers.
+  for (int layer = 0; layer < 9; ++layer) {
+    auto vGrid = context->visualLookup[0][layer];
+    auto aGrid = context->globalGrids[layer];
+    ASSERT_TRUE(vGrid);
+    ASSERT_TRUE(aGrid);
+
+    if (layer == 2) {
+      // Layer 2 has an extra mapping on the same key; visual conflict, but audio
+      // should still have a single active slot from the forced mapping path.
+      EXPECT_EQ((*vGrid)[81].state, VisualState::Conflict);
+      EXPECT_TRUE((*aGrid)[81].isActive);
+    } else {
+      EXPECT_NE((*vGrid)[81].state, VisualState::Empty);
+      EXPECT_TRUE((*aGrid)[81].isActive);
+    }
+  }
 }
 
 // Layer inheritance with zones: Passthru – zone on L1 (key 82); L2 inherits
