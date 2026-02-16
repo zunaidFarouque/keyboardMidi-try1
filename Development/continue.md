@@ -1,6 +1,9 @@
 Migrate from Mappings Tab to Touchpad Tab.
 > already discussing
 
+use: @touchpad Mappings (current implementations).md file to add exact features in the touchpad tab.
+
+
 ===
 
 We need to add a new type of touchpad layout: Encoders.
