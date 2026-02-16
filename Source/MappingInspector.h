@@ -69,7 +69,6 @@ private:
   void createControl(const InspectorControl &def, UiRow &currentRow);
   void createAliasRow();
   void createKeyRow();
-  void createTouchpadEventRow();
 
   bool allTreesHaveSameValue(const juce::Identifier &property);
   juce::var getCommonValue(const juce::Identifier &property);

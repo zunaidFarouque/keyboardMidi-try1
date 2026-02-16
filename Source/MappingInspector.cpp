@@ -120,54 +120,12 @@ void MappingInspector::rebuildUI() {
   if (selectedTrees.empty())
     return;
 
-  // Device row at top, then Key or Events (touchpad), then Type
   createAliasRow();
-  juce::String alias =
-      selectedTrees[0].getProperty("inputAlias", "").toString().trim();
-  const bool isTouchpad =
-      alias.equalsIgnoreCase("Touchpad");
-  if (isTouchpad)
-    createTouchpadEventRow();
-  else
-    createKeyRow();
-
-  // Apply defaults for newly created touchpad Expression PitchBend/SmartScale
-  // mappings that haven't been edited yet.
-  if (selectedTrees.size() == 1) {
-    auto mapping = selectedTrees[0];
-    juce::String typeStr =
-        mapping.getProperty("type", "Note").toString().trim();
-    juce::String adsrTargetStr =
-        mapping.getProperty("adsrTarget", "CC").toString().trim();
-    const bool touchpad = mapping.getProperty("inputAlias", "")
-                              .toString()
-                              .trim()
-                              .equalsIgnoreCase("Touchpad");
-    const int touchpadEvent =
-        touchpad ? (int)mapping.getProperty("inputTouchpadEvent", 0) : 0;
-    const bool touchpadInputBool =
-        touchpad && (touchpadEvent == TouchpadEvent::Finger1Down ||
-                     touchpadEvent == TouchpadEvent::Finger1Up ||
-                     touchpadEvent == TouchpadEvent::Finger2Down ||
-                     touchpadEvent == TouchpadEvent::Finger2Up);
-    bool isPitchOrSmart = adsrTargetStr.equalsIgnoreCase("PitchBend") ||
-                          adsrTargetStr.equalsIgnoreCase("SmartScaleBend");
-    if (typeStr.equalsIgnoreCase("Expression") && touchpad &&
-        !touchpadInputBool && isPitchOrSmart) {
-      if (mapping.getProperty("touchpadInputMin").isVoid())
-        mapping.setProperty("touchpadInputMin", 0.0, &undoManager);
-      if (mapping.getProperty("touchpadInputMax").isVoid())
-        mapping.setProperty("touchpadInputMax", 1.0, &undoManager);
-      if (mapping.getProperty("touchpadOutputMin").isVoid())
-        mapping.setProperty("touchpadOutputMin", -2, &undoManager);
-      if (mapping.getProperty("touchpadOutputMax").isVoid())
-        mapping.setProperty("touchpadOutputMax", 2, &undoManager);
-    }
-  }
+  createKeyRow();
 
   // Determine whether to show Base-layer-only \"Apply on all layers\" toggle.
   bool showForceAllLayers = false;
-  if (!isTouchpad && presetManager && selectedTrees[0].isValid() &&
+  if (presetManager && selectedTrees[0].isValid() &&
       selectedTrees[0].hasType("Mapping")) {
     int layerId = -1;
     juce::ValueTree node = selectedTrees[0];
@@ -751,47 +709,6 @@ void MappingInspector::createKeyRow() {
   uiRows.push_back(std::move(row));
 }
 
-void MappingInspector::createTouchpadEventRow() {
-  UiRow row;
-  row.isSeparatorRow = false;
-
-  auto rowComp = std::make_unique<LabelEditorRow>();
-  rowComp->label = std::make_unique<juce::Label>();
-  rowComp->label->setText("Events:", juce::dontSendNotification);
-
-  auto eventCombo = std::make_unique<juce::ComboBox>();
-  auto options = MappingDefinition::getTouchpadEventOptions();
-  for (const auto &p : options)
-    eventCombo->addItem(p.second, p.first + 1);
-
-  const juce::Identifier inputTouchpadEventId("inputTouchpadEvent");
-  int currentEvent = 0;
-  if (allTreesHaveSameValue(inputTouchpadEventId))
-    currentEvent = static_cast<int>(getCommonValue(inputTouchpadEventId));
-  eventCombo->setSelectedId(currentEvent + 1, juce::dontSendNotification);
-  if (!allTreesHaveSameValue(inputTouchpadEventId))
-    eventCombo->setSelectedId(-1, juce::dontSendNotification);
-
-  juce::ComboBox *eventComboPtr = eventCombo.get();
-  eventCombo->onChange = [this, eventComboPtr]() {
-    if (selectedTrees.empty() || eventComboPtr->getSelectedId() == -1)
-      return;
-    int newEvent = eventComboPtr->getSelectedId() - 1;
-    undoManager.beginNewTransaction("Change Touchpad Event");
-    for (auto &tree : selectedTrees) {
-      if (tree.isValid())
-        tree.setProperty("inputTouchpadEvent", newEvent, &undoManager);
-    }
-  };
-
-  rowComp->editor = std::move(eventCombo);
-  rowComp->addAndMakeVisible(*rowComp->label);
-  rowComp->addAndMakeVisible(*rowComp->editor);
-  addAndMakeVisible(*rowComp);
-  row.items.push_back({std::move(rowComp), 1.0f, false});
-  uiRows.push_back(std::move(row));
-}
-
 void MappingInspector::resized() {
   const int rowHeight = 25;
   const int separatorRowHeight = 15; // Phase 55.9: smaller for separator rows
@@ -916,13 +833,8 @@ void MappingInspector::valueTreePropertyChanged(
         targetStr.equalsIgnoreCase("SmartScaleBend"))
       tree.setProperty("sendReleaseValue", true, &undoManager);
   }
-  // Phase 55.6: Rebuild only when schema structure changes (avoids rebuild
-  // during slider drag). Also rebuild when inputKey / inputTouchpadEvent
-  // change so Key/Events dropdown and dependent controls (e.g. Release
-  // Behaviour options for touchpad) stay in sync.
   bool needsRebuild = false;
   if (property == juce::Identifier("inputKey") ||
-      property == juce::Identifier("inputTouchpadEvent") ||
       property == juce::Identifier("inputAlias") ||
       property == juce::Identifier("type") ||
       property == juce::Identifier("adsrTarget") ||
@@ -947,12 +859,8 @@ void MappingInspector::valueTreePropertyChanged(
     repaint();
   }
 
-  // Notify PresetManager so InputProcessor (and others) rebuild grid when
-  // mapping properties that affect compilation change (e.g. inputTouchpadEvent,
-  // releaseBehavior). InputProcessor listens to PresetManager and will rebuild.
   if (presetManager &&
       (property == juce::Identifier("inputKey") ||
-       property == juce::Identifier("inputTouchpadEvent") ||
        property == juce::Identifier("inputAlias") ||
        property == juce::Identifier("releaseBehavior") ||
        property == juce::Identifier("followTranspose") ||

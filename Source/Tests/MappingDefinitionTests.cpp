@@ -2,29 +2,8 @@
 #include "../MappingTypes.h"
 #include <gtest/gtest.h>
 
-// --- Touchpad event names and options (recent touchpad mapping feature) ---
-TEST(MappingDefinitionTest, TouchpadEventNames) {
-  EXPECT_EQ(MappingDefinition::getTouchpadEventName(0), "Finger 1: Down");
-  EXPECT_EQ(MappingDefinition::getTouchpadEventName(1), "Finger 1: Up");
-  EXPECT_EQ(MappingDefinition::getTouchpadEventName(2), "Finger 1: X");
-  EXPECT_EQ(
-      MappingDefinition::getTouchpadEventName(TouchpadEvent::Finger1And2Dist),
-      "Finger 1 & 2 dist");
-  EXPECT_EQ(MappingDefinition::getTouchpadEventName(TouchpadEvent::Count - 1),
-            "Finger 1 & 2 avg Y");
-  EXPECT_EQ(MappingDefinition::getTouchpadEventName(-1), "Unknown");
-  EXPECT_EQ(MappingDefinition::getTouchpadEventName(TouchpadEvent::Count),
-            "Unknown");
-}
-
-TEST(MappingDefinitionTest, TouchpadEventOptions) {
-  auto options = MappingDefinition::getTouchpadEventOptions();
-  EXPECT_EQ(options.size(), static_cast<size_t>(TouchpadEvent::Count));
-  EXPECT_EQ(options[0], "Finger 1: Down");
-  EXPECT_EQ(options[TouchpadEvent::Finger2Up], "Finger 2: Up");
-  EXPECT_EQ(options[TouchpadEvent::Finger1And2AvgY], "Finger 1 & 2 avg Y");
-}
-
+// Touchpad mappings are edited in the Touchpad tab; schema in Mappings tab is
+// keyboard-only. Note schema still has releaseBehaviour and Note control.
 TEST(MappingDefinitionTest, TouchpadMappingSchemaHasNoteAndReleaseControls) {
   juce::ValueTree mapping("Mapping");
   mapping.setProperty("inputAlias", "Touchpad", nullptr);
@@ -45,33 +24,6 @@ TEST(MappingDefinitionTest, TouchpadMappingSchemaHasNoteAndReleaseControls) {
       << "Touchpad Note schema should have releaseBehavior (release behaviour)";
   EXPECT_TRUE(hasNoteControl)
       << "Touchpad Note schema should have Note (data1) control";
-}
-
-// Release "Send Note Off" must not be offered for Finger 1 Up / Finger 2 Up
-TEST(MappingDefinitionTest, TouchpadFingerUpSchemaNoSendNoteOffOption) {
-  juce::ValueTree mapping("Mapping");
-  mapping.setProperty("inputAlias", "Touchpad", nullptr);
-  mapping.setProperty("inputTouchpadEvent", TouchpadEvent::Finger1Up, nullptr);
-  mapping.setProperty("type", "Note", nullptr);
-
-  InspectorSchema schema = MappingDefinition::getSchema(mapping);
-
-  const InspectorControl *releaseCtrl = nullptr;
-  for (const auto &c : schema) {
-    if (c.propertyId == "releaseBehavior") {
-      releaseCtrl = &c;
-      break;
-    }
-  }
-  ASSERT_NE(releaseCtrl, nullptr);
-  // Option 1 (Send Note Off) must not be present for Up events
-  auto it = releaseCtrl->options.find(1);
-  EXPECT_TRUE(it == releaseCtrl->options.end())
-      << "Finger 1 Up must not have 'Send Note Off' option (id 1)";
-  EXPECT_NE(releaseCtrl->options.find(2), releaseCtrl->options.end())
-      << "Sustain until retrigger (2) should be available";
-  EXPECT_NE(releaseCtrl->options.find(3), releaseCtrl->options.end())
-      << "Always Latch (3) should be available";
 }
 
 TEST(MappingDefinitionTest, SchemaGeneration) {
@@ -159,151 +111,6 @@ TEST(MappingDefinitionTest, LayerUnifiedUI) {
 }
 
 // Touchpad solo command: unified UI with category + scope + type + group id
-TEST(MappingDefinitionTest, TouchpadSoloCommandHasCategoryScopeTypeAndGroup) {
-  juce::ValueTree mapping("Mapping");
-  mapping.setProperty("type", "Command", nullptr);
-  mapping.setProperty(
-      "data1",
-      (int)MIDIQy::CommandID::TouchpadLayoutGroupSoloMomentary,
-      nullptr);
-
-  InspectorSchema schema = MappingDefinition::getSchema(mapping);
-
-  const InspectorControl *cmdCtrl = nullptr;
-  const InspectorControl *scopeCtrl = nullptr;
-  const InspectorControl *typeCtrl = nullptr;
-  const InspectorControl *groupCtrl = nullptr;
-  for (const auto &c : schema) {
-    if (c.propertyId == "commandCategory")
-      cmdCtrl = &c;
-    else if (c.propertyId == "touchpadSoloScope")
-      scopeCtrl = &c;
-    else if (c.propertyId == "touchpadSoloType")
-      typeCtrl = &c;
-    else if (c.propertyId == "touchpadLayoutGroupId")
-      groupCtrl = &c;
-  }
-
-  ASSERT_NE(cmdCtrl, nullptr);
-  EXPECT_EQ(cmdCtrl->label, "Command");
-  ASSERT_NE(scopeCtrl, nullptr);
-  ASSERT_NE(typeCtrl, nullptr);
-  ASSERT_NE(groupCtrl, nullptr);
-}
-
-// Verify touchpadSoloType has correct options
-TEST(MappingDefinitionTest, TouchpadSoloTypeHasCorrectOptions) {
-  juce::ValueTree mapping("Mapping");
-  mapping.setProperty("type", "Command", nullptr);
-  mapping.setProperty(
-      "data1",
-      (int)MIDIQy::CommandID::TouchpadLayoutGroupSoloMomentary,
-      nullptr);
-
-  InspectorSchema schema = MappingDefinition::getSchema(mapping);
-
-  const InspectorControl *typeCtrl = nullptr;
-  for (const auto &c : schema) {
-    if (c.propertyId == "touchpadSoloType") {
-      typeCtrl = &c;
-      break;
-    }
-  }
-
-  ASSERT_NE(typeCtrl, nullptr);
-  EXPECT_EQ(typeCtrl->label, "Solo type");
-  EXPECT_EQ(typeCtrl->controlType, InspectorControl::Type::ComboBox);
-  EXPECT_EQ(typeCtrl->options.size(), 4u) << "Should have 4 solo type options";
-  auto it1 = typeCtrl->options.find(1);
-  ASSERT_NE(it1, typeCtrl->options.end());
-  EXPECT_EQ(it1->second, "Hold");
-  auto it2 = typeCtrl->options.find(2);
-  ASSERT_NE(it2, typeCtrl->options.end());
-  EXPECT_EQ(it2->second, "Toggle");
-  auto it3 = typeCtrl->options.find(3);
-  ASSERT_NE(it3, typeCtrl->options.end());
-  EXPECT_EQ(it3->second, "Set");
-  auto it4 = typeCtrl->options.find(4);
-  ASSERT_NE(it4, typeCtrl->options.end());
-  EXPECT_EQ(it4->second, "Clear");
-}
-
-// Verify touchpad solo controls appear for all touchpad solo command IDs
-TEST(MappingDefinitionTest, TouchpadSoloControlsAppearForAllSoloTypes) {
-  using MIDIQy::CommandID;
-  std::vector<CommandID> soloCommands = {
-      CommandID::TouchpadLayoutGroupSoloMomentary,
-      CommandID::TouchpadLayoutGroupSoloToggle,
-      CommandID::TouchpadLayoutGroupSoloSet,
-      CommandID::TouchpadLayoutGroupSoloClear};
-
-  for (auto cmd : soloCommands) {
-    juce::ValueTree mapping("Mapping");
-    mapping.setProperty("type", "Command", nullptr);
-    mapping.setProperty("data1", static_cast<int>(cmd), nullptr);
-
-    InspectorSchema schema = MappingDefinition::getSchema(mapping);
-
-    bool hasSoloType = false;
-    bool hasSoloScope = false;
-    bool hasLayoutGroup = false;
-    for (const auto &c : schema) {
-      if (c.propertyId == "touchpadSoloType")
-        hasSoloType = true;
-      else if (c.propertyId == "touchpadSoloScope")
-        hasSoloScope = true;
-      else if (c.propertyId == "touchpadLayoutGroupId")
-        hasLayoutGroup = true;
-    }
-
-    EXPECT_TRUE(hasSoloType) << "Should have touchpadSoloType for command "
-                              << static_cast<int>(cmd);
-    EXPECT_TRUE(hasSoloScope) << "Should have touchpadSoloScope for command "
-                               << static_cast<int>(cmd);
-    EXPECT_TRUE(hasLayoutGroup)
-        << "Should have touchpadLayoutGroupId for command "
-        << static_cast<int>(cmd);
-  }
-}
-
-// Command schema includes Touchpad solo block only when data1 is 18-21.
-// Assert absence when Sustain (data1=0), presence when Touchpad (data1=18).
-TEST(MappingDefinitionTest, SchemaWhenSwitchingToTouchpad_NoControlsThenHasControls) {
-  juce::ValueTree mapping("Mapping");
-  mapping.setProperty("type", "Command", nullptr);
-  mapping.setProperty("data1", 0, nullptr); // SustainMomentary, not touchpad
-
-  InspectorSchema schemaBefore = MappingDefinition::getSchema(mapping);
-  bool hasSoloTypeBefore = false, hasGroupBefore = false, hasScopeBefore = false;
-  for (const auto &c : schemaBefore) {
-    if (c.propertyId == "touchpadSoloType")
-      hasSoloTypeBefore = true;
-    else if (c.propertyId == "touchpadLayoutGroupId")
-      hasGroupBefore = true;
-    else if (c.propertyId == "touchpadSoloScope")
-      hasScopeBefore = true;
-  }
-  EXPECT_FALSE(hasSoloTypeBefore) << "Touchpad solo controls should not be in schema when data1=0";
-  EXPECT_FALSE(hasGroupBefore) << "Touchpad layout group should not be in schema when data1=0";
-  EXPECT_FALSE(hasScopeBefore) << "Touchpad solo scope should not be in schema when data1=0";
-
-  mapping.setProperty("data1",
-                      (int)MIDIQy::CommandID::TouchpadLayoutGroupSoloMomentary,
-                      nullptr);
-  InspectorSchema schemaAfter = MappingDefinition::getSchema(mapping);
-  bool hasSoloType = false, hasGroup = false, hasScope = false;
-  for (const auto &c : schemaAfter) {
-    if (c.propertyId == "touchpadSoloType")
-      hasSoloType = true;
-    else if (c.propertyId == "touchpadLayoutGroupId")
-      hasGroup = true;
-    else if (c.propertyId == "touchpadSoloScope")
-      hasScope = true;
-  }
-  EXPECT_TRUE(hasSoloType) << "Schema should have touchpadSoloType when data1=18";
-  EXPECT_TRUE(hasGroup) << "Schema should have touchpadLayoutGroupId when data1=18";
-  EXPECT_TRUE(hasScope) << "Schema should have touchpadSoloScope when data1=18";
-}
 
 // CC Expression uses Value when On / Value when Off (no data2 peak slider)
 TEST(MappingDefinitionTest, EnvelopeContext) {
@@ -352,50 +159,6 @@ TEST(MappingDefinitionTest, PitchBendHasBendSemitonesNoValueWhenOnOff) {
     if (c.propertyId == "touchpadValueWhenOn")
       hasValueWhenOn = true;
   EXPECT_FALSE(hasValueWhenOn) << "PitchBend should not have Value when On";
-}
-
-TEST(MappingDefinitionTest,
-     TouchpadContinuousPitchBendDisablesBendSemitonesSlider) {
-  juce::ValueTree mapping("Mapping");
-  mapping.setProperty("type", "Expression", nullptr);
-  mapping.setProperty("adsrTarget", "PitchBend", nullptr);
-  mapping.setProperty("inputAlias", "Touchpad", nullptr);
-  mapping.setProperty("inputTouchpadEvent", TouchpadEvent::Finger1X, nullptr);
-
-  const int pbRange = 12;
-  InspectorSchema schema = MappingDefinition::getSchema(mapping, pbRange);
-
-  bool hasData2 = false;
-  for (const auto &c : schema) {
-    if (c.propertyId == "data2") {
-      hasData2 = true;
-      break;
-    }
-  }
-  EXPECT_FALSE(hasData2)
-      << "Touchpad continuous PitchBend Expression should not show Bend "
-         "(semitones) slider at all";
-}
-
-TEST(MappingDefinitionTest, TouchpadContinuousSmartScaleHidesScaleStepsSlider) {
-  juce::ValueTree mapping("Mapping");
-  mapping.setProperty("type", "Expression", nullptr);
-  mapping.setProperty("adsrTarget", "SmartScaleBend", nullptr);
-  mapping.setProperty("inputAlias", "Touchpad", nullptr);
-  mapping.setProperty("inputTouchpadEvent", TouchpadEvent::Finger1X, nullptr);
-
-  InspectorSchema schema = MappingDefinition::getSchema(mapping, 12);
-
-  const InspectorControl *stepsCtrl = nullptr;
-  for (const auto &c : schema) {
-    if (c.propertyId == "smartStepShift") {
-      stepsCtrl = &c;
-      break;
-    }
-  }
-  EXPECT_EQ(stepsCtrl, nullptr)
-      << "Touchpad continuous SmartScaleBend should not show Scale Steps "
-         "slider; range is defined by Output min/max (smart scale distance)";
 }
 
 // SmartScaleBend uses Scale Steps only; no data2, no Value when On/Off
@@ -527,27 +290,6 @@ TEST(MappingDefinitionTest, KeyboardNoteReleaseBehaviorHasAllThreeOptions) {
       << "Always Latch (3)";
 }
 
-// --- Touchpad continuous Note: threshold + trigger above/below ---
-TEST(MappingDefinitionTest, TouchpadContinuousNoteHasThresholdAndTrigger) {
-  juce::ValueTree mapping("Mapping");
-  mapping.setProperty("inputAlias", "Touchpad", nullptr);
-  mapping.setProperty("inputTouchpadEvent", TouchpadEvent::Finger1X, nullptr);
-  mapping.setProperty("type", "Note", nullptr);
-  InspectorSchema schema = MappingDefinition::getSchema(mapping);
-  bool hasThreshold = false;
-  bool hasTrigger = false;
-  for (const auto &c : schema) {
-    if (c.propertyId == "touchpadThreshold")
-      hasThreshold = true;
-    if (c.propertyId == "touchpadTriggerAbove")
-      hasTrigger = true;
-  }
-  EXPECT_TRUE(hasThreshold)
-      << "Touchpad continuous Note should have threshold control";
-  EXPECT_TRUE(hasTrigger)
-      << "Touchpad continuous Note should have trigger above/below control";
-}
-
 // --- Expression: Use Custom Envelope true + CC -> ADSR sliders ---
 TEST(MappingDefinitionTest, ExpressionCCCustomEnvelopeShowsAdsrSliders) {
   juce::ValueTree mapping("Mapping");
@@ -601,59 +343,19 @@ TEST(MappingDefinitionTest, ExpressionSmartScaleBendDisablesCustomEnvelopeContro
       << "SmartScaleBend target should disable Use Custom ADSR control";
 }
 
-// --- Expression: Touchpad boolean + CC -> value when on/off ---
-TEST(MappingDefinitionTest, ExpressionTouchpadBooleanCCHasValueWhenOnOff) {
+// --- Expression: CC -> value when on/off (used for keyboard CC in Mappings tab) ---
+TEST(MappingDefinitionTest, ExpressionCCHasValueWhenOnOff) {
   juce::ValueTree mapping("Mapping");
   mapping.setProperty("type", "Expression", nullptr);
   mapping.setProperty("adsrTarget", "CC", nullptr);
-  mapping.setProperty("inputAlias", "Touchpad", nullptr);
-  mapping.setProperty("inputTouchpadEvent", TouchpadEvent::Finger1Down, nullptr);
   InspectorSchema schema = MappingDefinition::getSchema(mapping);
   bool hasValOn = false, hasValOff = false;
   for (const auto &c : schema) {
     if (c.propertyId == "touchpadValueWhenOn") hasValOn = true;
     if (c.propertyId == "touchpadValueWhenOff") hasValOff = true;
   }
-  EXPECT_TRUE(hasValOn) << "Touchpad boolean CC Expression should have Value when On";
-  EXPECT_TRUE(hasValOff) << "Touchpad boolean CC Expression should have Value when Off";
-}
-
-// --- Expression: Touchpad continuous + pitch -> pitch pad and zero range warning ---
-TEST(MappingDefinitionTest, TouchpadContinuousPitchBendHasPitchPadControls) {
-  juce::ValueTree mapping("Mapping");
-  mapping.setProperty("type", "Expression", nullptr);
-  mapping.setProperty("adsrTarget", "PitchBend", nullptr);
-  mapping.setProperty("inputAlias", "Touchpad", nullptr);
-  mapping.setProperty("inputTouchpadEvent", TouchpadEvent::Finger1X, nullptr);
-  mapping.setProperty("touchpadOutputMin", -2, nullptr);
-  mapping.setProperty("touchpadOutputMax", 2, nullptr);
-  InspectorSchema schema = MappingDefinition::getSchema(mapping);
-  bool hasMode = false, hasResting = false;
-  for (const auto &c : schema) {
-    if (c.propertyId == "pitchPadMode") hasMode = true;
-    if (c.propertyId == "pitchPadRestingPercent") hasResting = true;
-  }
-  EXPECT_TRUE(hasMode) << "Touchpad continuous PitchBend should have Pitch Pad Mode";
-  EXPECT_TRUE(hasResting) << "Touchpad continuous PitchBend should have resting %";
-}
-
-TEST(MappingDefinitionTest, TouchpadPitchPadZeroRangeShowsWarning) {
-  juce::ValueTree mapping("Mapping");
-  mapping.setProperty("type", "Expression", nullptr);
-  mapping.setProperty("adsrTarget", "PitchBend", nullptr);
-  mapping.setProperty("inputAlias", "Touchpad", nullptr);
-  mapping.setProperty("inputTouchpadEvent", TouchpadEvent::Finger1X, nullptr);
-  mapping.setProperty("touchpadOutputMin", 0, nullptr);
-  mapping.setProperty("touchpadOutputMax", 0, nullptr);
-  InspectorSchema schema = MappingDefinition::getSchema(mapping);
-  bool hasWarning = false;
-  for (const auto &c : schema)
-    if (c.propertyId == "touchpadPitchPadWarning") {
-      hasWarning = true;
-      break;
-    }
-  EXPECT_TRUE(hasWarning)
-      << "Zero effective pitch range should show warning label";
+  EXPECT_TRUE(hasValOn) << "CC Expression should have Value when On";
+  EXPECT_TRUE(hasValOff) << "CC Expression should have Value when Off";
 }
 
 // --- Command: Sustain -> commandCategory and sustainStyle ---

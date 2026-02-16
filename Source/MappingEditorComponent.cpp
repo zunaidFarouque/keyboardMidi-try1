@@ -9,7 +9,6 @@
 class InputCaptureOverlay : public juce::Component {
 public:
   std::function<void(bool skipped)> onDismiss;
-  std::function<void()> onMapTouchpad;
 
   InputCaptureOverlay() {
     label.setText("Press any key to add mapping...",
@@ -18,13 +17,6 @@ public:
     label.setJustificationType(juce::Justification::centred);
     label.setColour(juce::Label::textColourId, juce::Colours::white);
     addAndMakeVisible(label);
-
-    mapTouchpadButton.setButtonText("Map Touchpad");
-    mapTouchpadButton.onClick = [this] {
-      if (onMapTouchpad)
-        onMapTouchpad();
-    };
-    addAndMakeVisible(mapTouchpadButton);
 
     skipButton.setButtonText("Skip (Add Default)");
     skipButton.onClick = [this] {
@@ -52,13 +44,10 @@ public:
     cancelButton.setBounds(btnArea.removeFromRight(80));
     btnArea.removeFromRight(10);
     skipButton.setBounds(btnArea.removeFromRight(140));
-    btnArea.removeFromRight(10);
-    mapTouchpadButton.setBounds(btnArea.removeFromRight(120));
   }
 
 private:
   juce::Label label;
-  juce::TextButton mapTouchpadButton;
   juce::TextButton skipButton;
   juce::TextButton cancelButton;
 };
@@ -151,32 +140,23 @@ MappingEditorComponent::MappingEditorComponent(PresetManager &pm,
     int row = table.getSelectedRow();
     auto mappingsNode = getCurrentLayerMappings();
 
-    // Validation
-    if (row < 0 || row >= mappingsNode.getNumChildren()) {
+    if (row < 0 || row >= getNumRows()) {
       juce::AlertWindow::showMessageBoxAsync(
           juce::AlertWindow::InfoIcon, "No Selection",
           "Please select a mapping to duplicate.", "OK");
       return;
     }
 
-    // Get the original mapping
-    juce::ValueTree original = mappingsNode.getChild(row);
-    if (!original.isValid()) {
+    int childIndex = rowToChildIndex(row);
+    juce::ValueTree original = mappingsNode.getChild(childIndex);
+    if (!original.isValid())
       return;
-    }
 
-    // Create deep copy
     juce::ValueTree copy = original.createCopy();
-    copy.setProperty("layerID", selectedLayerId,
-                     nullptr); // Ensure layerID is set
+    copy.setProperty("layerID", selectedLayerId, nullptr);
+    mappingsNode.addChild(copy, childIndex + 1, &undoManager);
 
-    // Insert directly below the original
-    mappingsNode.addChild(copy, row + 1, &undoManager);
-
-    // Select the new row
     table.selectRow(row + 1);
-
-    // Refresh UI
     table.updateContent();
     table.repaint();
   };
@@ -242,7 +222,6 @@ MappingEditorComponent::MappingEditorComponent(PresetManager &pm,
             if (!mappingsNode.isValid())
               return;
 
-            // Collect selected rows (sorted descending to avoid index shifting)
             juce::Array<int> selectedRows;
             for (int i = 0; i < numSelected; ++i) {
               int row = table.getSelectedRow(i);
@@ -250,19 +229,15 @@ MappingEditorComponent::MappingEditorComponent(PresetManager &pm,
                 selectedRows.add(row);
             }
             selectedRows.sort();
-            std::reverse(selectedRows.begin(),
-                         selectedRows.end()); // Remove from end to start
+            std::reverse(selectedRows.begin(), selectedRows.end());
 
-            // Remove each selected mapping
             undoManager.beginNewTransaction("Delete Mappings");
             for (int row : selectedRows) {
-              auto child = mappingsNode.getChild(row);
-              if (child.isValid()) {
+              auto child = getMappingAtRow(row);
+              if (child.isValid())
                 mappingsNode.removeChild(child, &undoManager);
-              }
             }
 
-            // Clear selection and refresh
             table.deselectAllRows();
             table.updateContent();
             inspector.setSelection({});
@@ -321,7 +296,6 @@ void MappingEditorComponent::startInputCapture() {
       resized();
     }
   };
-  captureOverlay->onMapTouchpad = [this] { finishInputCaptureTouchpad(); };
   addAndMakeVisible(captureOverlay.get());
   resized();
 }
@@ -395,52 +369,6 @@ void MappingEditorComponent::finishInputCapture(uintptr_t deviceHandle,
     table.selectRow(newRow);
 }
 
-void MappingEditorComponent::finishInputCaptureTouchpad() {
-  uintptr_t deviceHandle = lastTouchpadDeviceForCapture;
-  if (!wasMidiModeEnabledBeforeCapture)
-    settingsManager.setMidiModeActive(false);
-  captureOverlay.reset();
-  lastTouchpadDeviceForCapture = 0;
-  resized();
-
-  juce::String inputAlias("Touchpad");
-  if (!deviceManager.aliasExists(inputAlias))
-    deviceManager.createAlias(inputAlias);
-  if (deviceHandle != 0)
-    deviceManager.assignHardware(inputAlias, deviceHandle);
-
-  uintptr_t hash =
-      static_cast<uintptr_t>(std::hash<juce::String>{}(inputAlias));
-  juce::String deviceHashStr =
-      juce::String::toHexString((juce::int64)hash).toUpperCase();
-
-  juce::ValueTree newMapping("Mapping");
-  newMapping.setProperty("enabled", true, nullptr);
-  newMapping.setProperty("inputKey", 0, nullptr);
-  newMapping.setProperty("deviceHash", deviceHashStr, nullptr);
-  newMapping.setProperty("inputAlias", inputAlias, nullptr);
-  newMapping.setProperty("inputTouchpadEvent", 0, nullptr);
-  newMapping.setProperty("layerID", selectedLayerId, nullptr);
-  newMapping.setProperty("type", "Note", nullptr);
-  newMapping.setProperty("channel", 1, nullptr);
-  newMapping.setProperty("data1", 60, nullptr);
-  newMapping.setProperty("data2", 127, nullptr);
-  newMapping.setProperty("releaseBehavior", "Send Note Off", nullptr);
-  newMapping.setProperty("followTranspose", true, nullptr);
-
-  auto mappingsNode = getCurrentLayerMappings();
-  if (mappingsNode.isValid()) {
-    mappingsNode.addChild(newMapping, -1, &undoManager);
-  }
-
-  table.updateContent();
-  table.repaint();
-
-  int newRow = getNumRows() - 1;
-  if (newRow >= 0)
-    table.selectRow(newRow);
-}
-
 void MappingEditorComponent::resized() {
   auto area = getLocalBounds();
   if (captureOverlay)
@@ -476,9 +404,52 @@ void MappingEditorComponent::resized() {
   inspector.setBounds(0, 0, contentWidth, contentHeight);
 }
 
+static bool isTouchpadMapping(const juce::ValueTree &mapping) {
+  return mapping.getProperty("inputAlias", "")
+      .toString()
+      .trim()
+      .equalsIgnoreCase("Touchpad");
+}
+
+int MappingEditorComponent::getNonTouchpadMappingCount() const {
+  auto mappingsNode = presetManager.getMappingsListForLayer(selectedLayerId);
+  int n = 0;
+  for (int i = 0; i < mappingsNode.getNumChildren(); ++i) {
+    if (!isTouchpadMapping(mappingsNode.getChild(i)))
+      ++n;
+  }
+  return n;
+}
+
+juce::ValueTree MappingEditorComponent::getMappingAtRow(int row) const {
+  auto mappingsNode = presetManager.getMappingsListForLayer(selectedLayerId);
+  int k = 0;
+  for (int i = 0; i < mappingsNode.getNumChildren(); ++i) {
+    auto child = mappingsNode.getChild(i);
+    if (!isTouchpadMapping(child)) {
+      if (k == row)
+        return child;
+      ++k;
+    }
+  }
+  return juce::ValueTree();
+}
+
+int MappingEditorComponent::rowToChildIndex(int row) const {
+  auto mappingsNode = presetManager.getMappingsListForLayer(selectedLayerId);
+  int k = 0;
+  for (int i = 0; i < mappingsNode.getNumChildren(); ++i) {
+    if (!isTouchpadMapping(mappingsNode.getChild(i))) {
+      if (k == row)
+        return i;
+      ++k;
+    }
+  }
+  return -1;
+}
+
 int MappingEditorComponent::getNumRows() {
-  // Phase 41: Return count for current layer
-  return getCurrentLayerMappings().getNumChildren();
+  return getNonTouchpadMappingCount();
 }
 
 juce::ValueTree MappingEditorComponent::getCurrentLayerMappings() {
@@ -503,7 +474,7 @@ void MappingEditorComponent::moveSelectedMappingsToLayer(int targetLayerId) {
   juce::Array<int> selectedRows;
   for (int i = 0; i < numSelected; ++i) {
     int row = table.getSelectedRow(i);
-    if (row >= 0 && row < sourceMappings.getNumChildren())
+    if (row >= 0 && row < getNumRows())
       selectedRows.add(row);
   }
   selectedRows.sort();
@@ -517,7 +488,7 @@ void MappingEditorComponent::moveSelectedMappingsToLayer(int targetLayerId) {
   undoManager.beginNewTransaction("Move to " + layerName);
 
   for (int row : selectedRows) {
-    auto child = sourceMappings.getChild(row);
+    auto child = getMappingAtRow(row);
     if (!child.isValid())
       continue;
     juce::ValueTree copy = child.createCopy();
@@ -536,7 +507,7 @@ void MappingEditorComponent::paintRowBackground(juce::Graphics &g,
                                                 int rowNumber, int width,
                                                 int height,
                                                 bool rowIsSelected) {
-  auto node = getCurrentLayerMappings().getChild(rowNumber);
+  auto node = getMappingAtRow(rowNumber);
   const bool disabled =
       node.isValid() && !MappingDefinition::isMappingEnabled(node);
   if (rowIsSelected)
@@ -550,8 +521,7 @@ void MappingEditorComponent::paintRowBackground(juce::Graphics &g,
 void MappingEditorComponent::paintCell(juce::Graphics &g, int rowNumber,
                                        int columnId, int width, int height,
                                        bool rowIsSelected) {
-  // Phase 41: Get mapping from current layer
-  auto node = getCurrentLayerMappings().getChild(rowNumber);
+  auto node = getMappingAtRow(rowNumber);
   if (!node.isValid())
     return;
 
@@ -564,16 +534,9 @@ void MappingEditorComponent::paintCell(juce::Graphics &g, int rowNumber,
   };
 
   switch (columnId) {
-  case 1: {
-    juce::String alias = node.getProperty("inputAlias", "").toString().trim();
-    if (alias.equalsIgnoreCase("Touchpad")) {
-      int ev = (int)node.getProperty("inputTouchpadEvent", 0);
-      text = MappingDefinition::getTouchpadEventName(ev);
-    } else {
-      text = KeyNameUtilities::getKeyName((int)node.getProperty("inputKey"));
-    }
+  case 1:
+    text = KeyNameUtilities::getKeyName((int)node.getProperty("inputKey"));
     break;
-  }
   case 2:
     // Show alias name if available, otherwise convert deviceHash to alias name
     if (node.hasProperty("inputAlias")) {
@@ -670,30 +633,22 @@ void MappingEditorComponent::selectedRowsChanged(int lastRowSelected) {
 }
 
 void MappingEditorComponent::updateInspectorFromSelection() {
-  // 1. Get selected rows (SparseSet)
   auto selectedRows = table.getSelectedRows();
-
-  // 2. Build vector of selected ValueTrees for the current layer
   std::vector<juce::ValueTree> selectedTrees;
-  auto mappingsNode = getCurrentLayerMappings(); // Uses selectedLayerId
-
   for (int i = 0; i < selectedRows.size(); ++i) {
     int row = selectedRows[i];
-    if (row >= 0 && row < mappingsNode.getNumChildren()) {
-      auto child = mappingsNode.getChild(row);
+    if (row >= 0 && row < getNumRows()) {
+      auto child = getMappingAtRow(row);
       if (child.isValid())
         selectedTrees.push_back(child);
     }
   }
-
-  // 3. Update inspector with selection (may be empty to clear)
   inspector.setSelection(selectedTrees);
 }
 
 void MappingEditorComponent::handleTouchpadContacts(
-    uintptr_t deviceHandle, const std::vector<TouchpadContact> &contacts) {
-  if (captureOverlay != nullptr && !contacts.empty())
-    lastTouchpadDeviceForCapture = deviceHandle;
+    uintptr_t /*deviceHandle*/, const std::vector<TouchpadContact> &) {
+  // Touchpad mappings are managed in the Touchpad tab; no capture in Mappings tab.
 }
 
 void MappingEditorComponent::handleRawKeyEvent(uintptr_t deviceHandle,
@@ -726,17 +681,11 @@ void MappingEditorComponent::handleRawKeyEvent(uintptr_t deviceHandle,
     if (!learnButton.getToggleState())
       return;
 
-    // Get selected row
     int selectedRow = table.getSelectedRow();
     if (selectedRow < 0)
       return;
 
-    // Get the ValueTree for the selected row in the CURRENT layer
-    auto mappingsNode = getCurrentLayerMappings();
-    if (!mappingsNode.isValid())
-      return;
-
-    auto mappingNode = mappingsNode.getChild(selectedRow);
+    auto mappingNode = getMappingAtRow(selectedRow);
     if (!mappingNode.isValid())
       return;
 
@@ -861,19 +810,12 @@ void MappingEditorComponent::handleAxisEvent(uintptr_t deviceHandle,
   learnedAxisID = -1;
   learnedDevice = 0;
 
-  // Thread safety: wrap UI updates in callAsync
   juce::MessageManager::callAsync([this, deviceToUse, axisToLearn] {
-    // Get selected row
     int selectedRow = table.getSelectedRow();
     if (selectedRow < 0)
       return;
 
-    // Get the ValueTree for the selected row in the current layer
-    auto mappingsNode = getCurrentLayerMappings();
-    if (!mappingsNode.isValid())
-      return;
-
-    auto mappingNode = mappingsNode.getChild(selectedRow);
+    auto mappingNode = getMappingAtRow(selectedRow);
     if (!mappingNode.isValid())
       return;
 

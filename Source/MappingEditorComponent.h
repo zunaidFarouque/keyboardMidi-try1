@@ -90,11 +90,8 @@ private:
   // Phase 56.3: Smart Input Capture
   std::unique_ptr<InputCaptureOverlay> captureOverlay;
   bool wasMidiModeEnabledBeforeCapture = false;
-  uintptr_t lastTouchpadDeviceForCapture =
-      0; // Set while overlay visible for Map Touchpad
   void startInputCapture();
   void finishInputCapture(uintptr_t deviceHandle, int keyCode, bool skipped);
-  void finishInputCaptureTouchpad();
 
   // 3. Containers (Must die first)
   juce::Viewport inspectorViewport;
@@ -105,6 +102,11 @@ private:
 
   // Phase 41: Helper to get current layer's mappings
   juce::ValueTree getCurrentLayerMappings();
+
+  // Mappings tab shows only non-touchpad mappings (row index -> filtered list)
+  int getNonTouchpadMappingCount() const;
+  juce::ValueTree getMappingAtRow(int row) const;
+  int rowToChildIndex(int row) const;
 
   void moveSelectedMappingsToLayer(int targetLayerId);
 
