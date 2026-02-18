@@ -1964,7 +1964,7 @@ TEST_F(GridCompilerTest, TouchpadTab_ExpressionCC_ChannelFromHeader) {
   EXPECT_EQ(entry.action.channel, 5) << "Channel must come from header midiChannel";
 }
 
-// Expression CC: value when off always sent on release; default 127
+// Expression CC: value when off always sent on release
 TEST_F(GridCompilerTest, TouchpadTab_ExpressionCC_ValueWhenOffSentOnRelease) {
   TouchpadMappingConfig cfg;
   cfg.layerId = 0;
@@ -1990,8 +1990,8 @@ TEST_F(GridCompilerTest, TouchpadTab_ExpressionCC_ValueWhenOffSentOnRelease) {
   EXPECT_EQ(entry.conversionParams.valueWhenOff, 20);
 }
 
-// Expression CC: default value when off is 127 when property not set
-TEST_F(GridCompilerTest, TouchpadTab_ExpressionCC_DefaultValueWhenOff127) {
+// Expression CC: default value when off is 0 when property not set
+TEST_F(GridCompilerTest, TouchpadTab_ExpressionCC_DefaultValueWhenOff0) {
   TouchpadMappingConfig cfg;
   cfg.layerId = 0;
   cfg.midiChannel = 1;
@@ -2010,9 +2010,9 @@ TEST_F(GridCompilerTest, TouchpadTab_ExpressionCC_DefaultValueWhenOff127) {
                                        touchpadMixerMgr, settingsMgr);
   ASSERT_EQ(context->touchpadMappings.size(), 1u);
   const auto &entry = context->touchpadMappings.front();
-  EXPECT_EQ(entry.action.releaseValue, 127);
-  EXPECT_EQ(entry.conversionParams.valueWhenOff, 127);
-  EXPECT_EQ(entry.action.adsrSettings.valueWhenOff, 127);
+  EXPECT_EQ(entry.action.releaseValue, 0);
+  EXPECT_EQ(entry.conversionParams.valueWhenOff, 0);
+  EXPECT_EQ(entry.action.adsrSettings.valueWhenOff, 0);
 }
 
 TEST_F(GridCompilerTest, TouchpadTab_DisabledTouchpadMappingNotInContext) {

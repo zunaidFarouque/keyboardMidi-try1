@@ -13,7 +13,7 @@ constexpr int ADSRReleaseMs = 100;
 
 // Expression CC
 constexpr int TouchpadValueWhenOn = 127;
-constexpr int TouchpadValueWhenOff = 127;
+constexpr int TouchpadValueWhenOff = 0;
 
 // Common (Note/Expression/Command)
 constexpr int Channel = 1;
