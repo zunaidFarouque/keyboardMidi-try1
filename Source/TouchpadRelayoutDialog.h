@@ -7,8 +7,9 @@
 // a target region. All coordinates are returned in 0..1 normalized space.
 class TouchpadRelayoutDialog : public juce::Component {
 public:
+  // Parameter names avoid Windows macros (e.g. left/right in some SDK headers).
   using RegionChosenCallback =
-      std::function<void(float left, float top, float right, float bottom)>;
+      std::function<void(float x1, float y1, float x2, float y2)>;
 
   explicit TouchpadRelayoutDialog(RegionChosenCallback cb);
   ~TouchpadRelayoutDialog() override = default;

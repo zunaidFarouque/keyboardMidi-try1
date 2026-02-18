@@ -1736,18 +1736,28 @@ void InputProcessor::processTouchpadContacts(
   TouchpadPrevState &prev = touchpadPrevState[deviceHandle];
   bool tip1 = false, tip2 = false;
   float x1 = 0.0f, y1 = 0.0f, x2 = 0.0f, y2 = 0.0f;
-  if (contacts.size() >= 1) {
-    tip1 = contacts[0].tipDown;
-    x1 = contacts[0].normX;
-    y1 = contacts[0].normY;
+  // IMPORTANT: Finger 1/2 are identified by contactId 0/1 (not by vector order).
+  // Some drivers can reorder contacts across frames, which would otherwise cause
+  // spurious FingerUp detection and immediate Note Off.
+  int idxFinger1 = -1;
+  int idxFinger2 = -1;
+  for (size_t i = 0; i < contacts.size(); ++i) {
+    const auto &c = contacts[i];
+    if (c.contactId == 0) {
+      idxFinger1 = static_cast<int>(i);
+      tip1 = c.tipDown;
+      x1 = c.normX;
+      y1 = c.normY;
+    } else if (c.contactId == 1) {
+      idxFinger2 = static_cast<int>(i);
+      tip2 = c.tipDown;
+      x2 = c.normX;
+      y2 = c.normY;
+    }
   }
-  if (contacts.size() >= 2) {
-    tip2 = contacts[1].tipDown;
-    x2 = contacts[1].normX;
-    y2 = contacts[1].normY;
-  }
+
   float dist = 0.0f, avgX = x1, avgY = y1;
-  if (contacts.size() >= 2) {
+  if (tip1 && tip2) {
     float dx = x2 - x1, dy = y2 - y1;
     dist = std::sqrt(dx * dx + dy * dy);
     avgX = (x1 + x2) * 0.5f;
@@ -1852,8 +1862,12 @@ void InputProcessor::processTouchpadContacts(
 
   // When finger is in any layout region (mixer or drum), skip Finger1Down/
   // Finger2Down Note mappings so the layout owns that finger.
-  auto layout1 = contacts.size() >= 1 ? layoutPerContact[0] : std::nullopt;
-  auto layout2 = contacts.size() >= 2 ? layoutPerContact[1] : std::nullopt;
+  auto layout1 = (idxFinger1 >= 0 && (size_t)idxFinger1 < layoutPerContact.size())
+                     ? layoutPerContact[(size_t)idxFinger1]
+                     : std::nullopt;
+  auto layout2 = (idxFinger2 >= 0 && (size_t)idxFinger2 < layoutPerContact.size())
+                     ? layoutPerContact[(size_t)idxFinger2]
+                     : std::nullopt;
   bool layoutConsumesFinger1Down = tip1 && layout1.has_value();
   bool layoutConsumesFinger2Down = tip2 && layout2.has_value();
 
@@ -1918,19 +1932,45 @@ void InputProcessor::processTouchpadContacts(
           if (isDownEvent && layoutConsumes)
             continue; // Layout (mixer/drum) owns finger; skip fixed-note
                       // mapping
+          
+          // Track note state: check if note is currently active
+          bool noteIsActive = (touchpadNoteOnSent.find(key) != touchpadNoteOnSent.end());
+          
           bool releaseThisFrame =
               (entry.eventId == TouchpadEvent::Finger1Down && finger1Up) ||
               (entry.eventId == TouchpadEvent::Finger2Down && finger2Up);
           InputID touchpadInput{deviceHandle, 0};
-          if (isDownEvent && boolVal)
-            triggerManualNoteOn(touchpadInput, act,
-                                true); // Latch applies to Down
-          else if (releaseThisFrame)
-            triggerManualNoteRelease(touchpadInput, act);
-          else if (!isDownEvent && boolVal)
+          
+          // Check hold behavior: if "Ignore, send note off immediately", send note off right after note on
+          bool shouldSendNoteOffImmediately = 
+              (act.touchpadHoldBehavior == TouchpadHoldBehavior::IgnoreSendNoteOffImmediately);
+          
+          if (isDownEvent && boolVal) {
+            // Finger down: trigger note on (only if not already active)
+            if (!noteIsActive) {
+              triggerManualNoteOn(touchpadInput, act,
+                                  true); // Latch applies to Down
+              touchpadNoteOnSent.insert(key);
+              
+              // If hold behavior is "Ignore, send note off immediately", send note off right away
+              if (shouldSendNoteOffImmediately) {
+                triggerManualNoteRelease(touchpadInput, act);
+                touchpadNoteOnSent.erase(key);
+              }
+            }
+          } else if (releaseThisFrame && noteIsActive) {
+            // Finger released: trigger note off only if note was active
+            // Only send note off if hold behavior is NOT "Ignore" (since we already sent it)
+            if (!shouldSendNoteOffImmediately) {
+              triggerManualNoteRelease(touchpadInput, act);
+            }
+            touchpadNoteOnSent.erase(key);
+          } else if ((entry.eventId == TouchpadEvent::Finger1Up || entry.eventId == TouchpadEvent::Finger2Up) && boolVal) {
             // Finger1Up/Finger2Up: trigger note when finger lifts (one-shot);
             // no Send Note Off, Latch only applies to Down so pass false
+            // Only fire for explicit Finger1Up/Finger2Up mappings, not as side effect of Finger1Down release
             triggerManualNoteOn(touchpadInput, act, false);
+          }
         } else if (act.type == ActionType::Command && boolVal) {
           int cmd = act.data1;
           if (cmd == static_cast<int>(MIDIQy::CommandID::SustainMomentary))
@@ -3042,12 +3082,28 @@ void InputProcessor::processTouchpadContacts(
   for (auto it = touchpadExpressionActive.begin();
        it != touchpadExpressionActive.end();) {
     uintptr_t dev = std::get<0>(*it);
+    int layerId = std::get<1>(*it);
     int evId = std::get<2>(*it);
     bool fingerActive = (evId == TouchpadEvent::Finger1Down && tip1) ||
                         (evId == TouchpadEvent::Finger1Up && !tip1) ||
                         (evId == TouchpadEvent::Finger2Down && tip2) ||
                         (evId == TouchpadEvent::Finger2Up && !tip2);
     if (!fingerActive) {
+      // For Expression CC, send release value when finger lifts. When ADSR is
+      // off (fast path) no envelope is in ExpressionEngine so releaseEnvelope
+      // does nothing; sending here is the only way to get value-when-off.
+      for (const auto &entry : ctx->touchpadMappings) {
+        if (entry.layerId == layerId &&
+            static_cast<int>(entry.eventId) == evId &&
+            entry.action.type == ActionType::Expression &&
+            entry.action.adsrSettings.target == AdsrTarget::CC &&
+            entry.action.sendReleaseValue) {
+          voiceManager.sendCC(entry.action.channel,
+                              entry.action.adsrSettings.ccNumber,
+                              entry.action.releaseValue);
+          break;
+        }
+      }
       expressionEngine.releaseEnvelope(InputID{dev, evId});
       it = touchpadExpressionActive.erase(it);
     } else {

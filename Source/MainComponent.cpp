@@ -41,7 +41,8 @@ MainComponent::MainComponent()
   zoneEditor = std::make_unique<ZoneEditorComponent>(
       &inputProcessor.getZoneManager(), &deviceManager, rawInputManager.get(),
       &scaleLibrary);
-  touchpadTab = std::make_unique<TouchpadTabComponent>(&touchpadMixerManager);
+  touchpadTab = std::make_unique<TouchpadTabComponent>(&touchpadMixerManager,
+                                                        &settingsManager);
   touchpadTab->onSelectionChangedForVisualizer = [this](int layoutIndex,
                                                         int layerId) {
     if (visualizer) {

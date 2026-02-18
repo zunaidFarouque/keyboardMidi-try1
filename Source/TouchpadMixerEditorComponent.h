@@ -4,21 +4,30 @@
 #include "TouchpadMixerTypes.h"
 #include "TouchpadRelayoutDialog.h"
 #include <JuceHeader.h>
+#include <functional>
 #include <memory>
 #include <vector>
 
+class SettingsManager;
+
 class TouchpadMixerEditorComponent : public juce::Component {
 public:
-  explicit TouchpadMixerEditorComponent(TouchpadMixerManager *mgr);
+  explicit TouchpadMixerEditorComponent(TouchpadMixerManager *mgr,
+                                        SettingsManager *settingsMgr = nullptr);
   ~TouchpadMixerEditorComponent() override;
 
   void paint(juce::Graphics &) override;
   void resized() override;
 
   void setLayout(int index, const TouchpadMixerConfig *config);
+  void setMapping(int index, const TouchpadMappingConfig *config);
 
   /// Height needed to show all schema rows (used by parent for viewport sizing).
   int getPreferredContentHeight() const;
+
+  /// Called when schema/row count may have changed (e.g. after rebuildUI).
+  /// Parent can use this to resize the viewport content.
+  std::function<void()> onContentHeightMaybeChanged;
 
 private:
   struct UiItem {
@@ -34,12 +43,19 @@ private:
   void rebuildUI();
   void createControl(const InspectorControl &def,
                      std::vector<UiItem> &currentRow);
+  void launchRelayoutDialog();
+  void onRelayoutRegionChosen(float x1, float y1, float x2, float y2);
   juce::var getConfigValue(const juce::String &propertyId) const;
   void applyConfigValue(const juce::String &propertyId, const juce::var &value);
 
   TouchpadMixerManager *manager;
-  int selectedIndex = -1;
+  SettingsManager *settingsManager;
+  enum class SelectionKind { None, Layout, Mapping };
+  SelectionKind selectionKind = SelectionKind::None;
+  int selectedLayoutIndex = -1;
+  int selectedMappingIndex = -1;
   TouchpadMixerConfig currentConfig;
+  TouchpadMappingConfig currentMapping;
 
   std::vector<UiRow> uiRows;
 

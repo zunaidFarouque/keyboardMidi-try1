@@ -397,4 +397,5 @@ private:
 
   // Grant tests access to internal touchpad state for behavioural verification.
   friend class TouchpadPitchPadTest;
+  friend class TouchpadTabPitchPadTest;
 };

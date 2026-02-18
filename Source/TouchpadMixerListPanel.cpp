@@ -1,4 +1,5 @@
 #include "TouchpadMixerListPanel.h"
+#include "MappingTypes.h"
 
 namespace {
 
@@ -259,8 +260,10 @@ TouchpadMixerListPanel::TouchpadMixerListPanel(TouchpadMixerManager *mgr)
 
     juce::PopupMenu menu;
     int nextId = 1;
-    const int emptyId = nextId++;
-    menu.addItem(emptyId, "Empty layout");
+    const int emptyLayoutId = nextId++;
+    menu.addItem(emptyLayoutId, "Empty layout");
+    const int emptyMappingId = nextId++;
+    menu.addItem(emptyMappingId, "Empty touchpad mapping");
 
     const auto &presets = getTouchpadLayoutPresets();
     int firstPresetId = nextId;
@@ -274,14 +277,27 @@ TouchpadMixerListPanel::TouchpadMixerListPanel(TouchpadMixerManager *mgr)
 
     menu.showMenuAsync(
         juce::PopupMenu::Options(),
-        [this, emptyId, firstPresetId](int result) {
+        [this, emptyLayoutId, emptyMappingId, firstPresetId](int result) {
           if (result <= 0 || !manager)
             return;
 
-          if (result == emptyId) {
+          if (result == emptyLayoutId) {
             TouchpadMixerConfig def;
             def.name = "Touchpad Mixer";
             manager->addLayout(def);
+          } else if (result == emptyMappingId) {
+            TouchpadMappingConfig cfg;
+            cfg.name = "Touchpad Mapping";
+            juce::ValueTree m("Mapping");
+            m.setProperty("inputAlias", "Touchpad", nullptr);
+            m.setProperty("inputTouchpadEvent", TouchpadEvent::Finger1Down,
+                          nullptr);
+            m.setProperty("type", "Note", nullptr);
+            m.setProperty("channel", 1, nullptr);
+            m.setProperty("data1", 60, nullptr);
+            m.setProperty("data2", 100, nullptr);
+            cfg.mapping = m;
+            manager->addTouchpadMapping(cfg);
           } else if (result >= firstPresetId) {
             const auto &presets = getTouchpadLayoutPresets();
             int presetIdx = result - firstPresetId;
@@ -295,9 +311,10 @@ TouchpadMixerListPanel::TouchpadMixerListPanel(TouchpadMixerManager *mgr)
 
           listBox.updateContent();
           if (manager) {
-            int n = static_cast<int>(manager->getLayouts().size());
-            if (n > 0)
-              listBox.selectRow(n - 1);
+            int totalRows = static_cast<int>(manager->getLayouts().size() +
+                                             manager->getTouchpadMappings().size());
+            if (totalRows > 0)
+              listBox.selectRow(totalRows - 1);
           }
         });
   };
@@ -307,7 +324,17 @@ TouchpadMixerListPanel::TouchpadMixerListPanel(TouchpadMixerManager *mgr)
   removeButton.onClick = [this] {
     int row = listBox.getSelectedRow();
     if (row >= 0 && manager) {
-      manager->removeLayout(row);
+      rebuildRowKinds();
+      if (row >= 0 && row < static_cast<int>(rowKinds.size())) {
+        RowKind kind = rowKinds[(size_t)row];
+        if (kind == RowKind::Layout) {
+          manager->removeLayout(row);
+        } else {
+          int mappingIndex = row - static_cast<int>(manager->getLayouts().size());
+          if (mappingIndex >= 0)
+            manager->removeTouchpadMapping(mappingIndex);
+        }
+      }
       listBox.updateContent();
       listBox.deselectAllRows();
     }
@@ -341,7 +368,8 @@ void TouchpadMixerListPanel::resized() {
 int TouchpadMixerListPanel::getNumRows() {
   if (!manager)
     return 0;
-  return static_cast<int>(manager->getLayouts().size());
+  rebuildRowKinds();
+  return static_cast<int>(rowKinds.size());
 }
 
 void TouchpadMixerListPanel::paintListBoxItem(int rowNumber, juce::Graphics &g,
@@ -349,8 +377,8 @@ void TouchpadMixerListPanel::paintListBoxItem(int rowNumber, juce::Graphics &g,
                                               bool rowIsSelected) {
   if (!manager)
     return;
-  auto layouts = manager->getLayouts();
-  if (rowNumber < 0 || rowNumber >= static_cast<int>(layouts.size()))
+  rebuildRowKinds();
+  if (rowNumber < 0 || rowNumber >= static_cast<int>(rowKinds.size()))
     return;
   if (rowIsSelected)
     g.fillAll(juce::Colour(0xff4a4a4a));
@@ -358,28 +386,97 @@ void TouchpadMixerListPanel::paintListBoxItem(int rowNumber, juce::Graphics &g,
     g.fillAll(juce::Colour(0xff2a2a2a));
   g.setColour(juce::Colours::white);
   g.setFont(14.0f);
-  g.drawText(juce::String(layouts[(size_t)rowNumber].name), 8, 0, width - 16,
-             height, juce::Justification::centredLeft);
+  auto layouts = manager->getLayouts();
+  auto mappings = manager->getTouchpadMappings();
+
+  const RowKind kind = rowKinds[(size_t)rowNumber];
+  juce::String label;
+  if (kind == RowKind::Layout) {
+    const int layoutIndex = rowNumber;
+    if (layoutIndex >= 0 &&
+        layoutIndex < static_cast<int>(layouts.size())) {
+      label = juce::String(layouts[(size_t)layoutIndex].name);
+    }
+  } else {
+    const int mappingIndex = rowNumber - static_cast<int>(layouts.size());
+    if (mappingIndex >= 0 &&
+        mappingIndex < static_cast<int>(mappings.size())) {
+      const auto &m = mappings[(size_t)mappingIndex];
+      label = "[Map] " + juce::String(m.name);
+    }
+  }
+  if (label.isEmpty())
+    label = "<invalid>";
+  g.drawText(label, 8, 0, width - 16, height,
+             juce::Justification::centredLeft);
 }
 
-int TouchpadMixerListPanel::getSelectedLayoutIndex() const {
+int TouchpadMixerListPanel::getSelectedRowIndex() const {
   return listBox.getSelectedRow();
 }
 
 void TouchpadMixerListPanel::selectedRowsChanged(int lastRowSelected) {
-  if (onSelectionChanged) {
-    if (lastRowSelected >= 0 && manager) {
-      auto layouts = manager->getLayouts();
-      if (lastRowSelected < static_cast<int>(layouts.size()))
-        onSelectionChanged(lastRowSelected, &layouts[(size_t)lastRowSelected]);
-      else
-        onSelectionChanged(-1, nullptr);
+  if (!onSelectionChanged || !manager) {
+    return;
+  }
+
+  rebuildRowKinds();
+
+  auto layouts = manager->getLayouts();
+  auto mappings = manager->getTouchpadMappings();
+
+  if (lastRowSelected < 0 ||
+      lastRowSelected >= static_cast<int>(rowKinds.size())) {
+    onSelectionChanged(RowKind::Layout, -1, nullptr, nullptr);
+    return;
+  }
+
+  RowKind kind = rowKinds[(size_t)lastRowSelected];
+  if (kind == RowKind::Layout) {
+    int layoutIndex = lastRowSelected;
+    if (layoutIndex >= 0 &&
+        layoutIndex < static_cast<int>(layouts.size())) {
+      onSelectionChanged(kind, layoutIndex,
+                         &layouts[(size_t)layoutIndex], nullptr);
     } else {
-      onSelectionChanged(-1, nullptr);
+      onSelectionChanged(kind, -1, nullptr, nullptr);
+    }
+  } else {
+    int mappingIndex = lastRowSelected -
+                       static_cast<int>(layouts.size());
+    if (mappingIndex >= 0 &&
+        mappingIndex < static_cast<int>(mappings.size())) {
+      onSelectionChanged(kind, mappingIndex, nullptr,
+                         &mappings[(size_t)mappingIndex]);
+    } else {
+      onSelectionChanged(kind, -1, nullptr, nullptr);
     }
   }
 }
 
 void TouchpadMixerListPanel::changeListenerCallback(juce::ChangeBroadcaster *) {
-  juce::MessageManager::callAsync([this] { listBox.updateContent(); });
+  juce::MessageManager::callAsync([this] {
+    rebuildRowKinds();
+    listBox.updateContent();
+  });
+}
+
+void TouchpadMixerListPanel::rebuildRowKinds() {
+  rowKinds.clear();
+  if (!manager)
+    return;
+  auto layouts = manager->getLayouts();
+  auto mappings = manager->getTouchpadMappings();
+  rowKinds.reserve(layouts.size() + mappings.size());
+  for (size_t i = 0; i < layouts.size(); ++i)
+    rowKinds.push_back(RowKind::Layout);
+  for (size_t i = 0; i < mappings.size(); ++i)
+    rowKinds.push_back(RowKind::Mapping);
+}
+
+TouchpadMixerListPanel::RowKind
+TouchpadMixerListPanel::getRowKind(int rowIndex) const {
+  if (rowIndex < 0 || rowIndex >= static_cast<int>(rowKinds.size()))
+    return RowKind::Layout;
+  return rowKinds[(size_t)rowIndex];
 }

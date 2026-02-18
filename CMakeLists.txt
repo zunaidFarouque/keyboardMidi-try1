@@ -192,6 +192,7 @@ add_executable(MIDIQy_Tests
     Source/Tests/InputProcessorTests.cpp
     Source/Tests/MappingDefinitionTests.cpp
     Source/Tests/MappingInspectorLogicTests.cpp
+    Source/Tests/TouchpadTabTests.cpp
     Source/Tests/ZonePropertiesLogicTests.cpp
     Source/Tests/ZoneTests.cpp
 )

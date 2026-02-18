@@ -1,4 +1,6 @@
 #include "GridCompiler.h"
+#include "MappingDefinition.h"
+#include "MappingDefaults.h"
 #include "MidiNoteUtilities.h"
 #include "PitchPadUtilities.h"
 #include "ScaleUtilities.h"
@@ -35,7 +37,7 @@ uintptr_t parseDeviceHash(const juce::var &var) {
 // (note + scale step) using global scale and PB range.
 void buildSmartBendLookup(MidiAction &action, const juce::ValueTree &mapping,
                           ZoneManager &zoneMgr, SettingsManager &settingsMgr) {
-  int stepShift = (int)mapping.getProperty("smartStepShift", 1);
+  int stepShift = (int)mapping.getProperty("smartStepShift", MappingDefaults::SmartStepShift);
   std::vector<int> intervals = zoneMgr.getGlobalScaleIntervals();
   if (intervals.empty())
     intervals = {0, 2, 4, 5, 7, 9, 11}; // Major
@@ -403,10 +405,10 @@ MidiAction buildMidiActionFromMapping(juce::ValueTree mappingNode) {
   }
 
   action.type = actionType;
-  action.channel = (int)mappingNode.getProperty("channel", 1);
-  action.data1 = (int)mappingNode.getProperty("data1", 60);
-  action.data2 = (int)mappingNode.getProperty("data2", 127);
-  action.velocityRandom = (int)mappingNode.getProperty("velRandom", 0);
+  action.channel = (int)mappingNode.getProperty("channel", MappingDefaults::Channel);
+  action.data1 = (int)mappingNode.getProperty("data1", MappingDefaults::Data1);
+  action.data2 = (int)mappingNode.getProperty("data2", MappingDefaults::Data2);
+  action.velocityRandom = (int)mappingNode.getProperty("velRandom", MappingDefaults::VelRandom);
 
   // ADSR / SmartScaleBend details intentionally left at defaults here –
   // existing InputProcessor path still handles them; they will be migrated
@@ -428,7 +430,7 @@ static void applyNoteOptionsFromMapping(juce::ValueTree mapping,
     action.data1 = juce::jlimit(0, 127, action.data1 + chrom);
   }
   juce::String rbStr =
-      mapping.getProperty("releaseBehavior", "Send Note Off").toString().trim();
+      mapping.getProperty("releaseBehavior", MappingDefaults::ReleaseBehaviorSendNoteOff).toString().trim();
   if (rbStr.equalsIgnoreCase("Sustain until retrigger"))
     action.releaseBehavior = NoteReleaseBehavior::SustainUntilRetrigger;
   else if (rbStr.equalsIgnoreCase("Always Latch"))
@@ -574,7 +576,7 @@ static void collectForcedMappings(
     if (aliasName.equalsIgnoreCase("Touchpad"))
       continue;
 
-    const int inputKey = (int)mapping.getProperty("inputKey", 0);
+    const int inputKey = (int)mapping.getProperty("inputKey", MappingDefaults::InputKey);
     if (inputKey < 0 || inputKey > 0xFF)
       continue;
 
@@ -602,7 +604,7 @@ static void collectForcedMappings(
 
     if (action.type == ActionType::Expression) {
       juce::String adsrTargetStr =
-          mapping.getProperty("adsrTarget", "CC").toString().trim();
+          mapping.getProperty("adsrTarget", MappingDefaults::AdsrTargetCC).toString().trim();
       bool useCustomEnvelope =
           (bool)mapping.getProperty("useCustomEnvelope", false);
 
@@ -626,21 +628,21 @@ static void collectForcedMappings(
         action.adsrSettings.releaseMs = 0;
       } else {
         action.adsrSettings.attackMs =
-            (int)mapping.getProperty("adsrAttack", 10);
+            (int)mapping.getProperty("adsrAttack", MappingDefaults::ADSRAttackMs);
         action.adsrSettings.decayMs =
-            (int)mapping.getProperty("adsrDecay", 10);
+            (int)mapping.getProperty("adsrDecay", MappingDefaults::ADSRDecayMs);
         action.adsrSettings.sustainLevel =
-            (float)mapping.getProperty("adsrSustain", 0.7);
+            (float)mapping.getProperty("adsrSustain", MappingDefaults::ADSRSustain);
         action.adsrSettings.releaseMs =
-            (int)mapping.getProperty("adsrRelease", 100);
+            (int)mapping.getProperty("adsrRelease", MappingDefaults::ADSRReleaseMs);
       }
 
       if (action.adsrSettings.target == AdsrTarget::CC) {
-        action.adsrSettings.ccNumber = (int)mapping.getProperty("data1", 1);
+        action.adsrSettings.ccNumber = (int)mapping.getProperty("data1", MappingDefaults::ExpressionData1);
         action.adsrSettings.valueWhenOn =
-            (int)mapping.getProperty("touchpadValueWhenOn", 127);
+            (int)mapping.getProperty("touchpadValueWhenOn", MappingDefaults::TouchpadValueWhenOn);
         action.adsrSettings.valueWhenOff =
-            (int)mapping.getProperty("touchpadValueWhenOff", 0);
+            (int)mapping.getProperty("touchpadValueWhenOff", MappingDefaults::TouchpadValueWhenOff);
         action.data2 = action.adsrSettings.valueWhenOn;
       } else if (action.adsrSettings.target == AdsrTarget::PitchBend) {
         const int pbRange = settingsMgr.getPitchBendRange();
@@ -656,7 +658,7 @@ static void collectForcedMappings(
            action.adsrSettings.target == AdsrTarget::SmartScaleBend);
       action.sendReleaseValue =
           (bool)mapping.getProperty("sendReleaseValue", defaultResetPitch);
-      action.releaseValue = (int)mapping.getProperty("releaseValue", 0);
+      action.releaseValue = (int)mapping.getProperty("releaseValue", MappingDefaults::ReleaseValue);
     }
 
     if (action.type == ActionType::Command) {
@@ -677,9 +679,9 @@ static void collectForcedMappings(
               static_cast<int>(
                   MIDIQy::CommandID::TouchpadLayoutGroupSoloClear)) {
         action.touchpadLayoutGroupId =
-            (int)mapping.getProperty("touchpadLayoutGroupId", 0);
+            (int)mapping.getProperty("touchpadLayoutGroupId", MappingDefaults::TouchpadLayoutGroupId);
         action.touchpadSoloScope =
-            juce::jlimit(0, 2, (int)mapping.getProperty("touchpadSoloScope", 0));
+            juce::jlimit(0, 2, (int)mapping.getProperty("touchpadSoloScope", MappingDefaults::TouchpadSoloScope));
       }
     }
 
@@ -690,14 +692,14 @@ static void collectForcedMappings(
       juce::String modeStr =
           mapping.getProperty("transposeMode", "Global").toString();
       action.transposeLocal = modeStr.equalsIgnoreCase("Local");
-      int modify = (int)mapping.getProperty("transposeModify", 0);
+      int modify = (int)mapping.getProperty("transposeModify", MappingDefaults::TransposeModify);
       if (action.data1 ==
           static_cast<int>(MIDIQy::CommandID::GlobalPitchDown)) {
         modify = 1;
       }
       action.transposeModify = juce::jlimit(0, 4, modify);
       action.transposeSemitones =
-          (int)mapping.getProperty("transposeSemitones", 0);
+          (int)mapping.getProperty("transposeSemitones", MappingDefaults::TransposeSemitones);
       action.transposeSemitones =
           juce::jlimit(-48, 48, action.transposeSemitones);
     }
@@ -707,18 +709,18 @@ static void collectForcedMappings(
       if (cmd == static_cast<int>(MIDIQy::CommandID::GlobalRootUp) ||
           cmd == static_cast<int>(MIDIQy::CommandID::GlobalRootDown) ||
           cmd == static_cast<int>(MIDIQy::CommandID::GlobalRootSet)) {
-        int rm = (int)mapping.getProperty("rootModify", 0);
+        int rm = (int)mapping.getProperty("rootModify", MappingDefaults::RootModify);
         action.rootModify = juce::jlimit(0, 2, rm);
         action.rootNote =
-            juce::jlimit(0, 127, (int)mapping.getProperty("rootNote", 60));
+            juce::jlimit(0, 127, (int)mapping.getProperty("rootNote", MappingDefaults::RootNote));
       }
       if (cmd == static_cast<int>(MIDIQy::CommandID::GlobalScaleNext) ||
           cmd == static_cast<int>(MIDIQy::CommandID::GlobalScalePrev) ||
           cmd == static_cast<int>(MIDIQy::CommandID::GlobalScaleSet)) {
-        int sm = (int)mapping.getProperty("scaleModify", 0);
+        int sm = (int)mapping.getProperty("scaleModify", MappingDefaults::ScaleModify);
         action.scaleModify = juce::jlimit(0, 2, sm);
         action.scaleIndex =
-            juce::jmax(0, (int)mapping.getProperty("scaleIndex", 0));
+            juce::jmax(0, (int)mapping.getProperty("scaleIndex", MappingDefaults::ScaleIndex));
       }
     }
 
@@ -730,6 +732,188 @@ static void collectForcedMappings(
     forcedByAlias[mappingAliasHash].push_back(
         ForcedMapping{inputKey, action, color, label, sourceName});
   }
+}
+
+// Compile one touchpad mapping ValueTree into a TouchpadMappingEntry and append
+// it to out. Used by the Touchpad tab (TouchpadMixerManager). Channel is taken
+// from the header (headerChannel), not from the mapping ValueTree.
+static void compileTouchpadMappingFromValueTree(
+    const juce::ValueTree &mapping, int layerId, int headerChannel,
+    ZoneManager &zoneMgr, SettingsManager &settingsMgr,
+    std::vector<TouchpadMappingEntry> &out) {
+  if (!mapping.isValid() || !mapping.hasType("Mapping"))
+    return;
+  
+  // Skip disabled mappings
+  if (!MappingDefinition::isMappingEnabled(mapping))
+    return;
+
+  int eventId = (int)mapping.getProperty("inputTouchpadEvent", MappingDefaults::InputTouchpadEvent);
+  eventId = juce::jlimit(0, TouchpadEvent::Count - 1, eventId);
+
+  MidiAction action = buildMidiActionFromMapping(mapping);
+  // Channel always from header for touchpad mappings
+  action.channel = juce::jlimit(1, 16, headerChannel);
+
+  TouchpadMappingEntry entry;
+  entry.layerId = layerId;
+  entry.eventId = eventId;
+  entry.action = std::move(action);
+  TouchpadConversionParams &p = entry.conversionParams;
+
+  juce::String typeStr =
+      mapping.getProperty("type", "Note").toString().trim();
+  const bool inputBool = isTouchpadEventBoolean(eventId);
+
+  if (typeStr.equalsIgnoreCase("Note")) {
+    applyNoteOptionsFromMapping(mapping, zoneMgr, entry.action);
+    // Apply touchpad-specific hold behavior
+    juce::String holdBehaviorStr = mapping.getProperty("touchpadHoldBehavior",
+        MappingDefaults::TouchpadHoldBehaviorHold).toString().trim();
+    if (holdBehaviorStr.equalsIgnoreCase("Ignore, send note off immediately"))
+      entry.action.touchpadHoldBehavior =
+          TouchpadHoldBehavior::IgnoreSendNoteOffImmediately;
+    else
+      entry.action.touchpadHoldBehavior =
+          TouchpadHoldBehavior::HoldToNotSendNoteOffImmediately;
+    if (inputBool) {
+      entry.conversionKind = TouchpadConversionKind::BoolToGate;
+    } else {
+      entry.conversionKind = TouchpadConversionKind::ContinuousToGate;
+      p.threshold = (float)mapping.getProperty("touchpadThreshold", static_cast<double>(MappingDefaults::TouchpadThreshold));
+      int triggerId = (int)mapping.getProperty("touchpadTriggerAbove", MappingDefaults::TouchpadTriggerAbove);
+      p.triggerAbove = (triggerId == 2);
+    }
+  } else if (typeStr.equalsIgnoreCase("Expression")) {
+    juce::String adsrTargetStr =
+        mapping.getProperty("adsrTarget", MappingDefaults::AdsrTargetCC).toString().trim();
+    const bool isCC = adsrTargetStr.equalsIgnoreCase("CC");
+    const bool isPB = adsrTargetStr.equalsIgnoreCase("PitchBend");
+    const bool isSmartBend =
+        adsrTargetStr.equalsIgnoreCase("SmartScaleBend");
+
+    if (inputBool) {
+      entry.conversionKind = TouchpadConversionKind::BoolToCC;
+      if (isCC) {
+        p.valueWhenOn =
+            (int)mapping.getProperty("touchpadValueWhenOn", MappingDefaults::TouchpadValueWhenOn);
+        p.valueWhenOff =
+            (int)mapping.getProperty("touchpadValueWhenOff", MappingDefaults::TouchpadValueWhenOff);
+      }
+    } else {
+      entry.conversionKind = TouchpadConversionKind::ContinuousToRange;
+      p.inputMin = (float)mapping.getProperty("touchpadInputMin", static_cast<double>(MappingDefaults::TouchpadInputMin));
+      p.inputMax = (float)mapping.getProperty("touchpadInputMax", static_cast<double>(MappingDefaults::TouchpadInputMax));
+      float r = p.inputMax - p.inputMin;
+      p.invInputRange = (r > 0.0f) ? (1.0f / r) : 0.0f;
+      if (isPB || isSmartBend) {
+        // For pitch-based Expression targets, interpret the existing
+        // touchpadOutputMin/Max as discrete step bounds and also store them
+        // in a PitchPadConfig for shared runtime/visualizer use.
+        p.outputMin = (int)mapping.getProperty("touchpadOutputMin", -1);
+        p.outputMax = (int)mapping.getProperty("touchpadOutputMax", MappingDefaults::TouchpadOutputMaxPitchBend);
+
+        PitchPadConfig cfg;
+
+        juce::String modeStr =
+            mapping.getProperty("pitchPadMode", "Absolute").toString();
+        cfg.mode = modeStr.equalsIgnoreCase("Relative")
+                       ? PitchPadMode::Relative
+                       : PitchPadMode::Absolute;
+
+        juce::String startStr =
+            mapping.getProperty("pitchPadStart", "Center").toString();
+        if (startStr.equalsIgnoreCase("Left"))
+          cfg.start = PitchPadStart::Left;
+        else if (startStr.equalsIgnoreCase("Right"))
+          cfg.start = PitchPadStart::Right;
+        else if (startStr.equalsIgnoreCase("Custom"))
+          cfg.start = PitchPadStart::Custom;
+        else
+          cfg.start = PitchPadStart::Center;
+
+        cfg.customStartX =
+            (float)mapping.getProperty("pitchPadCustomStart", static_cast<double>(MappingDefaults::PitchPadCustomStart));
+        cfg.minStep = p.outputMin;
+        cfg.maxStep = p.outputMax;
+        cfg.restingSpacePercent =
+            (float)mapping.getProperty("pitchPadRestingPercent", static_cast<double>(MappingDefaults::PitchPadRestingPercent));
+
+        // For absolute mode: zero step is always 0 (center of range maps to
+        // center of pad). For relative mode, zero is determined dynamically
+        // at gesture start.
+        cfg.zeroStep = 0.0f;
+
+        p.pitchPadConfig = cfg;
+        p.cachedPitchPadLayout = buildPitchPadLayout(cfg);
+      } else {
+        p.outputMin = (int)mapping.getProperty("touchpadOutputMin", MappingDefaults::TouchpadOutputMin);
+        p.outputMax = (int)mapping.getProperty("touchpadOutputMax", MappingDefaults::TouchpadOutputMax);
+        p.pitchPadConfig.reset();
+      }
+    }
+    // Apply Expression ADSR and release behavior.
+    if (isPB)
+      entry.action.adsrSettings.target = AdsrTarget::PitchBend;
+    else if (isSmartBend)
+      entry.action.adsrSettings.target = AdsrTarget::SmartScaleBend;
+    else
+      entry.action.adsrSettings.target = AdsrTarget::CC;
+
+    // Custom ADSR envelope is not supported for PitchBend/SmartScaleBend
+    entry.action.adsrSettings.useCustomEnvelope =
+        (bool)mapping.getProperty("useCustomEnvelope", false) && !isPB &&
+        !isSmartBend;
+    if (!entry.action.adsrSettings.useCustomEnvelope) {
+      entry.action.adsrSettings.attackMs = 0;
+      entry.action.adsrSettings.decayMs = 0;
+      entry.action.adsrSettings.sustainLevel = 1.0f;
+      entry.action.adsrSettings.releaseMs = 0;
+    } else {
+      entry.action.adsrSettings.attackMs =
+          (int)mapping.getProperty("adsrAttack", MappingDefaults::ADSRAttackMs);
+      entry.action.adsrSettings.decayMs =
+          (int)mapping.getProperty("adsrDecay", MappingDefaults::ADSRDecayMs);
+      entry.action.adsrSettings.sustainLevel =
+          (float)mapping.getProperty("adsrSustain", MappingDefaults::ADSRSustain);
+      entry.action.adsrSettings.releaseMs =
+          (int)mapping.getProperty("adsrRelease", MappingDefaults::ADSRReleaseMs);
+    }
+
+    bool defaultResetPitch =
+        (entry.action.adsrSettings.target == AdsrTarget::PitchBend ||
+         entry.action.adsrSettings.target == AdsrTarget::SmartScaleBend);
+    entry.action.sendReleaseValue =
+        (bool)mapping.getProperty("sendReleaseValue", defaultResetPitch);
+    entry.action.releaseValue =
+        (int)mapping.getProperty("touchpadValueWhenOff", MappingDefaults::TouchpadValueWhenOff);
+    // CC: always send value when off on release (no UI toggle)
+    if (entry.action.adsrSettings.target == AdsrTarget::CC)
+      entry.action.sendReleaseValue = true;
+
+    if (entry.action.adsrSettings.target == AdsrTarget::CC) {
+      entry.action.adsrSettings.ccNumber =
+          (int)mapping.getProperty("data1", MappingDefaults::ExpressionData1);
+      entry.action.adsrSettings.valueWhenOn =
+          (int)mapping.getProperty("touchpadValueWhenOn", MappingDefaults::TouchpadValueWhenOn);
+      entry.action.adsrSettings.valueWhenOff =
+          (int)mapping.getProperty("touchpadValueWhenOff", MappingDefaults::TouchpadValueWhenOff);
+      entry.action.data2 = entry.action.adsrSettings.valueWhenOn;
+    } else if (entry.action.adsrSettings.target ==
+               AdsrTarget::SmartScaleBend) {
+      buildSmartBendLookup(entry.action, mapping, zoneMgr, settingsMgr);
+      entry.action.data2 = 8192;
+    } else {
+      const int pbRange = settingsMgr.getPitchBendRange();
+      int semitones = (int)mapping.getProperty("data2", 0);
+      entry.action.data2 = juce::jlimit(-juce::jmax(1, pbRange),
+                                        juce::jmax(1, pbRange), semitones);
+    }
+  } else {
+    entry.conversionKind = TouchpadConversionKind::BoolToGate;
+  }
+
+  out.push_back(std::move(entry));
 }
 
 // Phase 51.4 / 53.5: Apply manual mappings for a single layer. targetState for
@@ -754,8 +938,8 @@ void compileMappingsForLayer(
   std::vector<int> order(enabledList.size());
   std::iota(order.begin(), order.end(), 0);
   std::sort(order.begin(), order.end(), [&](int a, int b) {
-    int keyA = (int)enabledList[a].getProperty("inputKey", 0);
-    int keyB = (int)enabledList[b].getProperty("inputKey", 0);
+    int keyA = (int)enabledList[a].getProperty("inputKey", MappingDefaults::InputKey);
+    int keyB = (int)enabledList[b].getProperty("inputKey", MappingDefaults::InputKey);
     bool specificA = isSpecificModifierKey(keyA);
     bool specificB = isSpecificModifierKey(keyB);
     if (specificA != specificB)
@@ -778,161 +962,13 @@ void compileMappingsForLayer(
     const bool isTouchpadMapping =
         aliasName.trim().equalsIgnoreCase("Touchpad");
 
-    if (isTouchpadMapping && touchpadMappingsOut != nullptr) {
-      int eventId = (int)mapping.getProperty("inputTouchpadEvent", 0);
-      eventId = juce::jlimit(0, TouchpadEvent::Count - 1, eventId);
-      MidiAction action = buildMidiActionFromMapping(mapping);
-      TouchpadMappingEntry entry;
-      entry.layerId = layerId;
-      entry.eventId = eventId;
-      entry.action = std::move(action);
-      TouchpadConversionParams &p = entry.conversionParams;
-
-      juce::String typeStr =
-          mapping.getProperty("type", "Note").toString().trim();
-      const bool inputBool = isTouchpadEventBoolean(eventId);
-
-      if (typeStr.equalsIgnoreCase("Note")) {
-        applyNoteOptionsFromMapping(mapping, zoneMgr, entry.action);
-        if (inputBool) {
-          entry.conversionKind = TouchpadConversionKind::BoolToGate;
-        } else {
-          entry.conversionKind = TouchpadConversionKind::ContinuousToGate;
-          p.threshold = (float)mapping.getProperty("touchpadThreshold", 0.5);
-          int triggerId = (int)mapping.getProperty("touchpadTriggerAbove", 2);
-          p.triggerAbove = (triggerId == 2);
-        }
-      } else if (typeStr.equalsIgnoreCase("Expression")) {
-        juce::String adsrTargetStr =
-            mapping.getProperty("adsrTarget", "CC").toString().trim();
-        const bool isCC = adsrTargetStr.equalsIgnoreCase("CC");
-        const bool isPB = adsrTargetStr.equalsIgnoreCase("PitchBend");
-        const bool isSmartBend =
-            adsrTargetStr.equalsIgnoreCase("SmartScaleBend");
-
-        if (inputBool) {
-          entry.conversionKind = TouchpadConversionKind::BoolToCC;
-          if (isCC) {
-            p.valueWhenOn =
-                (int)mapping.getProperty("touchpadValueWhenOn", 127);
-            p.valueWhenOff =
-                (int)mapping.getProperty("touchpadValueWhenOff", 0);
-          }
-        } else {
-          entry.conversionKind = TouchpadConversionKind::ContinuousToRange;
-          p.inputMin = (float)mapping.getProperty("touchpadInputMin", 0.0);
-          p.inputMax = (float)mapping.getProperty("touchpadInputMax", 1.0);
-          float r = p.inputMax - p.inputMin;
-          p.invInputRange = (r > 0.0f) ? (1.0f / r) : 0.0f;
-          if (isPB || isSmartBend) {
-            // For pitch-based Expression targets, interpret the existing
-            // touchpadOutputMin/Max as discrete step bounds and also store them
-            // in a PitchPadConfig for shared runtime/visualizer use.
-            p.outputMin = (int)mapping.getProperty("touchpadOutputMin", -1);
-            p.outputMax = (int)mapping.getProperty("touchpadOutputMax", 3);
-
-            PitchPadConfig cfg;
-
-            juce::String modeStr =
-                mapping.getProperty("pitchPadMode", "Absolute").toString();
-            cfg.mode = modeStr.equalsIgnoreCase("Relative")
-                           ? PitchPadMode::Relative
-                           : PitchPadMode::Absolute;
-
-            juce::String startStr =
-                mapping.getProperty("pitchPadStart", "Center").toString();
-            if (startStr.equalsIgnoreCase("Left"))
-              cfg.start = PitchPadStart::Left;
-            else if (startStr.equalsIgnoreCase("Right"))
-              cfg.start = PitchPadStart::Right;
-            else if (startStr.equalsIgnoreCase("Custom"))
-              cfg.start = PitchPadStart::Custom;
-            else
-              cfg.start = PitchPadStart::Center;
-
-            cfg.customStartX =
-                (float)mapping.getProperty("pitchPadCustomStart", 0.5);
-            cfg.minStep = p.outputMin;
-            cfg.maxStep = p.outputMax;
-            cfg.restingSpacePercent =
-                (float)mapping.getProperty("pitchPadRestingPercent", 10.0);
-
-            // For absolute mode: zero step is always 0 (center of range maps to
-            // center of pad). For relative mode, zero is determined dynamically
-            // at gesture start.
-            cfg.zeroStep = 0.0f;
-
-            p.pitchPadConfig = cfg;
-            p.cachedPitchPadLayout = buildPitchPadLayout(cfg);
-          } else {
-            p.outputMin = (int)mapping.getProperty("touchpadOutputMin", 0);
-            p.outputMax = (int)mapping.getProperty("touchpadOutputMax", 127);
-            p.pitchPadConfig.reset();
-          }
-        }
-        // Apply Expression ADSR and release behavior.
-        if (isPB)
-          entry.action.adsrSettings.target = AdsrTarget::PitchBend;
-        else if (isSmartBend)
-          entry.action.adsrSettings.target = AdsrTarget::SmartScaleBend;
-        else
-          entry.action.adsrSettings.target = AdsrTarget::CC;
-
-        // Custom ADSR envelope is not supported for PitchBend/SmartScaleBend
-        entry.action.adsrSettings.useCustomEnvelope =
-            (bool)mapping.getProperty("useCustomEnvelope", false) && !isPB &&
-            !isSmartBend;
-        if (!entry.action.adsrSettings.useCustomEnvelope) {
-          entry.action.adsrSettings.attackMs = 0;
-          entry.action.adsrSettings.decayMs = 0;
-          entry.action.adsrSettings.sustainLevel = 1.0f;
-          entry.action.adsrSettings.releaseMs = 0;
-        } else {
-          entry.action.adsrSettings.attackMs =
-              (int)mapping.getProperty("adsrAttack", 10);
-          entry.action.adsrSettings.decayMs =
-              (int)mapping.getProperty("adsrDecay", 10);
-          entry.action.adsrSettings.sustainLevel =
-              (float)mapping.getProperty("adsrSustain", 0.7);
-          entry.action.adsrSettings.releaseMs =
-              (int)mapping.getProperty("adsrRelease", 100);
-        }
-
-        bool defaultResetPitch =
-            (entry.action.adsrSettings.target == AdsrTarget::PitchBend ||
-             entry.action.adsrSettings.target == AdsrTarget::SmartScaleBend);
-        entry.action.sendReleaseValue =
-            (bool)mapping.getProperty("sendReleaseValue", defaultResetPitch);
-        entry.action.releaseValue =
-            (int)mapping.getProperty("touchpadValueWhenOff", 0);
-
-        if (entry.action.adsrSettings.target == AdsrTarget::CC) {
-          entry.action.adsrSettings.ccNumber =
-              (int)mapping.getProperty("data1", 1);
-          entry.action.adsrSettings.valueWhenOn =
-              (int)mapping.getProperty("touchpadValueWhenOn", 127);
-          entry.action.adsrSettings.valueWhenOff =
-              (int)mapping.getProperty("touchpadValueWhenOff", 0);
-          entry.action.data2 = entry.action.adsrSettings.valueWhenOn;
-        } else if (entry.action.adsrSettings.target ==
-                   AdsrTarget::SmartScaleBend) {
-          buildSmartBendLookup(entry.action, mapping, zoneMgr, settingsMgr);
-          entry.action.data2 = 8192;
-        } else {
-          const int pbRange = settingsMgr.getPitchBendRange();
-          int semitones = (int)mapping.getProperty("data2", 0);
-          entry.action.data2 = juce::jlimit(-juce::jmax(1, pbRange),
-                                            juce::jmax(1, pbRange), semitones);
-        }
-      } else {
-        entry.conversionKind = TouchpadConversionKind::BoolToGate;
-      }
-
-      touchpadMappingsOut->push_back(std::move(entry));
+    // Touchpad mappings are only taken from the Touchpad tab (TouchpadMixerManager),
+    // not from the preset Mappings list, to avoid duplicate or conflicting entries
+    // (e.g. Finger1Up from preset + Finger1Down from Touchpad tab causing extra NOTE_ON on release).
+    if (isTouchpadMapping)
       continue;
-    }
 
-    const int inputKey = (int)mapping.getProperty("inputKey", 0);
+    const int inputKey = (int)mapping.getProperty("inputKey", MappingDefaults::InputKey);
     if (inputKey < 0 || inputKey > 0xFF)
       continue;
 
@@ -963,7 +999,7 @@ void compileMappingsForLayer(
     // Phase 56.1: Expression (unified CC + Envelope)
     if (action.type == ActionType::Expression) {
       juce::String adsrTargetStr =
-          mapping.getProperty("adsrTarget", "CC").toString().trim();
+          mapping.getProperty("adsrTarget", MappingDefaults::AdsrTargetCC).toString().trim();
       bool useCustomEnvelope =
           (bool)mapping.getProperty("useCustomEnvelope", false);
 
@@ -988,20 +1024,20 @@ void compileMappingsForLayer(
         action.adsrSettings.releaseMs = 0;
       } else {
         action.adsrSettings.attackMs =
-            (int)mapping.getProperty("adsrAttack", 10);
-        action.adsrSettings.decayMs = (int)mapping.getProperty("adsrDecay", 10);
+            (int)mapping.getProperty("adsrAttack", MappingDefaults::ADSRAttackMs);
+        action.adsrSettings.decayMs = (int)mapping.getProperty("adsrDecay", MappingDefaults::ADSRDecayMs);
         action.adsrSettings.sustainLevel =
-            (float)mapping.getProperty("adsrSustain", 0.7);
+            (float)mapping.getProperty("adsrSustain", MappingDefaults::ADSRSustain);
         action.adsrSettings.releaseMs =
-            (int)mapping.getProperty("adsrRelease", 100);
+            (int)mapping.getProperty("adsrRelease", MappingDefaults::ADSRReleaseMs);
       }
 
       if (action.adsrSettings.target == AdsrTarget::CC) {
-        action.adsrSettings.ccNumber = (int)mapping.getProperty("data1", 1);
+        action.adsrSettings.ccNumber = (int)mapping.getProperty("data1", MappingDefaults::ExpressionData1);
         action.adsrSettings.valueWhenOn =
-            (int)mapping.getProperty("touchpadValueWhenOn", 127);
+            (int)mapping.getProperty("touchpadValueWhenOn", MappingDefaults::TouchpadValueWhenOn);
         action.adsrSettings.valueWhenOff =
-            (int)mapping.getProperty("touchpadValueWhenOff", 0);
+            (int)mapping.getProperty("touchpadValueWhenOff", MappingDefaults::TouchpadValueWhenOff);
         action.data2 = action.adsrSettings.valueWhenOn;
       } else if (action.adsrSettings.target == AdsrTarget::PitchBend) {
         // Bend (semitones); envelope uses this and returns to neutral (8192)
@@ -1018,7 +1054,7 @@ void compileMappingsForLayer(
            action.adsrSettings.target == AdsrTarget::SmartScaleBend);
       action.sendReleaseValue =
           (bool)mapping.getProperty("sendReleaseValue", defaultResetPitch);
-      action.releaseValue = (int)mapping.getProperty("releaseValue", 0);
+      action.releaseValue = (int)mapping.getProperty("releaseValue", MappingDefaults::ReleaseValue);
     }
 
     // Latch Toggle: release latched notes when toggling off
@@ -1036,14 +1072,14 @@ void compileMappingsForLayer(
       juce::String modeStr =
           mapping.getProperty("transposeMode", "Global").toString();
       action.transposeLocal = modeStr.equalsIgnoreCase("Local");
-      int modify = (int)mapping.getProperty("transposeModify", 0);
+      int modify = (int)mapping.getProperty("transposeModify", MappingDefaults::TransposeModify);
       if (action.data1 ==
           static_cast<int>(MIDIQy::CommandID::GlobalPitchDown)) {
         modify = 1; // Legacy: down 1 semitone
       }
       action.transposeModify = juce::jlimit(0, 4, modify);
       action.transposeSemitones =
-          (int)mapping.getProperty("transposeSemitones", 0);
+          (int)mapping.getProperty("transposeSemitones", MappingDefaults::TransposeSemitones);
       action.transposeSemitones =
           juce::jlimit(-48, 48, action.transposeSemitones);
     }
@@ -1053,18 +1089,18 @@ void compileMappingsForLayer(
       if (cmd == static_cast<int>(MIDIQy::CommandID::GlobalRootUp) ||
           cmd == static_cast<int>(MIDIQy::CommandID::GlobalRootDown) ||
           cmd == static_cast<int>(MIDIQy::CommandID::GlobalRootSet)) {
-        int rm = (int)mapping.getProperty("rootModify", 0);
+        int rm = (int)mapping.getProperty("rootModify", MappingDefaults::RootModify);
         action.rootModify = juce::jlimit(0, 2, rm);
         action.rootNote =
-            juce::jlimit(0, 127, (int)mapping.getProperty("rootNote", 60));
+            juce::jlimit(0, 127, (int)mapping.getProperty("rootNote", MappingDefaults::RootNote));
       }
       if (cmd == static_cast<int>(MIDIQy::CommandID::GlobalScaleNext) ||
           cmd == static_cast<int>(MIDIQy::CommandID::GlobalScalePrev) ||
           cmd == static_cast<int>(MIDIQy::CommandID::GlobalScaleSet)) {
-        int sm = (int)mapping.getProperty("scaleModify", 0);
+        int sm = (int)mapping.getProperty("scaleModify", MappingDefaults::ScaleModify);
         action.scaleModify = juce::jlimit(0, 2, sm);
         action.scaleIndex =
-            juce::jmax(0, (int)mapping.getProperty("scaleIndex", 0));
+            juce::jmax(0, (int)mapping.getProperty("scaleIndex", MappingDefaults::ScaleIndex));
       }
 
       if (cmd == static_cast<int>(
@@ -1076,9 +1112,9 @@ void compileMappingsForLayer(
           cmd == static_cast<int>(
                     MIDIQy::CommandID::TouchpadLayoutGroupSoloClear)) {
         action.touchpadLayoutGroupId =
-            (int)mapping.getProperty("touchpadLayoutGroupId", 0);
+            (int)mapping.getProperty("touchpadLayoutGroupId", MappingDefaults::TouchpadLayoutGroupId);
         action.touchpadSoloScope =
-            juce::jlimit(0, 2, (int)mapping.getProperty("touchpadSoloScope", 0));
+            juce::jlimit(0, 2, (int)mapping.getProperty("touchpadSoloScope", MappingDefaults::TouchpadSoloScope));
       }
     }
 
@@ -1121,6 +1157,20 @@ std::shared_ptr<CompiledMapContext> GridCompiler::compile(
                             settingsMgr, touchpadAliasHash, layerId,
                             touchedKeys, VisualState::Active,
                             &context->touchpadMappings);
+  }
+
+  // 2c. Collect touchpad mappings defined in the Touchpad tab (TouchpadMixerManager).
+  {
+    auto touchpadMappings = touchpadMixerMgr.getTouchpadMappings();
+    for (const auto &cfg : touchpadMappings) {
+      if (!cfg.mapping.isValid())
+        continue;
+      // Use cfg.layerId as the authoritative layer for this mapping.
+      int layerId = juce::jlimit(0, 8, cfg.layerId);
+      compileTouchpadMappingFromValueTree(cfg.mapping, layerId, cfg.midiChannel,
+                                          zoneMgr, settingsMgr,
+                                          context->touchpadMappings);
+    }
   }
 
   // 2b. Collect touchpad mixer and drum pad strips. Sort by z-index descending

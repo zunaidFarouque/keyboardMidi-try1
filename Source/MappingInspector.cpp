@@ -285,6 +285,8 @@ void MappingInspector::createControl(const InspectorControl &def,
       }
     } else if (sameVal && !currentVal.isVoid()) {
       sl->setValue(static_cast<double>(currentVal), juce::dontSendNotification);
+    } else if (sameVal && currentVal.isVoid() && !def.defaultValue.isVoid()) {
+      sl->setValue(static_cast<double>(def.defaultValue), juce::dontSendNotification);
     } else if (!sameVal) {
       sl->setValue((def.min + def.max) * 0.5, juce::dontSendNotification);
       sl->setTextValueSuffix(" (---)");
@@ -801,9 +803,12 @@ bool MappingInspector::allTreesHaveSameValue(const juce::Identifier &property) {
 }
 
 juce::var MappingInspector::getCommonValue(const juce::Identifier &property) {
-  if (!selectedTrees.empty())
-    return selectedTrees[0].getProperty(property);
-  return juce::var();
+  if (selectedTrees.empty())
+    return juce::var();
+  juce::var v = selectedTrees[0].getProperty(property);
+  if (v.isVoid())
+    return MappingDefinition::getDefaultValue(property.toString());
+  return v;
 }
 
 void MappingInspector::changeListenerCallback(juce::ChangeBroadcaster *source) {

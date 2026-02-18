@@ -1,7 +1,9 @@
 #include "TouchpadTabComponent.h"
+#include "SettingsManager.h"
 
-TouchpadTabComponent::TouchpadTabComponent(TouchpadMixerManager *mgr)
-    : manager(mgr), listPanel(mgr), editorPanel(mgr),
+TouchpadTabComponent::TouchpadTabComponent(TouchpadMixerManager *mgr,
+                                           SettingsManager *settingsMgr)
+    : manager(mgr), listPanel(mgr), editorPanel(mgr, settingsMgr),
       resizerBar(&layout, 1, true) {
   addAndMakeVisible(listPanel);
   addAndMakeVisible(editorViewport);
@@ -14,13 +16,23 @@ TouchpadTabComponent::TouchpadTabComponent(TouchpadMixerManager *mgr)
   layout.setItemLayout(1, 5, 5, 5);
   layout.setItemLayout(2, -0.6, -0.75, -0.7);
 
-  listPanel.onSelectionChanged = [this](int index,
-                                        const TouchpadMixerConfig *c) {
-    editorPanel.setLayout(index, c);
-    if (onSelectionChangedForVisualizer)
-      onSelectionChangedForVisualizer(index, c ? c->layerId : 0);
-    resized();
-  };
+  listPanel.onSelectionChanged =
+      [this](TouchpadMixerListPanel::RowKind kind, int index,
+             const TouchpadMixerConfig *layoutCfg,
+             const TouchpadMappingConfig *mappingCfg) {
+        if (kind == TouchpadMixerListPanel::RowKind::Layout) {
+          editorPanel.setLayout(index, layoutCfg);
+          if (onSelectionChangedForVisualizer)
+            onSelectionChangedForVisualizer(index, layoutCfg ? layoutCfg->layerId
+                                                             : 0);
+        } else {
+          editorPanel.setMapping(index, mappingCfg);
+          // Visualizer selection is driven only by layouts; keep current
+          // selection when choosing a mapping.
+        }
+        resized();
+      };
+  editorPanel.onContentHeightMaybeChanged = [this]() { resized(); };
   editorPanel.setLayout(-1, nullptr);
 }
 
@@ -29,7 +41,7 @@ TouchpadTabComponent::~TouchpadTabComponent() {}
 void TouchpadTabComponent::refreshVisualizerSelection() {
   if (!onSelectionChangedForVisualizer || !manager)
     return;
-  int idx = listPanel.getSelectedLayoutIndex();
+  int idx = listPanel.getSelectedRowIndex();
   if (idx < 0) {
     onSelectionChangedForVisualizer(-1, 0);
     return;

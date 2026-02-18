@@ -4,9 +4,12 @@
 #include <JuceHeader.h>
 #include <functional>
 
+class SettingsManager;
+
 class TouchpadTabComponent : public juce::Component {
 public:
-  explicit TouchpadTabComponent(TouchpadMixerManager *mgr);
+  explicit TouchpadTabComponent(TouchpadMixerManager *mgr,
+                                SettingsManager *settingsMgr = nullptr);
   ~TouchpadTabComponent() override;
 
   /// Notified when layout selection changes: (layoutIndex, layerId). (-1, 0)

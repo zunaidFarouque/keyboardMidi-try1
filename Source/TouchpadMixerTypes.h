@@ -1,4 +1,5 @@
 #pragma once
+#include <JuceHeader.h>
 #include <cstdint>
 #include <string>
 #include <vector>
@@ -57,6 +58,27 @@ enum class DrumPadLayoutMode {
 struct TouchpadLayoutGroup {
   int id = 0;
   std::string name;
+};
+
+// Config for one touchpad mapping row in the Touchpad tab.
+// This is independent from the global Mapping list; we keep a full ValueTree
+// for the mapping so we can reuse the existing mapping engine (GridCompiler,
+// InputProcessor, MappingDefinition, etc.) without re-implementing every
+// property by hand.
+struct TouchpadMappingConfig {
+  // Shared header fields (same semantics as TouchpadMixerConfig)
+  std::string name = "Touchpad Mapping";
+  int layerId = 0;
+  int layoutGroupId = 0; // 0 = none, >0 = TouchpadLayoutGroup::id
+  int midiChannel = 1;   // Shared with Mapping ValueTree "channel"
+  TouchpadLayoutRegion region; // Active region on touchpad (0-1, normalized)
+  int zIndex = 0;
+  bool regionLock = false;
+
+  // Underlying mapping ValueTree (type "Mapping").
+  // Must use the same schema/property IDs as the main mapping engine
+  // (see MappingTypes / MappingDefinition / MappingInspector).
+  juce::ValueTree mapping;
 };
 
 // Config for one touchpad strip (serialized in preset / session).

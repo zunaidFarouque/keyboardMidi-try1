@@ -1,4 +1,5 @@
 #include "../MappingDefinition.h"
+#include "../MappingDefaults.h"
 #include "../MappingTypes.h"
 #include <gtest/gtest.h>
 
@@ -179,16 +180,32 @@ TEST(MappingDefinitionTest, SmartScaleBendNoPeakSlider) {
   }
 }
 
-// Phase 55.7 / 56.1: Expression (simple) with compact dependent layout -
-// checkbox + slider
-TEST(MappingDefinitionTest, CCCompactDependentLayout) {
+// CC Expression: no sendReleaseValue/releaseValue (Value when Off always sent)
+TEST(MappingDefinitionTest, CCExpressionNoSendReleaseValueControls) {
   juce::ValueTree mapping("Mapping");
   mapping.setProperty("type", "Expression", nullptr);
+  mapping.setProperty("adsrTarget", "CC", nullptr);
   mapping.setProperty("useCustomEnvelope", false, nullptr);
 
   InspectorSchema schema = MappingDefinition::getSchema(mapping);
 
-  // Find sendReleaseValue toggle
+  for (const auto &c : schema) {
+    EXPECT_NE(c.propertyId, "sendReleaseValue")
+        << "CC Expression should not have Send value on Release toggle";
+    EXPECT_NE(c.propertyId, "releaseValue")
+        << "CC Expression should not have release value slider";
+  }
+}
+
+// PitchBend Expression: has "Reset pitch on release" toggle only
+TEST(MappingDefinitionTest, PitchBendHasResetPitchOnReleaseToggle) {
+  juce::ValueTree mapping("Mapping");
+  mapping.setProperty("type", "Expression", nullptr);
+  mapping.setProperty("adsrTarget", "PitchBend", nullptr);
+  mapping.setProperty("useCustomEnvelope", false, nullptr);
+
+  InspectorSchema schema = MappingDefinition::getSchema(mapping);
+
   const InspectorControl *sendRelControl = nullptr;
   for (const auto &c : schema) {
     if (c.propertyId == "sendReleaseValue") {
@@ -197,31 +214,28 @@ TEST(MappingDefinitionTest, CCCompactDependentLayout) {
     }
   }
   ASSERT_NE(sendRelControl, nullptr)
-      << "Schema should have 'sendReleaseValue' control";
+      << "PitchBend should have Reset pitch on release toggle";
   EXPECT_EQ(sendRelControl->controlType, InspectorControl::Type::Toggle);
-  EXPECT_FLOAT_EQ(sendRelControl->widthWeight, 0.45f)
-      << "Toggle should have 0.45 width weight (Phase 56.2)";
-  EXPECT_FALSE(sendRelControl->sameLine) << "Toggle should start a new row";
+  EXPECT_EQ(sendRelControl->label, "Reset pitch on release");
+  EXPECT_FLOAT_EQ(sendRelControl->widthWeight, 1.0f);
+}
 
-  // Find releaseValue slider
-  const InspectorControl *releaseValControl = nullptr;
+// Touchpad editor schema: no Enabled (in header), no channel in Expression body
+TEST(MappingDefinitionTest, TouchpadEditorSchemaOmitsEnabledAndChannel) {
+  juce::ValueTree mapping("Mapping");
+  mapping.setProperty("type", "Expression", nullptr);
+  mapping.setProperty("adsrTarget", "CC", nullptr);
+
+  InspectorSchema schema = MappingDefinition::getSchema(mapping, 12, true);
+
+  bool hasEnabled = false;
+  bool hasChannel = false;
   for (const auto &c : schema) {
-    if (c.propertyId == "releaseValue") {
-      releaseValControl = &c;
-      break;
-    }
+    if (c.propertyId == "enabled") hasEnabled = true;
+    if (c.propertyId == "channel") hasChannel = true;
   }
-  ASSERT_NE(releaseValControl, nullptr)
-      << "Schema should have 'releaseValue' control";
-  EXPECT_EQ(releaseValControl->controlType, InspectorControl::Type::Slider);
-  EXPECT_TRUE(releaseValControl->label.isEmpty())
-      << "Slider should have empty label for compact layout";
-  EXPECT_TRUE(releaseValControl->sameLine)
-      << "Slider should be on same line as toggle";
-  EXPECT_FLOAT_EQ(releaseValControl->widthWeight, 0.55f)
-      << "Slider should have 0.55 width weight (Phase 56.2)";
-  EXPECT_EQ(releaseValControl->enabledConditionProperty, "sendReleaseValue")
-      << "Slider should be dependent on sendReleaseValue property";
+  EXPECT_FALSE(hasEnabled) << "Touchpad schema should omit Enabled (lives in header)";
+  EXPECT_FALSE(hasChannel) << "Touchpad schema should omit channel (lives in header)";
 }
 
 // --- Enabled toggle and isMappingEnabled ---
@@ -480,4 +494,38 @@ TEST(MappingDefinitionTest, GetTypeNameAllTypes) {
   EXPECT_EQ(MappingDefinition::getTypeName(ActionType::Note), "Note");
   EXPECT_EQ(MappingDefinition::getTypeName(ActionType::Expression), "Expression");
   EXPECT_EQ(MappingDefinition::getTypeName(ActionType::Command), "Command");
+}
+
+// --- Centralized mapping defaults ---
+TEST(MappingDefinitionTest, GetDefaultValueAdsrMatchesConstants) {
+  juce::var attackDef = MappingDefinition::getDefaultValue("adsrAttack");
+  juce::var decayDef = MappingDefinition::getDefaultValue("adsrDecay");
+  juce::var sustainDef = MappingDefinition::getDefaultValue("adsrSustain");
+  juce::var releaseDef = MappingDefinition::getDefaultValue("adsrRelease");
+  ASSERT_FALSE(attackDef.isVoid());
+  ASSERT_FALSE(decayDef.isVoid());
+  ASSERT_FALSE(sustainDef.isVoid());
+  ASSERT_FALSE(releaseDef.isVoid());
+  EXPECT_EQ(static_cast<int>(attackDef), MappingDefaults::ADSRAttackMs);
+  EXPECT_EQ(static_cast<int>(decayDef), MappingDefaults::ADSRDecayMs);
+  EXPECT_DOUBLE_EQ(static_cast<double>(sustainDef), MappingDefaults::ADSRSustain);
+  EXPECT_EQ(static_cast<int>(releaseDef), MappingDefaults::ADSRReleaseMs);
+}
+
+TEST(MappingDefinitionTest, ExpressionSchemaAdsrControlsHaveDefaultValue) {
+  juce::ValueTree mapping("Mapping");
+  mapping.setProperty("type", "Expression", nullptr);
+  mapping.setProperty("adsrTarget", "CC", nullptr);
+  mapping.setProperty("useCustomEnvelope", true, nullptr);
+
+  InspectorSchema schema = MappingDefinition::getSchema(mapping);
+
+  for (const auto &c : schema) {
+    if (c.propertyId == "adsrAttack" || c.propertyId == "adsrDecay" ||
+        c.propertyId == "adsrSustain" || c.propertyId == "adsrRelease") {
+      EXPECT_FALSE(c.defaultValue.isVoid())
+          << "ADSR control " << c.propertyId.toStdString()
+          << " should have defaultValue set";
+    }
+  }
 }

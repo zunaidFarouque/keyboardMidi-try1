@@ -13,6 +13,9 @@ struct InspectorControl {
   bool autoWidth =
       false; // Phase 55.10: if true, fit to content; ignore widthWeight
 
+  // Optional default when property is missing; slider/UI shows this until set.
+  juce::var defaultValue;
+
   // Phase 55.7: If set, this control is enabled only when the target property
   // is true
   juce::String enabledConditionProperty;
@@ -58,8 +61,11 @@ public:
   // Factory: Inspects the mapping state and returns the UI schema.
   // pitchBendRange: global PB range in semitones (for Expression PitchBend peak
   // slider).
+  // forTouchpadEditor: when true, omit Enabled and channel from schema (they
+  // live in the touchpad header).
   static InspectorSchema getSchema(const juce::ValueTree &mapping,
-                                   int pitchBendRange = 12);
+                                   int pitchBendRange = 12,
+                                   bool forTouchpadEditor = false);
 
   // Helper to get friendly name for ActionType (e.g. "Note", "CC")
   static juce::String getTypeName(ActionType type);
@@ -77,4 +83,8 @@ public:
 
   // Single source of truth for mapping enabled state (property "enabled", default true)
   static bool isMappingEnabled(const juce::ValueTree &mapping);
+
+  // Single source of truth for default value when a property is missing.
+  // Returns juce::var() if no default is defined.
+  static juce::var getDefaultValue(juce::StringRef propertyId);
 };

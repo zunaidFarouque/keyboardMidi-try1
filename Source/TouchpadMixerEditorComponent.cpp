@@ -1,5 +1,9 @@
 #include "TouchpadMixerEditorComponent.h"
+#include "MappingDefinition.h"
+#include "MappingTypes.h"
 #include "TouchpadMixerDefinition.h"
+#include "SettingsManager.h"
+#include <functional>
 
 namespace {
 struct LabelEditorRow : juce::Component {
@@ -90,8 +94,8 @@ void TouchpadMixerEditorComponent::SeparatorComponent::paint(
 }
 
 TouchpadMixerEditorComponent::TouchpadMixerEditorComponent(
-    TouchpadMixerManager *mgr)
-    : manager(mgr) {
+    TouchpadMixerManager *mgr, SettingsManager *settingsMgr)
+    : manager(mgr), settingsManager(settingsMgr) {
   setLookAndFeel(&comboPopupLAF);
 }
 
@@ -108,7 +112,10 @@ TouchpadMixerEditorComponent::~TouchpadMixerEditorComponent() {
 
 void TouchpadMixerEditorComponent::setLayout(int index,
                                             const TouchpadMixerConfig *config) {
-  selectedIndex = index;
+  selectionKind = (config != nullptr && index >= 0) ? SelectionKind::Layout
+                                                   : SelectionKind::None;
+  selectedLayoutIndex = index;
+  selectedMappingIndex = -1;
   if (config)
     currentConfig = *config;
   else
@@ -117,32 +124,155 @@ void TouchpadMixerEditorComponent::setLayout(int index,
   setEnabled(config != nullptr);
 }
 
+void TouchpadMixerEditorComponent::setMapping(
+    int index, const TouchpadMappingConfig *config) {
+  selectionKind = (config != nullptr && index >= 0) ? SelectionKind::Mapping
+                                                   : SelectionKind::None;
+  selectedMappingIndex = index;
+  selectedLayoutIndex = -1;
+  if (config)
+    currentMapping = *config;
+  else
+    currentMapping = TouchpadMappingConfig();
+  rebuildUI();
+  setEnabled(config != nullptr);
+}
+
 juce::var TouchpadMixerEditorComponent::getConfigValue(
     const juce::String &propertyId) const {
+  const bool isLayout = (selectionKind == SelectionKind::Layout);
+  const bool isMapping = (selectionKind == SelectionKind::Mapping);
+
   if (propertyId == "type") {
-    switch (currentConfig.type) {
-    case TouchpadType::Mixer:
-      return juce::var(1);
-    case TouchpadType::DrumPad:
-      return juce::var(2);
-    case TouchpadType::ChordPad:
-      return juce::var(3);
-    default:
-      return juce::var(1);
+    if (isLayout) {
+      switch (currentConfig.type) {
+      case TouchpadType::Mixer:
+        return juce::var(1);
+      case TouchpadType::DrumPad:
+        return juce::var(2);
+      case TouchpadType::ChordPad:
+        return juce::var(3);
+      default:
+        return juce::var(1);
+      }
     }
+    // For mappings, read type from the mapping ValueTree.
+    if (isMapping && currentMapping.mapping.isValid()) {
+      juce::String typeStr =
+          currentMapping.mapping.getProperty("type", "Note").toString().trim();
+      if (typeStr.equalsIgnoreCase("Note"))
+        return juce::var(1);
+      if (typeStr.equalsIgnoreCase("Expression"))
+        return juce::var(2);
+      if (typeStr.equalsIgnoreCase("Command"))
+        return juce::var(3);
+      return juce::var(1); // default to Note
+    }
+    return juce::var();
   }
   if (propertyId == "name")
-    return juce::var(juce::String(currentConfig.name));
+    return juce::var(isLayout ? juce::String(currentConfig.name)
+                              : juce::String(currentMapping.name));
   if (propertyId == "layerId")
-    return juce::var(currentConfig.layerId + 1); // combo IDs 1..9
+    return juce::var((isLayout ? currentConfig.layerId : currentMapping.layerId) +
+                     1); // combo IDs 1..9
   if (propertyId == "layoutGroupId")
-    return juce::var(currentConfig.layoutGroupId);
+    return juce::var(isLayout ? currentConfig.layoutGroupId
+                              : currentMapping.layoutGroupId);
+  if (propertyId == "midiChannel")
+    return juce::var(isLayout ? currentConfig.midiChannel
+                              : currentMapping.midiChannel);
+  if (propertyId == "regionLeft")
+    return juce::var(static_cast<double>(
+        isLayout ? currentConfig.region.left : currentMapping.region.left));
+  if (propertyId == "regionTop")
+    return juce::var(static_cast<double>(
+        isLayout ? currentConfig.region.top : currentMapping.region.top));
+  if (propertyId == "regionRight")
+    return juce::var(static_cast<double>(
+        isLayout ? currentConfig.region.right : currentMapping.region.right));
+  if (propertyId == "regionBottom")
+    return juce::var(static_cast<double>(
+        isLayout ? currentConfig.region.bottom : currentMapping.region.bottom));
+  if (propertyId == "zIndex")
+    return juce::var(isLayout ? currentConfig.zIndex : currentMapping.zIndex);
+  if (propertyId == "regionLock")
+    return juce::var(isLayout ? currentConfig.regionLock
+                              : currentMapping.regionLock);
+
+  // Mapping-specific properties (read from mapping ValueTree).
+  if (isMapping && currentMapping.mapping.isValid()) {
+    // All mapping properties are stored in the ValueTree.
+    if (currentMapping.mapping.hasProperty(propertyId)) {
+      juce::var propVal = currentMapping.mapping.getProperty(propertyId);
+      // Convert string properties to ComboBox IDs
+      if (propertyId == "releaseBehavior") {
+        juce::String str = propVal.toString().trim();
+        if (str.equalsIgnoreCase("Send Note Off"))
+          return juce::var(1);
+        else if (str.equalsIgnoreCase("Sustain until retrigger"))
+          return juce::var(2);
+        else if (str.equalsIgnoreCase("Always Latch"))
+          return juce::var(3);
+        return juce::var(1); // default
+      } else if (propertyId == "touchpadHoldBehavior") {
+        juce::String str = propVal.toString().trim();
+        if (str.equalsIgnoreCase("Hold to not send note off immediately"))
+          return juce::var(1);
+        else if (str.equalsIgnoreCase("Ignore, send note off immediately"))
+          return juce::var(2);
+        return juce::var(1); // default
+      } else if (propertyId == "adsrTarget") {
+        juce::String str = propVal.toString().trim();
+        if (str.equalsIgnoreCase("CC"))
+          return juce::var(1);
+        if (str.equalsIgnoreCase("PitchBend"))
+          return juce::var(2);
+        if (str.equalsIgnoreCase("SmartScaleBend"))
+          return juce::var(3);
+        return juce::var(1); // default CC
+      }
+      return propVal;
+    }
+    // Return centralized default when property not set.
+    juce::var defVal = MappingDefinition::getDefaultValue(propertyId);
+    if (!defVal.isVoid()) {
+      // ComboBox properties store string in tree; UI needs combo ID.
+      if (propertyId == "releaseBehavior") {
+        juce::String str = defVal.toString().trim();
+        if (str.equalsIgnoreCase("Send Note Off")) return juce::var(1);
+        if (str.equalsIgnoreCase("Sustain until retrigger")) return juce::var(2);
+        if (str.equalsIgnoreCase("Always Latch")) return juce::var(3);
+        return juce::var(1);
+      }
+      if (propertyId == "touchpadHoldBehavior") {
+        juce::String str = defVal.toString().trim();
+        if (str.equalsIgnoreCase("Hold to not send note off immediately")) return juce::var(1);
+        if (str.equalsIgnoreCase("Ignore, send note off immediately")) return juce::var(2);
+        return juce::var(1);
+      }
+      if (propertyId == "adsrTarget") {
+        juce::String str = defVal.toString().trim();
+        if (str.equalsIgnoreCase("CC")) return juce::var(1);
+        if (str.equalsIgnoreCase("PitchBend")) return juce::var(2);
+        if (str.equalsIgnoreCase("SmartScaleBend")) return juce::var(3);
+        return juce::var(1);
+      }
+      return defVal;
+    }
+    return juce::var();
+  }
+
+  // Layout-only properties below
+  if (!isLayout)
+    return juce::var();
+
+  if (propertyId == "name")
+    return juce::var(juce::String(currentConfig.name));
   if (propertyId == "numFaders")
     return juce::var(currentConfig.numFaders);
   if (propertyId == "ccStart")
     return juce::var(currentConfig.ccStart);
-  if (propertyId == "midiChannel")
-    return juce::var(currentConfig.midiChannel);
   if (propertyId == "inputMin")
     return juce::var(currentConfig.inputMin);
   if (propertyId == "inputMax")
@@ -202,57 +332,95 @@ juce::var TouchpadMixerEditorComponent::getConfigValue(
     return juce::var(currentConfig.fxOutputMax);
   if (propertyId == "fxToggleMode")
     return juce::var(currentConfig.fxToggleMode);
-  if (propertyId == "regionLeft")
-    return juce::var(static_cast<double>(currentConfig.region.left));
-  if (propertyId == "regionTop")
-    return juce::var(static_cast<double>(currentConfig.region.top));
-  if (propertyId == "regionRight")
-    return juce::var(static_cast<double>(currentConfig.region.right));
-  if (propertyId == "regionBottom")
-    return juce::var(static_cast<double>(currentConfig.region.bottom));
-  if (propertyId == "zIndex")
-    return juce::var(currentConfig.zIndex);
-  if (propertyId == "regionLock")
-    return juce::var(currentConfig.regionLock);
   return juce::var();
 }
 
 void TouchpadMixerEditorComponent::applyConfigValue(
     const juce::String &propertyId, const juce::var &value) {
-  if (selectedIndex < 0 || !manager)
+  if (!manager)
     return;
+
+  const bool isLayout = (selectionKind == SelectionKind::Layout);
+  const bool isMapping = (selectionKind == SelectionKind::Mapping);
+
+  if (isLayout && selectedLayoutIndex < 0)
+    return;
+  if (isMapping && selectedMappingIndex < 0)
+    return;
+
   if (propertyId == "type") {
-    int id = static_cast<int>(value);
-    switch (id) {
-    case 1:
-      currentConfig.type = TouchpadType::Mixer;
-      break;
-    case 2:
-      currentConfig.type = TouchpadType::DrumPad;
-      break;
-    case 3:
-      currentConfig.type = TouchpadType::ChordPad;
-      break;
-    default:
-      currentConfig.type = TouchpadType::Mixer;
-      break;
+    if (isLayout) {
+      int id = static_cast<int>(value);
+      switch (id) {
+      case 1:
+        currentConfig.type = TouchpadType::Mixer;
+        break;
+      case 2:
+        currentConfig.type = TouchpadType::DrumPad;
+        break;
+      case 3:
+        currentConfig.type = TouchpadType::ChordPad;
+        break;
+      default:
+        currentConfig.type = TouchpadType::Mixer;
+        break;
+      }
+      manager->updateLayout(selectedLayoutIndex, currentConfig);
+      rebuildUI();
+      return;
+    } else if (isMapping && currentMapping.mapping.isValid()) {
+      // Mapping type: Note/Expression/Command
+      int id = static_cast<int>(value);
+      juce::String typeStr;
+      switch (id) {
+      case 1:
+        typeStr = "Note";
+        break;
+      case 2:
+        typeStr = "Expression";
+        break;
+      case 3:
+        typeStr = "Command";
+        break;
+      default:
+        typeStr = "Note";
+        break;
+      }
+      currentMapping.mapping.setProperty("type", typeStr, nullptr);
+      manager->updateTouchpadMapping(selectedMappingIndex, currentMapping);
+      rebuildUI();
+      return;
     }
-    manager->updateLayout(selectedIndex, currentConfig);
-    rebuildUI();
     return;
-  } else if (propertyId == "name")
-    currentConfig.name = value.toString().toStdString();
-  else if (propertyId == "layerId")
-    currentConfig.layerId =
-        juce::jlimit(0, 8, static_cast<int>(value) - 1); // combo ID 1..9
-  else if (propertyId == "layoutGroupId")
-    currentConfig.layoutGroupId = juce::jmax(0, static_cast<int>(value));
+  } else if (propertyId == "name") {
+    if (isLayout)
+      currentConfig.name = value.toString().toStdString();
+    else if (isMapping)
+      currentMapping.name = value.toString().toStdString();
+  } else if (propertyId == "layerId") {
+    int v = juce::jlimit(0, 8, static_cast<int>(value) - 1); // combo ID 1..9
+    if (isLayout)
+      currentConfig.layerId = v;
+    else if (isMapping)
+      currentMapping.layerId = v;
+  } else if (propertyId == "layoutGroupId") {
+    int v = juce::jmax(0, static_cast<int>(value));
+    if (isLayout)
+      currentConfig.layoutGroupId = v;
+    else if (isMapping)
+      currentMapping.layoutGroupId = v;
+  }
   else if (propertyId == "numFaders")
     currentConfig.numFaders = juce::jlimit(1, 32, static_cast<int>(value));
   else if (propertyId == "ccStart")
     currentConfig.ccStart = juce::jlimit(0, 127, static_cast<int>(value));
-  else if (propertyId == "midiChannel")
-    currentConfig.midiChannel = juce::jlimit(1, 16, static_cast<int>(value));
+  else if (propertyId == "midiChannel") {
+    int v = juce::jlimit(1, 16, static_cast<int>(value));
+    if (isLayout)
+      currentConfig.midiChannel = v;
+    else if (isMapping)
+      currentMapping.midiChannel = v;
+  }
   else if (propertyId == "inputMin")
     currentConfig.inputMin = static_cast<float>(static_cast<double>(value));
   else if (propertyId == "inputMax")
@@ -314,25 +482,131 @@ void TouchpadMixerEditorComponent::applyConfigValue(
     currentConfig.fxOutputMax = juce::jlimit(0, 127, static_cast<int>(value));
   else if (propertyId == "fxToggleMode")
     currentConfig.fxToggleMode = static_cast<bool>(value);
-  else if (propertyId == "regionLeft")
-    currentConfig.region.left =
-        static_cast<float>(juce::jlimit(0.0, 1.0, static_cast<double>(value)));
-  else if (propertyId == "regionTop")
-    currentConfig.region.top =
-        static_cast<float>(juce::jlimit(0.0, 1.0, static_cast<double>(value)));
-  else if (propertyId == "regionRight")
-    currentConfig.region.right =
-        static_cast<float>(juce::jlimit(0.0, 1.0, static_cast<double>(value)));
-  else if (propertyId == "regionBottom")
-    currentConfig.region.bottom =
-        static_cast<float>(juce::jlimit(0.0, 1.0, static_cast<double>(value)));
-  else if (propertyId == "zIndex")
-    currentConfig.zIndex = juce::jlimit(-100, 100, static_cast<int>(value));
-  else if (propertyId == "regionLock")
-    currentConfig.regionLock = static_cast<bool>(value);
-  else
+  else if (propertyId == "regionLeft" || propertyId == "regionTop" ||
+           propertyId == "regionRight" || propertyId == "regionBottom") {
+    double d = static_cast<double>(value);
+    d = juce::jlimit(0.0, 1.0, d);
+    float f = static_cast<float>(d);
+    if (isLayout) {
+      if (propertyId == "regionLeft")
+        currentConfig.region.left = f;
+      else if (propertyId == "regionTop")
+        currentConfig.region.top = f;
+      else if (propertyId == "regionRight")
+        currentConfig.region.right = f;
+      else if (propertyId == "regionBottom")
+        currentConfig.region.bottom = f;
+    } else if (isMapping) {
+      if (propertyId == "regionLeft")
+        currentMapping.region.left = f;
+      else if (propertyId == "regionTop")
+        currentMapping.region.top = f;
+      else if (propertyId == "regionRight")
+        currentMapping.region.right = f;
+      else if (propertyId == "regionBottom")
+        currentMapping.region.bottom = f;
+    }
+  } else if (propertyId == "zIndex") {
+    int v = juce::jlimit(-100, 100, static_cast<int>(value));
+    if (isLayout)
+      currentConfig.zIndex = v;
+    else if (isMapping)
+      currentMapping.zIndex = v;
+  } else if (propertyId == "regionLock") {
+    bool v = static_cast<bool>(value);
+    if (isLayout)
+      currentConfig.regionLock = v;
+    else if (isMapping)
+      currentMapping.regionLock = v;
+  }
+  else {
+    // Mapping-specific properties: write to mapping ValueTree.
+    if (isMapping && currentMapping.mapping.isValid()) {
+      // Convert ComboBox ID to string for string properties
+      juce::var valueToSet = value;
+      if (propertyId == "releaseBehavior") {
+        int id = static_cast<int>(value);
+        if (id == 1)
+          valueToSet = juce::var("Send Note Off");
+        else if (id == 2)
+          valueToSet = juce::var("Sustain until retrigger");
+        else if (id == 3)
+          valueToSet = juce::var("Always Latch");
+      } else if (propertyId == "touchpadHoldBehavior") {
+        int id = static_cast<int>(value);
+        if (id == 1)
+          valueToSet = juce::var("Hold to not send note off immediately");
+        else if (id == 2)
+          valueToSet = juce::var("Ignore, send note off immediately");
+      } else if (propertyId == "adsrTarget") {
+        int id = juce::jlimit(1, 3, static_cast<int>(value));
+        if (id == 1)
+          valueToSet = juce::var("CC");
+        else if (id == 2)
+          valueToSet = juce::var("PitchBend");
+        else
+          valueToSet = juce::var("SmartScaleBend");
+      }
+      currentMapping.mapping.setProperty(propertyId, valueToSet, nullptr);
+      manager->updateTouchpadMapping(selectedMappingIndex, currentMapping);
+      // Rebuild UI when schema structure changes (controls show/hide).
+      if (propertyId == "type" || propertyId == "useCustomEnvelope" ||
+          propertyId == "adsrTarget")
+        rebuildUI();
+      return;
+    }
     return;
-  manager->updateLayout(selectedIndex, currentConfig);
+  }
+
+  if (isLayout)
+    manager->updateLayout(selectedLayoutIndex, currentConfig);
+  else if (isMapping)
+    manager->updateTouchpadMapping(selectedMappingIndex, currentMapping);
+}
+
+void TouchpadMixerEditorComponent::onRelayoutRegionChosen(float x1, float y1,
+                                                         float x2, float y2) {
+  if (!manager)
+    return;
+  if (selectionKind == SelectionKind::Layout && selectedLayoutIndex >= 0) {
+    currentConfig.region.left = x1;
+    currentConfig.region.top = y1;
+    currentConfig.region.right = x2;
+    currentConfig.region.bottom = y2;
+    manager->updateLayout(selectedLayoutIndex, currentConfig);
+  } else if (selectionKind == SelectionKind::Mapping &&
+             selectedMappingIndex >= 0) {
+    currentMapping.region.left = x1;
+    currentMapping.region.top = y1;
+    currentMapping.region.right = x2;
+    currentMapping.region.bottom = y2;
+    manager->updateTouchpadMapping(selectedMappingIndex, currentMapping);
+  }
+  rebuildUI();
+}
+
+void TouchpadMixerEditorComponent::launchRelayoutDialog() {
+  if (!manager ||
+      (selectionKind == SelectionKind::Layout && selectedLayoutIndex < 0) ||
+      (selectionKind == SelectionKind::Mapping && selectedMappingIndex < 0))
+    return;
+  using Cb = TouchpadRelayoutDialog::RegionChosenCallback;
+  Cb onChosen(std::bind(&TouchpadMixerEditorComponent::onRelayoutRegionChosen,
+                        this, std::placeholders::_1, std::placeholders::_2,
+                        std::placeholders::_3, std::placeholders::_4));
+  auto *dialog = new TouchpadRelayoutDialog(std::move(onChosen));
+  juce::DialogWindow::LaunchOptions opts;
+  opts.content.setOwned(dialog);
+  opts.dialogTitle = "Re-layout region";
+  opts.dialogBackgroundColour = juce::Colour(0xff222222);
+  opts.escapeKeyTriggersCloseButton = true;
+  opts.useNativeTitleBar = true;
+  opts.resizable = false;
+#if JUCE_MODAL_LOOPS_PERMITTED
+  opts.runModal();
+#else
+  opts.launchAsync();
+#endif
 }
 
 void TouchpadMixerEditorComponent::createControl(
@@ -465,34 +739,10 @@ void TouchpadMixerEditorComponent::createControl(
     auto btn = std::make_unique<juce::TextButton>(def.label);
     juce::TextButton *btnPtr = btn.get();
     btnPtr->onClick = [this, propId]() {
-      if (propId == "relayoutRegion" && manager && selectedIndex >= 0) {
-        // Create a temporary dialog for this invocation; the callback applies
-        // the chosen region and rebuilds the UI.
-        auto *dialog = new TouchpadRelayoutDialog(
-            [this](float left, float top, float right, float bottom) {
-              if (selectedIndex < 0 || !manager)
-                return;
-              currentConfig.region.left = left;
-              currentConfig.region.top = top;
-              currentConfig.region.right = right;
-              currentConfig.region.bottom = bottom;
-              manager->updateLayout(selectedIndex, currentConfig);
-              rebuildUI();
-            });
-
-        juce::DialogWindow::LaunchOptions opts;
-        opts.content.setOwned(dialog);
-        opts.dialogTitle = "Re-layout region";
-        opts.dialogBackgroundColour = juce::Colour(0xff222222);
-        opts.escapeKeyTriggersCloseButton = true;
-        opts.useNativeTitleBar = true;
-        opts.resizable = false;
-       #if JUCE_MODAL_LOOPS_PERMITTED
-        opts.runModal();
-       #else
-        opts.launchAsync();
-       #endif
-      }
+      if (propId == "relayoutRegion" && manager &&
+          ((selectionKind == SelectionKind::Layout && selectedLayoutIndex >= 0) ||
+           (selectionKind == SelectionKind::Mapping && selectedMappingIndex >= 0)))
+        launchRelayoutDialog();
     };
 
     auto rowComp = std::make_unique<LabelEditorRow>();
@@ -520,13 +770,51 @@ void TouchpadMixerEditorComponent::rebuildUI() {
   }
   uiRows.clear();
 
-  if (selectedIndex < 0) {
+  if (selectionKind == SelectionKind::None) {
     resized();
     return;
   }
 
-  InspectorSchema schema =
-      TouchpadMixerDefinition::getSchema(currentConfig.type);
+  InspectorSchema schema;
+  if (selectionKind == SelectionKind::Layout) {
+    schema = TouchpadMixerDefinition::getSchema(currentConfig.type);
+  } else {
+    // For mappings: common header (name, layerId, layoutGroupId, midiChannel, zIndex)
+    // + mapping body schema (type Note/Expression/Command, touchpad event, etc.)
+    // + common region controls.
+    InspectorSchema commonHeader = TouchpadMixerDefinition::getCommonLayoutHeader();
+    // Remove "type" from common header (layout types) - we'll use mapping type instead.
+    commonHeader.erase(
+        std::remove_if(commonHeader.begin(), commonHeader.end(),
+                       [](const InspectorControl &c) { return c.propertyId == "type"; }),
+        commonHeader.end());
+    for (const auto &c : commonHeader)
+      schema.push_back(c);
+
+    // Enabled in header (all touchpad mapping types)
+    InspectorControl enabledCtrl;
+    enabledCtrl.propertyId = "enabled";
+    enabledCtrl.label = "Enabled";
+    enabledCtrl.controlType = InspectorControl::Type::Toggle;
+    enabledCtrl.widthWeight = 0.5f;
+    schema.push_back(enabledCtrl);
+
+    // Get mapping body schema (includes "type" with Note/Expression/Command).
+    if (currentMapping.mapping.isValid() && settingsManager) {
+      int pbRange = settingsManager->getPitchBendRange();
+      InspectorSchema mappingSchema = MappingDefinition::getSchema(
+          currentMapping.mapping, pbRange, true /* forTouchpadEditor */);
+      // Add separator before mapping body.
+      schema.push_back(MappingDefinition::createSeparator(
+          "Mapping", juce::Justification::centredLeft));
+      for (const auto &c : mappingSchema)
+        schema.push_back(c);
+    }
+
+    // Add common region controls at the end.
+    for (const auto &c : TouchpadMixerDefinition::getCommonLayoutControls())
+      schema.push_back(c);
+  }
   for (const auto &def : schema) {
     if (def.controlType == InspectorControl::Type::Separator) {
       UiRow row;
@@ -546,11 +834,13 @@ void TouchpadMixerEditorComponent::rebuildUI() {
     createControl(def, uiRows.back().items);
   }
   resized();
+  if (onContentHeightMaybeChanged)
+    onContentHeightMaybeChanged();
 }
 
 void TouchpadMixerEditorComponent::paint(juce::Graphics &g) {
   g.fillAll(juce::Colour(0xff222222));
-  if (selectedIndex < 0) {
+  if (selectedLayoutIndex < 0 && selectedMappingIndex < 0) {
     g.setColour(juce::Colours::grey);
     g.setFont(14.0f);
     g.drawText("Select a strip from the list.", getLocalBounds(),

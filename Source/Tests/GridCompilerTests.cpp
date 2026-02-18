@@ -1,6 +1,7 @@
 #include "../ChordUtilities.h"
 #include "../DeviceManager.h"
 #include "../GridCompiler.h"
+#include "../MappingDefaults.h"
 #include "../MappingTypes.h"
 #include "../PresetManager.h"
 #include "../ScaleLibrary.h"
@@ -198,6 +199,27 @@ protected:
     m.setProperty("data1", 60, nullptr);
     m.setProperty("data2", 127, nullptr);
     mappings.addChild(m, -1, nullptr);
+  }
+
+  // Helper to create a TouchpadMappingConfig for Touchpad tab tests
+  TouchpadMappingConfig makeTouchpadTabMapping(int layerId, int eventId,
+                                                const juce::String &typeStr = "Note",
+                                                const juce::String &releaseBehavior = "Send Note Off",
+                                                bool enabled = true) {
+    TouchpadMappingConfig cfg;
+    cfg.name = "Test Mapping";
+    cfg.layerId = layerId;
+    juce::ValueTree m("Mapping");
+    m.setProperty("inputAlias", "Touchpad", nullptr);
+    m.setProperty("inputTouchpadEvent", eventId, nullptr);
+    m.setProperty("type", typeStr, nullptr);
+    m.setProperty("releaseBehavior", releaseBehavior, nullptr);
+    m.setProperty("channel", 1, nullptr);
+    m.setProperty("data1", 60, nullptr);
+    m.setProperty("data2", 127, nullptr);
+    m.setProperty("enabled", enabled, nullptr);
+    cfg.mapping = m;
+    return cfg;
   }
 };
 
@@ -826,6 +848,35 @@ TEST_F(GridCompilerTest, ExpressionCustomEnvelopeReadsAdsr) {
   EXPECT_EQ(slot.action.adsrSettings.releaseMs, 200);
 }
 
+// Centralized defaults: Expression with useCustomEnvelope but no ADSR
+// properties compiles to MappingDefaults ADSR values.
+TEST_F(GridCompilerTest, ExpressionOmittedAdsrUsesMappingDefaults) {
+  auto mappings = presetMgr.getMappingsListForLayer(0);
+  juce::ValueTree m("Mapping");
+  m.setProperty("inputKey", 54, nullptr);
+  m.setProperty("deviceHash",
+                juce::String::toHexString((juce::int64)0).toUpperCase(),
+                nullptr);
+  m.setProperty("type", "Expression", nullptr);
+  m.setProperty("useCustomEnvelope", true, nullptr);
+  m.setProperty("adsrTarget", "CC", nullptr);
+  // Omit adsrAttack, adsrDecay, adsrSustain, adsrRelease
+  m.setProperty("layerID", 0, nullptr);
+  mappings.addChild(m, -1, nullptr);
+
+  auto context = GridCompiler::compile(presetMgr, deviceMgr, zoneMgr,
+                                       touchpadMixerMgr, settingsMgr);
+  const auto &slot = (*context->globalGrids[0])[54];
+
+  ASSERT_TRUE(slot.isActive);
+  EXPECT_EQ(slot.action.type, ActionType::Expression);
+  EXPECT_EQ(slot.action.adsrSettings.attackMs, MappingDefaults::ADSRAttackMs);
+  EXPECT_EQ(slot.action.adsrSettings.decayMs, MappingDefaults::ADSRDecayMs);
+  EXPECT_FLOAT_EQ(slot.action.adsrSettings.sustainLevel,
+                  static_cast<float>(MappingDefaults::ADSRSustain));
+  EXPECT_EQ(slot.action.adsrSettings.releaseMs, MappingDefaults::ADSRReleaseMs);
+}
+
 // Expression: value when on/off compiled from touchpadValueWhenOn/Off (keyboard
 // and touchpad)
 TEST_F(GridCompilerTest, ExpressionValueWhenOnOffCompiled) {
@@ -1023,9 +1074,10 @@ TEST_F(GridCompilerTest, SmartScaleBendScalesWithPitchBendRange) {
   EXPECT_EQ(c4Pb, expected) << "C4 +1 step with PB range 6 = 1/3 of full bend";
 }
 
-// --- Touchpad mapping compilation (recent touchpad feature) ---
+// --- Touchpad mapping compilation (Touchpad tab is single source of truth) ---
 TEST_F(GridCompilerTest, TouchpadMappingCompiledIntoContext) {
-  addTouchpadMapping(0, TouchpadEvent::Finger1Down, "Note");
+  touchpadMixerMgr.addTouchpadMapping(
+      makeTouchpadTabMapping(0, TouchpadEvent::Finger1Down, "Note"));
 
   auto context = GridCompiler::compile(presetMgr, deviceMgr, zoneMgr,
                                        touchpadMixerMgr, settingsMgr);
@@ -1040,8 +1092,8 @@ TEST_F(GridCompilerTest, TouchpadMappingCompiledIntoContext) {
 }
 
 TEST_F(GridCompilerTest, TouchpadNoteReleaseBehaviorApplied) {
-  addTouchpadMapping(0, TouchpadEvent::Finger1Down, "Note",
-                     "Sustain until retrigger", true);
+  touchpadMixerMgr.addTouchpadMapping(makeTouchpadTabMapping(
+      0, TouchpadEvent::Finger1Down, "Note", "Sustain until retrigger", true));
 
   auto context = GridCompiler::compile(presetMgr, deviceMgr, zoneMgr,
                                        touchpadMixerMgr, settingsMgr);
@@ -1052,8 +1104,9 @@ TEST_F(GridCompilerTest, TouchpadNoteReleaseBehaviorApplied) {
 }
 
 TEST_F(GridCompilerTest, TouchpadNoteAlwaysLatchApplied) {
-  addTouchpadMapping(0, TouchpadEvent::Finger2Down, "Note", "Always Latch",
-                     true);
+  touchpadMixerMgr.addTouchpadMapping(
+      makeTouchpadTabMapping(0, TouchpadEvent::Finger2Down, "Note",
+                             "Always Latch", true));
 
   auto context = GridCompiler::compile(presetMgr, deviceMgr, zoneMgr,
                                        touchpadMixerMgr, settingsMgr);
@@ -1064,7 +1117,8 @@ TEST_F(GridCompilerTest, TouchpadNoteAlwaysLatchApplied) {
 }
 
 TEST_F(GridCompilerTest, TouchpadContinuousEventCompiledAsContinuousToGate) {
-  addTouchpadMapping(0, TouchpadEvent::Finger1X, "Note"); // continuous event
+  touchpadMixerMgr.addTouchpadMapping(
+      makeTouchpadTabMapping(0, TouchpadEvent::Finger1X, "Note"));
 
   auto context = GridCompiler::compile(presetMgr, deviceMgr, zoneMgr,
                                        touchpadMixerMgr, settingsMgr);
@@ -1075,13 +1129,14 @@ TEST_F(GridCompilerTest, TouchpadContinuousEventCompiledAsContinuousToGate) {
 }
 
 TEST_F(GridCompilerTest, TouchpadPitchPadConfigCompiledForPitchBend) {
-  auto mappings = presetMgr.getMappingsListForLayer(0);
+  TouchpadMappingConfig touchpadCfg;
+  touchpadCfg.name = "Pitch Pad";
+  touchpadCfg.layerId = 0;
   juce::ValueTree m("Mapping");
   m.setProperty("inputAlias", "Touchpad", nullptr);
   m.setProperty("inputTouchpadEvent", TouchpadEvent::Finger1X, nullptr);
   m.setProperty("type", "Expression", nullptr);
   m.setProperty("adsrTarget", "PitchBend", nullptr);
-  m.setProperty("layerID", 0, nullptr);
   m.setProperty("channel", 1, nullptr);
   m.setProperty("touchpadInputMin", 0.0, nullptr);
   m.setProperty("touchpadInputMax", 1.0, nullptr);
@@ -1089,7 +1144,8 @@ TEST_F(GridCompilerTest, TouchpadPitchPadConfigCompiledForPitchBend) {
   m.setProperty("touchpadOutputMax", 2, nullptr);
   m.setProperty("pitchPadRestingPercent", 15.0, nullptr);
   m.setProperty("pitchPadMode", "Relative", nullptr);
-  mappings.addChild(m, -1, nullptr);
+  touchpadCfg.mapping = m;
+  touchpadMixerMgr.addTouchpadMapping(touchpadCfg);
 
   auto context = GridCompiler::compile(presetMgr, deviceMgr, zoneMgr,
                                        touchpadMixerMgr, settingsMgr);
@@ -1109,13 +1165,14 @@ TEST_F(GridCompilerTest, TouchpadPitchPadConfigCompiledForPitchBend) {
 }
 
 TEST_F(GridCompilerTest, TouchpadPitchPadHonoursResetPitchFlag) {
-  auto mappings = presetMgr.getMappingsListForLayer(0);
+  TouchpadMappingConfig touchpadCfg;
+  touchpadCfg.name = "Pitch Pad No Reset";
+  touchpadCfg.layerId = 0;
   juce::ValueTree m("Mapping");
   m.setProperty("inputAlias", "Touchpad", nullptr);
   m.setProperty("inputTouchpadEvent", TouchpadEvent::Finger1X, nullptr);
   m.setProperty("type", "Expression", nullptr);
   m.setProperty("adsrTarget", "PitchBend", nullptr);
-  m.setProperty("layerID", 0, nullptr);
   m.setProperty("channel", 1, nullptr);
   m.setProperty("touchpadInputMin", 0.0, nullptr);
   m.setProperty("touchpadInputMax", 1.0, nullptr);
@@ -1123,7 +1180,8 @@ TEST_F(GridCompilerTest, TouchpadPitchPadHonoursResetPitchFlag) {
   m.setProperty("touchpadOutputMax", 2, nullptr);
   m.setProperty("pitchPadRestingPercent", 10.0, nullptr);
   m.setProperty("sendReleaseValue", false, nullptr);
-  mappings.addChild(m, -1, nullptr);
+  touchpadCfg.mapping = m;
+  touchpadMixerMgr.addTouchpadMapping(touchpadCfg);
 
   auto context = GridCompiler::compile(presetMgr, deviceMgr, zoneMgr,
                                        touchpadMixerMgr, settingsMgr);
@@ -1694,4 +1752,276 @@ TEST_F(GridCompilerTest, TouchpadMixerManagerDrumPadTypePersistence) {
   restored.restoreFromValueTree(vt);
   EXPECT_EQ(restored.getLayouts().size(), 1u);
   EXPECT_EQ(restored.getLayouts()[0].type, TouchpadType::DrumPad);
+}
+
+TEST_F(GridCompilerTest, TouchpadMixerManagerTouchpadMappingsRoundTrip) {
+  // Arrange: create a simple touchpad mapping config with an underlying
+  // Mapping ValueTree.
+  TouchpadMappingConfig cfg;
+  cfg.name = "Tap Note";
+  cfg.layerId = 2;
+  cfg.layoutGroupId = 5;
+  cfg.region.left = 0.1f;
+  cfg.region.top = 0.2f;
+  cfg.region.right = 0.9f;
+  cfg.region.bottom = 0.8f;
+  cfg.zIndex = 7;
+  cfg.regionLock = true;
+
+  juce::ValueTree m("Mapping");
+  m.setProperty("inputAlias", "Touchpad", nullptr);
+  m.setProperty("inputTouchpadEvent", TouchpadEvent::Finger1Down, nullptr);
+  m.setProperty("type", "Note", nullptr);
+  m.setProperty("layerID", cfg.layerId, nullptr);
+  m.setProperty("channel", 1, nullptr);
+  m.setProperty("data1", 60, nullptr);
+  m.setProperty("data2", 100, nullptr);
+  cfg.mapping = m;
+
+  touchpadMixerMgr.addTouchpadMapping(cfg);
+
+  // Act: serialize and restore via ValueTree.
+  juce::ValueTree vt = touchpadMixerMgr.toValueTree();
+  TouchpadMixerManager restored;
+  restored.restoreFromValueTree(vt);
+
+  auto mappings = restored.getTouchpadMappings();
+  ASSERT_EQ(mappings.size(), 1u);
+  const auto &r = mappings[0];
+  EXPECT_EQ(r.name, "Tap Note");
+  EXPECT_EQ(r.layerId, 2);
+  EXPECT_EQ(r.layoutGroupId, 5);
+  EXPECT_FLOAT_EQ(r.region.left, 0.1f);
+  EXPECT_FLOAT_EQ(r.region.top, 0.2f);
+  EXPECT_FLOAT_EQ(r.region.right, 0.9f);
+  EXPECT_FLOAT_EQ(r.region.bottom, 0.8f);
+  EXPECT_EQ(r.zIndex, 7);
+  EXPECT_TRUE(r.regionLock);
+  ASSERT_TRUE(r.mapping.isValid());
+  EXPECT_EQ(r.mapping.getType().toString(), "Mapping");
+  EXPECT_EQ((int)r.mapping.getProperty("inputTouchpadEvent", -1),
+            TouchpadEvent::Finger1Down);
+  EXPECT_EQ(r.mapping.getProperty("type", juce::var()).toString(), "Note");
+}
+
+TEST_F(GridCompilerTest, TouchpadMixerTouchpadMappingsCompiledIntoContext) {
+  // Arrange: create a touchpad mapping in TouchpadMixerManager only (no preset
+  // mappings) and ensure it ends up in ctx->touchpadMappings. Channel comes
+  // from header (midiChannel).
+  TouchpadMappingConfig cfg;
+  cfg.name = "Finger1Down Note";
+  cfg.layerId = 1;
+  cfg.midiChannel = 2;
+
+  juce::ValueTree m("Mapping");
+  m.setProperty("inputAlias", "Touchpad", nullptr);
+  m.setProperty("inputTouchpadEvent", TouchpadEvent::Finger1Down, nullptr);
+  m.setProperty("type", "Note", nullptr);
+  m.setProperty("layerID", cfg.layerId, nullptr);
+  m.setProperty("data1", 64, nullptr);
+  m.setProperty("data2", 110, nullptr);
+  cfg.mapping = m;
+
+  touchpadMixerMgr.addTouchpadMapping(cfg);
+
+  // Act
+  auto context = GridCompiler::compile(presetMgr, deviceMgr, zoneMgr,
+                                       touchpadMixerMgr, settingsMgr);
+
+  // Assert
+  ASSERT_FALSE(context->touchpadMappings.empty());
+  const auto &entry = context->touchpadMappings.back();
+  EXPECT_EQ(entry.layerId, 1);
+  EXPECT_EQ(entry.eventId, TouchpadEvent::Finger1Down);
+  EXPECT_EQ(entry.action.type, ActionType::Note);
+  EXPECT_EQ(entry.action.channel, 2);
+  EXPECT_EQ(entry.action.data1, 64);
+  EXPECT_EQ(entry.action.data2, 110);
+}
+
+// --- Touchpad Tab touchpad mapping compilation tests ---
+TEST_F(GridCompilerTest, TouchpadTab_TouchpadNoteReleaseBehaviorApplied) {
+  TouchpadMappingConfig cfg = makeTouchpadTabMapping(0, TouchpadEvent::Finger1Down,
+                                                     "Note", "Sustain until retrigger");
+  touchpadMixerMgr.addTouchpadMapping(cfg);
+
+  auto context = GridCompiler::compile(presetMgr, deviceMgr, zoneMgr,
+                                       touchpadMixerMgr, settingsMgr);
+
+  ASSERT_EQ(context->touchpadMappings.size(), 1u);
+  EXPECT_EQ(context->touchpadMappings.front().action.releaseBehavior,
+            NoteReleaseBehavior::SustainUntilRetrigger);
+}
+
+TEST_F(GridCompilerTest, TouchpadTab_TouchpadNoteAlwaysLatchApplied) {
+  TouchpadMappingConfig cfg = makeTouchpadTabMapping(0, TouchpadEvent::Finger2Down,
+                                                      "Note", "Always Latch");
+  touchpadMixerMgr.addTouchpadMapping(cfg);
+
+  auto context = GridCompiler::compile(presetMgr, deviceMgr, zoneMgr,
+                                       touchpadMixerMgr, settingsMgr);
+
+  ASSERT_EQ(context->touchpadMappings.size(), 1u);
+  EXPECT_EQ(context->touchpadMappings.front().action.releaseBehavior,
+            NoteReleaseBehavior::AlwaysLatch);
+}
+
+TEST_F(GridCompilerTest, TouchpadTab_TouchpadContinuousEventCompiledAsContinuousToGate) {
+  TouchpadMappingConfig cfg = makeTouchpadTabMapping(0, TouchpadEvent::Finger1X, "Note");
+  touchpadMixerMgr.addTouchpadMapping(cfg);
+
+  auto context = GridCompiler::compile(presetMgr, deviceMgr, zoneMgr,
+                                       touchpadMixerMgr, settingsMgr);
+
+  ASSERT_EQ(context->touchpadMappings.size(), 1u);
+  EXPECT_EQ(context->touchpadMappings.front().conversionKind,
+            TouchpadConversionKind::ContinuousToGate);
+}
+
+TEST_F(GridCompilerTest, TouchpadTab_TouchpadPitchPadConfigCompiledForPitchBend) {
+  TouchpadMappingConfig cfg;
+  cfg.name = "Pitch Pad";
+  cfg.layerId = 0;
+  juce::ValueTree m("Mapping");
+  m.setProperty("inputAlias", "Touchpad", nullptr);
+  m.setProperty("inputTouchpadEvent", TouchpadEvent::Finger1X, nullptr);
+  m.setProperty("type", "Expression", nullptr);
+  m.setProperty("adsrTarget", "PitchBend", nullptr);
+  m.setProperty("channel", 1, nullptr);
+  m.setProperty("touchpadInputMin", 0.0, nullptr);
+  m.setProperty("touchpadInputMax", 1.0, nullptr);
+  m.setProperty("touchpadOutputMin", -2, nullptr);
+  m.setProperty("touchpadOutputMax", 2, nullptr);
+  m.setProperty("pitchPadRestingPercent", 15.0, nullptr);
+  m.setProperty("pitchPadMode", "Relative", nullptr);
+  cfg.mapping = m;
+  touchpadMixerMgr.addTouchpadMapping(cfg);
+
+  auto context = GridCompiler::compile(presetMgr, deviceMgr, zoneMgr,
+                                       touchpadMixerMgr, settingsMgr);
+
+  ASSERT_EQ(context->touchpadMappings.size(), 1u);
+  const auto &entry = context->touchpadMappings.front();
+  EXPECT_EQ(entry.conversionKind, TouchpadConversionKind::ContinuousToRange);
+  ASSERT_TRUE(entry.conversionParams.pitchPadConfig.has_value());
+  const auto &pitchCfg = *entry.conversionParams.pitchPadConfig;
+  EXPECT_EQ(pitchCfg.minStep, -2);
+  EXPECT_EQ(pitchCfg.maxStep, 2);
+  EXPECT_NEAR(pitchCfg.restingSpacePercent, 15.0f, 0.001f);
+  EXPECT_EQ(pitchCfg.mode, PitchPadMode::Relative);
+  EXPECT_TRUE(entry.action.sendReleaseValue)
+      << "Pitch-bend touchpad expression should default to resetting PB on release";
+}
+
+TEST_F(GridCompilerTest, TouchpadTab_TouchpadPitchPadHonoursResetPitchFlag) {
+  TouchpadMappingConfig cfg;
+  cfg.name = "Pitch Pad No Reset";
+  cfg.layerId = 0;
+  juce::ValueTree m("Mapping");
+  m.setProperty("inputAlias", "Touchpad", nullptr);
+  m.setProperty("inputTouchpadEvent", TouchpadEvent::Finger1X, nullptr);
+  m.setProperty("type", "Expression", nullptr);
+  m.setProperty("adsrTarget", "PitchBend", nullptr);
+  m.setProperty("channel", 1, nullptr);
+  m.setProperty("touchpadInputMin", 0.0, nullptr);
+  m.setProperty("touchpadInputMax", 1.0, nullptr);
+  m.setProperty("touchpadOutputMin", -2, nullptr);
+  m.setProperty("touchpadOutputMax", 2, nullptr);
+  m.setProperty("pitchPadRestingPercent", 10.0, nullptr);
+  m.setProperty("sendReleaseValue", false, nullptr);
+  cfg.mapping = m;
+  touchpadMixerMgr.addTouchpadMapping(cfg);
+
+  auto context = GridCompiler::compile(presetMgr, deviceMgr, zoneMgr,
+                                       touchpadMixerMgr, settingsMgr);
+  ASSERT_EQ(context->touchpadMappings.size(), 1u);
+  const auto &entry = context->touchpadMappings.front();
+  EXPECT_FALSE(entry.action.sendReleaseValue)
+      << "sendReleaseValue should reflect mapping property for touchpad expression PB";
+}
+
+// Expression CC: channel comes from header (cfg.midiChannel), not mapping
+TEST_F(GridCompilerTest, TouchpadTab_ExpressionCC_ChannelFromHeader) {
+  TouchpadMappingConfig cfg;
+  cfg.name = "CC From Header";
+  cfg.layerId = 0;
+  cfg.midiChannel = 5;
+  juce::ValueTree m("Mapping");
+  m.setProperty("inputAlias", "Touchpad", nullptr);
+  m.setProperty("inputTouchpadEvent", TouchpadEvent::Finger1Down, nullptr);
+  m.setProperty("type", "Expression", nullptr);
+  m.setProperty("adsrTarget", "CC", nullptr);
+  m.setProperty("data1", 7, nullptr);
+  m.setProperty("touchpadValueWhenOn", 127, nullptr);
+  m.setProperty("touchpadValueWhenOff", 127, nullptr);
+  cfg.mapping = m;
+  touchpadMixerMgr.addTouchpadMapping(cfg);
+
+  auto context = GridCompiler::compile(presetMgr, deviceMgr, zoneMgr,
+                                       touchpadMixerMgr, settingsMgr);
+  ASSERT_EQ(context->touchpadMappings.size(), 1u);
+  const auto &entry = context->touchpadMappings.front();
+  EXPECT_EQ(entry.action.channel, 5) << "Channel must come from header midiChannel";
+}
+
+// Expression CC: value when off always sent on release; default 127
+TEST_F(GridCompilerTest, TouchpadTab_ExpressionCC_ValueWhenOffSentOnRelease) {
+  TouchpadMappingConfig cfg;
+  cfg.layerId = 0;
+  cfg.midiChannel = 1;
+  juce::ValueTree m("Mapping");
+  m.setProperty("inputAlias", "Touchpad", nullptr);
+  m.setProperty("inputTouchpadEvent", TouchpadEvent::Finger1Down, nullptr);
+  m.setProperty("type", "Expression", nullptr);
+  m.setProperty("adsrTarget", "CC", nullptr);
+  m.setProperty("data1", 11, nullptr);
+  m.setProperty("touchpadValueWhenOn", 100, nullptr);
+  m.setProperty("touchpadValueWhenOff", 20, nullptr);
+  cfg.mapping = m;
+  touchpadMixerMgr.addTouchpadMapping(cfg);
+
+  auto context = GridCompiler::compile(presetMgr, deviceMgr, zoneMgr,
+                                       touchpadMixerMgr, settingsMgr);
+  ASSERT_EQ(context->touchpadMappings.size(), 1u);
+  const auto &entry = context->touchpadMappings.front();
+  EXPECT_TRUE(entry.action.sendReleaseValue)
+      << "CC Expression must always send value when off on release";
+  EXPECT_EQ(entry.action.releaseValue, 20);
+  EXPECT_EQ(entry.conversionParams.valueWhenOff, 20);
+}
+
+// Expression CC: default value when off is 127 when property not set
+TEST_F(GridCompilerTest, TouchpadTab_ExpressionCC_DefaultValueWhenOff127) {
+  TouchpadMappingConfig cfg;
+  cfg.layerId = 0;
+  cfg.midiChannel = 1;
+  juce::ValueTree m("Mapping");
+  m.setProperty("inputAlias", "Touchpad", nullptr);
+  m.setProperty("inputTouchpadEvent", TouchpadEvent::Finger1Down, nullptr);
+  m.setProperty("type", "Expression", nullptr);
+  m.setProperty("adsrTarget", "CC", nullptr);
+  m.setProperty("data1", 1, nullptr);
+  m.setProperty("touchpadValueWhenOn", 127, nullptr);
+  // do not set touchpadValueWhenOff
+  cfg.mapping = m;
+  touchpadMixerMgr.addTouchpadMapping(cfg);
+
+  auto context = GridCompiler::compile(presetMgr, deviceMgr, zoneMgr,
+                                       touchpadMixerMgr, settingsMgr);
+  ASSERT_EQ(context->touchpadMappings.size(), 1u);
+  const auto &entry = context->touchpadMappings.front();
+  EXPECT_EQ(entry.action.releaseValue, 127);
+  EXPECT_EQ(entry.conversionParams.valueWhenOff, 127);
+  EXPECT_EQ(entry.action.adsrSettings.valueWhenOff, 127);
+}
+
+TEST_F(GridCompilerTest, TouchpadTab_DisabledTouchpadMappingNotInContext) {
+  TouchpadMappingConfig cfg = makeTouchpadTabMapping(0, TouchpadEvent::Finger1Down,
+                                                     "Note", "Send Note Off", false);
+  touchpadMixerMgr.addTouchpadMapping(cfg);
+
+  auto context = GridCompiler::compile(presetMgr, deviceMgr, zoneMgr,
+                                       touchpadMixerMgr, settingsMgr);
+  EXPECT_EQ(context->touchpadMappings.size(), 0u)
+      << "Disabled touchpad mapping should not be in context";
 }

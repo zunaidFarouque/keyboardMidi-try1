@@ -18,6 +18,18 @@ public:
     return layouts_;
   }
 
+  // Touchpad-tab-specific mappings ------------------------------------------------
+  // These mappings are independent of the main Mappings tab but reuse the same
+  // Mapping engine semantics (ValueTree schema, compiler, runtime).
+  void addTouchpadMapping(const TouchpadMappingConfig &config);
+  void removeTouchpadMapping(int index);
+  void updateTouchpadMapping(int index, const TouchpadMappingConfig &config);
+
+  std::vector<TouchpadMappingConfig> getTouchpadMappings() const {
+    juce::ScopedReadLock lock(lock_);
+    return touchpadMappings_;
+  }
+
   // Layout group registry ----------------------------------------------------
   // Explicit list of named groups. Layouts refer to groups by ID.
   std::vector<TouchpadLayoutGroup> getGroups() const;
@@ -36,6 +48,7 @@ private:
   mutable juce::ReadWriteLock lock_;
   std::vector<TouchpadMixerConfig> layouts_;
   std::vector<TouchpadLayoutGroup> groups_;
+  std::vector<TouchpadMappingConfig> touchpadMappings_;
 
   JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(TouchpadMixerManager)
 };

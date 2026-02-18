@@ -25,6 +25,12 @@ enum class NoteReleaseBehavior {
   AlwaysLatch            // Always latch on release (ignores global latch mode)
 };
 
+// Touchpad Note hold behavior: controls what happens while finger is held down
+enum class TouchpadHoldBehavior {
+  HoldToNotSendNoteOffImmediately, // Note stays on while finger is down (default)
+  IgnoreSendNoteOffImmediately     // Send note off immediately after note on (one-shot)
+};
+
 // Polyphony modes (Phase 26)
 enum class PolyphonyMode {
   Poly,  // Polyphonic (multiple notes simultaneously)
@@ -138,6 +144,10 @@ struct MidiAction {
 
   // Phase 55.4: Note options (releaseBehavior replaces legacy isOneShot)
   NoteReleaseBehavior releaseBehavior = NoteReleaseBehavior::SendNoteOff;
+
+  // Touchpad Note hold behavior: controls what happens while finger is held down
+  TouchpadHoldBehavior touchpadHoldBehavior =
+      TouchpadHoldBehavior::HoldToNotSendNoteOffImmediately;
 
   // Phase 55.4: CC options
   bool sendReleaseValue =

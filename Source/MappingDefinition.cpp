@@ -1,4 +1,67 @@
 #include "MappingDefinition.h"
+#include "MappingDefaults.h"
+#include <unordered_map>
+
+namespace {
+const std::unordered_map<juce::String, juce::var> &getDefaultsMap() {
+  using namespace MappingDefaults;
+  static std::unordered_map<juce::String, juce::var> map;
+  if (map.empty()) {
+    map["enabled"] = juce::var(Enabled);
+    map["channel"] = juce::var(Channel);
+    map["data1"] = juce::var(Data1);
+    map["data2"] = juce::var(Data2);
+    map["velRandom"] = juce::var(VelRandom);
+    map["releaseBehavior"] = juce::var(ReleaseBehaviorSendNoteOff);
+    map["touchpadHoldBehavior"] = juce::var(TouchpadHoldBehaviorHold);
+    map["adsrTarget"] = juce::var(AdsrTargetCC);
+    map["adsrAttack"] = juce::var(ADSRAttackMs);
+    map["adsrDecay"] = juce::var(ADSRDecayMs);
+    map["adsrSustain"] = juce::var(ADSRSustain);
+    map["adsrRelease"] = juce::var(ADSRReleaseMs);
+    map["touchpadValueWhenOn"] = juce::var(TouchpadValueWhenOn);
+    map["touchpadValueWhenOff"] = juce::var(TouchpadValueWhenOff);
+    map["inputTouchpadEvent"] = juce::var(InputTouchpadEvent);
+    map["releaseValue"] = juce::var(ReleaseValue);
+    map["touchpadLayoutGroupId"] = juce::var(TouchpadLayoutGroupId);
+    map["touchpadSoloScope"] = juce::var(TouchpadSoloScope);
+    map["touchpadThreshold"] = juce::var(static_cast<double>(TouchpadThreshold));
+    map["touchpadTriggerAbove"] = juce::var(TouchpadTriggerAbove);
+    map["touchpadInputMin"] = juce::var(static_cast<double>(TouchpadInputMin));
+    map["touchpadInputMax"] = juce::var(static_cast<double>(TouchpadInputMax));
+    map["touchpadOutputMin"] = juce::var(TouchpadOutputMin);
+    map["touchpadOutputMax"] = juce::var(TouchpadOutputMax);
+    map["pitchPadCustomStart"] = juce::var(static_cast<double>(PitchPadCustomStart));
+    map["pitchPadRestingPercent"] = juce::var(static_cast<double>(PitchPadRestingPercent));
+    map["transposeModify"] = juce::var(TransposeModify);
+    map["transposeSemitones"] = juce::var(TransposeSemitones);
+    map["rootModify"] = juce::var(RootModify);
+    map["rootNote"] = juce::var(RootNote);
+    map["scaleModify"] = juce::var(ScaleModify);
+    map["scaleIndex"] = juce::var(ScaleIndex);
+    map["smartStepShift"] = juce::var(SmartStepShift);
+    map["inputKey"] = juce::var(InputKey);
+  }
+  return map;
+}
+
+void setControlDefaultFromMap(InspectorControl &c) {
+  if (c.propertyId.isEmpty())
+    return;
+  juce::var d = MappingDefinition::getDefaultValue(c.propertyId);
+  if (!d.isVoid())
+    c.defaultValue = d;
+}
+} // namespace
+
+juce::var MappingDefinition::getDefaultValue(juce::StringRef propertyId) {
+  const auto &map = getDefaultsMap();
+  const juce::String key(propertyId);
+  auto it = map.find(key);
+  if (it != map.end())
+    return it->second;
+  return juce::var();
+}
 
 juce::String MappingDefinition::getTypeName(ActionType type) {
   switch (type) {
@@ -54,22 +117,26 @@ InspectorControl MappingDefinition::createSeparator(const juce::String &label,
 }
 
 bool MappingDefinition::isMappingEnabled(const juce::ValueTree &mapping) {
-  return mapping.getProperty("enabled", true);
+  return mapping.getProperty("enabled", MappingDefaults::Enabled);
 }
 
 InspectorSchema MappingDefinition::getSchema(const juce::ValueTree &mapping,
-                                             int pitchBendRange) {
+                                             int pitchBendRange,
+                                             bool forTouchpadEditor) {
   InspectorSchema schema;
 
-  // Enabled: mapping can be turned off without deleting
-  InspectorControl enabledCtrl;
-  enabledCtrl.propertyId = "enabled";
-  enabledCtrl.label = "Enabled";
-  enabledCtrl.controlType = InspectorControl::Type::Toggle;
-  enabledCtrl.widthWeight = 0.5f;
-  schema.push_back(enabledCtrl);
-
-  schema.push_back(createSeparator("", juce::Justification::centred));
+  // Enabled: mapping can be turned off without deleting (omit when in touchpad
+  // header)
+  if (!forTouchpadEditor) {
+    InspectorControl enabledCtrl;
+    enabledCtrl.propertyId = "enabled";
+    enabledCtrl.label = "Enabled";
+    enabledCtrl.controlType = InspectorControl::Type::Toggle;
+    enabledCtrl.widthWeight = 0.5f;
+    setControlDefaultFromMap(enabledCtrl);
+    schema.push_back(enabledCtrl);
+    schema.push_back(createSeparator("", juce::Justification::centred));
+  }
 
   // Step 1: Common control – Type selector (ComboBox)
   InspectorControl typeCtrl;
@@ -79,6 +146,7 @@ InspectorSchema MappingDefinition::getSchema(const juce::ValueTree &mapping,
   typeCtrl.options[1] = "Note";
   typeCtrl.options[2] = "Expression";
   typeCtrl.options[3] = "Command";
+  setControlDefaultFromMap(typeCtrl);
   schema.push_back(typeCtrl);
 
   schema.push_back(createSeparator("", juce::Justification::centred));
@@ -87,16 +155,19 @@ InspectorSchema MappingDefinition::getSchema(const juce::ValueTree &mapping,
   juce::String typeStr = mapping.getProperty("type", "Note").toString().trim();
 
   if (typeStr.equalsIgnoreCase("Note")) {
-    // Channel: Slider 1–16
-    InspectorControl ch;
-    ch.propertyId = "channel";
-    ch.label = "Channel";
-    ch.controlType = InspectorControl::Type::Slider;
-    ch.min = 1.0;
-    ch.max = 16.0;
-    ch.step = 1.0;
-    ch.valueFormat = InspectorControl::Format::Integer;
-    schema.push_back(ch);
+    // Channel: Slider 1–16 (omit when in touchpad header)
+    if (!forTouchpadEditor) {
+      InspectorControl ch;
+      ch.propertyId = "channel";
+      ch.label = "Channel";
+      ch.controlType = InspectorControl::Type::Slider;
+      ch.min = 1.0;
+      ch.max = 16.0;
+      ch.step = 1.0;
+      ch.valueFormat = InspectorControl::Format::Integer;
+      setControlDefaultFromMap(ch);
+      schema.push_back(ch);
+    }
 
     // Data1 (Pitch): Slider 0–127, Label "Note", Format NoteName
     InspectorControl data1;
@@ -107,6 +178,7 @@ InspectorSchema MappingDefinition::getSchema(const juce::ValueTree &mapping,
     data1.max = 127.0;
     data1.step = 1.0;
     data1.valueFormat = InspectorControl::Format::NoteName;
+    setControlDefaultFromMap(data1);
     schema.push_back(data1);
 
     // Data2 (Velocity): Slider 0–127
@@ -118,6 +190,7 @@ InspectorSchema MappingDefinition::getSchema(const juce::ValueTree &mapping,
     data2.max = 127.0;
     data2.step = 1.0;
     data2.valueFormat = InspectorControl::Format::Integer;
+    setControlDefaultFromMap(data2);
     schema.push_back(data2);
 
     // Vel Random +/-: Slider 0–64
@@ -129,6 +202,7 @@ InspectorSchema MappingDefinition::getSchema(const juce::ValueTree &mapping,
     velRand.max = 64.0;
     velRand.step = 1.0;
     velRand.valueFormat = InspectorControl::Format::Integer;
+    setControlDefaultFromMap(velRand);
     schema.push_back(velRand);
 
     // Phase 55.9: Explicit separator before Note Settings
@@ -142,17 +216,42 @@ InspectorSchema MappingDefinition::getSchema(const juce::ValueTree &mapping,
     releaseBehavior.options[1] = "Send Note Off";
     releaseBehavior.options[2] = "Sustain until retrigger";
     releaseBehavior.options[3] = "Always Latch";
+    setControlDefaultFromMap(releaseBehavior);
     schema.push_back(releaseBehavior);
+
+    // Touchpad-specific: Hold behavior dropdown (only for touchpad Note mappings)
+    juce::String inputAlias =
+        mapping.getProperty("inputAlias", "").toString().trim();
+    bool isTouchpadMapping =
+        inputAlias.equalsIgnoreCase("Touchpad");
+    if (isTouchpadMapping) {
+      InspectorControl holdBehavior;
+      holdBehavior.propertyId = "touchpadHoldBehavior";
+      holdBehavior.label = "Hold behaviour";
+      holdBehavior.controlType = InspectorControl::Type::ComboBox;
+      holdBehavior.options[1] = "Hold to not send note off immediately";
+      holdBehavior.options[2] = "Ignore, send note off immediately";
+      setControlDefaultFromMap(holdBehavior);
+      schema.push_back(holdBehavior);
+    }
 
     InspectorControl followTranspose;
     followTranspose.propertyId = "followTranspose";
     followTranspose.label = "Follow Global Transpose";
     followTranspose.controlType = InspectorControl::Type::Toggle;
     followTranspose.widthWeight = 0.5f;
+    setControlDefaultFromMap(followTranspose);
     schema.push_back(followTranspose);
   } else if (typeStr.equalsIgnoreCase("Expression")) {
-    juce::String adsrTargetStr =
-        mapping.getProperty("adsrTarget", "CC").toString().trim();
+    juce::var adsrTargetVar = mapping.getProperty("adsrTarget", "CC");
+    juce::String adsrTargetStr = adsrTargetVar.toString().trim();
+    // Accept legacy integer combo IDs (1=CC, 2=PitchBend, 3=SmartScaleBend)
+    if (adsrTargetVar.isInt()) {
+      int id = (int)adsrTargetVar;
+      if (id == 1) adsrTargetStr = "CC";
+      else if (id == 2) adsrTargetStr = "PitchBend";
+      else if (id == 3) adsrTargetStr = "SmartScaleBend";
+    }
     bool useCustomEnvelope =
         (bool)mapping.getProperty("useCustomEnvelope", false);
     bool isPitchOrSmart = adsrTargetStr.equalsIgnoreCase("PitchBend") ||
@@ -162,15 +261,19 @@ InspectorSchema MappingDefinition::getSchema(const juce::ValueTree &mapping,
     schema.push_back(
         createSeparator("Expression", juce::Justification::centredLeft));
 
-    InspectorControl ch;
-    ch.propertyId = "channel";
-    ch.label = "Channel";
-    ch.controlType = InspectorControl::Type::Slider;
-    ch.min = 1.0;
-    ch.max = 16.0;
-    ch.step = 1.0;
-    ch.valueFormat = InspectorControl::Format::Integer;
-    schema.push_back(ch);
+    // Channel (omit when in touchpad header)
+    if (!forTouchpadEditor) {
+      InspectorControl ch;
+      ch.propertyId = "channel";
+      ch.label = "Channel";
+      ch.controlType = InspectorControl::Type::Slider;
+      ch.min = 1.0;
+      ch.max = 16.0;
+      ch.step = 1.0;
+      ch.valueFormat = InspectorControl::Format::Integer;
+      setControlDefaultFromMap(ch);
+      schema.push_back(ch);
+    }
 
     InspectorControl target;
     target.propertyId = "adsrTarget";
@@ -179,6 +282,7 @@ InspectorSchema MappingDefinition::getSchema(const juce::ValueTree &mapping,
     target.options[1] = "CC";
     target.options[2] = "PitchBend";
     target.options[3] = "SmartScaleBend";
+    setControlDefaultFromMap(target);
     schema.push_back(target);
 
     if (adsrTargetStr.equalsIgnoreCase("CC")) {
@@ -189,6 +293,7 @@ InspectorSchema MappingDefinition::getSchema(const juce::ValueTree &mapping,
       data1.min = 0.0;
       data1.max = 127.0;
       data1.step = 1.0;
+      setControlDefaultFromMap(data1);
       schema.push_back(data1);
     }
     if (adsrTargetStr.equalsIgnoreCase("PitchBend")) {
@@ -200,6 +305,7 @@ InspectorSchema MappingDefinition::getSchema(const juce::ValueTree &mapping,
       bend.max = static_cast<double>(pitchBendRange);
       bend.step = 1.0;
       bend.valueScaleRange = pitchBendRange;
+      setControlDefaultFromMap(bend);
       schema.push_back(bend);
     }
     if (adsrTargetStr.equalsIgnoreCase("SmartScaleBend")) {
@@ -210,6 +316,7 @@ InspectorSchema MappingDefinition::getSchema(const juce::ValueTree &mapping,
       steps.min = -12.0;
       steps.max = 12.0;
       steps.step = 1.0;
+      setControlDefaultFromMap(steps);
       schema.push_back(steps);
     }
 
@@ -223,6 +330,7 @@ InspectorSchema MappingDefinition::getSchema(const juce::ValueTree &mapping,
       valOn.min = 0.0;
       valOn.max = 127.0;
       valOn.step = 1.0;
+      setControlDefaultFromMap(valOn);
       schema.push_back(valOn);
       InspectorControl valOff;
       valOff.propertyId = "touchpadValueWhenOff";
@@ -231,6 +339,7 @@ InspectorSchema MappingDefinition::getSchema(const juce::ValueTree &mapping,
       valOff.min = 0.0;
       valOff.max = 127.0;
       valOff.step = 1.0;
+      setControlDefaultFromMap(valOff);
       schema.push_back(valOff);
     }
 
@@ -244,6 +353,7 @@ InspectorSchema MappingDefinition::getSchema(const juce::ValueTree &mapping,
     useEnv.widthWeight = 1.0f;
     // Disable custom envelope for PitchBend and SmartScaleBend (not supported)
     useEnv.isEnabled = !isPitchOrSmart;
+    setControlDefaultFromMap(useEnv);
     schema.push_back(useEnv);
 
     // 3. Conditional Branch
@@ -258,6 +368,7 @@ InspectorSchema MappingDefinition::getSchema(const juce::ValueTree &mapping,
         c.min = 0.0;
         c.max = maxVal;
         c.step = (maxVal <= 1.0) ? 0.01 : 1.0;
+        setControlDefaultFromMap(c);
         schema.push_back(c);
       };
       addAdsrSlider("adsrAttack", "Attack (ms)", 5000.0);
@@ -265,29 +376,16 @@ InspectorSchema MappingDefinition::getSchema(const juce::ValueTree &mapping,
       addAdsrSlider("adsrSustain", "Sustain (0-1)", 1.0);
       addAdsrSlider("adsrRelease", "Release (ms)", 5000.0);
     } else {
-      InspectorControl sendRel;
-      sendRel.propertyId = "sendReleaseValue";
-      sendRel.label =
-          isPitchOrSmart ? "Reset pitch on release" : "Send Value on Release";
-      sendRel.controlType = InspectorControl::Type::Toggle;
-      sendRel.widthWeight = isPitchOrSmart ? 1.0f : 0.45f;
-      sendRel.sameLine = false;
-      schema.push_back(sendRel);
-
-      // Release value slider only for CC; for PitchBend/SmartScaleBend release
-      // is always 8192
-      if (!isPitchOrSmart) {
-        InspectorControl relVal;
-        relVal.propertyId = "releaseValue";
-        relVal.label = "";
-        relVal.controlType = InspectorControl::Type::Slider;
-        relVal.min = 0.0;
-        relVal.max = 127.0;
-        relVal.step = 1.0;
-        relVal.sameLine = true;
-        relVal.widthWeight = 0.55f;
-        relVal.enabledConditionProperty = "sendReleaseValue";
-        schema.push_back(relVal);
+      // Only PitchBend/SmartScaleBend get "Reset pitch on release". CC always
+      // sends Value when Off on release (no toggle/slider).
+      if (isPitchOrSmart) {
+        InspectorControl sendRel;
+        sendRel.propertyId = "sendReleaseValue";
+        sendRel.label = "Reset pitch on release";
+        sendRel.controlType = InspectorControl::Type::Toggle;
+        sendRel.widthWeight = 1.0f;
+        setControlDefaultFromMap(sendRel);
+        schema.push_back(sendRel);
       }
     }
   } else if (typeStr.equalsIgnoreCase("Command")) {
@@ -315,6 +413,7 @@ InspectorSchema MappingDefinition::getSchema(const juce::ValueTree &mapping,
     cmdCtrl.options[16] = "Global Scale Prev";
     cmdCtrl.options[17] = "Global Scale Set";
     cmdCtrl.options[kLayerCategoryId] = "Layer";
+    setControlDefaultFromMap(cmdCtrl);
     schema.push_back(cmdCtrl);
 
     if (isSustain) {
@@ -325,6 +424,7 @@ InspectorSchema MappingDefinition::getSchema(const juce::ValueTree &mapping,
       styleCtrl.options[1] = "Hold to sustain";
       styleCtrl.options[2] = "Toggle sustain";
       styleCtrl.options[3] = "Default is on. Hold to not sustain";
+      setControlDefaultFromMap(styleCtrl);
       schema.push_back(styleCtrl);
     }
 
@@ -335,6 +435,7 @@ InspectorSchema MappingDefinition::getSchema(const juce::ValueTree &mapping,
       styleCtrl.controlType = InspectorControl::Type::ComboBox;
       styleCtrl.options[1] = "Hold to switch";
       styleCtrl.options[2] = "Toggle layer";
+      setControlDefaultFromMap(styleCtrl);
       schema.push_back(styleCtrl);
     }
 
@@ -349,6 +450,7 @@ InspectorSchema MappingDefinition::getSchema(const juce::ValueTree &mapping,
       data2.label = "Target Layer";
       data2.controlType = InspectorControl::Type::ComboBox;
       data2.options = getLayerOptions();
+      setControlDefaultFromMap(data2);
       schema.push_back(data2);
     }
     const int latchToggle = static_cast<int>(MIDIQy::CommandID::LatchToggle);
@@ -357,6 +459,7 @@ InspectorSchema MappingDefinition::getSchema(const juce::ValueTree &mapping,
       releaseLatched.propertyId = "releaseLatchedOnToggleOff";
       releaseLatched.label = "Release latched when toggling off";
       releaseLatched.controlType = InspectorControl::Type::Toggle;
+      setControlDefaultFromMap(releaseLatched);
       schema.push_back(releaseLatched);
     }
     const int panic = static_cast<int>(MIDIQy::CommandID::Panic);
@@ -369,6 +472,7 @@ InspectorSchema MappingDefinition::getSchema(const juce::ValueTree &mapping,
       panicMode.options[1] = "Panic all";
       panicMode.options[2] = "Panic latched only";
       panicMode.options[3] = "Panic chords";
+      setControlDefaultFromMap(panicMode);
       schema.push_back(panicMode);
     }
     const int transpose = static_cast<int>(MIDIQy::CommandID::Transpose);
@@ -383,6 +487,7 @@ InspectorSchema MappingDefinition::getSchema(const juce::ValueTree &mapping,
       modeCtrl.controlType = InspectorControl::Type::ComboBox;
       modeCtrl.options[1] = "Global";
       modeCtrl.options[2] = "Local";
+      setControlDefaultFromMap(modeCtrl);
       schema.push_back(modeCtrl);
 
       InspectorControl modifyCtrl;
@@ -394,6 +499,7 @@ InspectorSchema MappingDefinition::getSchema(const juce::ValueTree &mapping,
       modifyCtrl.options[3] = "Up (1 octave)";
       modifyCtrl.options[4] = "Down (1 octave)";
       modifyCtrl.options[5] = "Set (specific semitones)";
+      setControlDefaultFromMap(modifyCtrl);
       schema.push_back(modifyCtrl);
 
       int modifyVal = (int)mapping.getProperty("transposeModify", 0);
@@ -406,6 +512,7 @@ InspectorSchema MappingDefinition::getSchema(const juce::ValueTree &mapping,
         semitonesCtrl.max = 48.0;
         semitonesCtrl.step = 1.0;
         semitonesCtrl.valueFormat = InspectorControl::Format::Integer;
+        setControlDefaultFromMap(semitonesCtrl);
         schema.push_back(semitonesCtrl);
       }
 
@@ -442,6 +549,7 @@ InspectorSchema MappingDefinition::getSchema(const juce::ValueTree &mapping,
         rootNoteCtrl.max = 127.0;
         rootNoteCtrl.step = 1.0;
         rootNoteCtrl.valueFormat = InspectorControl::Format::Integer;
+        setControlDefaultFromMap(rootNoteCtrl);
         schema.push_back(rootNoteCtrl);
       }
     }
@@ -459,6 +567,7 @@ InspectorSchema MappingDefinition::getSchema(const juce::ValueTree &mapping,
         scaleIndexCtrl.max = 63.0;
         scaleIndexCtrl.step = 1.0;
         scaleIndexCtrl.valueFormat = InspectorControl::Format::Integer;
+        setControlDefaultFromMap(scaleIndexCtrl);
         schema.push_back(scaleIndexCtrl);
       }
     }

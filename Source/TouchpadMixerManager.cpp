@@ -5,6 +5,8 @@ const juce::Identifier kTouchpadMixers("TouchpadMixers");
 const juce::Identifier kTouchpadMixer("TouchpadMixer");
 const juce::Identifier kLayoutGroupsNode("TouchpadLayoutGroups");
 const juce::Identifier kLayoutGroupNode("TouchpadLayoutGroup");
+const juce::Identifier kTouchpadMappingsNode("TouchpadMappings");
+const juce::Identifier kTouchpadMappingNode("TouchpadMapping");
 const juce::Identifier kName("name");
 const juce::Identifier kLayerId("layerId");
 const juce::Identifier kLayoutGroupId("layoutGroupId");
@@ -72,6 +74,36 @@ void TouchpadMixerManager::updateLayout(int index,
     juce::ScopedWriteLock lock(lock_);
     if (index >= 0 && index < static_cast<int>(layouts_.size())) {
       layouts_[static_cast<size_t>(index)] = config;
+    }
+  }
+  sendChangeMessage();
+}
+
+void TouchpadMixerManager::addTouchpadMapping(
+    const TouchpadMappingConfig &config) {
+  {
+    juce::ScopedWriteLock lock(lock_);
+    touchpadMappings_.push_back(config);
+  }
+  sendChangeMessage();
+}
+
+void TouchpadMixerManager::removeTouchpadMapping(int index) {
+  {
+    juce::ScopedWriteLock lock(lock_);
+    if (index >= 0 && index < static_cast<int>(touchpadMappings_.size())) {
+      touchpadMappings_.erase(touchpadMappings_.begin() + index);
+    }
+  }
+  sendChangeMessage();
+}
+
+void TouchpadMixerManager::updateTouchpadMapping(
+    int index, const TouchpadMappingConfig &config) {
+  {
+    juce::ScopedWriteLock lock(lock_);
+    if (index >= 0 && index < static_cast<int>(touchpadMappings_.size())) {
+      touchpadMappings_[static_cast<size_t>(index)] = config;
     }
   }
   sendChangeMessage();
@@ -149,6 +181,30 @@ juce::ValueTree TouchpadMixerManager::toValueTree() const {
     }
     vt.addChild(child, -1, nullptr);
   }
+  // Serialize explicit touchpad mappings (if any)
+  if (!touchpadMappings_.empty()) {
+    juce::ValueTree mappingsNode(kTouchpadMappingsNode);
+    for (const auto &m : touchpadMappings_) {
+      juce::ValueTree child(kTouchpadMappingNode);
+      child.setProperty(kName, juce::String(m.name), nullptr);
+      child.setProperty(kLayerId, m.layerId, nullptr);
+      child.setProperty(kLayoutGroupId, m.layoutGroupId, nullptr);
+      child.setProperty(kMidiChannel, m.midiChannel, nullptr);
+      child.setProperty(kRegionLeft, m.region.left, nullptr);
+      child.setProperty(kRegionTop, m.region.top, nullptr);
+      child.setProperty(kRegionRight, m.region.right, nullptr);
+      child.setProperty(kRegionBottom, m.region.bottom, nullptr);
+      child.setProperty(kZIndex, m.zIndex, nullptr);
+      child.setProperty(kRegionLock, m.regionLock, nullptr);
+
+      // Store the underlying mapping ValueTree (if valid) as a child.
+      if (m.mapping.isValid())
+        child.addChild(m.mapping.createCopy(), -1, nullptr);
+
+      mappingsNode.addChild(child, -1, nullptr);
+    }
+    vt.addChild(mappingsNode, -1, nullptr);
+  }
   // Serialize explicit layout groups (if any)
   if (!groups_.empty()) {
     juce::ValueTree groupsNode(kLayoutGroupsNode);
@@ -180,6 +236,7 @@ void TouchpadMixerManager::restoreFromValueTree(const juce::ValueTree &vt) {
   juce::ScopedWriteLock lock(lock_);
   layouts_.clear();
   groups_.clear();
+  touchpadMappings_.clear();
   for (int i = 0; i < vt.getNumChildren(); ++i) {
     auto child = vt.getChild(i);
     if (child.hasType(kTouchpadMixer)) {
@@ -302,6 +359,49 @@ void TouchpadMixerManager::restoreFromValueTree(const juce::ValueTree &vt) {
                      .toStdString();
         if (g.id > 0)
           groups_.push_back(g);
+      }
+    } else if (child.hasType(kTouchpadMappingsNode)) {
+      touchpadMappings_.clear();
+      for (int j = 0; j < child.getNumChildren(); ++j) {
+        auto mNode = child.getChild(j);
+        if (!mNode.hasType(kTouchpadMappingNode))
+          continue;
+
+        TouchpadMappingConfig cfg;
+        cfg.name =
+            mNode.getProperty(kName, "Touchpad Mapping").toString().toStdString();
+        cfg.layerId =
+            juce::jlimit(0, 8, (int)mNode.getProperty(kLayerId, 0));
+        cfg.layoutGroupId =
+            juce::jlimit(0, 128, (int)mNode.getProperty(kLayoutGroupId, 0));
+        cfg.midiChannel =
+            juce::jlimit(1, 16, (int)mNode.getProperty(kMidiChannel, 1));
+        cfg.region.left =
+            static_cast<float>(mNode.getProperty(kRegionLeft, 0.0));
+        cfg.region.top =
+            static_cast<float>(mNode.getProperty(kRegionTop, 0.0));
+        cfg.region.right =
+            static_cast<float>(mNode.getProperty(kRegionRight, 1.0));
+        cfg.region.bottom =
+            static_cast<float>(mNode.getProperty(kRegionBottom, 1.0));
+        cfg.zIndex =
+            juce::jlimit(-100, 100, (int)mNode.getProperty(kZIndex, 0));
+        cfg.regionLock = (bool)mNode.getProperty(kRegionLock, false);
+
+        // Underlying mapping tree is stored as a child; take the first Mapping
+        // child if present.
+        juce::ValueTree mappingChild;
+        for (int k = 0; k < mNode.getNumChildren(); ++k) {
+          auto c = mNode.getChild(k);
+          if (c.hasType("Mapping")) {
+            mappingChild = c;
+            break;
+          }
+        }
+        if (mappingChild.isValid())
+          cfg.mapping = mappingChild.createCopy();
+
+        touchpadMappings_.push_back(std::move(cfg));
       }
     }
   }
