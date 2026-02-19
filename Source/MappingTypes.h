@@ -313,7 +313,9 @@ enum class TouchpadConversionKind {
   BoolToGate,       // Boolean input -> Note/Command (direct)
   BoolToCC,         // Boolean input -> Expression (value when on/off)
   ContinuousToGate, // Continuous input -> Note (threshold)
-  ContinuousToRange // Continuous input -> Expression (range map)
+  ContinuousToRange,// Continuous input -> Expression (range map)
+  SlideToCC,        // Single-CC fader (position/delta, mixer-like modes)
+  EncoderCC         // Incremental CC + optional push
 };
 
 // Pitch-pad layout types (shared by TouchpadConversionParams and
@@ -341,6 +343,20 @@ struct TouchpadConversionParams {
   int valueWhenOn = 127;
   int valueWhenOff = 0;
 
+  // SlideToCC: same bit layout as TouchpadMixerEntry modeFlags (Quick/Precision, Lock/Free, Relative)
+  uint8_t slideModeFlags = 0;
+  // SlideToCC axis: 0 = Vertical (Y), 1 = Horizontal (X)
+  uint8_t slideAxis = 0;
+
+  // EncoderCC: step size (1-16), wrap at 0/127, axis (0=Vertical, 1=Horizontal, 2=Both)
+  int encoderStepSize = 1; // Used when axis is Vertical or Horizontal
+  int encoderStepSizeX = 1; // Used for X axis when axis is Both
+  int encoderStepSizeY = 1; // Used for Y axis when axis is Both
+  bool encoderWrap = false;
+  uint8_t encoderAxis = 0;
+  uint8_t encoderPushMode = 0; // 0=Off, 1=Momentary, 2=Toggle, 3=Trigger
+  int encoderPushValue = 0;
+
   // Optional per-mapping pitch-pad configuration for Expression mappings where
   // the ADSR target is PitchBend or SmartScaleBend and conversionKind is
   // ContinuousToRange. When not set, ContinuousToRange falls back to the
@@ -351,13 +367,16 @@ struct TouchpadConversionParams {
 };
 
 // One compiled touchpad mapping (alias "Touchpad", layer, event, action,
-// conversion)
+// conversion). Region defaults to full pad (0,0,1,1) when built from preset.
 struct TouchpadMappingEntry {
   int layerId = 0;
   int eventId = 0; // TouchpadEvent::Finger1Down etc.
   MidiAction action;
   TouchpadConversionKind conversionKind = TouchpadConversionKind::BoolToGate;
   TouchpadConversionParams conversionParams;
+  // Active region on touchpad (0-1 normalized). Full pad when not set.
+  float regionLeft = 0.0f, regionTop = 0.0f, regionRight = 1.0f, regionBottom = 1.0f;
+  float invRegionWidth = 1.0f, invRegionHeight = 1.0f;
 };
 
 // Holds the entire pre-calculated state of the engine.

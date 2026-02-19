@@ -68,6 +68,64 @@ public:
   juce::Colour getTypeColor(ActionType type) const;
   void setTypeColor(ActionType type, juce::Colour colour);
 
+  // UI layout / state persistence
+  bool getRememberUiState() const;
+  void setRememberUiState(bool remember);
+
+  // Main window state (JUCE window state string; empty = use default)
+  juce::String getMainWindowState() const;
+  void setMainWindowState(const juce::String &state);
+
+  // MainComponent layout
+  int getMainTabIndex() const;
+  void setMainTabIndex(int index);
+
+  int getVerticalSplitPos() const;
+  void setVerticalSplitPos(int pos);
+
+  int getHorizontalSplitPos() const;
+  void setHorizontalSplitPos(int pos);
+
+  // Detachable containers (Visualizer / Editors / Log)
+  bool getVisualizerVisible() const;
+  void setVisualizerVisible(bool visible);
+  bool getVisualizerPoppedOut() const;
+  void setVisualizerPoppedOut(bool poppedOut);
+  juce::String getVisualizerWindowState() const;
+  void setVisualizerWindowState(const juce::String &state);
+
+  bool getEditorVisible() const;
+  void setEditorVisible(bool visible);
+  bool getEditorPoppedOut() const;
+  void setEditorPoppedOut(bool poppedOut);
+  juce::String getEditorWindowState() const;
+  void setEditorWindowState(const juce::String &state);
+
+  bool getLogVisible() const;
+  void setLogVisible(bool visible);
+  bool getLogPoppedOut() const;
+  void setLogPoppedOut(bool poppedOut);
+  juce::String getLogWindowState() const;
+  void setLogWindowState(const juce::String &state);
+
+  // Tab-specific selections
+  // Mappings tab
+  int getMappingsSelectedLayerId() const;
+  void setMappingsSelectedLayerId(int layerId);
+  int getMappingsSelectedRow() const;
+  void setMappingsSelectedRow(int row);
+
+  // Zones tab (index into ZoneManager::getZones(); -1 = none)
+  int getZonesSelectedIndex() const;
+  void setZonesSelectedIndex(int index);
+
+  // Touchpad tab (row index in TouchpadMixerListPanel; -1 = none)
+  int getTouchpadSelectedRow() const;
+  void setTouchpadSelectedRow(int row);
+
+  // Reset all UI-related state to defaults (used by Reset UI Layout).
+  void resetUiStateToDefaults();
+
   // Persistence
   void saveToXml(juce::File file);
   void loadFromXml(juce::File file);
@@ -80,6 +138,9 @@ private:
   juce::ValueTree rootNode;
   double cachedStepsPerSemitone = 8192.0 / 12.0; // 8192 / pitchBendRange
   bool cachedMidiModeActive = false;
+
+  juce::ValueTree getUiStateNode();
+  juce::ValueTree getUiStateNode() const;
 
   juce::String getTypePropertyName(ActionType type) const;
   void updateCachedStepsPerSemitone();

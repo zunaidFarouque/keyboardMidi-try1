@@ -53,6 +53,9 @@ public:
   bool perform(const InvocationInfo &info) override;
   juce::ApplicationCommandTarget *getNextCommandTarget() override;
 
+  // Expose SettingsManager for top-level window/layout persistence.
+  SettingsManager &getSettingsManager() { return settingsManager; }
+
 private:
   // 1. Core Engines & Inputs (Must die LAST)
   SettingsManager settingsManager;
@@ -181,6 +184,10 @@ private:
     WindowShowEditors = 2002,
     WindowShowLog = 2003
   };
+
+  static constexpr juce::CommandID CommandResetUiLayout = 0x2000;
+
+  void resetUiLayoutAndRestart();
 
   JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(MainComponent)
 };

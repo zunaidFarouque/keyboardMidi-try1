@@ -15,6 +15,10 @@ public:
   void paint(juce::Graphics &) override;
   void resized() override;
 
+  // UI state persistence
+  void saveUiState(SettingsManager &settings) const;
+  void loadUiState(SettingsManager &settings);
+
 private:
   // 1. Data/Managers
   ZoneManager *zoneManager;

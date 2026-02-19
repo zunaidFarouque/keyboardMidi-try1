@@ -11,6 +11,49 @@
 // Windows header needed for cursor locking and window state checks
 #include <windows.h>
 
+namespace {
+// Clamp a window's bounds to the nearest display's user area. This mirrors the
+// helper in Main.cpp but is local to this translation unit.
+juce::Rectangle<int> clampBoundsToDisplay(const juce::Rectangle<int> &bounds) {
+  auto displays = juce::Desktop::getInstance().getDisplays();
+  if (displays.displays.isEmpty())
+    return bounds;
+
+  juce::Rectangle<int> result = bounds;
+
+  int bestArea = -1;
+  juce::Rectangle<int> best;
+  for (auto &d : displays.displays) {
+    auto area = d.userArea.getIntersection(result);
+    int areaPx = area.getWidth() * area.getHeight();
+    if (areaPx > bestArea) {
+      bestArea = areaPx;
+      best = d.userArea;
+    }
+  }
+
+  if (bestArea <= 0) {
+    if (auto *primary = displays.getPrimaryDisplay())
+      best = primary->userArea;
+  }
+
+  if (!best.isEmpty()) {
+    result.setSize(juce::jmin(result.getWidth(), best.getWidth()),
+                   juce::jmin(result.getHeight(), best.getHeight()));
+    if (result.getX() < best.getX())
+      result.setX(best.getX());
+    if (result.getRight() > best.getRight())
+      result.setX(best.getRight() - result.getWidth());
+    if (result.getY() < best.getY())
+      result.setY(best.getY());
+    if (result.getBottom() > best.getBottom())
+      result.setY(best.getBottom() - result.getHeight());
+  }
+
+  return result;
+}
+} // namespace
+
 MainComponent::MainComponent()
     : voiceManager(midiEngine, settingsManager),
       inputProcessor(voiceManager, presetManager, deviceManager, scaleLibrary,
@@ -343,7 +386,31 @@ MainComponent::MainComponent()
   mappingEditor->initialize();
   visualizer->initialize();
   settingsPanel->initialize();
+  settingsPanel->onResetUiLayout = [this]() { resetUiLayoutAndRestart(); };
   startupManager.initApp();
+
+  // Now that settings have been loaded from disk, apply any persisted main
+  // window state. We do this here (instead of in MainWindow's constructor)
+  // because StartupManager::initApp() runs after MainWindow is created.
+  if (settingsManager.getRememberUiState()) {
+    juce::String state = settingsManager.getMainWindowState();
+    if (state.isNotEmpty()) {
+      if (auto *top = getTopLevelComponent()) {
+        if (auto *window = dynamic_cast<juce::DocumentWindow *>(top)) {
+          window->restoreWindowStateFromString(state);
+          window->setBounds(clampBoundsToDisplay(window->getBounds()));
+        }
+      }
+    }
+  }
+
+  // Restore per-tab UI state after settings/presets are loaded.
+  if (mappingEditor)
+    mappingEditor->loadUiState(settingsManager);
+  if (zoneEditor)
+    zoneEditor->loadUiState(settingsManager);
+  if (touchpadTab)
+    touchpadTab->loadUiState(settingsManager);
 
   // --- Input Logic ---
   rawInputManager->addListener(this);
@@ -378,7 +445,7 @@ MainComponent::MainComponent()
 
   startTimer(settingsManager.getWindowRefreshIntervalMs());
 
-  // Load layout positions from DeviceManager
+  // Load layout positions and container visibility
   loadLayoutPositions();
 
   // Setup visibility callbacks
@@ -506,6 +573,7 @@ void MainComponent::logEvent(uintptr_t device, int keyCode, bool isDown) {
 void MainComponent::getAllCommands(juce::Array<juce::CommandID> &commands) {
   commands.add(juce::StandardApplicationCommandIDs::undo);
   commands.add(juce::StandardApplicationCommandIDs::redo);
+  commands.add(CommandResetUiLayout);
 }
 
 void MainComponent::getCommandInfo(juce::CommandID commandID,
@@ -520,6 +588,13 @@ void MainComponent::getCommandInfo(juce::CommandID commandID,
     result.addDefaultKeypress('Y', juce::ModifierKeys::ctrlModifier);
     result.setActive(mappingEditor ? mappingEditor->getUndoManager().canRedo()
                                    : false);
+  } else if (commandID == CommandResetUiLayout) {
+    result.setInfo("Reset UI Layout",
+                   "Reset window positions, visible panels, and tabs, then exit MIDIQy",
+                   "View", 0);
+    result.addDefaultKeypress(juce::KeyPress::F12Key,
+                              juce::ModifierKeys::ctrlModifier |
+                                  juce::ModifierKeys::shiftModifier);
   }
 }
 
@@ -533,6 +608,9 @@ bool MainComponent::perform(const InvocationInfo &info) {
   } else if (info.commandID == juce::StandardApplicationCommandIDs::redo) {
     mappingEditor->getUndoManager().redo();
     commandManager.commandStatusChanged();
+    return true;
+  } else if (info.commandID == CommandResetUiLayout) {
+    resetUiLayoutAndRestart();
     return true;
   }
   return false;
@@ -557,6 +635,8 @@ void MainComponent::changeListenerCallback(juce::ChangeBroadcaster *source) {
   static constexpr int kTouchpadTabIndex = 2; // Mappings=0, Zones=1, Touchpad=2, Settings=3
   if (source == &mainTabs.getTabbedButtonBar()) {
     int idx = mainTabs.getCurrentTabIndex();
+    if (settingsManager.getRememberUiState())
+      settingsManager.setMainTabIndex(idx);
     bool touchpadActive = (idx == kTouchpadTabIndex);
     if (visualizer)
       visualizer->setTouchpadTabActive(touchpadActive);
@@ -827,15 +907,106 @@ void MainComponent::refreshMidiDeviceList(bool triggerConnection) {
 }
 
 void MainComponent::loadLayoutPositions() {
-  // Load vertical split position from DeviceManager
-  // For now, use default positions; can be extended to load from config
-  // verticalLayout.setItemPosition(0, 200); // Example
+  if (!settingsManager.getRememberUiState())
+    return;
+
+  // Restore main tab index
+  int tabIndex = settingsManager.getMainTabIndex();
+  if (tabIndex >= 0 && tabIndex < mainTabs.getNumTabs())
+    mainTabs.setCurrentTabIndex(tabIndex);
+
+  // Restore container visibility
+  if (!settingsManager.getVisualizerVisible())
+    visualizerContainer.hide();
+  else
+    visualizerContainer.show();
+
+  if (!settingsManager.getEditorVisible())
+    editorContainer.hide();
+  else
+    editorContainer.show();
+
+  if (!settingsManager.getLogVisible())
+    logContainer.hide();
+  else
+    logContainer.show();
+
+  // Restore floating window states (best-effort; ignore failures)
+  if (settingsManager.getVisualizerPoppedOut())
+    visualizerContainer.popOut();
+  if (auto *w = visualizerContainer.getFloatingWindow()) {
+    juce::String state = settingsManager.getVisualizerWindowState();
+    if (state.isNotEmpty())
+      w->restoreWindowStateFromString(state);
+  }
+
+  if (settingsManager.getEditorPoppedOut())
+    editorContainer.popOut();
+  if (auto *w = editorContainer.getFloatingWindow()) {
+    juce::String state = settingsManager.getEditorWindowState();
+    if (state.isNotEmpty())
+      w->restoreWindowStateFromString(state);
+  }
+
+  if (settingsManager.getLogPoppedOut())
+    logContainer.popOut();
+  if (auto *w = logContainer.getFloatingWindow()) {
+    juce::String state = settingsManager.getLogWindowState();
+    if (state.isNotEmpty())
+      w->restoreWindowStateFromString(state);
+  }
 }
 
 void MainComponent::saveLayoutPositions() {
-  // Save vertical split position to DeviceManager config
-  // Can be extended to save to globalConfig
-  // int position = verticalLayout.getItemCurrentPosition(0);
+  if (!settingsManager.getRememberUiState())
+    return;
+
+  // Persist per-tab selections and final main window state.
+  if (mappingEditor)
+    mappingEditor->saveUiState(settingsManager);
+  if (zoneEditor)
+    zoneEditor->saveUiState(settingsManager);
+  if (touchpadTab)
+    touchpadTab->saveUiState(settingsManager);
+  if (auto *top = getTopLevelComponent()) {
+    if (auto *window = dynamic_cast<juce::DocumentWindow *>(top))
+      settingsManager.setMainWindowState(window->getWindowStateAsString());
+  }
+
+  // Main tab index
+  settingsManager.setMainTabIndex(mainTabs.getCurrentTabIndex());
+
+  // Container visibility
+  settingsManager.setVisualizerVisible(!visualizerContainer.isHidden());
+  settingsManager.setEditorVisible(!editorContainer.isHidden());
+  settingsManager.setLogVisible(!logContainer.isHidden());
+
+  // Floating window states
+  settingsManager.setVisualizerPoppedOut(visualizerContainer.isPoppedOut());
+  if (auto *vw = visualizerContainer.getFloatingWindow())
+    settingsManager.setVisualizerWindowState(vw->getWindowStateAsString());
+  else
+    settingsManager.setVisualizerWindowState("");
+
+  settingsManager.setEditorPoppedOut(editorContainer.isPoppedOut());
+  if (auto *ew = editorContainer.getFloatingWindow())
+    settingsManager.setEditorWindowState(ew->getWindowStateAsString());
+  else
+    settingsManager.setEditorWindowState("");
+
+  settingsManager.setLogPoppedOut(logContainer.isPoppedOut());
+  if (auto *lw = logContainer.getFloatingWindow())
+    settingsManager.setLogWindowState(lw->getWindowStateAsString());
+  else
+    settingsManager.setLogWindowState("");
+}
+
+void MainComponent::resetUiLayoutAndRestart() {
+  settingsManager.resetUiStateToDefaults();
+  startupManager.saveImmediate();
+  if (auto *app = juce::JUCEApplication::getInstance()) {
+    app->systemRequestedQuit();
+  }
 }
 
 juce::StringArray MainComponent::getMenuBarNames() {

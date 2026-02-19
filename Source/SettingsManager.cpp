@@ -18,8 +18,14 @@ SettingsManager::SettingsManager() {
   rootNode.setProperty("showTouchpadVisualizerInMiniWindow", false, nullptr);
   rootNode.setProperty("hideCursorInPerformanceMode", false, nullptr);
   rootNode.setProperty("miniWindowPosition", "", nullptr);
+  rootNode.setProperty("rememberUiState", true, nullptr);
   rootNode.setProperty("delayMidiEnabled", false, nullptr);
   rootNode.setProperty("delayMidiSeconds", 1, nullptr);
+
+  // Ensure UIState child exists for layout persistence
+  if (!rootNode.getChildWithName("UIState").isValid()) {
+    rootNode.addChild(juce::ValueTree("UIState"), -1, nullptr);
+  }
   rootNode.addListener(this);
   updateCachedMidiModeActive();
 }
@@ -180,6 +186,265 @@ void SettingsManager::resetMiniWindowPosition() {
   sendChangeMessage();
 }
 
+juce::ValueTree SettingsManager::getUiStateNode() {
+  auto ui = rootNode.getChildWithName("UIState");
+  if (!ui.isValid()) {
+    ui = juce::ValueTree("UIState");
+    rootNode.addChild(ui, -1, nullptr);
+  }
+  return ui;
+}
+
+juce::ValueTree SettingsManager::getUiStateNode() const {
+  return rootNode.getChildWithName("UIState");
+}
+
+bool SettingsManager::getRememberUiState() const {
+  return static_cast<bool>(rootNode.getProperty("rememberUiState", true));
+}
+
+void SettingsManager::setRememberUiState(bool remember) {
+  rootNode.setProperty("rememberUiState", remember, nullptr);
+  sendChangeMessage();
+}
+
+juce::String SettingsManager::getMainWindowState() const {
+  auto ui = getUiStateNode();
+  if (!ui.isValid())
+    return {};
+  return ui.getProperty("mainWindowState", "").toString();
+}
+
+void SettingsManager::setMainWindowState(const juce::String &state) {
+  auto ui = getUiStateNode();
+  ui.setProperty("mainWindowState", state, nullptr);
+  sendChangeMessage();
+}
+
+int SettingsManager::getMainTabIndex() const {
+  auto ui = getUiStateNode();
+  if (!ui.isValid())
+    return 0;
+  int idx = static_cast<int>(ui.getProperty("mainTabIndex", 0));
+  if (idx < 0)
+    idx = 0;
+  return idx;
+}
+
+void SettingsManager::setMainTabIndex(int index) {
+  auto ui = getUiStateNode();
+  ui.setProperty("mainTabIndex", index, nullptr);
+  sendChangeMessage();
+}
+
+int SettingsManager::getVerticalSplitPos() const {
+  auto ui = getUiStateNode();
+  if (!ui.isValid())
+    return -1;
+  return static_cast<int>(ui.getProperty("verticalSplitPos", -1));
+}
+
+void SettingsManager::setVerticalSplitPos(int pos) {
+  auto ui = getUiStateNode();
+  ui.setProperty("verticalSplitPos", pos, nullptr);
+  sendChangeMessage();
+}
+
+int SettingsManager::getHorizontalSplitPos() const {
+  auto ui = getUiStateNode();
+  if (!ui.isValid())
+    return -1;
+  return static_cast<int>(ui.getProperty("horizontalSplitPos", -1));
+}
+
+void SettingsManager::setHorizontalSplitPos(int pos) {
+  auto ui = getUiStateNode();
+  ui.setProperty("horizontalSplitPos", pos, nullptr);
+  sendChangeMessage();
+}
+
+bool SettingsManager::getVisualizerVisible() const {
+  auto ui = getUiStateNode();
+  if (!ui.isValid())
+    return true;
+  return static_cast<bool>(ui.getProperty("visualizerVisible", true));
+}
+
+void SettingsManager::setVisualizerVisible(bool visible) {
+  auto ui = getUiStateNode();
+  ui.setProperty("visualizerVisible", visible, nullptr);
+  sendChangeMessage();
+}
+
+bool SettingsManager::getVisualizerPoppedOut() const {
+  auto ui = getUiStateNode();
+  if (!ui.isValid())
+    return false;
+  return static_cast<bool>(ui.getProperty("visualizerPoppedOut", false));
+}
+
+void SettingsManager::setVisualizerPoppedOut(bool poppedOut) {
+  auto ui = getUiStateNode();
+  ui.setProperty("visualizerPoppedOut", poppedOut, nullptr);
+  sendChangeMessage();
+}
+
+juce::String SettingsManager::getVisualizerWindowState() const {
+  auto ui = getUiStateNode();
+  if (!ui.isValid())
+    return {};
+  return ui.getProperty("visualizerWindowState", "").toString();
+}
+
+void SettingsManager::setVisualizerWindowState(const juce::String &state) {
+  auto ui = getUiStateNode();
+  ui.setProperty("visualizerWindowState", state, nullptr);
+  sendChangeMessage();
+}
+
+bool SettingsManager::getEditorVisible() const {
+  auto ui = getUiStateNode();
+  if (!ui.isValid())
+    return true;
+  return static_cast<bool>(ui.getProperty("editorVisible", true));
+}
+
+void SettingsManager::setEditorVisible(bool visible) {
+  auto ui = getUiStateNode();
+  ui.setProperty("editorVisible", visible, nullptr);
+  sendChangeMessage();
+}
+
+bool SettingsManager::getEditorPoppedOut() const {
+  auto ui = getUiStateNode();
+  if (!ui.isValid())
+    return false;
+  return static_cast<bool>(ui.getProperty("editorPoppedOut", false));
+}
+
+void SettingsManager::setEditorPoppedOut(bool poppedOut) {
+  auto ui = getUiStateNode();
+  ui.setProperty("editorPoppedOut", poppedOut, nullptr);
+  sendChangeMessage();
+}
+
+juce::String SettingsManager::getEditorWindowState() const {
+  auto ui = getUiStateNode();
+  if (!ui.isValid())
+    return {};
+  return ui.getProperty("editorWindowState", "").toString();
+}
+
+void SettingsManager::setEditorWindowState(const juce::String &state) {
+  auto ui = getUiStateNode();
+  ui.setProperty("editorWindowState", state, nullptr);
+  sendChangeMessage();
+}
+
+bool SettingsManager::getLogVisible() const {
+  auto ui = getUiStateNode();
+  if (!ui.isValid())
+    return true;
+  return static_cast<bool>(ui.getProperty("logVisible", true));
+}
+
+void SettingsManager::setLogVisible(bool visible) {
+  auto ui = getUiStateNode();
+  ui.setProperty("logVisible", visible, nullptr);
+  sendChangeMessage();
+}
+
+bool SettingsManager::getLogPoppedOut() const {
+  auto ui = getUiStateNode();
+  if (!ui.isValid())
+    return false;
+  return static_cast<bool>(ui.getProperty("logPoppedOut", false));
+}
+
+void SettingsManager::setLogPoppedOut(bool poppedOut) {
+  auto ui = getUiStateNode();
+  ui.setProperty("logPoppedOut", poppedOut, nullptr);
+  sendChangeMessage();
+}
+
+juce::String SettingsManager::getLogWindowState() const {
+  auto ui = getUiStateNode();
+  if (!ui.isValid())
+    return {};
+  return ui.getProperty("logWindowState", "").toString();
+}
+
+void SettingsManager::setLogWindowState(const juce::String &state) {
+  auto ui = getUiStateNode();
+  ui.setProperty("logWindowState", state, nullptr);
+  sendChangeMessage();
+}
+
+int SettingsManager::getMappingsSelectedLayerId() const {
+  auto ui = getUiStateNode();
+  if (!ui.isValid())
+    return 0;
+  return static_cast<int>(ui.getProperty("mappingsSelectedLayerId", 0));
+}
+
+void SettingsManager::setMappingsSelectedLayerId(int layerId) {
+  auto ui = getUiStateNode();
+  ui.setProperty("mappingsSelectedLayerId", layerId, nullptr);
+  sendChangeMessage();
+}
+
+int SettingsManager::getMappingsSelectedRow() const {
+  auto ui = getUiStateNode();
+  if (!ui.isValid())
+    return -1;
+  return static_cast<int>(ui.getProperty("mappingsSelectedRow", -1));
+}
+
+void SettingsManager::setMappingsSelectedRow(int row) {
+  auto ui = getUiStateNode();
+  ui.setProperty("mappingsSelectedRow", row, nullptr);
+  sendChangeMessage();
+}
+
+int SettingsManager::getZonesSelectedIndex() const {
+  auto ui = getUiStateNode();
+  if (!ui.isValid())
+    return -1;
+  return static_cast<int>(ui.getProperty("zonesSelectedIndex", -1));
+}
+
+void SettingsManager::setZonesSelectedIndex(int index) {
+  auto ui = getUiStateNode();
+  ui.setProperty("zonesSelectedIndex", index, nullptr);
+  sendChangeMessage();
+}
+
+int SettingsManager::getTouchpadSelectedRow() const {
+  auto ui = getUiStateNode();
+  if (!ui.isValid())
+    return -1;
+  return static_cast<int>(ui.getProperty("touchpadSelectedRow", -1));
+}
+
+void SettingsManager::setTouchpadSelectedRow(int row) {
+  auto ui = getUiStateNode();
+  ui.setProperty("touchpadSelectedRow", row, nullptr);
+  sendChangeMessage();
+}
+
+void SettingsManager::resetUiStateToDefaults() {
+  // Remove any existing UIState child and recreate a fresh one.
+  auto ui = rootNode.getChildWithName("UIState");
+  if (ui.isValid())
+    rootNode.removeChild(ui, nullptr);
+  rootNode.addChild(juce::ValueTree("UIState"), -1, nullptr);
+  // Turn off UI state remembering so the next run uses hard-coded defaults
+  // (1200x800 centred) and does not immediately overwrite them with the old
+  // window size. The user can re-enable "Remember UI layout" in Settings.
+  rootNode.setProperty("rememberUiState", false, nullptr);
+  sendChangeMessage();
+}
+
 juce::String SettingsManager::getTypePropertyName(ActionType type) const {
   switch (type) {
   case ActionType::Note:
@@ -256,6 +521,7 @@ void SettingsManager::loadFromXml(juce::File file) {
         rootNode.setProperty("visualizerYOpacity", 0.45, nullptr);
         rootNode.setProperty("delayMidiEnabled", false, nullptr);
         rootNode.setProperty("delayMidiSeconds", 1, nullptr);
+        rootNode.setProperty("rememberUiState", true, nullptr);
       } else {
         // Phase 43: Validate (sanitize) – prevent divide-by-zero from bad saved
         // data
@@ -274,6 +540,12 @@ void SettingsManager::loadFromXml(juce::File file) {
           rootNode.setProperty("delayMidiSeconds", 1, nullptr);
         if (!rootNode.hasProperty("hideCursorInPerformanceMode"))
           rootNode.setProperty("hideCursorInPerformanceMode", false, nullptr);
+        if (!rootNode.hasProperty("rememberUiState"))
+          rootNode.setProperty("rememberUiState", true, nullptr);
+      }
+      // Ensure UIState child exists even for older settings files.
+      if (!rootNode.getChildWithName("UIState").isValid()) {
+        rootNode.addChild(juce::ValueTree("UIState"), -1, nullptr);
       }
       rootNode.addListener(this);
       updateCachedStepsPerSemitone();

@@ -27,6 +27,9 @@ public:
   /// mapping.
   int getSelectedRowIndex() const;
 
+  /// Select a row programmatically (clamped to valid range).
+  void setSelectedRowIndex(int row);
+
   /// Returns the kind of the given row (Layout / Mapping). Behavior is
   /// undefined for out-of-range indices.
   RowKind getRowKind(int rowIndex) const;

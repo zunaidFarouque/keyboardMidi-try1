@@ -415,6 +415,15 @@ int TouchpadMixerListPanel::getSelectedRowIndex() const {
   return listBox.getSelectedRow();
 }
 
+void TouchpadMixerListPanel::setSelectedRowIndex(int row) {
+  int num = getNumRows();
+  if (num <= 0)
+    return;
+  if (row < 0 || row >= num)
+    row = 0;
+  listBox.selectRow(row);
+}
+
 void TouchpadMixerListPanel::selectedRowsChanged(int lastRowSelected) {
   if (!onSelectionChanged || !manager) {
     return;

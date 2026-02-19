@@ -96,6 +96,18 @@ InspectorSchema SettingsDefinition::getSchema() {
     schema.push_back(capFps);
   }
 
+  // --- UI & Layout section ---
+  schema.push_back(
+      MappingDefinition::createSeparator("UI & Layout",
+                                         juce::Justification::centredLeft));
+  {
+    InspectorControl rememberUi;
+    rememberUi.propertyId = "rememberUiState";
+    rememberUi.label = "Remember UI layout (windows, tabs, selections)";
+    rememberUi.controlType = InspectorControl::Type::Toggle;
+    schema.push_back(rememberUi);
+  }
+
   return schema;
 }
 

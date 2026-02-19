@@ -26,6 +26,10 @@ public:
   // Callback for selection changes
   std::function<void(std::shared_ptr<Zone>)> onSelectionChanged;
 
+  // Selection helpers
+  int getSelectedRow() const { return listBox.getSelectedRow(); }
+  void setSelectedRow(int row) { listBox.selectRow(row); }
+
 private:
   ZoneManager *zoneManager;
   juce::ListBox listBox;

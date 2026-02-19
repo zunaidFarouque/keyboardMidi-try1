@@ -646,6 +646,25 @@ void MappingEditorComponent::updateInspectorFromSelection() {
   inspector.setSelection(selectedTrees);
 }
 
+void MappingEditorComponent::saveUiState(SettingsManager &settings) const {
+  if (!settings.getRememberUiState())
+    return;
+  settings.setMappingsSelectedLayerId(selectedLayerId);
+  settings.setMappingsSelectedRow(table.getSelectedRow());
+}
+
+void MappingEditorComponent::loadUiState(SettingsManager &settings) {
+  if (!settings.getRememberUiState())
+    return;
+  int layerId = settings.getMappingsSelectedLayerId();
+  int row = settings.getMappingsSelectedRow();
+  if (layerId < 0 || layerId > 8)
+    layerId = 0;
+  layerListPanel.setSelectedLayer(layerId);
+  if (row >= 0 && row < getNumRows())
+    table.selectRow(row);
+}
+
 void MappingEditorComponent::handleTouchpadContacts(
     uintptr_t /*deviceHandle*/, const std::vector<TouchpadContact> &) {
   // Touchpad mappings are managed in the Touchpad tab; no capture in Mappings tab.

@@ -69,3 +69,18 @@ void TouchpadTabComponent::resized() {
   int ch = juce::jmax(kEditorMinHeight, editorPanel.getPreferredContentHeight());
   editorPanel.setSize(cw, ch);
 }
+
+void TouchpadTabComponent::saveUiState(SettingsManager &settings) const {
+  if (!settings.getRememberUiState())
+    return;
+  settings.setTouchpadSelectedRow(listPanel.getSelectedRowIndex());
+}
+
+void TouchpadTabComponent::loadUiState(SettingsManager &settings) {
+  if (!settings.getRememberUiState())
+    return;
+  int row = settings.getTouchpadSelectedRow();
+  if (row < 0)
+    return;
+  listPanel.setSelectedRowIndex(row);
+}

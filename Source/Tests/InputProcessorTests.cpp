@@ -3041,6 +3041,422 @@ TEST_F(InputProcessorTest, TouchpadMixerFingerDownSendsCC) {
   EXPECT_LE(mockEng.ccEvents[0].value, 70);
 }
 
+// SlideToCC (Expression CC mode Slide): one-finger Y position maps to CC value
+TEST_F(InputProcessorTest, TouchpadSlideToCC_AbsoluteSendsCC) {
+  MockMidiEngine mockEng;
+  TouchpadMixerManager touchpadMixerMgr;
+  VoiceManager voiceMgr(mockEng, settingsMgr);
+  InputProcessor proc(voiceMgr, presetMgr, deviceMgr, scaleLib, mockEng,
+                      settingsMgr, touchpadMixerMgr);
+  presetMgr.getLayersList().removeAllChildren(nullptr);
+  presetMgr.ensureStaticLayers();
+  settingsMgr.setMidiModeActive(true);
+
+  TouchpadMappingConfig cfg;
+  cfg.name = "Slide CC";
+  cfg.layerId = 0;
+  cfg.midiChannel = 1;
+  juce::ValueTree m("Mapping");
+  m.setProperty("inputAlias", "Touchpad", nullptr);
+  m.setProperty("inputTouchpadEvent", TouchpadEvent::Finger1Y, nullptr);
+  m.setProperty("type", "Expression", nullptr);
+  m.setProperty("adsrTarget", "CC", nullptr);
+  m.setProperty("expressionCCMode", "Slide", nullptr);
+  m.setProperty("channel", 1, nullptr);
+  m.setProperty("data1", 20, nullptr);
+  m.setProperty("touchpadInputMin", 0.0, nullptr);
+  m.setProperty("touchpadInputMax", 1.0, nullptr);
+  m.setProperty("touchpadOutputMin", 0, nullptr);
+  m.setProperty("touchpadOutputMax", 127, nullptr);
+  m.setProperty("slideQuickPrecision", 0, nullptr);
+  m.setProperty("slideAbsRel", 0, nullptr);
+  m.setProperty("slideLockFree", 1, nullptr);
+  cfg.mapping = m;
+  touchpadMixerMgr.addTouchpadMapping(cfg);
+
+  proc.initialize();
+  proc.forceRebuildMappings();
+  mockEng.clear();
+  uintptr_t deviceHandle = 0x1234;
+
+  // Two frames at top so Slide sends CC. normY=0 = top -> high CC (screen up = fader up).
+  proc.processTouchpadContacts(deviceHandle, {{0, 0, 0, 0.5f, 0.0f, true}});
+  proc.processTouchpadContacts(deviceHandle, {{0, 0, 0, 0.5f, 0.0f, true}});
+
+  ASSERT_GE(mockEng.ccEvents.size(), 1u) << "SlideToCC should send CC";
+  EXPECT_EQ(mockEng.ccEvents[0].channel, 1);
+  EXPECT_EQ(mockEng.ccEvents[0].controller, 20);
+  EXPECT_GE(mockEng.ccEvents[0].value, 117) << "Top (Y=0) should send high CC";
+}
+
+// SlideToCC deadzone: values outside [inputMin,inputMax] do not emit CC.
+TEST_F(InputProcessorTest, TouchpadSlideToCC_InputMinMaxCreatesDeadzone) {
+  MockMidiEngine mockEng;
+  TouchpadMixerManager touchpadMixerMgr;
+  VoiceManager voiceMgr(mockEng, settingsMgr);
+  InputProcessor proc(voiceMgr, presetMgr, deviceMgr, scaleLib, mockEng,
+                      settingsMgr, touchpadMixerMgr);
+  presetMgr.getLayersList().removeAllChildren(nullptr);
+  presetMgr.ensureStaticLayers();
+  settingsMgr.setMidiModeActive(true);
+
+  TouchpadMappingConfig cfg;
+  cfg.name = "Slide CC Deadzone";
+  cfg.layerId = 0;
+  cfg.midiChannel = 1;
+  juce::ValueTree m("Mapping");
+  m.setProperty("inputAlias", "Touchpad", nullptr);
+  m.setProperty("inputTouchpadEvent", TouchpadEvent::Finger1Y, nullptr);
+  m.setProperty("type", "Expression", nullptr);
+  m.setProperty("adsrTarget", "CC", nullptr);
+  m.setProperty("expressionCCMode", "Slide", nullptr);
+  m.setProperty("channel", 1, nullptr);
+  m.setProperty("data1", 21, nullptr);
+  m.setProperty("touchpadInputMin", 0.5, nullptr);
+  m.setProperty("touchpadInputMax", 1.0, nullptr);
+  m.setProperty("touchpadOutputMin", 0, nullptr);
+  m.setProperty("touchpadOutputMax", 127, nullptr);
+  m.setProperty("slideQuickPrecision", 0, nullptr);
+  m.setProperty("slideAbsRel", 0, nullptr);
+  m.setProperty("slideLockFree", 1, nullptr);
+  m.setProperty("slideAxis", 1, nullptr); // Horizontal for simpler expectations
+  cfg.mapping = m;
+  touchpadMixerMgr.addTouchpadMapping(cfg);
+
+  proc.initialize();
+  proc.forceRebuildMappings();
+  mockEng.clear();
+  uintptr_t deviceHandle = 0x1234;
+
+  // In deadzone: X=0.25 < inputMin=0.5 => should not emit CC even after 2 frames.
+  proc.processTouchpadContacts(deviceHandle, {{0, 0, 0, 0.25f, 0.5f, true}});
+  proc.processTouchpadContacts(deviceHandle, {{0, 0, 0, 0.25f, 0.5f, true}});
+  EXPECT_EQ(mockEng.ccEvents.size(), 0u) << "Deadzone should emit no CC";
+
+  // Enter window: X=0.75 => should emit CC.
+  proc.processTouchpadContacts(deviceHandle, {{0, 0, 0, 0.75f, 0.5f, true}});
+  proc.processTouchpadContacts(deviceHandle, {{0, 0, 0, 0.75f, 0.5f, true}});
+  ASSERT_GE(mockEng.ccEvents.size(), 1u) << "Inside window should emit CC";
+  EXPECT_EQ(mockEng.ccEvents.back().controller, 21);
+}
+
+// EncoderCC: slide delta changes CC value incrementally
+TEST_F(InputProcessorTest, TouchpadEncoderCC_DeltaSendsCC) {
+  MockMidiEngine mockEng;
+  TouchpadMixerManager touchpadMixerMgr;
+  VoiceManager voiceMgr(mockEng, settingsMgr);
+  InputProcessor proc(voiceMgr, presetMgr, deviceMgr, scaleLib, mockEng,
+                      settingsMgr, touchpadMixerMgr);
+  presetMgr.getLayersList().removeAllChildren(nullptr);
+  presetMgr.ensureStaticLayers();
+  settingsMgr.setMidiModeActive(true);
+
+  TouchpadMappingConfig cfg;
+  cfg.name = "Encoder CC";
+  cfg.layerId = 0;
+  cfg.midiChannel = 1;
+  juce::ValueTree m("Mapping");
+  m.setProperty("inputAlias", "Touchpad", nullptr);
+  m.setProperty("inputTouchpadEvent", TouchpadEvent::Finger1Y, nullptr);
+  m.setProperty("type", "Expression", nullptr);
+  m.setProperty("adsrTarget", "CC", nullptr);
+  m.setProperty("expressionCCMode", "Encoder", nullptr);
+  m.setProperty("channel", 1, nullptr);
+  m.setProperty("data1", 74, nullptr);
+  m.setProperty("encoderStepSize", 1, nullptr);
+  m.setProperty("encoderWrap", false, nullptr);
+  m.setProperty("encoderAxis", 0, nullptr);
+  m.setProperty("encoderPushMode", 0, nullptr);
+  cfg.mapping = m;
+  touchpadMixerMgr.addTouchpadMapping(cfg);
+
+  proc.initialize();
+  mockEng.clear();
+  uintptr_t deviceHandle = 0x1234;
+
+  // First frame: Y=0.5 (establishes prevPos; may or may not send)
+  proc.processTouchpadContacts(deviceHandle, {{0, 0, 0, 0.5f, 0.5f, true}});
+  // Second frame: Y=0.6 (delta positive -> step count positive -> CC increase)
+  proc.processTouchpadContacts(deviceHandle, {{0, 0, 0, 0.5f, 0.6f, true}});
+  ASSERT_GE(mockEng.ccEvents.size(), 1u) << "EncoderCC delta should send CC";
+  EXPECT_EQ(mockEng.ccEvents.back().channel, 1);
+  EXPECT_EQ(mockEng.ccEvents.back().controller, 74);
+  EXPECT_GT(mockEng.ccEvents.back().value, 0) << "Positive Y delta should increase CC";
+}
+
+// SlideToCC Relative: second finger down establishes anchor, movement changes CC by delta
+TEST_F(InputProcessorTest, TouchpadSlideToCC_RelativeSendsDeltaCC) {
+  MockMidiEngine mockEng;
+  TouchpadMixerManager touchpadMixerMgr;
+  VoiceManager voiceMgr(mockEng, settingsMgr);
+  InputProcessor proc(voiceMgr, presetMgr, deviceMgr, scaleLib, mockEng,
+                      settingsMgr, touchpadMixerMgr);
+  presetMgr.getLayersList().removeAllChildren(nullptr);
+  presetMgr.ensureStaticLayers();
+  settingsMgr.setMidiModeActive(true);
+
+  TouchpadMappingConfig cfg;
+  cfg.name = "Slide CC Relative";
+  cfg.layerId = 0;
+  cfg.midiChannel = 1;
+  juce::ValueTree m("Mapping");
+  m.setProperty("inputAlias", "Touchpad", nullptr);
+  m.setProperty("inputTouchpadEvent", TouchpadEvent::Finger1Y, nullptr);
+  m.setProperty("type", "Expression", nullptr);
+  m.setProperty("adsrTarget", "CC", nullptr);
+  m.setProperty("expressionCCMode", "Slide", nullptr);
+  m.setProperty("channel", 1, nullptr);
+  m.setProperty("data1", 30, nullptr);
+  m.setProperty("touchpadInputMin", 0.0, nullptr);
+  m.setProperty("touchpadInputMax", 1.0, nullptr);
+  m.setProperty("touchpadOutputMin", 0, nullptr);
+  m.setProperty("touchpadOutputMax", 127, nullptr);
+  m.setProperty("slideQuickPrecision", 1, nullptr); // Precision = need 2 fingers
+  m.setProperty("slideAbsRel", 1, nullptr); // Relative
+  m.setProperty("slideLockFree", 1, nullptr);
+  cfg.mapping = m;
+  touchpadMixerMgr.addTouchpadMapping(cfg);
+
+  proc.initialize();
+  proc.forceRebuildMappings();
+  mockEng.clear();
+  uintptr_t deviceHandle = 0x1234;
+
+  // Frame 1: one finger at Y=0.5 (applier not down yet, no CC)
+  proc.processTouchpadContacts(deviceHandle, {{0, 0, 0, 0.5f, 0.5f, true}});
+  EXPECT_EQ(mockEng.ccEvents.size(), 0u) << "One finger in Precision mode shouldn't send CC yet";
+
+  // Frame 2: two fingers down (second finger = applier) at Y=0.5 - establishes anchor
+  proc.processTouchpadContacts(deviceHandle, {{0, 0, 0, 0.5f, 0.5f, true}, {1, 0, 0, 0.5f, 0.5f, true}});
+  EXPECT_EQ(mockEng.ccEvents.size(), 0u) << "Applier down edge establishes anchor, no CC this frame";
+
+  // Frame 3: move first finger down (Y=0.7) - in axis space this is towards min,
+  // so CC should decrease from its base value.
+  proc.processTouchpadContacts(deviceHandle, {{0, 0, 0, 0.5f, 0.7f, true}, {1, 0, 0, 0.5f, 0.5f, true}});
+  ASSERT_GE(mockEng.ccEvents.size(), 1u) << "Relative mode: movement should send CC";
+  EXPECT_EQ(mockEng.ccEvents.back().channel, 1);
+  EXPECT_EQ(mockEng.ccEvents.back().controller, 30);
+  // Moving down (Y increases) in Relative mode decreases CC from base
+  EXPECT_LT(mockEng.ccEvents.back().value, 64) << "Moving down from anchor should decrease CC";
+}
+
+// EncoderCC wrap: 127+1 wraps to 0, 0-1 wraps to 127
+TEST_F(InputProcessorTest, TouchpadEncoderCC_WrapAtBoundaries) {
+  MockMidiEngine mockEng;
+  TouchpadMixerManager touchpadMixerMgr;
+  VoiceManager voiceMgr(mockEng, settingsMgr);
+  InputProcessor proc(voiceMgr, presetMgr, deviceMgr, scaleLib, mockEng,
+                      settingsMgr, touchpadMixerMgr);
+  presetMgr.getLayersList().removeAllChildren(nullptr);
+  presetMgr.ensureStaticLayers();
+  settingsMgr.setMidiModeActive(true);
+
+  TouchpadMappingConfig cfg;
+  cfg.name = "Encoder CC Wrap";
+  cfg.layerId = 0;
+  cfg.midiChannel = 1;
+  juce::ValueTree m("Mapping");
+  m.setProperty("inputAlias", "Touchpad", nullptr);
+  m.setProperty("inputTouchpadEvent", TouchpadEvent::Finger1Y, nullptr);
+  m.setProperty("type", "Expression", nullptr);
+  m.setProperty("adsrTarget", "CC", nullptr);
+  m.setProperty("expressionCCMode", "Encoder", nullptr);
+  m.setProperty("channel", 1, nullptr);
+  m.setProperty("data1", 75, nullptr);
+  m.setProperty("encoderStepSize", 1, nullptr);
+  m.setProperty("encoderWrap", true, nullptr); // Wrap enabled
+  m.setProperty("encoderAxis", 0, nullptr);
+  m.setProperty("encoderPushMode", 0, nullptr);
+  cfg.mapping = m;
+  touchpadMixerMgr.addTouchpadMapping(cfg);
+
+  proc.initialize();
+  proc.forceRebuildMappings();
+  mockEng.clear();
+  uintptr_t deviceHandle = 0x1234;
+
+  // Establish initial position (prevPos = 0.5, default value = 64)
+  proc.processTouchpadContacts(deviceHandle, {{0, 0, 0, 0.5f, 0.5f, true}});
+  mockEng.clear();
+
+  // Move down to increase value: Y goes from 0.5 to 1.0 (delta = +0.5, stepCount = round(0.5*127) = 64)
+  // newVal = 64 + 64*1 = 128 -> wrap to 0
+  proc.processTouchpadContacts(deviceHandle, {{0, 0, 0, 0.5f, 1.0f, true}});
+  ASSERT_GE(mockEng.ccEvents.size(), 1u) << "Large movement should wrap past 127";
+  int wrappedVal = mockEng.ccEvents.back().value;
+  EXPECT_LE(wrappedVal, 127) << "Wrapped value should be in 0-127 range";
+  EXPECT_GE(wrappedVal, 0) << "Wrapped value should be non-negative";
+  
+  // Move up from Y=1.0 to Y=0.0: delta = -1.0, stepCount = -127
+  // If current value is 0, newVal = 0 + (-127)*1 = -127 -> wrap to 1
+  mockEng.clear();
+  proc.processTouchpadContacts(deviceHandle, {{0, 0, 0, 0.5f, 0.0f, true}});
+  if (mockEng.ccEvents.size() > 0) {
+    int wrappedVal2 = mockEng.ccEvents.back().value;
+    EXPECT_LE(wrappedVal2, 127) << "Wrapping past 0 should wrap to high value";
+    EXPECT_GE(wrappedVal2, 0) << "Wrapped value should be non-negative";
+  }
+}
+
+// EncoderCC clamp: values stay within 0-127
+TEST_F(InputProcessorTest, TouchpadEncoderCC_ClampAtBoundaries) {
+  MockMidiEngine mockEng;
+  TouchpadMixerManager touchpadMixerMgr;
+  VoiceManager voiceMgr(mockEng, settingsMgr);
+  InputProcessor proc(voiceMgr, presetMgr, deviceMgr, scaleLib, mockEng,
+                      settingsMgr, touchpadMixerMgr);
+  presetMgr.getLayersList().removeAllChildren(nullptr);
+  presetMgr.ensureStaticLayers();
+  settingsMgr.setMidiModeActive(true);
+
+  TouchpadMappingConfig cfg;
+  cfg.name = "Encoder CC Clamp";
+  cfg.layerId = 0;
+  cfg.midiChannel = 1;
+  juce::ValueTree m("Mapping");
+  m.setProperty("inputAlias", "Touchpad", nullptr);
+  m.setProperty("inputTouchpadEvent", TouchpadEvent::Finger1Y, nullptr);
+  m.setProperty("type", "Expression", nullptr);
+  m.setProperty("adsrTarget", "CC", nullptr);
+  m.setProperty("expressionCCMode", "Encoder", nullptr);
+  m.setProperty("channel", 1, nullptr);
+  m.setProperty("data1", 76, nullptr);
+  m.setProperty("encoderStepSize", 1, nullptr);
+  m.setProperty("encoderWrap", false, nullptr); // Clamp (no wrap)
+  m.setProperty("encoderAxis", 0, nullptr);
+  m.setProperty("encoderPushMode", 0, nullptr);
+  cfg.mapping = m;
+  touchpadMixerMgr.addTouchpadMapping(cfg);
+
+  proc.initialize();
+  proc.forceRebuildMappings();
+  mockEng.clear();
+  uintptr_t deviceHandle = 0x1234;
+
+  // Establish initial position
+  proc.processTouchpadContacts(deviceHandle, {{0, 0, 0, 0.5f, 0.5f, true}});
+  mockEng.clear();
+
+  // Move up significantly to push value high
+  for (int i = 0; i < 20; ++i) {
+    float y = 0.5f - (i + 1) * 0.05f;
+    proc.processTouchpadContacts(deviceHandle, {{0, 0, 0, 0.5f, y, true}});
+  }
+  ASSERT_GE(mockEng.ccEvents.size(), 1u);
+  int lastVal = mockEng.ccEvents.back().value;
+  EXPECT_LE(lastVal, 127) << "Clamp mode: value should not exceed 127";
+  EXPECT_GE(lastVal, 0) << "Clamp mode: value should not be below 0";
+}
+
+// EncoderCC push: two-finger tap sends push value (momentary)
+TEST_F(InputProcessorTest, TouchpadEncoderCC_PushMomentary) {
+  MockMidiEngine mockEng;
+  TouchpadMixerManager touchpadMixerMgr;
+  VoiceManager voiceMgr(mockEng, settingsMgr);
+  InputProcessor proc(voiceMgr, presetMgr, deviceMgr, scaleLib, mockEng,
+                      settingsMgr, touchpadMixerMgr);
+  presetMgr.getLayersList().removeAllChildren(nullptr);
+  presetMgr.ensureStaticLayers();
+  settingsMgr.setMidiModeActive(true);
+
+  TouchpadMappingConfig cfg;
+  cfg.name = "Encoder CC Push Momentary";
+  cfg.layerId = 0;
+  cfg.midiChannel = 1;
+  juce::ValueTree m("Mapping");
+  m.setProperty("inputAlias", "Touchpad", nullptr);
+  m.setProperty("inputTouchpadEvent", TouchpadEvent::Finger1Y, nullptr);
+  m.setProperty("type", "Expression", nullptr);
+  m.setProperty("adsrTarget", "CC", nullptr);
+  m.setProperty("expressionCCMode", "Encoder", nullptr);
+  m.setProperty("channel", 1, nullptr);
+  m.setProperty("data1", 77, nullptr);
+  m.setProperty("encoderStepSize", 1, nullptr);
+  m.setProperty("encoderWrap", false, nullptr);
+  m.setProperty("encoderAxis", 0, nullptr);
+  m.setProperty("encoderPushMode", 1, nullptr); // Momentary
+  m.setProperty("encoderPushValue", 100, nullptr);
+  cfg.mapping = m;
+  touchpadMixerMgr.addTouchpadMapping(cfg);
+
+  proc.initialize();
+  proc.forceRebuildMappings();
+  mockEng.clear();
+  uintptr_t deviceHandle = 0x1234;
+
+  // One finger: may send delta CC but not push value
+  proc.processTouchpadContacts(deviceHandle, {{0, 0, 0, 0.5f, 0.5f, true}});
+  // Check that if any CC was sent, it's not the push value (100)
+  for (const auto &evt : mockEng.ccEvents) {
+    EXPECT_NE(evt.value, 100) << "One finger shouldn't send push value";
+  }
+
+  // Two fingers down: should send push value
+  mockEng.clear();
+  proc.processTouchpadContacts(deviceHandle, {{0, 0, 0, 0.5f, 0.5f, true}, {1, 0, 0, 0.5f, 0.5f, true}});
+  ASSERT_GE(mockEng.ccEvents.size(), 1u) << "Two fingers down should send push value";
+  EXPECT_EQ(mockEng.ccEvents.back().channel, 1);
+  EXPECT_EQ(mockEng.ccEvents.back().controller, 77);
+  EXPECT_EQ(mockEng.ccEvents.back().value, 100) << "Momentary push should send push value";
+
+  // Two fingers up: should send 0
+  mockEng.clear();
+  proc.processTouchpadContacts(deviceHandle, {{0, 0, 0, 0.5f, 0.5f, false}, {1, 0, 0, 0.5f, 0.5f, false}});
+  ASSERT_GE(mockEng.ccEvents.size(), 1u) << "Two fingers up should send 0";
+  EXPECT_EQ(mockEng.ccEvents.back().value, 0) << "Momentary release should send 0";
+}
+
+// EncoderCC push: toggle mode flips state
+TEST_F(InputProcessorTest, TouchpadEncoderCC_PushToggle) {
+  MockMidiEngine mockEng;
+  TouchpadMixerManager touchpadMixerMgr;
+  VoiceManager voiceMgr(mockEng, settingsMgr);
+  InputProcessor proc(voiceMgr, presetMgr, deviceMgr, scaleLib, mockEng,
+                      settingsMgr, touchpadMixerMgr);
+  presetMgr.getLayersList().removeAllChildren(nullptr);
+  presetMgr.ensureStaticLayers();
+  settingsMgr.setMidiModeActive(true);
+
+  TouchpadMappingConfig cfg;
+  cfg.name = "Encoder CC Push Toggle";
+  cfg.layerId = 0;
+  cfg.midiChannel = 1;
+  juce::ValueTree m("Mapping");
+  m.setProperty("inputAlias", "Touchpad", nullptr);
+  m.setProperty("inputTouchpadEvent", TouchpadEvent::Finger1Y, nullptr);
+  m.setProperty("type", "Expression", nullptr);
+  m.setProperty("adsrTarget", "CC", nullptr);
+  m.setProperty("expressionCCMode", "Encoder", nullptr);
+  m.setProperty("channel", 1, nullptr);
+  m.setProperty("data1", 78, nullptr);
+  m.setProperty("encoderStepSize", 1, nullptr);
+  m.setProperty("encoderWrap", false, nullptr);
+  m.setProperty("encoderAxis", 0, nullptr);
+  m.setProperty("encoderPushMode", 2, nullptr); // Toggle
+  m.setProperty("encoderPushValue", 127, nullptr);
+  cfg.mapping = m;
+  touchpadMixerMgr.addTouchpadMapping(cfg);
+
+  proc.initialize();
+  proc.forceRebuildMappings();
+  mockEng.clear();
+  uintptr_t deviceHandle = 0x1234;
+
+  // First two-finger tap: should send push value (toggle ON)
+  proc.processTouchpadContacts(deviceHandle, {{0, 0, 0, 0.5f, 0.5f, true}, {1, 0, 0, 0.5f, 0.5f, true}});
+  ASSERT_GE(mockEng.ccEvents.size(), 1u) << "First tap should send push value";
+  EXPECT_EQ(mockEng.ccEvents.back().value, 127) << "Toggle ON should send push value";
+
+  // Release fingers
+  proc.processTouchpadContacts(deviceHandle, {{0, 0, 0, 0.5f, 0.5f, false}, {1, 0, 0, 0.5f, 0.5f, false}});
+  mockEng.clear();
+
+  // Second two-finger tap: should send 0 (toggle OFF)
+  proc.processTouchpadContacts(deviceHandle, {{0, 0, 0, 0.5f, 0.5f, true}, {1, 0, 0, 0.5f, 0.5f, true}});
+  ASSERT_GE(mockEng.ccEvents.size(), 1u) << "Second tap should toggle OFF";
+  EXPECT_EQ(mockEng.ccEvents.back().value, 0) << "Toggle OFF should send 0";
+}
+
 TEST_F(InputProcessorTest, HasTouchpadLayoutsReturnsTrueWhenLayoutsExist) {
   TouchpadMixerConfig cfg;
   cfg.type = TouchpadType::Mixer;

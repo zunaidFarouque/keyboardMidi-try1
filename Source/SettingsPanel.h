@@ -21,6 +21,7 @@ public:
   void initialize();
 
   std::function<void()> onResetMiniWindowPosition;
+  std::function<void()> onResetUiLayout;
 
   // RawInputManager::Listener implementation
   void handleRawKeyEvent(uintptr_t deviceHandle, int keyCode,
@@ -77,6 +78,7 @@ private:
   juce::ToggleButton *capRefresh30FpsToggle = nullptr;  // Cap window refresh at 30 FPS
   juce::ToggleButton *delayMidiCheckbox = nullptr;
   juce::Slider *delayMidiSlider = nullptr;
+  juce::ToggleButton *rememberUiStateToggle = nullptr;
 
   // Key-learning buttons (non-owning; used by helper methods and callbacks)
   juce::TextButton *toggleKeyButton = nullptr;                 // Set toggle key

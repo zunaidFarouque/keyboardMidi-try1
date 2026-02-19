@@ -66,6 +66,10 @@ public:
   // Phase 45.3: notify listeners when the current layer changes
   std::function<void(int)> onLayerChanged;
 
+  // UI state persistence
+  void saveUiState(SettingsManager &settings) const;
+  void loadUiState(SettingsManager &settings);
+
 private:
   // 1. Data/Managers
   PresetManager &presetManager;

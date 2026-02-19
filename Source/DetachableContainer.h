@@ -18,6 +18,12 @@ public:
   void show();
   bool isHidden() const { return isCurrentlyHidden; }
 
+  // Floating window state
+  bool isPoppedOut() const { return window != nullptr; }
+  void popOut();
+  void dock();
+  juce::DocumentWindow *getFloatingWindow() const { return window.get(); }
+
   // Callback when hide state changes
   std::function<void(DetachableContainer*, bool)> onVisibilityChanged;
 

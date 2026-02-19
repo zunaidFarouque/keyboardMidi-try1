@@ -1920,6 +1920,43 @@ void InputProcessor::processTouchpadContacts(
       const auto &p = entry.conversionParams;
       auto key = std::make_tuple(deviceHandle, entry.layerId, entry.eventId);
 
+      // Region test: skip if this mapping has a non-full region and the
+      // driving contact is outside it.
+      {
+        float testX = 0.0f, testY = 0.0f;
+        switch (entry.eventId) {
+        case TouchpadEvent::Finger1Down:
+        case TouchpadEvent::Finger1Up:
+        case TouchpadEvent::Finger1X:
+        case TouchpadEvent::Finger1Y:
+          testX = x1;
+          testY = y1;
+          break;
+        case TouchpadEvent::Finger2Down:
+        case TouchpadEvent::Finger2Up:
+        case TouchpadEvent::Finger2X:
+        case TouchpadEvent::Finger2Y:
+          testX = x2;
+          testY = y2;
+          break;
+        case TouchpadEvent::Finger1And2Dist:
+        case TouchpadEvent::Finger1And2AvgX:
+        case TouchpadEvent::Finger1And2AvgY:
+          testX = avgX;
+          testY = avgY;
+          break;
+        default:
+          break;
+        }
+        const bool hasRegion =
+            (entry.regionLeft != 0.0f || entry.regionTop != 0.0f ||
+             entry.regionRight != 1.0f || entry.regionBottom != 1.0f);
+        if (hasRegion &&
+            (testX < entry.regionLeft || testX >= entry.regionRight ||
+             testY < entry.regionTop || testY >= entry.regionBottom))
+          continue;
+      }
+
       switch (entry.conversionKind) {
       case TouchpadConversionKind::BoolToGate:
         if (act.type == ActionType::Note) {
@@ -2233,6 +2270,316 @@ void InputProcessor::processTouchpadContacts(
           }
         }
         break;
+      }
+    }
+  }
+
+  // Slide and Encoder CC: second pass (single-fader slide, incremental encoder + push)
+  if (!ctx->touchpadMappings.empty()) {
+    for (const auto &entry : ctx->touchpadMappings) {
+      if (entry.conversionKind != TouchpadConversionKind::SlideToCC &&
+          entry.conversionKind != TouchpadConversionKind::EncoderCC)
+        continue;
+      if (!activeLayersSnapshot[(size_t)entry.layerId])
+        continue;
+      if (entry.action.type != ActionType::Expression ||
+          entry.action.adsrSettings.target != AdsrTarget::CC)
+        continue;
+      const auto &act = entry.action;
+      const auto &p = entry.conversionParams;
+      auto keySlideEnc = std::make_tuple(deviceHandle, entry.layerId,
+          entry.eventId, act.channel, act.adsrSettings.ccNumber);
+      auto entryKey = std::make_tuple(deviceHandle, entry.layerId, entry.eventId);
+
+      // Region test: which contact drives this mapping
+      float testX = 0.0f, testY = 0.0f;
+      switch (entry.eventId) {
+      case TouchpadEvent::Finger1X:
+      case TouchpadEvent::Finger1Y:
+        testX = x1;
+        testY = y1;
+        break;
+      case TouchpadEvent::Finger2X:
+      case TouchpadEvent::Finger2Y:
+        testX = x2;
+        testY = y2;
+        break;
+      case TouchpadEvent::Finger1And2AvgX:
+      case TouchpadEvent::Finger1And2AvgY:
+        testX = avgX;
+        testY = avgY;
+        break;
+      default:
+        continue;
+      }
+      const bool hasRegion =
+          (entry.regionLeft != 0.0f || entry.regionTop != 0.0f ||
+           entry.regionRight != 1.0f || entry.regionBottom != 1.0f);
+      if (hasRegion &&
+          (testX < entry.regionLeft || testX >= entry.regionRight ||
+           testY < entry.regionTop || testY >= entry.regionBottom))
+        continue;
+
+      if (entry.conversionKind == TouchpadConversionKind::SlideToCC) {
+        // Build inRegion: contacts inside this entry's region
+        std::vector<std::pair<size_t, const TouchpadContact *>> inRegion;
+        for (size_t i = 0; i < contacts.size(); ++i) {
+          const auto &c = contacts[i];
+          if (c.normX >= entry.regionLeft && c.normX < entry.regionRight &&
+              c.normY >= entry.regionTop && c.normY < entry.regionBottom)
+            inRegion.push_back({i, &c});
+        }
+        std::sort(inRegion.begin(), inRegion.end(),
+            [](const auto &a, const auto &b) {
+              return a.second->contactId < b.second->contactId;
+            });
+        std::vector<std::pair<size_t, const TouchpadContact *>> active;
+        for (const auto &pairs : inRegion) {
+          if (pairs.second->tipDown)
+            active.push_back(pairs);
+        }
+        bool usePrecision = (p.slideModeFlags & kMixerModeUseFinger1) == 0;
+        bool applierDownNow =
+            usePrecision ? (active.size() >= 2) : !active.empty();
+        bool prevApplierDown = false;
+        {
+          auto it = touchpadSlideApplierDownPrev.find(entryKey);
+          if (it != touchpadSlideApplierDownPrev.end())
+            prevApplierDown = it->second;
+        }
+        bool applierDownEdge = applierDownNow && !prevApplierDown;
+        touchpadSlideApplierDownPrev[entryKey] = applierDownNow;
+
+        if (!applierDownNow) {
+          auto itLock = touchpadSlideLockedContact.find(entryKey);
+          if (itLock != touchpadSlideLockedContact.end())
+            touchpadSlideLockedContact.erase(itLock);
+          for (const auto &pairs : inRegion) {
+            auto k = std::make_tuple(deviceHandle, entry.layerId, entry.eventId,
+                pairs.second->contactId);
+            touchpadSlideContactPrev[k] = {pairs.second->tipDown,
+                pairs.second->normX, pairs.second->normY};
+          }
+          continue;
+        }
+
+        const TouchpadContact *positionContact = active[0].second;
+        float positionX = positionContact->normX;
+        float positionY = positionContact->normY;
+        if ((p.slideModeFlags & kMixerModeLock) != 0) {
+          auto itLock = touchpadSlideLockedContact.find(entryKey);
+          if (applierDownEdge) {
+            touchpadSlideLockedContact[entryKey] = positionContact->contactId;
+          } else if (itLock != touchpadSlideLockedContact.end() &&
+              itLock->second >= 0) {
+            bool found = false;
+            for (const auto &pairs : active) {
+              if (pairs.second->contactId == itLock->second) {
+                positionContact = pairs.second;
+                positionX = positionContact->normX;
+                positionY = positionContact->normY;
+                found = true;
+                break;
+              }
+            }
+            if (!found) {
+              for (const auto &pairs : inRegion) {
+                auto k = std::make_tuple(deviceHandle, entry.layerId,
+                    entry.eventId, pairs.second->contactId);
+                touchpadSlideContactPrev[k] = {pairs.second->tipDown,
+                    pairs.second->normX, pairs.second->normY};
+              }
+              continue; // Locked contact lifted; don't drive from other finger
+            }
+          }
+        }
+
+        // Choose axis: slideAxis 0 = Vertical (Y), 1 = Horizontal (X).
+        float localPos = 0.0f;
+        if (p.slideAxis == 0) {
+          localPos = (positionY - entry.regionTop) * entry.invRegionHeight; // 0 = top, 1 = bottom
+        } else {
+          localPos = (positionX - entry.regionLeft) * entry.invRegionWidth; // 0 = left, 1 = right
+        }
+        localPos = std::clamp(localPos, 0.0f, 1.0f);
+
+        // Work in a unified "axis space" where 0 = bottom/left, 1 = top/right.
+        float axisPos = (p.slideAxis == 0) ? (1.0f - localPos) : localPos;
+
+        // Apply input window as a true deadzone outside [inputMin, inputMax].
+        const float windowMin = std::clamp(p.inputMin, 0.0f, 1.0f);
+        const float windowMax = std::clamp(p.inputMax, 0.0f, 1.0f);
+        const float posInWindow = std::clamp(axisPos, windowMin, windowMax);
+        const bool inWindow = (axisPos >= windowMin && axisPos <= windowMax);
+
+        // Normalized within window in axis space: 0 at inputMin, 1 at inputMax.
+        float tAbs = 0.5f;
+        if (p.invInputRange > 0.0f) {
+          tAbs = (posInWindow - windowMin) * p.invInputRange;
+          tAbs = std::clamp(tAbs, 0.0f, 1.0f);
+        }
+        const float outputRange =
+            static_cast<float>(p.outputMax - p.outputMin);
+        bool skipSendThisFrame = false;
+        int ccVal = 0;
+
+        // Deadzone: outside input window, do not emit CC. For relative mode,
+        // keep anchor pinned to the nearest window edge so re-entry doesn't jump.
+        if (!inWindow) {
+          if ((p.slideModeFlags & kMixerModeRelative) != 0) {
+            float &base = touchpadSlideRelativeValue[keySlideEnc];
+            float &anchor = touchpadSlideRelativeAnchor[keySlideEnc];
+            if (applierDownEdge) {
+              auto itStored = lastTouchpadSlideCCValues.find(keySlideEnc);
+              if (itStored != lastTouchpadSlideCCValues.end()) {
+                base = static_cast<float>(itStored->second);
+              } else {
+                base = static_cast<float>(p.outputMin) +
+                       outputRange * tAbs;
+                lastTouchpadSlideCCValues[keySlideEnc] =
+                    static_cast<int>(std::round(base));
+              }
+            }
+            anchor = posInWindow;
+          }
+          for (const auto &pairs : inRegion) {
+            auto k = std::make_tuple(deviceHandle, entry.layerId, entry.eventId,
+                pairs.second->contactId);
+            touchpadSlideContactPrev[k] = {pairs.second->tipDown,
+                pairs.second->normX, pairs.second->normY};
+          }
+          continue;
+        }
+
+        if ((p.slideModeFlags & kMixerModeRelative) == 0) {
+          ccVal = juce::jlimit(p.outputMin, p.outputMax,
+              static_cast<int>(std::round(static_cast<float>(p.outputMin) +
+                  outputRange * tAbs)));
+        } else {
+          float &base = touchpadSlideRelativeValue[keySlideEnc];
+          float &anchor = touchpadSlideRelativeAnchor[keySlideEnc];
+          if (applierDownEdge) {
+            auto itStored = lastTouchpadSlideCCValues.find(keySlideEnc);
+            if (itStored != lastTouchpadSlideCCValues.end()) {
+              base = static_cast<float>(itStored->second);
+            } else {
+              base = static_cast<float>(p.outputMin) + outputRange * tAbs;
+              lastTouchpadSlideCCValues[keySlideEnc] =
+                  static_cast<int>(std::round(base));
+            }
+            anchor = posInWindow;
+            skipSendThisFrame = true;
+          } else {
+            float deltaPos = posInWindow - anchor;
+            float val = base + deltaPos * p.invInputRange * outputRange;
+            val = std::clamp(val, static_cast<float>(p.outputMin),
+                static_cast<float>(p.outputMax));
+            ccVal = static_cast<int>(std::round(val));
+          }
+        }
+
+        if (!skipSendThisFrame) {
+          auto itLast = lastTouchpadSlideCCValues.find(keySlideEnc);
+          if (itLast == lastTouchpadSlideCCValues.end() || itLast->second != ccVal) {
+            voiceManager.sendCC(act.channel, act.adsrSettings.ccNumber, ccVal);
+            lastTouchpadSlideCCValues[keySlideEnc] = ccVal;
+          }
+        }
+        for (const auto &pairs : inRegion) {
+          auto k = std::make_tuple(deviceHandle, entry.layerId, entry.eventId,
+              pairs.second->contactId);
+          touchpadSlideContactPrev[k] = {pairs.second->tipDown,
+              pairs.second->normX, pairs.second->normY};
+        }
+        continue;
+      }
+
+      if (entry.conversionKind == TouchpadConversionKind::EncoderCC) {
+        // Primary position from eventId; axis 0=Y, 1=X, 2=both
+        float primX = x1, primY = y1;
+        if (entry.eventId == TouchpadEvent::Finger2X || entry.eventId == TouchpadEvent::Finger2Y) {
+          primX = x2;
+          primY = y2;
+        } else if (entry.eventId == TouchpadEvent::Finger1And2AvgX ||
+            entry.eventId == TouchpadEvent::Finger1And2AvgY) {
+          primX = avgX;
+          primY = avgY;
+        }
+        
+        int stepCount = 0;
+        if (p.encoderAxis == 2) {
+          // Both: calculate deltaX and deltaY separately, apply stepSizeX/Y
+          float &prevPosX = touchpadEncoderPrevPosX[keySlideEnc];
+          float &prevPosY = touchpadEncoderPrevPosY[keySlideEnc];
+          float deltaX = primX - prevPosX;
+          float deltaY = primY - prevPosY;
+          prevPosX = primX;
+          prevPosY = primY;
+          int stepCountX = static_cast<int>(std::round(deltaX * 127.0f));
+          int stepCountY = static_cast<int>(std::round(deltaY * 127.0f));
+          int stepX = juce::jlimit(1, 16, p.encoderStepSizeX);
+          int stepY = juce::jlimit(1, 16, p.encoderStepSizeY);
+          stepCount = stepCountX * stepX + stepCountY * stepY;
+        } else {
+          // Single axis: use combined position and stepSize
+          float pos = (p.encoderAxis == 0) ? primY : primX;
+          float &prevPos = touchpadEncoderPrevPos[keySlideEnc];
+          float delta = pos - prevPos;
+          prevPos = pos;
+          stepCount = static_cast<int>(std::round(delta * 127.0f));
+        }
+        
+        if (stepCount != 0) {
+          auto itVal = lastTouchpadEncoderCCValues.find(keySlideEnc);
+          int curVal = (itVal != lastTouchpadEncoderCCValues.end())
+              ? itVal->second : 64;
+          int step = (p.encoderAxis == 2) ? 1 : juce::jlimit(1, 16, p.encoderStepSize); // Step already applied for Both
+          int newVal = curVal + stepCount * step;
+          if (p.encoderWrap) {
+            while (newVal > 127) newVal -= 128;
+            while (newVal < 0) newVal += 128;
+            newVal = (newVal + 128) % 128;
+          } else {
+            newVal = juce::jlimit(0, 127, newVal);
+          }
+          voiceManager.sendCC(act.channel, act.adsrSettings.ccNumber, newVal);
+          lastTouchpadEncoderCCValues[keySlideEnc] = newVal;
+        }
+
+        // Push: two fingers in region
+        std::vector<const TouchpadContact *> inRegionEnc;
+        for (const auto &c : contacts) {
+          if (c.normX >= entry.regionLeft && c.normX < entry.regionRight &&
+              c.normY >= entry.regionTop && c.normY < entry.regionBottom &&
+              c.tipDown)
+            inRegionEnc.push_back(&c);
+        }
+        bool twoFingers = (inRegionEnc.size() >= 2);
+        bool prevTwo = false;
+        {
+          auto it = touchpadEncoderTwoFingersPrev.find(keySlideEnc);
+          if (it != touchpadEncoderTwoFingersPrev.end())
+            prevTwo = it->second;
+        }
+        touchpadEncoderTwoFingersPrev[keySlideEnc] = twoFingers;
+        if (p.encoderPushMode != 0) {
+          if (twoFingers && !prevTwo) {
+            if (p.encoderPushMode == 1) { // Momentary
+              voiceManager.sendCC(act.channel, act.adsrSettings.ccNumber,
+                  juce::jlimit(0, 127, p.encoderPushValue));
+            } else if (p.encoderPushMode == 2) { // Toggle
+              bool &on = touchpadEncoderPushOn[keySlideEnc];
+              on = !on;
+              voiceManager.sendCC(act.channel, act.adsrSettings.ccNumber,
+                  on ? juce::jlimit(0, 127, p.encoderPushValue) : 0);
+            } else if (p.encoderPushMode == 3) { // Trigger
+              voiceManager.sendCC(act.channel, act.adsrSettings.ccNumber,
+                  juce::jlimit(0, 127, p.encoderPushValue));
+            }
+          } else if (!twoFingers && prevTwo && p.encoderPushMode == 1) {
+            voiceManager.sendCC(act.channel, act.adsrSettings.ccNumber, 0);
+          }
+        }
       }
     }
   }

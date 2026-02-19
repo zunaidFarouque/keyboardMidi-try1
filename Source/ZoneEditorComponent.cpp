@@ -1,4 +1,5 @@
 #include "ZoneEditorComponent.h"
+#include "SettingsManager.h"
 
 ZoneEditorComponent::ZoneEditorComponent(ZoneManager *zoneMgr, DeviceManager *deviceMgr, RawInputManager *rawInputMgr, ScaleLibrary *scaleLib)
     : zoneManager(zoneMgr),
@@ -64,4 +65,19 @@ void ZoneEditorComponent::resized() {
   int contentWidth = propertiesViewport.getWidth() - 15;
   int contentHeight = propertiesPanel.getRequiredHeight();
   propertiesPanel.setSize(contentWidth, contentHeight);
+}
+
+void ZoneEditorComponent::saveUiState(SettingsManager &settings) const {
+  if (!settings.getRememberUiState())
+    return;
+  settings.setZonesSelectedIndex(listPanel.getSelectedRow());
+}
+
+void ZoneEditorComponent::loadUiState(SettingsManager &settings) {
+  if (!settings.getRememberUiState())
+    return;
+  int index = settings.getZonesSelectedIndex();
+  if (index < 0)
+    return;
+  listPanel.setSelectedRow(index);
 }

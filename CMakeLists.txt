@@ -195,6 +195,7 @@ add_executable(MIDIQy_Tests
     Source/Tests/TouchpadTabTests.cpp
     Source/Tests/ZonePropertiesLogicTests.cpp
     Source/Tests/ZoneTests.cpp
+    Source/Tests/UiStatePersistenceTests.cpp
 )
 
 # 12. Link Dependencies

@@ -123,6 +123,18 @@ void DetachableContainer::setContent(juce::Component &newContent) {
   resized();
 }
 
+void DetachableContainer::popOut() {
+  if (!window && content) {
+    togglePopOut();
+  }
+}
+
+void DetachableContainer::dock() {
+  if (window && window->isVisible()) {
+    redock();
+  }
+}
+
 void DetachableContainer::togglePopOut() {
   if (window && window->isVisible()) {
     // Currently floating - redock

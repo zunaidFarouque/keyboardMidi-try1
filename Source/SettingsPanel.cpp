@@ -97,6 +97,7 @@ void SettingsPanel::rebuildUI() {
   capRefresh30FpsToggle = nullptr;
   delayMidiCheckbox = nullptr;
   delayMidiSlider = nullptr;
+  rememberUiStateToggle = nullptr;
   toggleKeyButton = nullptr;
   resetToggleKeyButton = nullptr;
   performanceModeKeyButton = nullptr;
@@ -163,6 +164,33 @@ void SettingsPanel::rebuildUI() {
   }
 
   // --- Custom rows not described by schema ---
+
+  // Reset UI Layout row (under UI & Layout section)
+  {
+    UiRow row;
+    row.isSeparatorRow = false;
+    auto btn = std::make_unique<juce::TextButton>("Reset UI Layout");
+    juce::TextButton *btnPtr = btn.get();
+    btn->setTooltip(
+        "Reset window positions, tabs, and panels to defaults, then exit MIDIQy.");
+    btn->onClick = [this, btnPtr]() {
+      juce::AlertWindow::showOkCancelBox(
+          juce::AlertWindow::WarningIcon, "Reset UI Layout",
+          "This will reset window positions, visible panels, and tab layout "
+          "to their defaults, then exit MIDIQy.\n\n"
+          "After it closes, please start MIDIQy again.\n\n"
+          "Continue with reset and exit?",
+          "Reset", "Cancel", this,
+          juce::ModalCallbackFunction::create([this](int result) {
+            if (result == 1 && onResetUiLayout) {
+              onResetUiLayout();
+            }
+          }));
+    };
+    addAndMakeVisible(*btn);
+    row.items.push_back({std::move(btn), 1.0f, false});
+    uiRows.push_back(std::move(row));
+  }
 
   // Global Shortcuts section header
   {
@@ -341,6 +369,9 @@ void SettingsPanel::changeListenerCallback(juce::ChangeBroadcaster *source) {
       hideCursorInPerformanceModeToggle->setToggleState(
           settingsManager.getHideCursorInPerformanceMode(),
           juce::dontSendNotification);
+    if (rememberUiStateToggle)
+      rememberUiStateToggle->setToggleState(
+          settingsManager.getRememberUiState(), juce::dontSendNotification);
   }
 }
 
@@ -440,6 +471,8 @@ juce::var SettingsPanel::getSettingsValue(const juce::String &propertyId) const 
     return juce::var(settingsManager.isDelayMidiEnabled());
   if (propertyId == "delayMidiSeconds")
     return juce::var(settingsManager.getDelayMidiSeconds());
+  if (propertyId == "rememberUiState")
+    return juce::var(settingsManager.getRememberUiState());
   return juce::var();
 }
 
@@ -473,6 +506,8 @@ void SettingsPanel::applySettingsValue(const juce::String &propertyId,
   } else if (propertyId == "delayMidiSeconds") {
     int v = static_cast<int>(value);
     settingsManager.setDelayMidiSeconds(v);
+  } else if (propertyId == "rememberUiState") {
+    settingsManager.setRememberUiState(static_cast<bool>(value));
   }
 }
 
@@ -543,6 +578,8 @@ void SettingsPanel::createControl(const InspectorControl &def, UiRow &currentRow
       capRefresh30FpsToggle = tbPtr;
     else if (propId == "delayMidiEnabled")
       delayMidiCheckbox = tbPtr;
+    else if (propId == "rememberUiState")
+      rememberUiStateToggle = tbPtr;
 
     tb->onClick = [this, propId, tbPtr]() {
       applySettingsValue(propId, juce::var(tbPtr->getToggleState()));

@@ -737,10 +737,12 @@ static void collectForcedMappings(
 // Compile one touchpad mapping ValueTree into a TouchpadMappingEntry and append
 // it to out. Used by the Touchpad tab (TouchpadMixerManager). Channel is taken
 // from the header (headerChannel), not from the mapping ValueTree.
+// If region is non-null, entry region is set from it; otherwise full pad (0,0,1,1).
 static void compileTouchpadMappingFromValueTree(
     const juce::ValueTree &mapping, int layerId, int headerChannel,
     ZoneManager &zoneMgr, SettingsManager &settingsMgr,
-    std::vector<TouchpadMappingEntry> &out) {
+    std::vector<TouchpadMappingEntry> &out,
+    const TouchpadLayoutRegion *region = nullptr) {
   if (!mapping.isValid() || !mapping.hasType("Mapping"))
     return;
   
@@ -759,6 +761,16 @@ static void compileTouchpadMappingFromValueTree(
   entry.layerId = layerId;
   entry.eventId = eventId;
   entry.action = std::move(action);
+  if (region) {
+    entry.regionLeft = region->left;
+    entry.regionTop = region->top;
+    entry.regionRight = region->right;
+    entry.regionBottom = region->bottom;
+    float rw = region->right - region->left;
+    float rh = region->bottom - region->top;
+    entry.invRegionWidth = (rw > 0.0f) ? (1.0f / rw) : 1.0f;
+    entry.invRegionHeight = (rh > 0.0f) ? (1.0f / rh) : 1.0f;
+  }
   TouchpadConversionParams &p = entry.conversionParams;
 
   juce::String typeStr =
@@ -791,8 +803,51 @@ static void compileTouchpadMappingFromValueTree(
     const bool isPB = adsrTargetStr.equalsIgnoreCase("PitchBend");
     const bool isSmartBend =
         adsrTargetStr.equalsIgnoreCase("SmartScaleBend");
+    juce::String expressionCCModeStr =
+        mapping.getProperty("expressionCCMode", MappingDefaults::ExpressionCCModePosition).toString().trim();
 
-    if (inputBool) {
+    if (isCC && expressionCCModeStr.equalsIgnoreCase("Slide")) {
+      // Slide/Encoder require continuous X/Y events at runtime. New touchpad
+      // mappings default to Finger1Down; auto-promote that to Finger1Y so CC
+      // actually emits without requiring the user to find an event selector.
+      if (eventId == TouchpadEvent::Finger1Down || eventId == TouchpadEvent::Finger1Up ||
+          eventId == TouchpadEvent::Finger2Down || eventId == TouchpadEvent::Finger2Up) {
+        entry.eventId = TouchpadEvent::Finger1Y;
+      }
+      entry.conversionKind = TouchpadConversionKind::SlideToCC;
+      entry.action.adsrSettings.target = AdsrTarget::CC;
+      entry.action.adsrSettings.ccNumber = (int)mapping.getProperty("data1", MappingDefaults::ExpressionData1);
+      p.inputMin = (float)mapping.getProperty("touchpadInputMin", static_cast<double>(MappingDefaults::TouchpadInputMin));
+      p.inputMax = (float)mapping.getProperty("touchpadInputMax", static_cast<double>(MappingDefaults::TouchpadInputMax));
+      float r = p.inputMax - p.inputMin;
+      p.invInputRange = (r > 0.0f) ? (1.0f / r) : 0.0f;
+      p.outputMin = (int)mapping.getProperty("touchpadOutputMin", MappingDefaults::TouchpadOutputMin);
+      p.outputMax = (int)mapping.getProperty("touchpadOutputMax", MappingDefaults::TouchpadOutputMax);
+      int quickPrecision = (int)mapping.getProperty("slideQuickPrecision", MappingDefaults::SlideQuickPrecision);
+      int absRel = (int)mapping.getProperty("slideAbsRel", MappingDefaults::SlideAbsRel);
+      int lockFree = (int)mapping.getProperty("slideLockFree", MappingDefaults::SlideLockFree);
+      // Quick (0) = one finger drives; Precision (1) = need two fingers. Same bit layout as mixer.
+      p.slideModeFlags = (quickPrecision == 0 ? kMixerModeUseFinger1 : 0) |
+                         (lockFree == 0 ? kMixerModeLock : 0) |
+                         (absRel ? kMixerModeRelative : 0);
+      p.slideAxis = (uint8_t)juce::jlimit(0, 1,
+          (int)mapping.getProperty("slideAxis", MappingDefaults::SlideAxis));
+    } else if (isCC && expressionCCModeStr.equalsIgnoreCase("Encoder")) {
+      if (eventId == TouchpadEvent::Finger1Down || eventId == TouchpadEvent::Finger1Up ||
+          eventId == TouchpadEvent::Finger2Down || eventId == TouchpadEvent::Finger2Up) {
+        entry.eventId = TouchpadEvent::Finger1Y;
+      }
+      entry.conversionKind = TouchpadConversionKind::EncoderCC;
+      entry.action.adsrSettings.target = AdsrTarget::CC;
+      entry.action.adsrSettings.ccNumber = (int)mapping.getProperty("data1", MappingDefaults::ExpressionData1);
+      p.encoderStepSize = juce::jlimit(1, 16, (int)mapping.getProperty("encoderStepSize", MappingDefaults::EncoderStepSize));
+      p.encoderStepSizeX = juce::jlimit(1, 16, (int)mapping.getProperty("encoderStepSizeX", MappingDefaults::EncoderStepSizeX));
+      p.encoderStepSizeY = juce::jlimit(1, 16, (int)mapping.getProperty("encoderStepSizeY", MappingDefaults::EncoderStepSizeY));
+      p.encoderWrap = (bool)mapping.getProperty("encoderWrap", MappingDefaults::EncoderWrap);
+      p.encoderAxis = (uint8_t)juce::jlimit(0, 2, (int)mapping.getProperty("encoderAxis", MappingDefaults::EncoderAxis));
+      p.encoderPushMode = (uint8_t)juce::jlimit(0, 3, (int)mapping.getProperty("encoderPushMode", MappingDefaults::EncoderPushMode));
+      p.encoderPushValue = juce::jlimit(0, 127, (int)mapping.getProperty("encoderPushValue", MappingDefaults::EncoderPushValue));
+    } else if (inputBool) {
       entry.conversionKind = TouchpadConversionKind::BoolToCC;
       if (isCC) {
         p.valueWhenOn =
@@ -1169,7 +1224,7 @@ std::shared_ptr<CompiledMapContext> GridCompiler::compile(
       int layerId = juce::jlimit(0, 8, cfg.layerId);
       compileTouchpadMappingFromValueTree(cfg.mapping, layerId, cfg.midiChannel,
                                           zoneMgr, settingsMgr,
-                                          context->touchpadMappings);
+                                          context->touchpadMappings, &cfg.region);
     }
   }
 
