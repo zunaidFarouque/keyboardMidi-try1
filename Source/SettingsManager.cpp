@@ -226,7 +226,8 @@ int SettingsManager::getMainTabIndex() const {
   if (!ui.isValid())
     return 0;
   int idx = static_cast<int>(ui.getProperty("mainTabIndex", 0));
-  if (idx < 0)
+  // Clamp to valid range of main tabs (Mappings=0, Zones=1, Touchpad=2, Settings=3).
+  if (idx < 0 || idx > 8)
     idx = 0;
   return idx;
 }
@@ -384,7 +385,11 @@ int SettingsManager::getMappingsSelectedLayerId() const {
   auto ui = getUiStateNode();
   if (!ui.isValid())
     return 0;
-  return static_cast<int>(ui.getProperty("mappingsSelectedLayerId", 0));
+  int layerId =
+      static_cast<int>(ui.getProperty("mappingsSelectedLayerId", 0));
+  if (layerId < 0 || layerId > 8)
+    layerId = 0;
+  return layerId;
 }
 
 void SettingsManager::setMappingsSelectedLayerId(int layerId) {
@@ -397,7 +402,10 @@ int SettingsManager::getMappingsSelectedRow() const {
   auto ui = getUiStateNode();
   if (!ui.isValid())
     return -1;
-  return static_cast<int>(ui.getProperty("mappingsSelectedRow", -1));
+  int row = static_cast<int>(ui.getProperty("mappingsSelectedRow", -1));
+  if (row < -1)
+    row = -1;
+  return row;
 }
 
 void SettingsManager::setMappingsSelectedRow(int row) {
@@ -410,7 +418,10 @@ int SettingsManager::getZonesSelectedIndex() const {
   auto ui = getUiStateNode();
   if (!ui.isValid())
     return -1;
-  return static_cast<int>(ui.getProperty("zonesSelectedIndex", -1));
+  int idx = static_cast<int>(ui.getProperty("zonesSelectedIndex", -1));
+  if (idx < -1)
+    idx = -1;
+  return idx;
 }
 
 void SettingsManager::setZonesSelectedIndex(int index) {
@@ -423,7 +434,10 @@ int SettingsManager::getTouchpadSelectedRow() const {
   auto ui = getUiStateNode();
   if (!ui.isValid())
     return -1;
-  return static_cast<int>(ui.getProperty("touchpadSelectedRow", -1));
+  int row = static_cast<int>(ui.getProperty("touchpadSelectedRow", -1));
+  if (row < -1)
+    row = -1;
+  return row;
 }
 
 void SettingsManager::setTouchpadSelectedRow(int row) {
@@ -443,6 +457,56 @@ void SettingsManager::resetUiStateToDefaults() {
   // window size. The user can re-enable "Remember UI layout" in Settings.
   rootNode.setProperty("rememberUiState", false, nullptr);
   sendChangeMessage();
+}
+
+void SettingsManager::sanitizeUiStateNode() {
+  auto ui = getUiStateNode();
+  if (!ui.isValid())
+    return;
+
+  // Ensure required properties exist with safe defaults.
+  if (!ui.hasProperty("mainWindowState"))
+    ui.setProperty("mainWindowState", "", nullptr);
+
+  int mainTabIndex =
+      static_cast<int>(ui.getProperty("mainTabIndex", getMainTabIndex()));
+  if (mainTabIndex < 0 || mainTabIndex > 8)
+    mainTabIndex = 0;
+  ui.setProperty("mainTabIndex", mainTabIndex, nullptr);
+
+  bool visVisible =
+      static_cast<bool>(ui.getProperty("visualizerVisible", true));
+  ui.setProperty("visualizerVisible", visVisible, nullptr);
+
+  bool edVisible = static_cast<bool>(ui.getProperty("editorVisible", true));
+  ui.setProperty("editorVisible", edVisible, nullptr);
+
+  bool lgVisible = static_cast<bool>(ui.getProperty("logVisible", true));
+  ui.setProperty("logVisible", lgVisible, nullptr);
+
+  int mappingsLayer =
+      static_cast<int>(ui.getProperty("mappingsSelectedLayerId", 0));
+  if (mappingsLayer < 0 || mappingsLayer > 8)
+    mappingsLayer = 0;
+  ui.setProperty("mappingsSelectedLayerId", mappingsLayer, nullptr);
+
+  int mappingsRow =
+      static_cast<int>(ui.getProperty("mappingsSelectedRow", -1));
+  if (mappingsRow < -1)
+    mappingsRow = -1;
+  ui.setProperty("mappingsSelectedRow", mappingsRow, nullptr);
+
+  int zonesIndex =
+      static_cast<int>(ui.getProperty("zonesSelectedIndex", -1));
+  if (zonesIndex < -1)
+    zonesIndex = -1;
+  ui.setProperty("zonesSelectedIndex", zonesIndex, nullptr);
+
+  int touchpadRow =
+      static_cast<int>(ui.getProperty("touchpadSelectedRow", -1));
+  if (touchpadRow < -1)
+    touchpadRow = -1;
+  ui.setProperty("touchpadSelectedRow", touchpadRow, nullptr);
 }
 
 juce::String SettingsManager::getTypePropertyName(ActionType type) const {
@@ -547,6 +611,8 @@ void SettingsManager::loadFromXml(juce::File file) {
       if (!rootNode.getChildWithName("UIState").isValid()) {
         rootNode.addChild(juce::ValueTree("UIState"), -1, nullptr);
       }
+      // Normalize any invalid or missing UIState indices / flags.
+      sanitizeUiStateNode();
       rootNode.addListener(this);
       updateCachedStepsPerSemitone();
       updateCachedMidiModeActive();

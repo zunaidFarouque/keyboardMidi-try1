@@ -6,7 +6,9 @@
 
 class TouchpadMixerListPanel : public juce::Component,
                                public juce::ListBoxModel,
-                               public juce::ChangeListener {
+                               public juce::ChangeListener,
+                               public juce::AsyncUpdater,
+                               public juce::ChangeBroadcaster {
 public:
   explicit TouchpadMixerListPanel(TouchpadMixerManager *mgr);
   ~TouchpadMixerListPanel() override;
@@ -22,6 +24,9 @@ public:
   void selectedRowsChanged(int lastRowSelected) override;
   void changeListenerCallback(juce::ChangeBroadcaster *source) override;
 
+  // AsyncUpdater implementation - batches rapid updates
+  void handleAsyncUpdate() override;
+
   /// Returns the currently selected row index in the combined list, or -1 if
   /// none. Use getRowKind() to know whether this refers to a layout or
   /// mapping.
@@ -29,6 +34,9 @@ public:
 
   /// Select a row programmatically (clamped to valid range).
   void setSelectedRowIndex(int row);
+  
+  // Set pending selection to restore after next update
+  void setPendingSelection(int row) { pendingSelectionRow = row; }
 
   /// Returns the kind of the given row (Layout / Mapping). Behavior is
   /// undefined for out-of-range indices.
@@ -36,7 +44,8 @@ public:
 
   std::function<void(RowKind kind, int index,
                      const TouchpadMixerConfig *layoutCfg,
-                     const TouchpadMappingConfig *mappingCfg)>
+                     const TouchpadMappingConfig *mappingCfg,
+                     int combinedRowIndex)>
       onSelectionChanged;
 
 private:
@@ -48,6 +57,8 @@ private:
 
   // Cached row kinds for the combined list (rebuilt when manager changes).
   std::vector<RowKind> rowKinds;
+  int pendingSelectionRow = -1; // Selection to restore after update
+  bool isInitialLoad = true; // Track first load for synchronous updates
 
   void rebuildRowKinds();
 

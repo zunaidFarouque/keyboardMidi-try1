@@ -436,7 +436,7 @@ void TouchpadMixerListPanel::selectedRowsChanged(int lastRowSelected) {
 
   if (lastRowSelected < 0 ||
       lastRowSelected >= static_cast<int>(rowKinds.size())) {
-    onSelectionChanged(RowKind::Layout, -1, nullptr, nullptr);
+    onSelectionChanged(RowKind::Layout, -1, nullptr, nullptr, -1);
     return;
   }
 
@@ -446,9 +446,9 @@ void TouchpadMixerListPanel::selectedRowsChanged(int lastRowSelected) {
     if (layoutIndex >= 0 &&
         layoutIndex < static_cast<int>(layouts.size())) {
       onSelectionChanged(kind, layoutIndex,
-                         &layouts[(size_t)layoutIndex], nullptr);
+                         &layouts[(size_t)layoutIndex], nullptr, lastRowSelected);
     } else {
-      onSelectionChanged(kind, -1, nullptr, nullptr);
+      onSelectionChanged(kind, -1, nullptr, nullptr, -1);
     }
   } else {
     int mappingIndex = lastRowSelected -
@@ -456,18 +456,52 @@ void TouchpadMixerListPanel::selectedRowsChanged(int lastRowSelected) {
     if (mappingIndex >= 0 &&
         mappingIndex < static_cast<int>(mappings.size())) {
       onSelectionChanged(kind, mappingIndex, nullptr,
-                         &mappings[(size_t)mappingIndex]);
+                         &mappings[(size_t)mappingIndex], lastRowSelected);
     } else {
-      onSelectionChanged(kind, -1, nullptr, nullptr);
+      onSelectionChanged(kind, -1, nullptr, nullptr, -1);
     }
   }
 }
 
 void TouchpadMixerListPanel::changeListenerCallback(juce::ChangeBroadcaster *) {
-  juce::MessageManager::callAsync([this] {
+  if (isInitialLoad) {
+    // First load: update synchronously for reliable selection restoration
     rebuildRowKinds();
     listBox.updateContent();
-  });
+    
+    // Restore pending selection right after list is updated
+    if (pendingSelectionRow >= 0 && getNumRows() > 0) {
+      int indexToSet = juce::jmin(pendingSelectionRow, getNumRows() - 1);
+      if (indexToSet >= 0) {
+        listBox.selectRow(indexToSet);
+      }
+      pendingSelectionRow = -1;
+    }
+    
+    listBox.repaint();
+    sendChangeMessage();
+    isInitialLoad = false; // Switch to async for subsequent updates
+  } else {
+    // Subsequent updates: use async to batch rapid changes and keep UI responsive
+    triggerAsyncUpdate();
+  }
+}
+
+void TouchpadMixerListPanel::handleAsyncUpdate() {
+  rebuildRowKinds();
+  listBox.updateContent();
+  
+  // Restore pending selection right after list is updated
+  if (pendingSelectionRow >= 0 && getNumRows() > 0) {
+    int indexToSet = juce::jmin(pendingSelectionRow, getNumRows() - 1);
+    if (indexToSet >= 0) {
+      listBox.selectRow(indexToSet);
+    }
+    pendingSelectionRow = -1;
+  }
+  
+  listBox.repaint(); // Force repaint to ensure rendering happens
+  sendChangeMessage();
 }
 
 void TouchpadMixerListPanel::rebuildRowKinds() {

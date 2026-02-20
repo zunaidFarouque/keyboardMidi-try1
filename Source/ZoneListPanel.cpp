@@ -92,20 +92,57 @@ void ZoneListPanel::paintListBoxItem(int rowNumber, juce::Graphics &g, int width
 }
 
 void ZoneListPanel::selectedRowsChanged(int lastRowSelected) {
-  if (lastRowSelected >= 0 && zoneManager && onSelectionChanged) {
-    const auto &zones = zoneManager->getZones();
-    if (lastRowSelected < static_cast<int>(zones.size())) {
-      onSelectionChanged(zones[lastRowSelected]);
+  if (onSelectionChanged) {
+    if (lastRowSelected >= 0 && zoneManager) {
+      const auto &zones = zoneManager->getZones();
+      if (lastRowSelected < static_cast<int>(zones.size())) {
+        onSelectionChanged(zones[lastRowSelected], lastRowSelected);
+      } else {
+        onSelectionChanged(nullptr, -1);
+      }
+    } else {
+      onSelectionChanged(nullptr, -1);
     }
-  } else if (lastRowSelected < 0 && onSelectionChanged) {
-    onSelectionChanged(nullptr);
   }
 }
 
 void ZoneListPanel::changeListenerCallback(juce::ChangeBroadcaster *source) {
   if (source == zoneManager) {
-    juce::MessageManager::callAsync([this] {
+    if (isInitialLoad) {
+      // First load: update synchronously for reliable selection restoration
       listBox.updateContent();
-    });
+      
+      // Restore pending selection right after list is updated
+      if (pendingSelectionRow >= 0 && getNumRows() > 0) {
+        int indexToSet = juce::jmin(pendingSelectionRow, getNumRows() - 1);
+        if (indexToSet >= 0) {
+          listBox.selectRow(indexToSet);
+        }
+        pendingSelectionRow = -1;
+      }
+      
+      listBox.repaint();
+      sendChangeMessage();
+      isInitialLoad = false; // Switch to async for subsequent updates
+    } else {
+      // Subsequent updates: use async to batch rapid changes and keep UI responsive
+      triggerAsyncUpdate();
+    }
   }
+}
+
+void ZoneListPanel::handleAsyncUpdate() {
+  listBox.updateContent();
+  
+  // Restore pending selection right after list is updated
+  if (pendingSelectionRow >= 0 && getNumRows() > 0) {
+    int indexToSet = juce::jmin(pendingSelectionRow, getNumRows() - 1);
+    if (indexToSet >= 0) {
+      listBox.selectRow(indexToSet);
+    }
+    pendingSelectionRow = -1;
+  }
+  
+  listBox.repaint(); // Force repaint to ensure rendering happens
+  sendChangeMessage();
 }

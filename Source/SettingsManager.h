@@ -142,6 +142,9 @@ private:
   juce::ValueTree getUiStateNode();
   juce::ValueTree getUiStateNode() const;
 
+  // Ensure UIState properties are present and within safe ranges.
+  void sanitizeUiStateNode();
+
   juce::String getTypePropertyName(ActionType type) const;
   void updateCachedStepsPerSemitone();
   void updateCachedMidiModeActive();

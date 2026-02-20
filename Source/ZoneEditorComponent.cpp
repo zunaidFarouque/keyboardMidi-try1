@@ -1,10 +1,11 @@
 #include "ZoneEditorComponent.h"
 #include "SettingsManager.h"
 
-ZoneEditorComponent::ZoneEditorComponent(ZoneManager *zoneMgr, DeviceManager *deviceMgr, RawInputManager *rawInputMgr, ScaleLibrary *scaleLib)
+ZoneEditorComponent::ZoneEditorComponent(ZoneManager *zoneMgr, DeviceManager *deviceMgr, RawInputManager *rawInputMgr, ScaleLibrary *scaleLib, SettingsManager *settingsMgr)
     : zoneManager(zoneMgr),
       deviceManager(deviceMgr),
       rawInputManager(rawInputMgr),
+      settingsManager(settingsMgr),
       listPanel(zoneMgr),
       propertiesPanel(zoneMgr, deviceMgr, rawInputMgr, scaleLib),
       resizerBar(&horizontalLayout, 1, true) { // Item index 1, vertical bar
@@ -39,13 +40,26 @@ ZoneEditorComponent::ZoneEditorComponent(ZoneManager *zoneMgr, DeviceManager *de
   };
 
   // Wire up selection callback
-  listPanel.onSelectionChanged = [this](std::shared_ptr<Zone> zone) {
+  listPanel.onSelectionChanged = [this](std::shared_ptr<Zone> zone, int rowIndex) {
     propertiesPanel.setZone(zone);
+    // Persist selection immediately when it changes (not just at shutdown)
+    // Use rowIndex from callback instead of getSelectedRow() to avoid stale values
+    // Only persist valid selections (>= 0), not deselections (-1)
+    juce::Logger::writeToLog("ZoneEditorComponent::onSelectionChanged: rowIndex=" + juce::String(rowIndex) + 
+                             ", isLoadingUiState=" + juce::String(isLoadingUiState ? 1 : 0) +
+                             ", rememberUiState=" + juce::String(settingsManager && settingsManager->getRememberUiState() ? 1 : 0));
+    if (!isLoadingUiState && settingsManager && settingsManager->getRememberUiState() && rowIndex >= 0) {
+      juce::Logger::writeToLog("ZoneEditorComponent: Persisting zonesSelectedIndex=" + juce::String(rowIndex));
+      settingsManager->setZonesSelectedIndex(rowIndex);
+    }
     resized(); // Update viewport bounds when zone changes
   };
 }
 
 ZoneEditorComponent::~ZoneEditorComponent() {
+  if (zoneManager) {
+    zoneManager->removeChangeListener(this);
+  }
 }
 
 void ZoneEditorComponent::paint(juce::Graphics &g) {
@@ -67,17 +81,94 @@ void ZoneEditorComponent::resized() {
   propertiesPanel.setSize(contentWidth, contentHeight);
 }
 
+void ZoneEditorComponent::changeListenerCallback(juce::ChangeBroadcaster *source) {
+  // Timer backup: if list becomes ready, clear pending selection
+  if (source == zoneManager && pendingSelectionIndex >= 0 && listPanel.getNumRows() > 0) {
+    // List is ready, clear pending since list panel should have handled it
+    stopTimer();
+    pendingSelectionIndex = -1;
+    loadRetryCount = 0;
+  }
+}
+
+void ZoneEditorComponent::timerCallback() {
+  if (pendingSelectionIndex >= 0) {
+    if (listPanel.getNumRows() > 0) {
+      // List is ready, restore selection (backup in case list panel didn't handle it)
+      juce::Logger::writeToLog("ZoneEditorComponent::timerCallback: List ready (retry " + juce::String(loadRetryCount) + 
+                               "), restoring selection to index=" + juce::String(pendingSelectionIndex));
+      stopTimer();
+      isLoadingUiState = true;
+      int indexToSet = juce::jmin(pendingSelectionIndex, listPanel.getNumRows() - 1);
+      if (indexToSet >= 0) {
+        listPanel.setSelectedRow(indexToSet);
+        juce::Logger::writeToLog("ZoneEditorComponent::timerCallback: Selection restored, current selectedRow=" + juce::String(listPanel.getSelectedRow()));
+      }
+      isLoadingUiState = false;
+      pendingSelectionIndex = -1;
+      loadRetryCount = 0;
+    } else {
+      // List still not ready, retry
+      loadRetryCount++;
+      if (loadRetryCount >= 100) {
+        // Max retries reached (5 seconds), give up
+        juce::Logger::writeToLog("ZoneEditorComponent::timerCallback: Max retries reached, giving up");
+        stopTimer();
+        pendingSelectionIndex = -1;
+        loadRetryCount = 0;
+      }
+    }
+  } else {
+    stopTimer();
+  }
+}
+
 void ZoneEditorComponent::saveUiState(SettingsManager &settings) const {
   if (!settings.getRememberUiState())
     return;
-  settings.setZonesSelectedIndex(listPanel.getSelectedRow());
+  // Only save valid selections (>= 0). Invalid selections are already persisted
+  // via persist-on-change, so don't overwrite with -1 here.
+  int currentRow = listPanel.getSelectedRow();
+  juce::Logger::writeToLog("ZoneEditorComponent::saveUiState: currentRow=" + juce::String(currentRow));
+  if (currentRow >= 0) {
+    juce::Logger::writeToLog("ZoneEditorComponent::saveUiState: Saving zonesSelectedIndex=" + juce::String(currentRow));
+    settings.setZonesSelectedIndex(currentRow);
+  } else {
+    juce::Logger::writeToLog("ZoneEditorComponent::saveUiState: Skipping save (invalid row)");
+  }
 }
 
 void ZoneEditorComponent::loadUiState(SettingsManager &settings) {
   if (!settings.getRememberUiState())
     return;
   int index = settings.getZonesSelectedIndex();
+  juce::Logger::writeToLog("ZoneEditorComponent::loadUiState: loaded index=" + juce::String(index) + 
+                           ", listPanel.getNumRows()=" + juce::String(listPanel.getNumRows()));
   if (index < 0)
-    return;
-  listPanel.setSelectedRow(index);
+    index = 0;
+  
+  // Stop any existing retry timer
+  stopTimer();
+  loadRetryCount = 0;
+  
+  // Check if list is populated yet
+  if (listPanel.getNumRows() > 0) {
+    // List is ready, set selection immediately
+    juce::Logger::writeToLog("ZoneEditorComponent::loadUiState: List ready, setting selection to index=" + juce::String(index));
+    isLoadingUiState = true;
+    int indexToSet = juce::jmin(index, listPanel.getNumRows() - 1);
+    if (indexToSet >= 0) {
+      listPanel.setSelectedRow(indexToSet);
+    }
+    isLoadingUiState = false;
+    juce::Logger::writeToLog("ZoneEditorComponent::loadUiState: Selection set, current selectedRow=" + juce::String(listPanel.getSelectedRow()));
+  } else {
+    // List not ready yet - set pending selection on list panel
+    // It will restore automatically when list updates
+    juce::Logger::writeToLog("ZoneEditorComponent::loadUiState: List not ready, setting pending selection on list panel=" + juce::String(index));
+    listPanel.setPendingSelection(index);
+    // Keep timer as backup
+    pendingSelectionIndex = index;
+    startTimer(50);
+  }
 }

@@ -83,7 +83,7 @@ MainComponent::MainComponent()
       presetManager, *rawInputManager, deviceManager, settingsManager, &touchpadMixerManager);
   zoneEditor = std::make_unique<ZoneEditorComponent>(
       &inputProcessor.getZoneManager(), &deviceManager, rawInputManager.get(),
-      &scaleLibrary);
+      &scaleLibrary, &settingsManager);
   touchpadTab = std::make_unique<TouchpadTabComponent>(&touchpadMixerManager,
                                                         &settingsManager);
   touchpadTab->onSelectionChangedForVisualizer = [this](int layoutIndex,
@@ -390,27 +390,42 @@ MainComponent::MainComponent()
   startupManager.initApp();
 
   // Now that settings have been loaded from disk, apply any persisted main
-  // window state. We do this here (instead of in MainWindow's constructor)
-  // because StartupManager::initApp() runs after MainWindow is created.
+  // window state. We must do this after the MainComponent has been attached
+  // to its top-level window, so we defer it to the next message loop turn.
   if (settingsManager.getRememberUiState()) {
     juce::String state = settingsManager.getMainWindowState();
     if (state.isNotEmpty()) {
-      if (auto *top = getTopLevelComponent()) {
-        if (auto *window = dynamic_cast<juce::DocumentWindow *>(top)) {
-          window->restoreWindowStateFromString(state);
-          window->setBounds(clampBoundsToDisplay(window->getBounds()));
+      juce::Component::SafePointer<MainComponent> weakThis(this);
+      juce::Timer::callAfterDelay(0, [weakThis, state]() {
+        if (weakThis == nullptr)
+          return;
+        if (auto *top = weakThis->getTopLevelComponent()) {
+          if (auto *window = dynamic_cast<juce::DocumentWindow *>(top)) {
+            window->restoreWindowStateFromString(state);
+            window->setBounds(clampBoundsToDisplay(window->getBounds()));
+          }
         }
-      }
+      });
     }
   }
 
   // Restore per-tab UI state after settings/presets are loaded.
+  // Note: For Mappings, we can restore immediately because the table is populated synchronously.
+  // For Zones and Touchpad, we defer restoration because their lists update asynchronously
+  // when data loads (via changeListenerCallback -> MessageManager::callAsync -> updateContent).
   if (mappingEditor)
     mappingEditor->loadUiState(settingsManager);
-  if (zoneEditor)
-    zoneEditor->loadUiState(settingsManager);
-  if (touchpadTab)
-    touchpadTab->loadUiState(settingsManager);
+  
+  // Defer Zones and Touchpad selection restore to allow async list updates to complete
+  juce::Component::SafePointer<MainComponent> weakThisForUiState(this);
+  juce::Timer::callAfterDelay(100, [weakThisForUiState]() {
+    if (weakThisForUiState == nullptr)
+      return;
+    if (weakThisForUiState->zoneEditor)
+      weakThisForUiState->zoneEditor->loadUiState(weakThisForUiState->settingsManager);
+    if (weakThisForUiState->touchpadTab)
+      weakThisForUiState->touchpadTab->loadUiState(weakThisForUiState->settingsManager);
+  });
 
   // --- Input Logic ---
   rawInputManager->addListener(this);
@@ -466,23 +481,25 @@ MainComponent::~MainComponent() {
   // 1. Stop any pending UI updates
   stopTimer();
 
-  // 2. CRITICAL: Manually clear tabs.
+  // 2. Force Save while UI (tabs, selections) is still intact. Must run before
+  // clearTabs() so mainTabs.getCurrentTabIndex() and per-tab saveUiState() see
+  // the real state.
+  saveLayoutPositions();
+  startupManager.saveImmediate();
+
+  // 3. CRITICAL: Manually clear tabs.
   // This detaches the MappingEditor/ZoneEditor/SettingsPanel safely so the
   // TabbedComponent doesn't try to delete them (even if we set the flag to
   // false, this is safer).
   mainTabs.clearTabs();
 
-  // 3. Close Popups
+  // 4. Close Popups
   if (miniWindow) {
     miniWindow->setVisible(false);
     miniWindow = nullptr;
   }
 
-  // 4. Force Save
-  saveLayoutPositions();
-  startupManager.saveImmediate();
-
-  // 5. Stop Input (Explicitly)
+  // 5. Stop Input (explicitly)
   if (rawInputManager) {
     rawInputManager->removeListener(this);
     if (visualizer)
