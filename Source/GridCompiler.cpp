@@ -807,7 +807,7 @@ static void compileTouchpadMappingFromValueTree(
         mapping.getProperty("expressionCCMode", MappingDefaults::ExpressionCCModePosition).toString().trim();
 
     if (isCC && expressionCCModeStr.equalsIgnoreCase("Slide")) {
-      // Slide/Encoder require continuous X/Y events at runtime. New touchpad
+      // Slide requires continuous X/Y events at runtime. New touchpad
       // mappings default to Finger1Down; auto-promote that to Finger1Y so CC
       // actually emits without requiring the user to find an event selector.
       if (eventId == TouchpadEvent::Finger1Down || eventId == TouchpadEvent::Finger1Up ||
@@ -832,21 +832,6 @@ static void compileTouchpadMappingFromValueTree(
                          (absRel ? kMixerModeRelative : 0);
       p.slideAxis = (uint8_t)juce::jlimit(0, 1,
           (int)mapping.getProperty("slideAxis", MappingDefaults::SlideAxis));
-    } else if (isCC && expressionCCModeStr.equalsIgnoreCase("Encoder")) {
-      if (eventId == TouchpadEvent::Finger1Down || eventId == TouchpadEvent::Finger1Up ||
-          eventId == TouchpadEvent::Finger2Down || eventId == TouchpadEvent::Finger2Up) {
-        entry.eventId = TouchpadEvent::Finger1Y;
-      }
-      entry.conversionKind = TouchpadConversionKind::EncoderCC;
-      entry.action.adsrSettings.target = AdsrTarget::CC;
-      entry.action.adsrSettings.ccNumber = (int)mapping.getProperty("data1", MappingDefaults::ExpressionData1);
-      p.encoderStepSize = juce::jlimit(1, 16, (int)mapping.getProperty("encoderStepSize", MappingDefaults::EncoderStepSize));
-      p.encoderStepSizeX = juce::jlimit(1, 16, (int)mapping.getProperty("encoderStepSizeX", MappingDefaults::EncoderStepSizeX));
-      p.encoderStepSizeY = juce::jlimit(1, 16, (int)mapping.getProperty("encoderStepSizeY", MappingDefaults::EncoderStepSizeY));
-      p.encoderWrap = (bool)mapping.getProperty("encoderWrap", MappingDefaults::EncoderWrap);
-      p.encoderAxis = (uint8_t)juce::jlimit(0, 2, (int)mapping.getProperty("encoderAxis", MappingDefaults::EncoderAxis));
-      p.encoderPushMode = (uint8_t)juce::jlimit(0, 3, (int)mapping.getProperty("encoderPushMode", MappingDefaults::EncoderPushMode));
-      p.encoderPushValue = juce::jlimit(0, 127, (int)mapping.getProperty("encoderPushValue", MappingDefaults::EncoderPushValue));
     } else if (inputBool) {
       entry.conversionKind = TouchpadConversionKind::BoolToCC;
       if (isCC) {

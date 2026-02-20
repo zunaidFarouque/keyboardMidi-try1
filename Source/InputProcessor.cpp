@@ -2274,11 +2274,10 @@ void InputProcessor::processTouchpadContacts(
     }
   }
 
-  // Slide and Encoder CC: second pass (single-fader slide, incremental encoder + push)
+  // Slide CC: second pass (single-fader slide)
   if (!ctx->touchpadMappings.empty()) {
     for (const auto &entry : ctx->touchpadMappings) {
-      if (entry.conversionKind != TouchpadConversionKind::SlideToCC &&
-          entry.conversionKind != TouchpadConversionKind::EncoderCC)
+      if (entry.conversionKind != TouchpadConversionKind::SlideToCC)
         continue;
       if (!activeLayersSnapshot[(size_t)entry.layerId])
         continue;
@@ -2492,94 +2491,6 @@ void InputProcessor::processTouchpadContacts(
               pairs.second->normX, pairs.second->normY};
         }
         continue;
-      }
-
-      if (entry.conversionKind == TouchpadConversionKind::EncoderCC) {
-        // Primary position from eventId; axis 0=Y, 1=X, 2=both
-        float primX = x1, primY = y1;
-        if (entry.eventId == TouchpadEvent::Finger2X || entry.eventId == TouchpadEvent::Finger2Y) {
-          primX = x2;
-          primY = y2;
-        } else if (entry.eventId == TouchpadEvent::Finger1And2AvgX ||
-            entry.eventId == TouchpadEvent::Finger1And2AvgY) {
-          primX = avgX;
-          primY = avgY;
-        }
-        
-        int stepCount = 0;
-        if (p.encoderAxis == 2) {
-          // Both: calculate deltaX and deltaY separately, apply stepSizeX/Y
-          float &prevPosX = touchpadEncoderPrevPosX[keySlideEnc];
-          float &prevPosY = touchpadEncoderPrevPosY[keySlideEnc];
-          float deltaX = primX - prevPosX;
-          float deltaY = primY - prevPosY;
-          prevPosX = primX;
-          prevPosY = primY;
-          int stepCountX = static_cast<int>(std::round(deltaX * 127.0f));
-          int stepCountY = static_cast<int>(std::round(deltaY * 127.0f));
-          int stepX = juce::jlimit(1, 16, p.encoderStepSizeX);
-          int stepY = juce::jlimit(1, 16, p.encoderStepSizeY);
-          stepCount = stepCountX * stepX + stepCountY * stepY;
-        } else {
-          // Single axis: use combined position and stepSize
-          float pos = (p.encoderAxis == 0) ? primY : primX;
-          float &prevPos = touchpadEncoderPrevPos[keySlideEnc];
-          float delta = pos - prevPos;
-          prevPos = pos;
-          stepCount = static_cast<int>(std::round(delta * 127.0f));
-        }
-        
-        if (stepCount != 0) {
-          auto itVal = lastTouchpadEncoderCCValues.find(keySlideEnc);
-          int curVal = (itVal != lastTouchpadEncoderCCValues.end())
-              ? itVal->second : 64;
-          int step = (p.encoderAxis == 2) ? 1 : juce::jlimit(1, 16, p.encoderStepSize); // Step already applied for Both
-          int newVal = curVal + stepCount * step;
-          if (p.encoderWrap) {
-            while (newVal > 127) newVal -= 128;
-            while (newVal < 0) newVal += 128;
-            newVal = (newVal + 128) % 128;
-          } else {
-            newVal = juce::jlimit(0, 127, newVal);
-          }
-          voiceManager.sendCC(act.channel, act.adsrSettings.ccNumber, newVal);
-          lastTouchpadEncoderCCValues[keySlideEnc] = newVal;
-        }
-
-        // Push: two fingers in region
-        std::vector<const TouchpadContact *> inRegionEnc;
-        for (const auto &c : contacts) {
-          if (c.normX >= entry.regionLeft && c.normX < entry.regionRight &&
-              c.normY >= entry.regionTop && c.normY < entry.regionBottom &&
-              c.tipDown)
-            inRegionEnc.push_back(&c);
-        }
-        bool twoFingers = (inRegionEnc.size() >= 2);
-        bool prevTwo = false;
-        {
-          auto it = touchpadEncoderTwoFingersPrev.find(keySlideEnc);
-          if (it != touchpadEncoderTwoFingersPrev.end())
-            prevTwo = it->second;
-        }
-        touchpadEncoderTwoFingersPrev[keySlideEnc] = twoFingers;
-        if (p.encoderPushMode != 0) {
-          if (twoFingers && !prevTwo) {
-            if (p.encoderPushMode == 1) { // Momentary
-              voiceManager.sendCC(act.channel, act.adsrSettings.ccNumber,
-                  juce::jlimit(0, 127, p.encoderPushValue));
-            } else if (p.encoderPushMode == 2) { // Toggle
-              bool &on = touchpadEncoderPushOn[keySlideEnc];
-              on = !on;
-              voiceManager.sendCC(act.channel, act.adsrSettings.ccNumber,
-                  on ? juce::jlimit(0, 127, p.encoderPushValue) : 0);
-            } else if (p.encoderPushMode == 3) { // Trigger
-              voiceManager.sendCC(act.channel, act.adsrSettings.ccNumber,
-                  juce::jlimit(0, 127, p.encoderPushValue));
-            }
-          } else if (!twoFingers && prevTwo && p.encoderPushMode == 1) {
-            voiceManager.sendCC(act.channel, act.adsrSettings.ccNumber, 0);
-          }
-        }
       }
     }
   }

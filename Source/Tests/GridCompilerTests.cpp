@@ -1221,35 +1221,6 @@ TEST_F(GridCompilerTest, TouchpadExpressionCCModeSlide_CompilesSlideToCC) {
   EXPECT_EQ(entry.action.adsrSettings.ccNumber, 10);
 }
 
-TEST_F(GridCompilerTest, TouchpadExpressionCCModeEncoder_CompilesEncoderCC) {
-  TouchpadMappingConfig cfg;
-  cfg.name = "CC Encoder";
-  cfg.layerId = 0;
-  juce::ValueTree m("Mapping");
-  m.setProperty("inputAlias", "Touchpad", nullptr);
-  m.setProperty("inputTouchpadEvent", TouchpadEvent::Finger1Y, nullptr);
-  m.setProperty("type", "Expression", nullptr);
-  m.setProperty("adsrTarget", "CC", nullptr);
-  m.setProperty("expressionCCMode", "Encoder", nullptr);
-  m.setProperty("channel", 1, nullptr);
-  m.setProperty("data1", 74, nullptr);
-  m.setProperty("encoderStepSize", 2, nullptr);
-  m.setProperty("encoderWrap", true, nullptr);
-  m.setProperty("encoderAxis", 0, nullptr);
-  m.setProperty("encoderPushMode", 0, nullptr);
-  cfg.mapping = m;
-  touchpadMixerMgr.addTouchpadMapping(cfg);
-
-  auto context = GridCompiler::compile(presetMgr, deviceMgr, zoneMgr,
-                                       touchpadMixerMgr, settingsMgr);
-
-  ASSERT_EQ(context->touchpadMappings.size(), 1u);
-  const auto &entry = context->touchpadMappings.front();
-  EXPECT_EQ(entry.conversionKind, TouchpadConversionKind::EncoderCC);
-  EXPECT_EQ(entry.conversionParams.encoderStepSize, 2);
-  EXPECT_TRUE(entry.conversionParams.encoderWrap);
-}
-
 TEST_F(GridCompilerTest, TouchpadPitchPadHonoursResetPitchFlag) {
   TouchpadMappingConfig touchpadCfg;
   touchpadCfg.name = "Pitch Pad No Reset";

@@ -314,8 +314,7 @@ enum class TouchpadConversionKind {
   BoolToCC,         // Boolean input -> Expression (value when on/off)
   ContinuousToGate, // Continuous input -> Note (threshold)
   ContinuousToRange,// Continuous input -> Expression (range map)
-  SlideToCC,        // Single-CC fader (position/delta, mixer-like modes)
-  EncoderCC         // Incremental CC + optional push
+  SlideToCC         // Single-CC fader (position/delta, mixer-like modes)
 };
 
 // Pitch-pad layout types (shared by TouchpadConversionParams and
@@ -347,15 +346,6 @@ struct TouchpadConversionParams {
   uint8_t slideModeFlags = 0;
   // SlideToCC axis: 0 = Vertical (Y), 1 = Horizontal (X)
   uint8_t slideAxis = 0;
-
-  // EncoderCC: step size (1-16), wrap at 0/127, axis (0=Vertical, 1=Horizontal, 2=Both)
-  int encoderStepSize = 1; // Used when axis is Vertical or Horizontal
-  int encoderStepSizeX = 1; // Used for X axis when axis is Both
-  int encoderStepSizeY = 1; // Used for Y axis when axis is Both
-  bool encoderWrap = false;
-  uint8_t encoderAxis = 0;
-  uint8_t encoderPushMode = 0; // 0=Off, 1=Momentary, 2=Toggle, 3=Trigger
-  int encoderPushValue = 0;
 
   // Optional per-mapping pitch-pad configuration for Expression mappings where
   // the ADSR target is PitchBend or SmartScaleBend and conversionKind is

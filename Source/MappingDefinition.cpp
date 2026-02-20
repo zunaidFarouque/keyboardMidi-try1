@@ -46,13 +46,6 @@ const std::unordered_map<juce::String, juce::var> &getDefaultsMap() {
     map["slideAbsRel"] = juce::var(SlideAbsRel);
     map["slideLockFree"] = juce::var(SlideLockFree);
     map["slideAxis"] = juce::var(SlideAxis);
-    map["encoderStepSize"] = juce::var(EncoderStepSize);
-    map["encoderStepSizeX"] = juce::var(EncoderStepSizeX);
-    map["encoderStepSizeY"] = juce::var(EncoderStepSizeY);
-    map["encoderWrap"] = juce::var(EncoderWrap);
-    map["encoderAxis"] = juce::var(EncoderAxis);
-    map["encoderPushMode"] = juce::var(EncoderPushMode);
-    map["encoderPushValue"] = juce::var(EncoderPushValue);
   }
   return map;
 }
@@ -315,7 +308,6 @@ InspectorSchema MappingDefinition::getSchema(const juce::ValueTree &mapping,
       ccMode.controlType = InspectorControl::Type::ComboBox;
       ccMode.options[1] = "Position";
       ccMode.options[2] = "Slide";
-      ccMode.options[3] = "Encoder";
       setControlDefaultFromMap(ccMode);
       schema.push_back(ccMode);
     }
@@ -440,72 +432,6 @@ InspectorSchema MappingDefinition::getSchema(const juce::ValueTree &mapping,
       schema.push_back(slideAxis);
     }
 
-    if (adsrTargetStr.equalsIgnoreCase("CC") &&
-        expressionCCModeStr.equalsIgnoreCase("Encoder")) {
-      schema.push_back(createSeparator("Encoder", juce::Justification::centredLeft));
-      InspectorControl stepSize;
-      stepSize.propertyId = "encoderStepSize";
-      stepSize.label = "Step size";
-      stepSize.controlType = InspectorControl::Type::Slider;
-      stepSize.min = 1.0;
-      stepSize.max = 16.0;
-      stepSize.step = 1.0;
-      setControlDefaultFromMap(stepSize);
-      schema.push_back(stepSize);
-      InspectorControl stepSizeX;
-      stepSizeX.propertyId = "encoderStepSizeX";
-      stepSizeX.label = "Step size X (horizontal)";
-      stepSizeX.controlType = InspectorControl::Type::Slider;
-      stepSizeX.min = 1.0;
-      stepSizeX.max = 16.0;
-      stepSizeX.step = 1.0;
-      setControlDefaultFromMap(stepSizeX);
-      schema.push_back(stepSizeX);
-      InspectorControl stepSizeY;
-      stepSizeY.propertyId = "encoderStepSizeY";
-      stepSizeY.label = "Step size Y (vertical)";
-      stepSizeY.controlType = InspectorControl::Type::Slider;
-      stepSizeY.min = 1.0;
-      stepSizeY.max = 16.0;
-      stepSizeY.step = 1.0;
-      setControlDefaultFromMap(stepSizeY);
-      schema.push_back(stepSizeY);
-      InspectorControl wrap;
-      wrap.propertyId = "encoderWrap";
-      wrap.label = "Wrap at 0/127";
-      wrap.controlType = InspectorControl::Type::Toggle;
-      wrap.widthWeight = 1.0f;
-      setControlDefaultFromMap(wrap);
-      schema.push_back(wrap);
-      InspectorControl axis;
-      axis.propertyId = "encoderAxis";
-      axis.label = "Axis";
-      axis.controlType = InspectorControl::Type::ComboBox;
-      axis.options[1] = "Vertical";
-      axis.options[2] = "Horizontal";
-      axis.options[3] = "Both";
-      setControlDefaultFromMap(axis);
-      schema.push_back(axis);
-      InspectorControl pushMode;
-      pushMode.propertyId = "encoderPushMode";
-      pushMode.label = "Push mode";
-      pushMode.controlType = InspectorControl::Type::ComboBox;
-      pushMode.options[1] = "Off";
-      pushMode.options[2] = "Momentary";
-      pushMode.options[3] = "Toggle";
-      pushMode.options[4] = "Trigger";
-      setControlDefaultFromMap(pushMode);
-      schema.push_back(pushMode);
-      InspectorControl pushVal;
-      pushVal.propertyId = "encoderPushValue";
-      pushVal.label = "Push value";
-      pushVal.controlType = InspectorControl::Type::Slider;
-      pushVal.min = 0.0;
-      pushVal.max = 127.0;
-      pushVal.step = 1.0;
-      setControlDefaultFromMap(pushVal);
-      schema.push_back(pushVal);
-    }
 
     // 2. Mode Selection (Dynamics: only for Position mode or non-CC targets)
     const bool showDynamics =

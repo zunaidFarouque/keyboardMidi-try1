@@ -235,20 +235,11 @@ juce::var TouchpadMixerEditorComponent::getConfigValue(
         juce::String str = propVal.toString().trim();
         if (str.equalsIgnoreCase("Position")) return juce::var(1);
         if (str.equalsIgnoreCase("Slide")) return juce::var(2);
-        if (str.equalsIgnoreCase("Encoder")) return juce::var(3);
         return juce::var(1);
       } else if (propertyId == "slideQuickPrecision" || propertyId == "slideAbsRel" || propertyId == "slideLockFree" || propertyId == "slideAxis") {
         // Convert 0/1 to 1/2 for ComboBox (JUCE uses 1-based IDs)
         int val = static_cast<int>(propVal);
         return juce::var(val == 0 ? 1 : 2);
-      } else if (propertyId == "encoderAxis") {
-        // Convert 0/1/2 to 1/2/3 for ComboBox
-        int val = static_cast<int>(propVal);
-        return juce::var(val + 1);
-      } else if (propertyId == "encoderPushMode") {
-        // Convert 0/1/2/3 to 1/2/3/4 for ComboBox
-        int val = static_cast<int>(propVal);
-        return juce::var(val + 1);
       }
       return propVal;
     }
@@ -280,23 +271,12 @@ juce::var TouchpadMixerEditorComponent::getConfigValue(
         juce::String str = defVal.toString().trim();
         if (str.equalsIgnoreCase("Position")) return juce::var(1);
         if (str.equalsIgnoreCase("Slide")) return juce::var(2);
-        if (str.equalsIgnoreCase("Encoder")) return juce::var(3);
         return juce::var(1);
       }
       if (propertyId == "slideQuickPrecision" || propertyId == "slideAbsRel" || propertyId == "slideLockFree" || propertyId == "slideAxis") {
         // Convert 0/1 default to 1/2 for ComboBox
         int val = static_cast<int>(defVal);
         return juce::var(val == 0 ? 1 : 2);
-      }
-      if (propertyId == "encoderAxis") {
-        // Convert 0/1/2 default to 1/2/3 for ComboBox
-        int val = static_cast<int>(defVal);
-        return juce::var(val + 1);
-      }
-      if (propertyId == "encoderPushMode") {
-        // Convert 0/1/2/3 default to 1/2/3/4 for ComboBox
-        int val = static_cast<int>(defVal);
-        return juce::var(val + 1);
       }
       return defVal;
     }
@@ -587,25 +567,15 @@ void TouchpadMixerEditorComponent::applyConfigValue(
         else
           valueToSet = juce::var("SmartScaleBend");
       } else if (propertyId == "expressionCCMode") {
-        int id = juce::jlimit(1, 3, static_cast<int>(value));
+        int id = juce::jlimit(1, 2, static_cast<int>(value));
         if (id == 1)
           valueToSet = juce::var("Position");
-        else if (id == 2)
-          valueToSet = juce::var("Slide");
         else
-          valueToSet = juce::var("Encoder");
+          valueToSet = juce::var("Slide");
       } else if (propertyId == "slideQuickPrecision" || propertyId == "slideAbsRel" || propertyId == "slideLockFree" || propertyId == "slideAxis") {
         // Convert ComboBox ID (1/2) back to stored value (0/1)
         int id = static_cast<int>(value);
         valueToSet = juce::var(id == 1 ? 0 : 1);
-      } else if (propertyId == "encoderAxis") {
-        // Convert ComboBox ID (1/2/3) back to stored value (0/1/2)
-        int id = static_cast<int>(value);
-        valueToSet = juce::var(id - 1);
-      } else if (propertyId == "encoderPushMode") {
-        // Convert ComboBox ID (1/2/3/4) back to stored value (0/1/2/3)
-        int id = static_cast<int>(value);
-        valueToSet = juce::var(id - 1);
       }
       currentMapping.mapping.setProperty(propertyId, valueToSet, nullptr);
       manager->updateTouchpadMapping(selectedMappingIndex, currentMapping);

@@ -29,7 +29,7 @@ inline const juce::String TouchpadHoldBehaviorHold{ "Hold to not send note off i
 // Expression target (stored as string)
 inline const juce::String AdsrTargetCC{ "CC" };
 
-// Expression CC input mode (Position = current behaviour, Slide = single fader, Encoder = incremental + push)
+// Expression CC input mode (Position = current behaviour, Slide = single fader)
 inline const juce::String ExpressionCCModePosition{ "Position" };
 
 // Slide mode: 0 = Quick, 1 = Precision; 0 = Absolute, 1 = Relative; 0 = Lock, 1 = Free
@@ -38,15 +38,6 @@ constexpr int SlideAbsRel = 0;
 constexpr int SlideLockFree = 1;
 // Slide axis: 0 = Vertical (Y), 1 = Horizontal (X)
 constexpr int SlideAxis = 0;
-
-// Encoder: step 1-16, no wrap, axis 0=Vertical, push off, push value 0
-constexpr int EncoderStepSize = 1;
-constexpr int EncoderStepSizeX = 1;
-constexpr int EncoderStepSizeY = 1;
-constexpr bool EncoderWrap = false;
-constexpr int EncoderAxis = 0;
-constexpr int EncoderPushMode = 0;
-constexpr int EncoderPushValue = 0;
 
 // Touchpad event (Finger1Down = 0)
 constexpr int InputTouchpadEvent = 0;
