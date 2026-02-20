@@ -854,9 +854,10 @@ void MainComponent::handleAxisEvent(uintptr_t deviceHandle, int inputCode,
 void MainComponent::handleTouchpadContacts(
     uintptr_t deviceHandle, const std::vector<TouchpadContact> &contacts) {
   // Process when device is in "Touchpad" alias, or when we have touchpad
-  // touchpad layouts (so MIDI is generated even without assigning Touchpad alias).
+  // layouts OR touchpad mappings (so MIDI is generated even without assigning Touchpad alias).
   if (cachedTouchpadHandles.count(deviceHandle) == 0 &&
-      !inputProcessor.hasTouchpadLayouts())
+      !inputProcessor.hasTouchpadLayouts() &&
+      !inputProcessor.hasPointerMappings())
     return;
   inputProcessor.processTouchpadContacts(deviceHandle, contacts);
   if (miniWindow && settingsManager.getShowTouchpadVisualizerInMiniWindow()) {
