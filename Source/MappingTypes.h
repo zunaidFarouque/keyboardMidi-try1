@@ -314,7 +314,8 @@ enum class TouchpadConversionKind {
   BoolToCC,         // Boolean input -> Expression (value when on/off)
   ContinuousToGate, // Continuous input -> Note (threshold)
   ContinuousToRange,// Continuous input -> Expression (range map)
-  SlideToCC         // Single-CC fader (position/delta, mixer-like modes)
+  SlideToCC,        // Single-CC fader (position/delta, mixer-like modes)
+  EncoderCC         // Touchpad encoder (rotation + push)
 };
 
 // Pitch-pad layout types (shared by TouchpadConversionParams and
@@ -354,6 +355,27 @@ struct TouchpadConversionParams {
   std::optional<PitchPadConfig> pitchPadConfig;
   // Pre-built layout for pitchPadConfig (avoids rebuilding every frame).
   std::optional<PitchPadLayout> cachedPitchPadLayout;
+
+  // EncoderCC fields
+  uint8_t encoderAxis = 0;              // 0=Vertical, 1=Horizontal, 2=Both
+  float encoderSensitivity = 1.0f;      // Movement scale (0.1-10.0)
+  int encoderStepSize = 1;              // Used for Vertical/Horizontal
+  int encoderStepSizeX = 1;             // Used for Both axis
+  int encoderStepSizeY = 1;             // Used for Both axis
+  uint8_t encoderOutputMode = 0;         // 0=Absolute, 1=Relative, 2=NRPN
+  uint8_t encoderRelativeEncoding = 0;  // 0-3 encoding method
+  bool encoderWrap = false;              // Wrap at boundaries
+  int encoderInitialValue = 64;          // Starting CC value for Absolute mode (0-127)
+  int encoderNRPNNumber = 0;            // 0-16383 for NRPN mode
+  uint8_t encoderPushDetection = 0;     // 0=Two-finger, 1=Three-finger
+  uint8_t encoderPushOutputType = 0;    // 0=CC, 1=Note, 2=ProgramChange
+  uint8_t encoderPushMode = 0;          // 0=Off, 1=Momentary, 2=Toggle, 3=Trigger
+  int encoderPushCCNumber = 1;         // CC number for push (when output type is CC)
+  int encoderPushValue = 127;          // CC value
+  int encoderPushNote = 60;            // Note number
+  int encoderPushProgram = 0;           // Program number
+  int encoderPushChannel = 1;           // Channel for Note/ProgramChange
+  float encoderDeadZone = 0.0f;         // Dead zone threshold (0-0.5)
 };
 
 // One compiled touchpad mapping (alias "Touchpad", layer, event, action,

@@ -330,6 +330,32 @@ private:
   std::unordered_map<std::tuple<uintptr_t, int, int>, bool, Tuple3Hash>
       touchpadSlideApplierDownPrev;
 
+  // EncoderCC: rotation state (device, layerId, eventId, channel, ccNumber)
+  std::map<std::tuple<uintptr_t, int, int, int, int>, int>
+      lastTouchpadEncoderCCValues;
+  std::map<std::tuple<uintptr_t, int, int, int, int>, float>
+      touchpadEncoderPrevPos;
+  std::map<std::tuple<uintptr_t, int, int, int, int>, float>
+      touchpadEncoderPrevPosX;
+  std::map<std::tuple<uintptr_t, int, int, int, int>, float>
+      touchpadEncoderPrevPosY;
+  // EncoderCC: anchor (gesture start) and cumulative steps sent (distance-based)
+  std::map<std::tuple<uintptr_t, int, int, int, int>, float>
+      touchpadEncoderAnchor;
+  std::map<std::tuple<uintptr_t, int, int, int, int>, float>
+      touchpadEncoderAnchorX;
+  std::map<std::tuple<uintptr_t, int, int, int, int>, float>
+      touchpadEncoderAnchorY;
+  std::map<std::tuple<uintptr_t, int, int, int, int>, int>
+      touchpadEncoderLastSentSteps;
+  // EncoderCC push state (device, layerId, eventId)
+  std::map<std::tuple<uintptr_t, int, int>, bool> touchpadEncoderPushOn;
+  std::map<std::tuple<uintptr_t, int, int>, bool> touchpadEncoderPushPrev;
+  // EncoderCC: had active contacts last frame (only clear prev on transition to empty)
+  std::map<std::tuple<uintptr_t, int, int>, bool> touchpadEncoderHadActivePrev;
+  // EncoderCC: previous active finger count; when it changes we re-anchor to avoid spurious steps (e.g. 2→1 on release)
+  std::map<std::tuple<uintptr_t, int, int>, int> touchpadEncoderActiveCount;
+
   // Drum pad / Harmonic grid: active notes per (deviceHandle, stripIdx,
   // contactId). Value stores InputID and padIndex so we can send note off when
   // finger moves outside or to a different pad.

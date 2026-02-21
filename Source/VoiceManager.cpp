@@ -950,3 +950,15 @@ void VoiceManager::sendCC(int channel, int controller, int value) {
 void VoiceManager::sendPitchBend(int channel, int value) {
   midiEngine.sendPitchBend(channel, value);
 }
+
+void VoiceManager::sendProgramChange(int channel, int program) {
+  midiEngine.sendProgramChange(channel, program);
+}
+
+void VoiceManager::sendNoteOn(int channel, int note, int velocity) {
+  midiEngine.sendNoteOn(channel, note, static_cast<float>(juce::jlimit(0, 127, velocity)) / 127.0f);
+}
+
+void VoiceManager::sendNoteOff(int channel, int note) {
+  midiEngine.sendNoteOff(channel, note);
+}

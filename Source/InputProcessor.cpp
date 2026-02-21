@@ -1875,6 +1875,8 @@ void InputProcessor::processTouchpadContacts(
     for (const auto &entry : ctx->touchpadMappings) {
       if (!activeLayersSnapshot[(size_t)entry.layerId])
         continue;
+      if (entry.conversionKind == TouchpadConversionKind::EncoderCC)
+        continue;
 
       bool boolVal = false;
       float continuousVal = 0.0f;
@@ -2491,6 +2493,259 @@ void InputProcessor::processTouchpadContacts(
               pairs.second->normX, pairs.second->normY};
         }
         continue;
+      }
+    }
+  }
+
+  // Encoder CC: rotation (swipe) + push
+  constexpr float kEncoderBaselineMovement = 0.02f;
+  if (!ctx->touchpadMappings.empty()) {
+    for (const auto &entry : ctx->touchpadMappings) {
+      if (entry.conversionKind != TouchpadConversionKind::EncoderCC)
+        continue;
+      if (!activeLayersSnapshot[(size_t)entry.layerId])
+        continue;
+      if (entry.action.type != ActionType::Expression ||
+          entry.action.adsrSettings.target != AdsrTarget::CC)
+        continue;
+      const auto &act = entry.action;
+      const auto &p = entry.conversionParams;
+
+      std::vector<std::pair<size_t, const TouchpadContact *>> inRegion;
+      for (size_t i = 0; i < contacts.size(); ++i) {
+        const auto &c = contacts[i];
+        if (c.normX >= entry.regionLeft && c.normX < entry.regionRight &&
+            c.normY >= entry.regionTop && c.normY < entry.regionBottom)
+          inRegion.push_back({i, &c});
+      }
+      std::sort(inRegion.begin(), inRegion.end(),
+                [](const auto &a, const auto &b) {
+                  return a.second->contactId < b.second->contactId;
+                });
+      std::vector<std::pair<size_t, const TouchpadContact *>> active;
+      for (const auto &pair : inRegion) {
+        if (pair.second->tipDown)
+          active.push_back(pair);
+      }
+
+      auto keyEnc = std::make_tuple(deviceHandle, entry.layerId, entry.eventId,
+                                   act.channel, act.adsrSettings.ccNumber);
+      auto entryKey = std::make_tuple(deviceHandle, entry.layerId, entry.eventId);
+
+      float posX = 0.0f, posY = 0.0f;
+      if (!active.empty()) {
+        float localX = (active[0].second->normX - entry.regionLeft) * entry.invRegionWidth;
+        float localY = (active[0].second->normY - entry.regionTop) * entry.invRegionHeight;
+        posX = std::clamp(localX, 0.0f, 1.0f);
+        posY = std::clamp(localY, 0.0f, 1.0f);
+      }
+
+      // Rotation: purely distance from anchor (gesture start), not per-frame delta.
+      // So slow swipes and fast swipes with the same distance give the same steps.
+      int stepCount = 0;
+      if (!active.empty() && p.encoderAxis <= 2) {
+        const int activeCount = static_cast<int>(active.size());
+        int prevCount = -1;
+        {
+          auto it = touchpadEncoderActiveCount.find(entryKey);
+          if (it != touchpadEncoderActiveCount.end())
+            prevCount = it->second;
+        }
+        touchpadEncoderActiveCount[entryKey] = activeCount;
+        const bool fingerCountChanged = (prevCount >= 0 && prevCount != activeCount);
+
+        const float stepScale = 1.0f / (p.encoderSensitivity * kEncoderBaselineMovement);
+        float distanceFromAnchor = 0.0f;
+        bool hadAnchor = false;
+
+        if (p.encoderAxis == 0) {
+          float current = 1.0f - posY;
+          if (fingerCountChanged) {
+            touchpadEncoderAnchor[keyEnc] = current;
+            touchpadEncoderLastSentSteps[keyEnc] = 0;
+          }
+          auto itAnchor = touchpadEncoderAnchor.find(keyEnc);
+          if (itAnchor != touchpadEncoderAnchor.end()) {
+            distanceFromAnchor = current - itAnchor->second;
+            hadAnchor = true;
+          } else {
+            touchpadEncoderAnchor[keyEnc] = current;
+          }
+          touchpadEncoderPrevPos[keyEnc] = current;
+        } else if (p.encoderAxis == 1) {
+          float current = posX;
+          if (fingerCountChanged) {
+            touchpadEncoderAnchor[keyEnc] = current;
+            touchpadEncoderLastSentSteps[keyEnc] = 0;
+          }
+          auto itAnchor = touchpadEncoderAnchor.find(keyEnc);
+          if (itAnchor != touchpadEncoderAnchor.end()) {
+            distanceFromAnchor = current - itAnchor->second;
+            hadAnchor = true;
+          } else {
+            touchpadEncoderAnchor[keyEnc] = current;
+          }
+          touchpadEncoderPrevPos[keyEnc] = current;
+        } else {
+          float currX = posX, currY = 1.0f - posY;
+          if (fingerCountChanged) {
+            touchpadEncoderAnchorX[keyEnc] = currX;
+            touchpadEncoderAnchorY[keyEnc] = currY;
+            touchpadEncoderLastSentSteps[keyEnc] = 0;
+          }
+          auto itAX = touchpadEncoderAnchorX.find(keyEnc);
+          auto itAY = touchpadEncoderAnchorY.find(keyEnc);
+          if (itAX != touchpadEncoderAnchorX.end() && itAY != touchpadEncoderAnchorY.end()) {
+            float dX = (currX - itAX->second) * static_cast<float>(p.encoderStepSizeX);
+            float dY = (currY - itAY->second) * static_cast<float>(p.encoderStepSizeY);
+            distanceFromAnchor = dX + dY;
+            hadAnchor = true;
+          } else {
+            touchpadEncoderAnchorX[keyEnc] = currX;
+            touchpadEncoderAnchorY[keyEnc] = currY;
+          }
+          touchpadEncoderPrevPosX[keyEnc] = currX;
+          touchpadEncoderPrevPosY[keyEnc] = currY;
+        }
+
+        if (hadAnchor) {
+          if (std::abs(distanceFromAnchor) < p.encoderDeadZone)
+            distanceFromAnchor = 0.0f;
+          float idealSteps = distanceFromAnchor * stepScale;
+          int idealStepsRounded = static_cast<int>(std::round(idealSteps));
+          int lastSent = 0;
+          auto itLast = touchpadEncoderLastSentSteps.find(keyEnc);
+          if (itLast != touchpadEncoderLastSentSteps.end())
+            lastSent = itLast->second;
+          int stepsToSend = idealStepsRounded - lastSent;
+          touchpadEncoderLastSentSteps[keyEnc] = idealStepsRounded;
+          int mult = (p.encoderAxis == 2) ? 1 : p.encoderStepSize;
+          stepCount = stepsToSend * mult;
+        }
+      }
+
+      // Only clear when gesture actually ends (transition from active to empty).
+      if (active.empty()) {
+        auto itHad = touchpadEncoderHadActivePrev.find(entryKey);
+        if (itHad != touchpadEncoderHadActivePrev.end() && itHad->second) {
+          touchpadEncoderPrevPos.erase(keyEnc);
+          touchpadEncoderPrevPosX.erase(keyEnc);
+          touchpadEncoderPrevPosY.erase(keyEnc);
+          touchpadEncoderAnchor.erase(keyEnc);
+          touchpadEncoderAnchorX.erase(keyEnc);
+          touchpadEncoderAnchorY.erase(keyEnc);
+          touchpadEncoderLastSentSteps.erase(keyEnc);
+          touchpadEncoderHadActivePrev[entryKey] = false;
+          touchpadEncoderActiveCount.erase(entryKey);
+        }
+      } else {
+        touchpadEncoderHadActivePrev[entryKey] = true;
+      }
+
+      if (stepCount != 0) {
+        if (p.encoderOutputMode == 0) {
+          int currentVal = p.encoderInitialValue;
+          auto it = lastTouchpadEncoderCCValues.find(keyEnc);
+          if (it != lastTouchpadEncoderCCValues.end())
+            currentVal = it->second;
+          currentVal += stepCount;
+          if (p.encoderWrap) {
+            while (currentVal > p.outputMax) currentVal -= (p.outputMax - p.outputMin + 1);
+            while (currentVal < p.outputMin) currentVal += (p.outputMax - p.outputMin + 1);
+          } else {
+            currentVal = juce::jlimit(p.outputMin, p.outputMax, currentVal);
+          }
+          voiceManager.sendCC(act.channel, act.adsrSettings.ccNumber, currentVal);
+          lastTouchpadEncoderCCValues[keyEnc] = currentVal;
+        } else if (p.encoderOutputMode == 1) {
+          int n = juce::jlimit(-63, 63, stepCount);
+          int ccVal = 64;
+          switch (p.encoderRelativeEncoding) {
+          case 0:
+            ccVal = 64 + n;
+            break;
+          case 1:
+            ccVal = (n >= 0) ? (n & 0x7F) : (0x80 | (std::abs(n) & 0x7F));
+            break;
+          case 2:
+            ccVal = (n >= 0) ? (n & 0x7F) : (256 + n) & 0xFF;
+            break;
+          case 3:
+            ccVal = (n > 0) ? 1 : (n < 0 ? 127 : 64);
+            break;
+          default:
+            ccVal = 64 + n;
+            break;
+          }
+          ccVal = juce::jlimit(0, 127, ccVal);
+          voiceManager.sendCC(act.channel, act.adsrSettings.ccNumber, ccVal);
+        } else if (p.encoderOutputMode == 2) {
+          int currentVal = 8192;
+          auto it = lastTouchpadEncoderCCValues.find(keyEnc);
+          if (it != lastTouchpadEncoderCCValues.end())
+            currentVal = it->second;
+          currentVal += stepCount * 128;
+          currentVal = juce::jlimit(0, 16383, currentVal);
+          int nrpnMsb = (p.encoderNRPNNumber >> 7) & 0x7F;
+          int nrpnLsb = p.encoderNRPNNumber & 0x7F;
+          voiceManager.sendCC(act.channel, 99, nrpnMsb);
+          voiceManager.sendCC(act.channel, 98, nrpnLsb);
+          voiceManager.sendCC(act.channel, 6, (currentVal >> 7) & 0x7F);
+          voiceManager.sendCC(act.channel, 38, currentVal & 0x7F);
+          lastTouchpadEncoderCCValues[keyEnc] = currentVal;
+        }
+      }
+
+      bool pushActive = (p.encoderPushDetection == 0 && active.size() >= 2) ||
+                        (p.encoderPushDetection == 1 && active.size() >= 3);
+      bool pushPrev = false;
+      {
+        auto it = touchpadEncoderPushPrev.find(entryKey);
+        if (it != touchpadEncoderPushPrev.end())
+          pushPrev = it->second;
+      }
+      touchpadEncoderPushPrev[entryKey] = pushActive;
+      bool pushEdgeOn = pushActive && !pushPrev;
+      bool pushEdgeOff = !pushActive && pushPrev;
+
+      if (p.encoderPushMode != 0) {
+        if (pushEdgeOn) {
+          if (p.encoderPushMode == 2) {
+            bool &on = touchpadEncoderPushOn[entryKey];
+            on = !on;
+            if (p.encoderPushOutputType == 0) {
+              voiceManager.sendCC(p.encoderPushChannel, p.encoderPushCCNumber,
+                                 on ? p.encoderPushValue : 0);
+            } else if (p.encoderPushOutputType == 1) {
+              if (on)
+                voiceManager.sendNoteOn(p.encoderPushChannel, p.encoderPushNote, 127);
+              else
+                voiceManager.sendNoteOff(p.encoderPushChannel, p.encoderPushNote);
+            } else if (p.encoderPushOutputType == 2) {
+              voiceManager.sendProgramChange(p.encoderPushChannel, p.encoderPushProgram);
+            }
+          } else if (p.encoderPushMode == 1) {
+            if (p.encoderPushOutputType == 0)
+              voiceManager.sendCC(p.encoderPushChannel, p.encoderPushCCNumber, p.encoderPushValue);
+            else if (p.encoderPushOutputType == 1)
+              voiceManager.sendNoteOn(p.encoderPushChannel, p.encoderPushNote, 127);
+            else if (p.encoderPushOutputType == 2)
+              voiceManager.sendProgramChange(p.encoderPushChannel, p.encoderPushProgram);
+          } else if (p.encoderPushMode == 3) {
+            if (p.encoderPushOutputType == 0)
+              voiceManager.sendCC(p.encoderPushChannel, p.encoderPushCCNumber, p.encoderPushValue);
+            else if (p.encoderPushOutputType == 1)
+              voiceManager.sendNoteOn(p.encoderPushChannel, p.encoderPushNote, 127);
+            else if (p.encoderPushOutputType == 2)
+              voiceManager.sendProgramChange(p.encoderPushChannel, p.encoderPushProgram);
+          }
+        }
+        if (pushEdgeOff && p.encoderPushMode == 1) {
+          if (p.encoderPushOutputType == 0)
+            voiceManager.sendCC(p.encoderPushChannel, p.encoderPushCCNumber, 0);
+          else if (p.encoderPushOutputType == 1)
+            voiceManager.sendNoteOff(p.encoderPushChannel, p.encoderPushNote);
+        }
       }
     }
   }

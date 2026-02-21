@@ -235,7 +235,32 @@ juce::var TouchpadMixerEditorComponent::getConfigValue(
         juce::String str = propVal.toString().trim();
         if (str.equalsIgnoreCase("Position")) return juce::var(1);
         if (str.equalsIgnoreCase("Slide")) return juce::var(2);
+        if (str.equalsIgnoreCase("Encoder")) return juce::var(3);
         return juce::var(1);
+      } else if (propertyId == "encoderAxis") {
+        int val = static_cast<int>(propVal);
+        return juce::var(juce::jlimit(1, 3, val + 1)); // 0/1/2 -> 1/2/3
+      } else if (propertyId == "encoderOutputMode") {
+        juce::String str = propVal.toString().trim();
+        if (str.equalsIgnoreCase("Absolute")) return juce::var(1);
+        if (str.equalsIgnoreCase("Relative")) return juce::var(2);
+        if (str.equalsIgnoreCase("NRPN")) return juce::var(3);
+        return juce::var(1);
+      } else if (propertyId == "encoderRelativeEncoding") {
+        int val = static_cast<int>(propVal);
+        return juce::var(juce::jlimit(1, 4, val + 1)); // 0-3 -> 1-4
+      } else if (propertyId == "encoderPushOutputType") {
+        juce::String str = propVal.toString().trim();
+        if (str.equalsIgnoreCase("CC")) return juce::var(1);
+        if (str.equalsIgnoreCase("Note")) return juce::var(2);
+        if (str.equalsIgnoreCase("ProgramChange")) return juce::var(3);
+        return juce::var(1);
+      } else if (propertyId == "encoderPushMode") {
+        int val = static_cast<int>(propVal);
+        return juce::var(juce::jlimit(1, 4, val + 1)); // 0-3 -> 1-4
+      } else if (propertyId == "encoderPushDetection") {
+        int val = static_cast<int>(propVal);
+        return juce::var(juce::jlimit(1, 3, val + 1)); // 0-2 -> 1-3
       } else if (propertyId == "slideQuickPrecision" || propertyId == "slideAbsRel" || propertyId == "slideLockFree" || propertyId == "slideAxis") {
         // Convert 0/1 to 1/2 for ComboBox (JUCE uses 1-based IDs)
         int val = static_cast<int>(propVal);
@@ -271,7 +296,38 @@ juce::var TouchpadMixerEditorComponent::getConfigValue(
         juce::String str = defVal.toString().trim();
         if (str.equalsIgnoreCase("Position")) return juce::var(1);
         if (str.equalsIgnoreCase("Slide")) return juce::var(2);
+        if (str.equalsIgnoreCase("Encoder")) return juce::var(3);
         return juce::var(1);
+      }
+      if (propertyId == "encoderAxis") {
+        int val = static_cast<int>(defVal);
+        return juce::var(juce::jlimit(1, 3, val + 1));
+      }
+      if (propertyId == "encoderOutputMode") {
+        juce::String str = defVal.toString().trim();
+        if (str.equalsIgnoreCase("Absolute")) return juce::var(1);
+        if (str.equalsIgnoreCase("Relative")) return juce::var(2);
+        if (str.equalsIgnoreCase("NRPN")) return juce::var(3);
+        return juce::var(1);
+      }
+      if (propertyId == "encoderRelativeEncoding") {
+        int val = static_cast<int>(defVal);
+        return juce::var(juce::jlimit(1, 4, val + 1));
+      }
+      if (propertyId == "encoderPushOutputType") {
+        juce::String str = defVal.toString().trim();
+        if (str.equalsIgnoreCase("CC")) return juce::var(1);
+        if (str.equalsIgnoreCase("Note")) return juce::var(2);
+        if (str.equalsIgnoreCase("ProgramChange")) return juce::var(3);
+        return juce::var(1);
+      }
+      if (propertyId == "encoderPushMode") {
+        int val = static_cast<int>(defVal);
+        return juce::var(juce::jlimit(1, 4, val + 1));
+      }
+      if (propertyId == "encoderPushDetection") {
+        int val = static_cast<int>(defVal);
+        return juce::var(juce::jlimit(1, 3, val + 1));
       }
       if (propertyId == "slideQuickPrecision" || propertyId == "slideAbsRel" || propertyId == "slideLockFree" || propertyId == "slideAxis") {
         // Convert 0/1 default to 1/2 for ComboBox
@@ -567,11 +623,35 @@ void TouchpadMixerEditorComponent::applyConfigValue(
         else
           valueToSet = juce::var("SmartScaleBend");
       } else if (propertyId == "expressionCCMode") {
-        int id = juce::jlimit(1, 2, static_cast<int>(value));
+        int id = juce::jlimit(1, 3, static_cast<int>(value));
         if (id == 1)
           valueToSet = juce::var("Position");
-        else
+        else if (id == 2)
           valueToSet = juce::var("Slide");
+        else
+          valueToSet = juce::var("Encoder");
+      } else if (propertyId == "encoderAxis") {
+        int id = juce::jlimit(1, 3, static_cast<int>(value));
+        valueToSet = juce::var(id - 1); // 1/2/3 -> 0/1/2
+      } else if (propertyId == "encoderOutputMode") {
+        int id = juce::jlimit(1, 3, static_cast<int>(value));
+        if (id == 1) valueToSet = juce::var("Absolute");
+        else if (id == 2) valueToSet = juce::var("Relative");
+        else valueToSet = juce::var("NRPN");
+      } else if (propertyId == "encoderRelativeEncoding") {
+        int id = juce::jlimit(1, 4, static_cast<int>(value));
+        valueToSet = juce::var(id - 1);
+      } else if (propertyId == "encoderPushOutputType") {
+        int id = juce::jlimit(1, 3, static_cast<int>(value));
+        if (id == 1) valueToSet = juce::var("CC");
+        else if (id == 2) valueToSet = juce::var("Note");
+        else valueToSet = juce::var("ProgramChange");
+      } else if (propertyId == "encoderPushMode") {
+        int id = juce::jlimit(1, 4, static_cast<int>(value));
+        valueToSet = juce::var(id - 1);
+      } else if (propertyId == "encoderPushDetection") {
+        int id = juce::jlimit(1, 3, static_cast<int>(value));
+        valueToSet = juce::var(id - 1);
       } else if (propertyId == "slideQuickPrecision" || propertyId == "slideAbsRel" || propertyId == "slideLockFree" || propertyId == "slideAxis") {
         // Convert ComboBox ID (1/2) back to stored value (0/1)
         int id = static_cast<int>(value);
@@ -581,7 +661,9 @@ void TouchpadMixerEditorComponent::applyConfigValue(
       manager->updateTouchpadMapping(selectedMappingIndex, currentMapping);
       // Rebuild UI when schema structure changes (controls show/hide).
       if (propertyId == "type" || propertyId == "useCustomEnvelope" ||
-          propertyId == "adsrTarget" || propertyId == "expressionCCMode")
+          propertyId == "adsrTarget" || propertyId == "expressionCCMode" ||
+          propertyId == "encoderAxis" || propertyId == "encoderOutputMode" ||
+          propertyId == "encoderPushMode" || propertyId == "encoderPushOutputType")
         rebuildUI();
       return;
     }

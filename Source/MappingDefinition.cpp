@@ -46,6 +46,25 @@ const std::unordered_map<juce::String, juce::var> &getDefaultsMap() {
     map["slideAbsRel"] = juce::var(SlideAbsRel);
     map["slideLockFree"] = juce::var(SlideLockFree);
     map["slideAxis"] = juce::var(SlideAxis);
+    map["encoderAxis"] = juce::var(EncoderAxis);
+    map["encoderSensitivity"] = juce::var(static_cast<double>(EncoderSensitivity));
+    map["encoderStepSize"] = juce::var(EncoderStepSize);
+    map["encoderStepSizeX"] = juce::var(EncoderStepSizeX);
+    map["encoderStepSizeY"] = juce::var(EncoderStepSizeY);
+    map["encoderOutputMode"] = juce::var(EncoderOutputModeAbsoluteStr);
+    map["encoderRelativeEncoding"] = juce::var(EncoderRelativeEncoding);
+    map["encoderWrap"] = juce::var(EncoderWrap);
+    map["encoderInitialValue"] = juce::var(EncoderInitialValue);
+    map["encoderNRPNNumber"] = juce::var(EncoderNRPNNumber);
+    map["encoderPushDetection"] = juce::var(EncoderPushDetection);
+    map["encoderPushOutputType"] = juce::var("CC");
+    map["encoderPushMode"] = juce::var(EncoderPushMode);
+    map["encoderPushCCNumber"] = juce::var(EncoderPushCCNumber);
+    map["encoderPushValue"] = juce::var(EncoderPushValue);
+    map["encoderPushNote"] = juce::var(EncoderPushNote);
+    map["encoderPushProgram"] = juce::var(EncoderPushProgram);
+    map["encoderPushChannel"] = juce::var(EncoderPushChannel);
+    map["encoderDeadZone"] = juce::var(static_cast<double>(EncoderDeadZone));
   }
   return map;
 }
@@ -308,6 +327,7 @@ InspectorSchema MappingDefinition::getSchema(const juce::ValueTree &mapping,
       ccMode.controlType = InspectorControl::Type::ComboBox;
       ccMode.options[1] = "Position";
       ccMode.options[2] = "Slide";
+      ccMode.options[3] = "Encoder";
       setControlDefaultFromMap(ccMode);
       schema.push_back(ccMode);
     }
@@ -432,6 +452,232 @@ InspectorSchema MappingDefinition::getSchema(const juce::ValueTree &mapping,
       schema.push_back(slideAxis);
     }
 
+    if (adsrTargetStr.equalsIgnoreCase("CC") &&
+        expressionCCModeStr.equalsIgnoreCase("Encoder")) {
+      schema.push_back(createSeparator("Encoder", juce::Justification::centredLeft));
+      InspectorControl encAxis;
+      encAxis.propertyId = "encoderAxis";
+      encAxis.label = "Axis";
+      encAxis.controlType = InspectorControl::Type::ComboBox;
+      encAxis.options[1] = "Vertical";
+      encAxis.options[2] = "Horizontal";
+      encAxis.options[3] = "Both";
+      setControlDefaultFromMap(encAxis);
+      schema.push_back(encAxis);
+      InspectorControl encSens;
+      encSens.propertyId = "encoderSensitivity";
+      encSens.label = "Movement per step";
+      encSens.controlType = InspectorControl::Type::Slider;
+      encSens.min = 0.1;
+      encSens.max = 10.0;
+      encSens.step = 0.1;
+      setControlDefaultFromMap(encSens);
+      schema.push_back(encSens);
+      int encAxisVal = (int)mapping.getProperty("encoderAxis", MappingDefaults::EncoderAxis);
+      if (encAxisVal == 2) {
+        InspectorControl stepX;
+        stepX.propertyId = "encoderStepSizeX";
+        stepX.label = "Step size X";
+        stepX.controlType = InspectorControl::Type::Slider;
+        stepX.min = 1.0;
+        stepX.max = 16.0;
+        stepX.step = 1.0;
+        setControlDefaultFromMap(stepX);
+        schema.push_back(stepX);
+        InspectorControl stepY;
+        stepY.propertyId = "encoderStepSizeY";
+        stepY.label = "Step size Y";
+        stepY.controlType = InspectorControl::Type::Slider;
+        stepY.min = 1.0;
+        stepY.max = 16.0;
+        stepY.step = 1.0;
+        setControlDefaultFromMap(stepY);
+        schema.push_back(stepY);
+      } else {
+        InspectorControl stepSize;
+        stepSize.propertyId = "encoderStepSize";
+        stepSize.label = "Step size";
+        stepSize.controlType = InspectorControl::Type::Slider;
+        stepSize.min = 1.0;
+        stepSize.max = 16.0;
+        stepSize.step = 1.0;
+        setControlDefaultFromMap(stepSize);
+        schema.push_back(stepSize);
+      }
+      schema.push_back(createSeparator("Output", juce::Justification::centredLeft));
+      InspectorControl outMode;
+      outMode.propertyId = "encoderOutputMode";
+      outMode.label = "Output mode";
+      outMode.controlType = InspectorControl::Type::ComboBox;
+      outMode.options[1] = "Absolute";
+      outMode.options[2] = "Relative";
+      outMode.options[3] = "High-Resolution (NRPN)";
+      setControlDefaultFromMap(outMode);
+      schema.push_back(outMode);
+      juce::String encOutModeStr = mapping.getProperty("encoderOutputMode", MappingDefaults::EncoderOutputModeAbsoluteStr).toString().trim();
+      if (encOutModeStr.equalsIgnoreCase("Relative")) {
+        InspectorControl relEnc;
+        relEnc.propertyId = "encoderRelativeEncoding";
+        relEnc.label = "Relative encoding";
+        relEnc.controlType = InspectorControl::Type::ComboBox;
+        relEnc.options[1] = "Offset Binary (64 ± n)";
+        relEnc.options[2] = "Sign Magnitude";
+        relEnc.options[3] = "Two's Complement";
+        relEnc.options[4] = "Simple Incremental (0/127)";
+        setControlDefaultFromMap(relEnc);
+        schema.push_back(relEnc);
+      }
+      if (encOutModeStr.equalsIgnoreCase("Absolute")) {
+        InspectorControl wrap;
+        wrap.propertyId = "encoderWrap";
+        wrap.label = "Wrap at 0/127";
+        wrap.controlType = InspectorControl::Type::Toggle;
+        setControlDefaultFromMap(wrap);
+        schema.push_back(wrap);
+        InspectorControl initVal;
+        initVal.propertyId = "encoderInitialValue";
+        initVal.label = "Initial value";
+        initVal.controlType = InspectorControl::Type::Slider;
+        initVal.min = 0.0;
+        initVal.max = 127.0;
+        initVal.step = 1.0;
+        setControlDefaultFromMap(initVal);
+        schema.push_back(initVal);
+      }
+      if (encOutModeStr.equalsIgnoreCase("NRPN")) {
+        InspectorControl nrpn;
+        nrpn.propertyId = "encoderNRPNNumber";
+        nrpn.label = "NRPN Parameter Number";
+        nrpn.controlType = InspectorControl::Type::Slider;
+        nrpn.min = 0.0;
+        nrpn.max = 16383.0;
+        nrpn.step = 1.0;
+        setControlDefaultFromMap(nrpn);
+        schema.push_back(nrpn);
+      }
+      InspectorControl outMin;
+      outMin.propertyId = "touchpadOutputMin";
+      outMin.label = "Output min";
+      outMin.controlType = InspectorControl::Type::Slider;
+      outMin.min = 0.0;
+      outMin.max = 127.0;
+      outMin.step = 1.0;
+      setControlDefaultFromMap(outMin);
+      schema.push_back(outMin);
+      InspectorControl outMax;
+      outMax.propertyId = "touchpadOutputMax";
+      outMax.label = "Output max";
+      outMax.controlType = InspectorControl::Type::Slider;
+      outMax.min = 0.0;
+      outMax.max = 127.0;
+      outMax.step = 1.0;
+      setControlDefaultFromMap(outMax);
+      schema.push_back(outMax);
+
+      schema.push_back(createSeparator("Push Button", juce::Justification::centredLeft));
+      InspectorControl pushDetect;
+      pushDetect.propertyId = "encoderPushDetection";
+      pushDetect.label = "Detection";
+      pushDetect.controlType = InspectorControl::Type::ComboBox;
+      pushDetect.options[1] = "Two-finger tap";
+      pushDetect.options[2] = "Three-finger tap";
+      pushDetect.options[3] = "Pressure threshold";
+      setControlDefaultFromMap(pushDetect);
+      schema.push_back(pushDetect);
+      InspectorControl pushType;
+      pushType.propertyId = "encoderPushOutputType";
+      pushType.label = "Output type";
+      pushType.controlType = InspectorControl::Type::ComboBox;
+      pushType.options[1] = "Control Change (CC)";
+      pushType.options[2] = "Note";
+      pushType.options[3] = "Program Change";
+      setControlDefaultFromMap(pushType);
+      schema.push_back(pushType);
+      InspectorControl pushMode;
+      pushMode.propertyId = "encoderPushMode";
+      pushMode.label = "Behavior";
+      pushMode.controlType = InspectorControl::Type::ComboBox;
+      pushMode.options[1] = "Off";
+      pushMode.options[2] = "Momentary";
+      pushMode.options[3] = "Toggle";
+      pushMode.options[4] = "Trigger";
+      setControlDefaultFromMap(pushMode);
+      schema.push_back(pushMode);
+      int encPushMode = (int)mapping.getProperty("encoderPushMode", MappingDefaults::EncoderPushMode);
+      if (encPushMode != 0) {
+        juce::String encPushTypeStr = mapping.getProperty("encoderPushOutputType", "CC").toString().trim();
+        if (encPushTypeStr.equalsIgnoreCase("CC")) {
+          InspectorControl pushCC;
+          pushCC.propertyId = "encoderPushCCNumber";
+          pushCC.label = "CC number";
+          pushCC.controlType = InspectorControl::Type::Slider;
+          pushCC.min = 0.0;
+          pushCC.max = 127.0;
+          pushCC.step = 1.0;
+          setControlDefaultFromMap(pushCC);
+          schema.push_back(pushCC);
+          InspectorControl pushVal;
+          pushVal.propertyId = "encoderPushValue";
+          pushVal.label = "Push value";
+          pushVal.controlType = InspectorControl::Type::Slider;
+          pushVal.min = 0.0;
+          pushVal.max = 127.0;
+          pushVal.step = 1.0;
+          setControlDefaultFromMap(pushVal);
+          schema.push_back(pushVal);
+        } else if (encPushTypeStr.equalsIgnoreCase("Note")) {
+          InspectorControl pushNote;
+          pushNote.propertyId = "encoderPushNote";
+          pushNote.label = "Note";
+          pushNote.controlType = InspectorControl::Type::Slider;
+          pushNote.min = 0.0;
+          pushNote.max = 127.0;
+          pushNote.step = 1.0;
+          pushNote.valueFormat = InspectorControl::Format::NoteName;
+          setControlDefaultFromMap(pushNote);
+          schema.push_back(pushNote);
+          InspectorControl pushCh;
+          pushCh.propertyId = "encoderPushChannel";
+          pushCh.label = "Channel";
+          pushCh.controlType = InspectorControl::Type::Slider;
+          pushCh.min = 1.0;
+          pushCh.max = 16.0;
+          pushCh.step = 1.0;
+          setControlDefaultFromMap(pushCh);
+          schema.push_back(pushCh);
+        } else if (encPushTypeStr.equalsIgnoreCase("ProgramChange")) {
+          InspectorControl pushProg;
+          pushProg.propertyId = "encoderPushProgram";
+          pushProg.label = "Program";
+          pushProg.controlType = InspectorControl::Type::Slider;
+          pushProg.min = 0.0;
+          pushProg.max = 127.0;
+          pushProg.step = 1.0;
+          setControlDefaultFromMap(pushProg);
+          schema.push_back(pushProg);
+          InspectorControl pushCh;
+          pushCh.propertyId = "encoderPushChannel";
+          pushCh.label = "Channel";
+          pushCh.controlType = InspectorControl::Type::Slider;
+          pushCh.min = 1.0;
+          pushCh.max = 16.0;
+          pushCh.step = 1.0;
+          setControlDefaultFromMap(pushCh);
+          schema.push_back(pushCh);
+        }
+      }
+
+      schema.push_back(createSeparator("Advanced", juce::Justification::centredLeft));
+      InspectorControl deadZone;
+      deadZone.propertyId = "encoderDeadZone";
+      deadZone.label = "Dead zone (ignore small movement from anchor)";
+      deadZone.controlType = InspectorControl::Type::Slider;
+      deadZone.min = 0.0;
+      deadZone.max = 0.5;
+      deadZone.step = 0.01;
+      setControlDefaultFromMap(deadZone);
+      schema.push_back(deadZone);
+    }
 
     // 2. Mode Selection (Dynamics: only for Position mode or non-CC targets)
     const bool showDynamics =

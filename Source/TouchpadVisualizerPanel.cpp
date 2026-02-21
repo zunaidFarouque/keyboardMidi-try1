@@ -231,6 +231,10 @@ void TouchpadVisualizerPanel::paint(juce::Graphics &g) {
                              entry.conversionParams.inputMax};
             yControlLabel =
                 "CC" + juce::String(entry.action.adsrSettings.ccNumber);
+          } else if (entry.conversionKind ==
+                     TouchpadConversionKind::EncoderCC) {
+            yControlLabel =
+                "Encoder CC" + juce::String(entry.action.adsrSettings.ccNumber);
           }
         }
       }

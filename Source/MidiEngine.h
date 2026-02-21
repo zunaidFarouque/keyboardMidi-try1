@@ -20,6 +20,7 @@ public:
   virtual void sendNoteOff(int channel, int note);
   virtual void sendCC(int channel, int controller, int value);
   virtual void sendPitchBend(int channel, int value); // Value: 0-16383 (center = 8192)
+  virtual void sendProgramChange(int channel, int program); // Program: 0-127
 
   // All Notes Off (CC 123) on all 16 channels
   void allNotesOff();

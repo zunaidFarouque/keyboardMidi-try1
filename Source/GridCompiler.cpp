@@ -832,6 +832,50 @@ static void compileTouchpadMappingFromValueTree(
                          (absRel ? kMixerModeRelative : 0);
       p.slideAxis = (uint8_t)juce::jlimit(0, 1,
           (int)mapping.getProperty("slideAxis", MappingDefaults::SlideAxis));
+    } else if (isCC && expressionCCModeStr.equalsIgnoreCase("Encoder")) {
+      // Encoder: rotation (swipe) + optional push. Requires continuous X/Y; auto-promote boolean events.
+      if (eventId == TouchpadEvent::Finger1Down || eventId == TouchpadEvent::Finger1Up ||
+          eventId == TouchpadEvent::Finger2Down || eventId == TouchpadEvent::Finger2Up) {
+        entry.eventId = TouchpadEvent::Finger1Y;
+      }
+      entry.conversionKind = TouchpadConversionKind::EncoderCC;
+      entry.action.adsrSettings.target = AdsrTarget::CC;
+      entry.action.adsrSettings.ccNumber = (int)mapping.getProperty("data1", MappingDefaults::ExpressionData1);
+      p.outputMin = (int)mapping.getProperty("touchpadOutputMin", MappingDefaults::TouchpadOutputMin);
+      p.outputMax = (int)mapping.getProperty("touchpadOutputMax", MappingDefaults::TouchpadOutputMax);
+      p.encoderAxis = (uint8_t)juce::jlimit(0, 2, (int)mapping.getProperty("encoderAxis", MappingDefaults::EncoderAxis));
+      p.encoderSensitivity = (float)mapping.getProperty("encoderSensitivity", static_cast<double>(MappingDefaults::EncoderSensitivity));
+      p.encoderSensitivity = juce::jlimit(0.1f, 10.0f, p.encoderSensitivity);
+      p.encoderStepSize = juce::jlimit(1, 16, (int)mapping.getProperty("encoderStepSize", MappingDefaults::EncoderStepSize));
+      p.encoderStepSizeX = juce::jlimit(1, 16, (int)mapping.getProperty("encoderStepSizeX", MappingDefaults::EncoderStepSizeX));
+      p.encoderStepSizeY = juce::jlimit(1, 16, (int)mapping.getProperty("encoderStepSizeY", MappingDefaults::EncoderStepSizeY));
+      juce::String outModeStr = mapping.getProperty("encoderOutputMode", MappingDefaults::EncoderOutputModeAbsoluteStr).toString().trim();
+      if (outModeStr.equalsIgnoreCase("Relative"))
+        p.encoderOutputMode = 1;
+      else if (outModeStr.equalsIgnoreCase("NRPN"))
+        p.encoderOutputMode = 2;
+      else
+        p.encoderOutputMode = 0;
+      p.encoderRelativeEncoding = (uint8_t)juce::jlimit(0, 3, (int)mapping.getProperty("encoderRelativeEncoding", MappingDefaults::EncoderRelativeEncoding));
+      p.encoderWrap = (bool)mapping.getProperty("encoderWrap", MappingDefaults::EncoderWrap);
+      p.encoderInitialValue = juce::jlimit(0, 127, (int)mapping.getProperty("encoderInitialValue", MappingDefaults::EncoderInitialValue));
+      p.encoderNRPNNumber = juce::jlimit(0, 16383, (int)mapping.getProperty("encoderNRPNNumber", MappingDefaults::EncoderNRPNNumber));
+      p.encoderPushDetection = (uint8_t)juce::jlimit(0, 2, (int)mapping.getProperty("encoderPushDetection", MappingDefaults::EncoderPushDetection));
+      juce::String pushTypeStr = mapping.getProperty("encoderPushOutputType", "CC").toString().trim();
+      if (pushTypeStr.equalsIgnoreCase("Note"))
+        p.encoderPushOutputType = 1;
+      else if (pushTypeStr.equalsIgnoreCase("ProgramChange"))
+        p.encoderPushOutputType = 2;
+      else
+        p.encoderPushOutputType = 0;
+      p.encoderPushMode = (uint8_t)juce::jlimit(0, 3, (int)mapping.getProperty("encoderPushMode", MappingDefaults::EncoderPushMode));
+      p.encoderPushCCNumber = juce::jlimit(0, 127, (int)mapping.getProperty("encoderPushCCNumber", entry.action.adsrSettings.ccNumber));
+      p.encoderPushValue = juce::jlimit(0, 127, (int)mapping.getProperty("encoderPushValue", MappingDefaults::EncoderPushValue));
+      p.encoderPushNote = juce::jlimit(0, 127, (int)mapping.getProperty("encoderPushNote", MappingDefaults::EncoderPushNote));
+      p.encoderPushProgram = juce::jlimit(0, 127, (int)mapping.getProperty("encoderPushProgram", MappingDefaults::EncoderPushProgram));
+      p.encoderPushChannel = juce::jlimit(1, 16, (int)mapping.getProperty("encoderPushChannel", headerChannel));
+      p.encoderDeadZone = (float)mapping.getProperty("encoderDeadZone", static_cast<double>(MappingDefaults::EncoderDeadZone));
+      p.encoderDeadZone = juce::jlimit(0.0f, 0.5f, p.encoderDeadZone);
     } else if (inputBool) {
       entry.conversionKind = TouchpadConversionKind::BoolToCC;
       if (isCC) {

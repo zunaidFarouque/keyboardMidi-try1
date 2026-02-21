@@ -124,6 +124,12 @@ void MidiEngine::sendPitchBend(int channel, int value) {
   queueOrSendNow(msg);
 }
 
+void MidiEngine::sendProgramChange(int channel, int program) {
+  program = juce::jlimit(0, 127, program);
+  auto msg = juce::MidiMessage::programChange(juce::jlimit(1, 16, channel), program);
+  queueOrSendNow(msg);
+}
+
 void MidiEngine::allNotesOff() {
   for (int ch = 1; ch <= 16; ++ch) {
     auto msg = juce::MidiMessage::controllerEvent(ch, 123, 0);

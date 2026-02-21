@@ -42,6 +42,9 @@ public:
   void sendCC(int channel, int controller, int value);
   void sendPitchBend(int channel,
                      int value); // Phase 56.1: for Expression release
+  void sendProgramChange(int channel, int program);
+  void sendNoteOn(int channel, int note, int velocity);  // Direct MIDI (e.g. encoder push)
+  void sendNoteOff(int channel, int note);
 
   // --- Sustain (pedal) ---
   void setSustain(bool active);

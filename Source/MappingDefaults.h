@@ -39,6 +39,33 @@ constexpr int SlideLockFree = 1;
 // Slide axis: 0 = Vertical (Y), 1 = Horizontal (X)
 constexpr int SlideAxis = 0;
 
+// Encoder (Expression CC mode = Encoder)
+inline const juce::String ExpressionCCModeEncoder{ "Encoder" };
+constexpr int EncoderAxis = 0;           // 0=Vertical, 1=Horizontal, 2=Both
+constexpr double EncoderSensitivity = 1.0;
+constexpr int EncoderStepSize = 1;
+constexpr int EncoderStepSizeX = 1;
+constexpr int EncoderStepSizeY = 1;
+constexpr int EncoderOutputModeAbsolute = 0;
+constexpr int EncoderOutputModeRelative = 1;
+constexpr int EncoderOutputModeNRPN = 2;
+inline const juce::String EncoderOutputModeAbsoluteStr{ "Absolute" };
+inline const juce::String EncoderOutputModeRelativeStr{ "Relative" };
+inline const juce::String EncoderOutputModeNRPNStr{ "NRPN" };
+constexpr int EncoderRelativeEncoding = 0; // 0=Offset Binary, 1=Sign Magnitude, 2=Two's Complement, 3=Simple Incremental
+constexpr bool EncoderWrap = false;
+constexpr int EncoderInitialValue = 64;
+constexpr int EncoderNRPNNumber = 0;
+constexpr int EncoderPushDetection = 0;   // 0=Two-finger, 1=Three-finger
+constexpr int EncoderPushOutputType = 0;   // 0=CC, 1=Note, 2=ProgramChange
+constexpr int EncoderPushMode = 0;        // 0=Off, 1=Momentary, 2=Toggle, 3=Trigger
+constexpr int EncoderPushCCNumber = 1;    // default same as rotation CC (set at compile)
+constexpr int EncoderPushValue = 127;
+constexpr int EncoderPushNote = 60;
+constexpr int EncoderPushProgram = 0;
+constexpr int EncoderPushChannel = 1;     // default same as rotation channel (set at compile)
+constexpr double EncoderDeadZone = 0.0;
+
 // Touchpad event (Finger1Down = 0)
 constexpr int InputTouchpadEvent = 0;
 
