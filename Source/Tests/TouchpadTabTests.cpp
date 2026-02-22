@@ -449,3 +449,21 @@ TEST(TouchpadTabTest, TouchpadTab_MappingSchemaRespectsPitchBendRange) {
   EXPECT_DOUBLE_EQ(data2Range12->max, 12.0)
       << "Pitch bend range 12 should set data2 max to 12";
 }
+
+TEST(TouchpadTabTest, TouchpadTab_PitchBendMappingSchemaHasPitchPadControls) {
+  TouchpadMappingConfig cfg = makeEmptyTouchpadMapping();
+  cfg.mapping.setProperty("type", "Expression", nullptr);
+  cfg.mapping.setProperty("adsrTarget", "PitchBend", nullptr);
+  InspectorSchema schema =
+      MappingDefinition::getSchema(cfg.mapping, 2, true /* forTouchpadEditor */);
+  EXPECT_TRUE(schemaHasPropertyId(schema, "pitchPadMode"))
+      << "Touchpad PitchBend schema should have pitchPadMode";
+  EXPECT_TRUE(schemaHasPropertyId(schema, "pitchPadStart"))
+      << "Touchpad PitchBend schema should have pitchPadStart";
+  EXPECT_TRUE(schemaHasPropertyId(schema, "pitchPadRestingPercent"))
+      << "Touchpad PitchBend schema should have pitchPadRestingPercent";
+  EXPECT_TRUE(schemaHasPropertyId(schema, "touchpadOutputMin"))
+      << "Touchpad PitchBend schema should have touchpadOutputMin (step range)";
+  EXPECT_TRUE(schemaHasPropertyId(schema, "touchpadOutputMax"))
+      << "Touchpad PitchBend schema should have touchpadOutputMax (step range)";
+}

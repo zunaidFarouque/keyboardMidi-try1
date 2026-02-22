@@ -261,6 +261,17 @@ juce::var TouchpadMixerEditorComponent::getConfigValue(
       } else if (propertyId == "encoderPushDetection") {
         int val = static_cast<int>(propVal);
         return juce::var(juce::jlimit(1, 3, val + 1)); // 0-2 -> 1-3
+      } else if (propertyId == "pitchPadMode") {
+        juce::String str = propVal.toString().trim();
+        if (str.equalsIgnoreCase("Relative")) return juce::var(2);
+        return juce::var(1); // Absolute
+      } else if (propertyId == "pitchPadStart") {
+        juce::String str = propVal.toString().trim();
+        if (str.equalsIgnoreCase("Left")) return juce::var(1);
+        if (str.equalsIgnoreCase("Center")) return juce::var(2);
+        if (str.equalsIgnoreCase("Right")) return juce::var(3);
+        if (str.equalsIgnoreCase("Custom")) return juce::var(4);
+        return juce::var(2); // Center default
       } else if (propertyId == "slideQuickPrecision" || propertyId == "slideAbsRel" || propertyId == "slideLockFree" || propertyId == "slideAxis") {
         // Convert 0/1 to 1/2 for ComboBox (JUCE uses 1-based IDs)
         int val = static_cast<int>(propVal);
@@ -328,6 +339,19 @@ juce::var TouchpadMixerEditorComponent::getConfigValue(
       if (propertyId == "encoderPushDetection") {
         int val = static_cast<int>(defVal);
         return juce::var(juce::jlimit(1, 3, val + 1));
+      }
+      if (propertyId == "pitchPadMode") {
+        juce::String str = defVal.toString().trim();
+        if (str.equalsIgnoreCase("Relative")) return juce::var(2);
+        return juce::var(1); // Absolute
+      }
+      if (propertyId == "pitchPadStart") {
+        juce::String str = defVal.toString().trim();
+        if (str.equalsIgnoreCase("Left")) return juce::var(1);
+        if (str.equalsIgnoreCase("Center")) return juce::var(2);
+        if (str.equalsIgnoreCase("Right")) return juce::var(3);
+        if (str.equalsIgnoreCase("Custom")) return juce::var(4);
+        return juce::var(2); // Center default
       }
       if (propertyId == "slideQuickPrecision" || propertyId == "slideAbsRel" || propertyId == "slideLockFree" || propertyId == "slideAxis") {
         // Convert 0/1 default to 1/2 for ComboBox
@@ -652,6 +676,15 @@ void TouchpadMixerEditorComponent::applyConfigValue(
       } else if (propertyId == "encoderPushDetection") {
         int id = juce::jlimit(1, 3, static_cast<int>(value));
         valueToSet = juce::var(id - 1);
+      } else if (propertyId == "pitchPadMode") {
+        int id = juce::jlimit(1, 2, static_cast<int>(value));
+        valueToSet = juce::var(id == 1 ? "Absolute" : "Relative");
+      } else if (propertyId == "pitchPadStart") {
+        int id = juce::jlimit(1, 4, static_cast<int>(value));
+        if (id == 1) valueToSet = juce::var("Left");
+        else if (id == 2) valueToSet = juce::var("Center");
+        else if (id == 3) valueToSet = juce::var("Right");
+        else valueToSet = juce::var("Custom");
       } else if (propertyId == "slideQuickPrecision" || propertyId == "slideAbsRel" || propertyId == "slideLockFree" || propertyId == "slideAxis") {
         // Convert ComboBox ID (1/2) back to stored value (0/1)
         int id = static_cast<int>(value);
@@ -663,7 +696,8 @@ void TouchpadMixerEditorComponent::applyConfigValue(
       if (propertyId == "type" || propertyId == "useCustomEnvelope" ||
           propertyId == "adsrTarget" || propertyId == "expressionCCMode" ||
           propertyId == "encoderAxis" || propertyId == "encoderOutputMode" ||
-          propertyId == "encoderPushMode" || propertyId == "encoderPushOutputType")
+          propertyId == "encoderPushMode" || propertyId == "encoderPushOutputType" ||
+          propertyId == "pitchPadStart" || propertyId == "pitchPadMode")
         rebuildUI();
       return;
     }

@@ -886,6 +886,14 @@ static void compileTouchpadMappingFromValueTree(
       }
     } else {
       entry.conversionKind = TouchpadConversionKind::ContinuousToRange;
+      // PitchBend/SmartScaleBend need continuous X/Y; auto-promote boolean
+      // events so the first touch sends position updates and the visualizer works.
+      if (isPB || isSmartBend) {
+        if (eventId == TouchpadEvent::Finger1Down || eventId == TouchpadEvent::Finger1Up ||
+            eventId == TouchpadEvent::Finger2Down || eventId == TouchpadEvent::Finger2Up) {
+          entry.eventId = TouchpadEvent::Finger1X;
+        }
+      }
       p.inputMin = (float)mapping.getProperty("touchpadInputMin", static_cast<double>(MappingDefaults::TouchpadInputMin));
       p.inputMax = (float)mapping.getProperty("touchpadInputMax", static_cast<double>(MappingDefaults::TouchpadInputMax));
       float r = p.inputMax - p.inputMin;
@@ -922,11 +930,22 @@ static void compileTouchpadMappingFromValueTree(
         cfg.maxStep = p.outputMax;
         cfg.restingSpacePercent =
             (float)mapping.getProperty("pitchPadRestingPercent", static_cast<double>(MappingDefaults::PitchPadRestingPercent));
-
-        // For absolute mode: zero step is always 0 (center of range maps to
-        // center of pad). For relative mode, zero is determined dynamically
-        // at gesture start.
-        cfg.zeroStep = 0.0f;
+        switch (cfg.start) {
+        case PitchPadStart::Left:
+          cfg.zeroStep = static_cast<float>(cfg.minStep);
+          break;
+        case PitchPadStart::Right:
+          cfg.zeroStep = static_cast<float>(cfg.maxStep);
+          break;
+        case PitchPadStart::Center:
+          cfg.zeroStep = 0.0f;
+          break;
+        case PitchPadStart::Custom:
+          cfg.zeroStep = juce::jmap(cfg.customStartX, 0.0f, 1.0f,
+                                    static_cast<float>(cfg.minStep),
+                                    static_cast<float>(cfg.maxStep));
+          break;
+        }
 
         p.pitchPadConfig = cfg;
         p.cachedPitchPadLayout = buildPitchPadLayout(cfg);

@@ -2071,6 +2071,34 @@ TEST_F(GridCompilerTest, TouchpadTab_TouchpadPitchPadHonoursResetPitchFlag) {
       << "sendReleaseValue should reflect mapping property for touchpad expression PB";
 }
 
+TEST_F(GridCompilerTest, TouchpadTab_PitchPadZeroStepFromStartPosition) {
+  settingsMgr.setPitchBendRange(2);
+  for (const auto &pair : std::vector<std::pair<juce::String, float>>{
+           {"Left", -2.0f}, {"Right", 2.0f}, {"Center", 0.0f}}) {
+    TouchpadMappingConfig cfg;
+    cfg.name = "Pitch Pad";
+    cfg.layerId = 0;
+    juce::ValueTree m("Mapping");
+    m.setProperty("inputAlias", "Touchpad", nullptr);
+    m.setProperty("inputTouchpadEvent", TouchpadEvent::Finger1X, nullptr);
+    m.setProperty("type", "Expression", nullptr);
+    m.setProperty("adsrTarget", "PitchBend", nullptr);
+    m.setProperty("channel", 1, nullptr);
+    m.setProperty("touchpadOutputMin", -2, nullptr);
+    m.setProperty("touchpadOutputMax", 2, nullptr);
+    m.setProperty("pitchPadStart", pair.first, nullptr);
+    cfg.mapping = m;
+    touchpadMixerMgr.addTouchpadMapping(cfg);
+    auto ctx = GridCompiler::compile(presetMgr, deviceMgr, zoneMgr,
+                                     touchpadMixerMgr, settingsMgr);
+    ASSERT_EQ(ctx->touchpadMappings.size(), 1u);
+    ASSERT_TRUE(ctx->touchpadMappings.front().conversionParams.pitchPadConfig.has_value());
+    EXPECT_FLOAT_EQ(ctx->touchpadMappings.front().conversionParams.pitchPadConfig->zeroStep,
+                    pair.second);
+    touchpadMixerMgr.removeTouchpadMapping(0);
+  }
+}
+
 // Expression CC: channel comes from header (cfg.midiChannel), not mapping
 TEST_F(GridCompilerTest, TouchpadTab_ExpressionCC_ChannelFromHeader) {
   TouchpadMappingConfig cfg;

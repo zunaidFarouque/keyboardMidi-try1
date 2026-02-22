@@ -33,6 +33,8 @@ const std::unordered_map<juce::String, juce::var> &getDefaultsMap() {
     map["touchpadOutputMax"] = juce::var(TouchpadOutputMax);
     map["pitchPadCustomStart"] = juce::var(static_cast<double>(PitchPadCustomStart));
     map["pitchPadRestingPercent"] = juce::var(static_cast<double>(PitchPadRestingPercent));
+    map["pitchPadMode"] = juce::var("Absolute");
+    map["pitchPadStart"] = juce::var("Center");
     map["transposeModify"] = juce::var(TransposeModify);
     map["transposeSemitones"] = juce::var(TransposeSemitones);
     map["rootModify"] = juce::var(RootModify);
@@ -353,6 +355,79 @@ InspectorSchema MappingDefinition::getSchema(const juce::ValueTree &mapping,
       steps.step = 1.0;
       setControlDefaultFromMap(steps);
       schema.push_back(steps);
+    }
+
+    if (forTouchpadEditor && isPitchOrSmart) {
+      schema.push_back(createSeparator("Pitch pad", juce::Justification::centredLeft));
+      InspectorControl pitchMode;
+      pitchMode.propertyId = "pitchPadMode";
+      pitchMode.label = "Mode";
+      pitchMode.controlType = InspectorControl::Type::ComboBox;
+      pitchMode.options[1] = "Absolute";
+      pitchMode.options[2] = "Relative";
+      setControlDefaultFromMap(pitchMode);
+      schema.push_back(pitchMode);
+      InspectorControl pitchStart;
+      pitchStart.propertyId = "pitchPadStart";
+      pitchStart.label = "Starting position";
+      pitchStart.controlType = InspectorControl::Type::ComboBox;
+      pitchStart.options[1] = "Left";
+      pitchStart.options[2] = "Center";
+      pitchStart.options[3] = "Right";
+      pitchStart.options[4] = "Custom";
+      setControlDefaultFromMap(pitchStart);
+      schema.push_back(pitchStart);
+      juce::String pitchStartStr = mapping.getProperty("pitchPadStart", "Center").toString().trim();
+      if (pitchStartStr.equalsIgnoreCase("Custom")) {
+        InspectorControl customStart;
+        customStart.propertyId = "pitchPadCustomStart";
+        customStart.label = "Custom start (X)";
+        customStart.controlType = InspectorControl::Type::Slider;
+        customStart.min = 0.0;
+        customStart.max = 1.0;
+        customStart.step = 0.01;
+        setControlDefaultFromMap(customStart);
+        schema.push_back(customStart);
+      }
+      InspectorControl stepMin;
+      stepMin.propertyId = "touchpadOutputMin";
+      stepMin.controlType = InspectorControl::Type::Slider;
+      stepMin.step = 1.0;
+      setControlDefaultFromMap(stepMin);
+      if (adsrTargetStr.equalsIgnoreCase("PitchBend")) {
+        stepMin.label = "Pitch range min (semitones)";
+        stepMin.min = -static_cast<double>(pitchBendRange);
+        stepMin.max = static_cast<double>(pitchBendRange);
+      } else {
+        stepMin.label = "Scale step min";
+        stepMin.min = -12.0;
+        stepMin.max = 12.0;
+      }
+      schema.push_back(stepMin);
+      InspectorControl stepMax;
+      stepMax.propertyId = "touchpadOutputMax";
+      stepMax.controlType = InspectorControl::Type::Slider;
+      stepMax.step = 1.0;
+      setControlDefaultFromMap(stepMax);
+      if (adsrTargetStr.equalsIgnoreCase("PitchBend")) {
+        stepMax.label = "Pitch range max (semitones)";
+        stepMax.min = -static_cast<double>(pitchBendRange);
+        stepMax.max = static_cast<double>(pitchBendRange);
+      } else {
+        stepMax.label = "Scale step max";
+        stepMax.min = -12.0;
+        stepMax.max = 12.0;
+      }
+      schema.push_back(stepMax);
+      InspectorControl resting;
+      resting.propertyId = "pitchPadRestingPercent";
+      resting.label = "Resting space %";
+      resting.controlType = InspectorControl::Type::Slider;
+      resting.min = 0.0;
+      resting.max = 50.0;
+      resting.step = 1.0;
+      setControlDefaultFromMap(resting);
+      schema.push_back(resting);
     }
 
     if (adsrTargetStr.equalsIgnoreCase("CC") &&

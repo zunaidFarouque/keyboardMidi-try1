@@ -6433,6 +6433,53 @@ TEST_F(InputProcessorTest, TouchpadTab_PitchBendRangeAffectsSentPitchBend) {
   EXPECT_LE(sentVal, 16383);
 }
 
+TEST_F(InputProcessorTest, TouchpadTab_PitchPadStartLeft_ZeroAtLeftEdge) {
+  MockMidiEngine mockEng;
+  TouchpadMixerManager touchpadMixerMgr;
+  VoiceManager voiceMgr(mockEng, settingsMgr);
+  InputProcessor proc(voiceMgr, presetMgr, deviceMgr, scaleLib, mockEng,
+                      settingsMgr, touchpadMixerMgr);
+  presetMgr.getLayersList().removeAllChildren(nullptr);
+  presetMgr.ensureStaticLayers();
+  settingsMgr.setMidiModeActive(true);
+  settingsMgr.setPitchBendRange(2);
+
+  TouchpadMappingConfig cfg;
+  cfg.name = "Pitch Pad Left Start";
+  cfg.layerId = 0;
+  juce::ValueTree m("Mapping");
+  m.setProperty("inputAlias", "Touchpad", nullptr);
+  m.setProperty("inputTouchpadEvent", TouchpadEvent::Finger1X, nullptr);
+  m.setProperty("type", "Expression", nullptr);
+  m.setProperty("adsrTarget", "PitchBend", nullptr);
+  m.setProperty("channel", 1, nullptr);
+  m.setProperty("touchpadInputMin", 0.0, nullptr);
+  m.setProperty("touchpadInputMax", 1.0, nullptr);
+  m.setProperty("touchpadOutputMin", -2, nullptr);
+  m.setProperty("touchpadOutputMax", 2, nullptr);
+  m.setProperty("pitchPadMode", "Absolute", nullptr);
+  m.setProperty("pitchPadStart", "Left", nullptr);
+  cfg.mapping = m;
+  touchpadMixerMgr.addTouchpadMapping(cfg);
+
+  proc.forceRebuildMappings();
+  mockEng.clear();
+  uintptr_t dev = 0x8888;
+
+  proc.processTouchpadContacts(dev, {{0, 0, 0, 0.0f, 0.5f, true}});
+  proc.processTouchpadContacts(dev, {{0, 0, 0, 0.0f, 0.5f, true}});
+  ASSERT_FALSE(mockEng.pitchEvents.empty());
+  EXPECT_NEAR(mockEng.pitchEvents.back().value, 8192, 100)
+      << "With Start=Left, touch at X=0 should be zero bend (8192)";
+
+  mockEng.clear();
+  proc.processTouchpadContacts(dev, {{0, 0, 0, 1.0f, 0.5f, true}});
+  proc.processTouchpadContacts(dev, {{0, 0, 0, 1.0f, 0.5f, true}});
+  ASSERT_FALSE(mockEng.pitchEvents.empty());
+  EXPECT_GE(mockEng.pitchEvents.back().value, 16380)
+      << "With Start=Left, touch at X=1 should be max bend";
+}
+
 // Layout group list changes: InputProcessor::changeListenerCallback already
 // calls rebuildGrid() when source == &touchpadMixerManager. TouchpadMixerManager
 // sends change messages on addGroup/removeGroup/renameGroup. No separate test
