@@ -139,8 +139,10 @@ void VisualizerComponent::setVisualizedLayer(int layerId) {
   if (layerId < 0)
     layerId = 0;
   currentVisualizedLayer = layerId;
-  if (touchpadPanel_)
+  if (touchpadPanel_) {
     touchpadPanel_->setVisualizedLayer(layerId);
+    touchpadPanel_->repaint();
+  }
   cacheValid = false;
   needsRepaint = true;
 }
@@ -896,6 +898,8 @@ void VisualizerComponent::restartTimerWithInterval(int intervalMs) {
 
 void VisualizerComponent::setTouchpadTabActive(bool active) {
   touchpadTabActive_ = active;
+  if (active && touchpadPanel_)
+    touchpadPanel_->repaint();
 }
 
 void VisualizerComponent::timerCallback() {
@@ -958,7 +962,9 @@ void VisualizerComponent::timerCallback() {
     }
 
     // B. Layer Switching – follow the highest active layer from InputProcessor.
-    if (inputProcessor) {
+    // When Touchpad tab is active, selection (layout or mapping) owns the layer;
+    // do not override so pitch-pad mapping visualization stays correct.
+    if (!touchpadTabActive_ && inputProcessor) {
       int activeLayer = inputProcessor->getHighestActiveLayerIndex();
       if (currentVisualizedLayer != activeLayer) {
         setVisualizedLayer(activeLayer); // invalidates cache + marks dirty

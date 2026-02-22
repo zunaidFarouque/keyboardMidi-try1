@@ -27,8 +27,10 @@ TouchpadTabComponent::TouchpadTabComponent(TouchpadMixerManager *mgr,
                                                              : 0);
         } else {
           editorPanel.setMapping(index, mappingCfg);
-          // Visualizer selection is driven only by layouts; keep current
-          // selection when choosing a mapping.
+          // Drive visualizer by mapping's layer so pitch-pad bands show when a
+          // PitchBend/SmartScaleBend mapping is selected.
+          if (onSelectionChangedForVisualizer && mappingCfg)
+            onSelectionChangedForVisualizer(-1, mappingCfg->layerId);
         }
         // Persist selection immediately when it changes (not just at shutdown)
         // Use combinedRowIndex from callback instead of getSelectedRowIndex() to avoid stale values
@@ -66,10 +68,16 @@ void TouchpadTabComponent::refreshVisualizerSelection() {
     return;
   }
   auto layouts = manager->getLayouts();
-  if (idx < static_cast<int>(layouts.size()))
+  if (idx < static_cast<int>(layouts.size())) {
     onSelectionChangedForVisualizer(idx, layouts[(size_t)idx].layerId);
-  else
-    onSelectionChangedForVisualizer(-1, 0);
+  } else {
+    auto mappings = manager->getTouchpadMappings();
+    int mappingIdx = idx - static_cast<int>(layouts.size());
+    int layerId = 0;
+    if (mappingIdx >= 0 && mappingIdx < static_cast<int>(mappings.size()))
+      layerId = mappings[(size_t)mappingIdx].layerId;
+    onSelectionChangedForVisualizer(-1, layerId);
+  }
 }
 
 void TouchpadTabComponent::paint(juce::Graphics &g) {

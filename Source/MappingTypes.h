@@ -293,9 +293,13 @@ struct PitchPadConfig {
   int minStep = -2;
   int maxStep = 2;
 
-  // Percentage of total pad width reserved as a resting band for each step.
-  // This is interpreted by helpers; runtime and visualizer share the same
-  // meaning, but callers are free to ignore it if they only care about steps.
+  // Relative width of each rest zone and each transition zone (0–50 typical).
+  // Layout: [rest][trans][rest][trans]...; normalized so sequence fills [0,1].
+  float restZonePercent = 10.0f;
+  float transitionZonePercent = 10.0f;
+
+  // Legacy: single "resting space %" for old presets; used when rest/transition
+  // are not set. BuildPitchPadLayout falls back to this when needed.
   float restingSpacePercent = 10.0f;
 
   // Step index that should correspond to zero pitch-bend (0 semitones / 0

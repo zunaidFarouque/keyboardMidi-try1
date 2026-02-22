@@ -385,6 +385,8 @@ void InputProcessor::valueTreePropertyChanged(
       property == juce::Identifier("pitchPadMode") ||
       property == juce::Identifier("pitchPadStart") ||
       property == juce::Identifier("pitchPadRestingPercent") ||
+      property == juce::Identifier("pitchPadRestZonePercent") ||
+      property == juce::Identifier("pitchPadTransitionZonePercent") ||
       property == juce::Identifier("pitchPadCustomStart") ||
       property == juce::Identifier("adsrTarget") ||
       property == juce::Identifier("smartStepShift") ||
@@ -1736,24 +1738,23 @@ void InputProcessor::processTouchpadContacts(
   TouchpadPrevState &prev = touchpadPrevState[deviceHandle];
   bool tip1 = false, tip2 = false;
   float x1 = 0.0f, y1 = 0.0f, x2 = 0.0f, y2 = 0.0f;
-  // IMPORTANT: Finger 1/2 are identified by contactId 0/1 (not by vector order).
-  // Some drivers can reorder contacts across frames, which would otherwise cause
-  // spurious FingerUp detection and immediate Note Off.
+  // Finger 1/2 are taken by array index (contacts[0], contacts[1]) so that
+  // continuous mappings (e.g. PitchBend on Finger1X) receive updated positions
+  // every frame regardless of driver contactId. The accumulator keeps contact
+  // order stable, so the same physical finger stays at the same index.
   int idxFinger1 = -1;
   int idxFinger2 = -1;
-  for (size_t i = 0; i < contacts.size(); ++i) {
-    const auto &c = contacts[i];
-    if (c.contactId == 0) {
-      idxFinger1 = static_cast<int>(i);
-      tip1 = c.tipDown;
-      x1 = c.normX;
-      y1 = c.normY;
-    } else if (c.contactId == 1) {
-      idxFinger2 = static_cast<int>(i);
-      tip2 = c.tipDown;
-      x2 = c.normX;
-      y2 = c.normY;
-    }
+  if (contacts.size() >= 1) {
+    idxFinger1 = 0;
+    tip1 = contacts[0].tipDown;
+    x1 = contacts[0].normX;
+    y1 = contacts[0].normY;
+  }
+  if (contacts.size() >= 2) {
+    idxFinger2 = 1;
+    tip2 = contacts[1].tipDown;
+    x2 = contacts[1].normX;
+    y2 = contacts[1].normY;
   }
 
   float dist = 0.0f, avgX = x1, avgY = y1;

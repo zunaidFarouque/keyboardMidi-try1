@@ -90,13 +90,11 @@ MainComponent::MainComponent()
                                                         int layerId) {
     if (visualizer) {
       visualizer->setSelectedTouchpadLayout(layoutIndex, layerId);
-      if (layoutIndex >= 0)
-        visualizer->setVisualizedLayer(layerId);
+      visualizer->setVisualizedLayer(layerId);
     }
     if (miniWindow && settingsManager.getShowTouchpadVisualizerInMiniWindow()) {
       miniWindow->setSelectedTouchpadLayout(layoutIndex, layerId);
-      if (layoutIndex >= 0)
-        miniWindow->setVisualizedLayer(layerId);
+      miniWindow->setVisualizedLayer(layerId);
     }
   };
   settingsPanel = std::make_unique<SettingsPanel>(settingsManager, midiEngine,

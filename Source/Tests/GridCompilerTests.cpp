@@ -1142,6 +1142,8 @@ TEST_F(GridCompilerTest, TouchpadPitchPadConfigCompiledForPitchBend) {
   m.setProperty("touchpadInputMax", 1.0, nullptr);
   m.setProperty("touchpadOutputMin", -2, nullptr);
   m.setProperty("touchpadOutputMax", 2, nullptr);
+  m.setProperty("pitchPadRestZonePercent", 12.0, nullptr);
+  m.setProperty("pitchPadTransitionZonePercent", 8.0, nullptr);
   m.setProperty("pitchPadRestingPercent", 15.0, nullptr);
   m.setProperty("pitchPadMode", "Relative", nullptr);
   touchpadCfg.mapping = m;
@@ -1157,6 +1159,8 @@ TEST_F(GridCompilerTest, TouchpadPitchPadConfigCompiledForPitchBend) {
   const auto &cfg = *entry.conversionParams.pitchPadConfig;
   EXPECT_EQ(cfg.minStep, -2);
   EXPECT_EQ(cfg.maxStep, 2);
+  EXPECT_NEAR(cfg.restZonePercent, 12.0f, 0.001f);
+  EXPECT_NEAR(cfg.transitionZonePercent, 8.0f, 0.001f);
   EXPECT_NEAR(cfg.restingSpacePercent, 15.0f, 0.001f);
   EXPECT_EQ(cfg.mode, PitchPadMode::Relative);
   EXPECT_TRUE(entry.action.sendReleaseValue)
@@ -2023,6 +2027,8 @@ TEST_F(GridCompilerTest, TouchpadTab_TouchpadPitchPadConfigCompiledForPitchBend)
   m.setProperty("touchpadInputMax", 1.0, nullptr);
   m.setProperty("touchpadOutputMin", -2, nullptr);
   m.setProperty("touchpadOutputMax", 2, nullptr);
+  m.setProperty("pitchPadRestZonePercent", 12.0, nullptr);
+  m.setProperty("pitchPadTransitionZonePercent", 8.0, nullptr);
   m.setProperty("pitchPadRestingPercent", 15.0, nullptr);
   m.setProperty("pitchPadMode", "Relative", nullptr);
   cfg.mapping = m;
@@ -2038,6 +2044,8 @@ TEST_F(GridCompilerTest, TouchpadTab_TouchpadPitchPadConfigCompiledForPitchBend)
   const auto &pitchCfg = *entry.conversionParams.pitchPadConfig;
   EXPECT_EQ(pitchCfg.minStep, -2);
   EXPECT_EQ(pitchCfg.maxStep, 2);
+  EXPECT_NEAR(pitchCfg.restZonePercent, 12.0f, 0.001f);
+  EXPECT_NEAR(pitchCfg.transitionZonePercent, 8.0f, 0.001f);
   EXPECT_NEAR(pitchCfg.restingSpacePercent, 15.0f, 0.001f);
   EXPECT_EQ(pitchCfg.mode, PitchPadMode::Relative);
   EXPECT_TRUE(entry.action.sendReleaseValue)

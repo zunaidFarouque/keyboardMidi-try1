@@ -12,25 +12,41 @@ PitchPadLayout buildPitchPadLayout(const PitchPadConfig &config) {
     return layout;
   }
 
-  const float restPct = juce::jlimit(0.0f, 80.0f, config.restingSpacePercent);
-  const float restWidthTotal =
-      (restPct / 100.0f) * static_cast<float>(stepCount);
-  const float remaining = juce::jmax(0.0f, 1.0f - restWidthTotal);
   const int transitionCount = stepCount > 1 ? (stepCount - 1) : 0;
-  const float transitionWidth =
-      transitionCount > 0 ? remaining / static_cast<float>(transitionCount)
-                          : 0.0f;
+  const float restPct = juce::jlimit(0.0f, 100.0f, config.restZonePercent);
+  const float transPct = juce::jlimit(0.0f, 100.0f, config.transitionZonePercent);
+  const float rawTotal =
+      static_cast<float>(stepCount) * restPct +
+      static_cast<float>(transitionCount) * transPct;
 
-  const float restWidth = (restPct > 0.0f && stepCount > 0)
-                              ? (restWidthTotal / static_cast<float>(stepCount))
-                              : 0.0f;
+  float restWidth = 0.0f;
+  float transitionWidth = 0.0f;
+
+  if (rawTotal > 0.0f) {
+    // Two-slider model: relative widths, normalized to fill [0,1].
+    const float scale = 1.0f / rawTotal;
+    restWidth = restPct * scale;
+    transitionWidth = (transitionCount > 0) ? (transPct * scale) : 0.0f;
+  } else {
+    // Legacy: single restingSpacePercent; rest total then remainder to transitions.
+    const float legacyRest =
+        juce::jlimit(0.0f, 80.0f, config.restingSpacePercent);
+    const float restWidthTotal =
+        (legacyRest / 100.0f) * static_cast<float>(stepCount);
+    const float remaining = juce::jmax(0.0f, 1.0f - restWidthTotal);
+    restWidth = (stepCount > 0 && legacyRest > 0.0f)
+                    ? (restWidthTotal / static_cast<float>(stepCount))
+                    : 0.0f;
+    transitionWidth =
+        (transitionCount > 0) ? (remaining / static_cast<float>(transitionCount))
+                             : 0.0f;
+  }
 
   float x = 0.0f;
 
   for (int i = 0; i < stepCount; ++i) {
     const int step = minStep + i;
 
-    // Resting band for this step
     PitchPadBand restBand;
     restBand.xStart = x;
     restBand.xEnd = x + restWidth;
@@ -41,21 +57,19 @@ PitchPadLayout buildPitchPadLayout(const PitchPadConfig &config) {
     layout.bands.push_back(restBand);
     x = restBand.xEnd;
 
-    // Transition band to next step (except after last)
     if (i < stepCount - 1 && transitionWidth > 0.0f) {
       PitchPadBand transBand;
       transBand.xStart = x;
       transBand.xEnd = x + transitionWidth;
       transBand.invSpan =
           (transitionWidth > 0.0f) ? (1.0f / transitionWidth) : 0.0f;
-      transBand.step = step; // Transition from 'step' to 'step + 1'
+      transBand.step = step;
       transBand.isRest = false;
       layout.bands.push_back(transBand);
       x = transBand.xEnd;
     }
   }
 
-  // Ensure final band covers the end of the interval.
   if (!layout.bands.empty()) {
     auto &back = layout.bands.back();
     back.xEnd = 1.0f;

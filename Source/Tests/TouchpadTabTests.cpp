@@ -460,8 +460,10 @@ TEST(TouchpadTabTest, TouchpadTab_PitchBendMappingSchemaHasPitchPadControls) {
       << "Touchpad PitchBend schema should have pitchPadMode";
   EXPECT_TRUE(schemaHasPropertyId(schema, "pitchPadStart"))
       << "Touchpad PitchBend schema should have pitchPadStart";
-  EXPECT_TRUE(schemaHasPropertyId(schema, "pitchPadRestingPercent"))
-      << "Touchpad PitchBend schema should have pitchPadRestingPercent";
+  EXPECT_TRUE(schemaHasPropertyId(schema, "pitchPadRestZonePercent"))
+      << "Touchpad PitchBend schema should have pitchPadRestZonePercent";
+  EXPECT_TRUE(schemaHasPropertyId(schema, "pitchPadTransitionZonePercent"))
+      << "Touchpad PitchBend schema should have pitchPadTransitionZonePercent";
   EXPECT_TRUE(schemaHasPropertyId(schema, "touchpadOutputMin"))
       << "Touchpad PitchBend schema should have touchpadOutputMin (step range)";
   EXPECT_TRUE(schemaHasPropertyId(schema, "touchpadOutputMax"))

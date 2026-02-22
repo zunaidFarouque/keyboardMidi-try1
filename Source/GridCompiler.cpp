@@ -876,14 +876,14 @@ static void compileTouchpadMappingFromValueTree(
       p.encoderPushChannel = juce::jlimit(1, 16, (int)mapping.getProperty("encoderPushChannel", headerChannel));
       p.encoderDeadZone = (float)mapping.getProperty("encoderDeadZone", static_cast<double>(MappingDefaults::EncoderDeadZone));
       p.encoderDeadZone = juce::jlimit(0.0f, 0.5f, p.encoderDeadZone);
-    } else if (inputBool) {
+    } else if (inputBool && isCC) {
+      // BoolToCC only for CC target; PitchBend/SmartScaleBend use ContinuousToRange
+      // (with boolean events auto-promoted to Finger1X) so visualizer and first-touch work.
       entry.conversionKind = TouchpadConversionKind::BoolToCC;
-      if (isCC) {
-        p.valueWhenOn =
-            (int)mapping.getProperty("touchpadValueWhenOn", MappingDefaults::TouchpadValueWhenOn);
-        p.valueWhenOff =
-            (int)mapping.getProperty("touchpadValueWhenOff", MappingDefaults::TouchpadValueWhenOff);
-      }
+      p.valueWhenOn =
+          (int)mapping.getProperty("touchpadValueWhenOn", MappingDefaults::TouchpadValueWhenOn);
+      p.valueWhenOff =
+          (int)mapping.getProperty("touchpadValueWhenOff", MappingDefaults::TouchpadValueWhenOff);
     } else {
       entry.conversionKind = TouchpadConversionKind::ContinuousToRange;
       // PitchBend/SmartScaleBend need continuous X/Y; auto-promote boolean
@@ -928,6 +928,10 @@ static void compileTouchpadMappingFromValueTree(
             (float)mapping.getProperty("pitchPadCustomStart", static_cast<double>(MappingDefaults::PitchPadCustomStart));
         cfg.minStep = p.outputMin;
         cfg.maxStep = p.outputMax;
+        cfg.restZonePercent =
+            (float)mapping.getProperty("pitchPadRestZonePercent", static_cast<double>(MappingDefaults::PitchPadRestZonePercent));
+        cfg.transitionZonePercent =
+            (float)mapping.getProperty("pitchPadTransitionZonePercent", static_cast<double>(MappingDefaults::PitchPadTransitionZonePercent));
         cfg.restingSpacePercent =
             (float)mapping.getProperty("pitchPadRestingPercent", static_cast<double>(MappingDefaults::PitchPadRestingPercent));
         switch (cfg.start) {

@@ -61,6 +61,8 @@ void TouchpadVisualizerPanel::setContacts(
 void TouchpadVisualizerPanel::setVisualizedLayer(int layerId) {
   if (layerId >= 0)
     currentVisualizedLayer = layerId;
+  lastPaintedContactCount_ = -1;
+  lastPaintedStateHash_ = 0;
 }
 
 void TouchpadVisualizerPanel::setSelectedLayout(int layoutIndex, int layerId) {
@@ -223,7 +225,7 @@ void TouchpadVisualizerPanel::paint(juce::Graphics &g) {
               yControlLabel = "PitchBend";
             else if (target == AdsrTarget::CC)
               yControlLabel =
-                  "CC" + juce::String(entry.action.adsrSettings.ccNumber);
+                "CC" + juce::String(entry.action.adsrSettings.ccNumber);
           } else if (entry.conversionKind ==
                          TouchpadConversionKind::ContinuousToRange &&
                      target == AdsrTarget::CC) {
@@ -235,6 +237,37 @@ void TouchpadVisualizerPanel::paint(juce::Graphics &g) {
                      TouchpadConversionKind::EncoderCC) {
             yControlLabel =
                 "Encoder CC" + juce::String(entry.action.adsrSettings.ccNumber);
+          }
+        }
+      }
+      // Fallback: if no pitch-pad config found for current layer (e.g. Touchpad
+      // tab mapping selected but layer mismatch), use first PitchBend/SmartScaleBend
+      // entry in context so bands always show when such a mapping exists.
+      if (!configX) {
+        for (const auto &entry : ctx->touchpadMappings) {
+          if (entry.eventId == TouchpadEvent::Finger1X &&
+              entry.conversionParams.pitchPadConfig.has_value()) {
+            auto target = entry.action.adsrSettings.target;
+            if (target == AdsrTarget::PitchBend ||
+                target == AdsrTarget::SmartScaleBend) {
+              configX = entry.conversionParams.pitchPadConfig;
+              xControlLabel = "PitchBend";
+              break;
+            }
+          }
+        }
+      }
+      if (!configY) {
+        for (const auto &entry : ctx->touchpadMappings) {
+          if (entry.eventId == TouchpadEvent::Finger1Y &&
+              entry.conversionParams.pitchPadConfig.has_value()) {
+            auto target = entry.action.adsrSettings.target;
+            if (target == AdsrTarget::PitchBend ||
+                target == AdsrTarget::SmartScaleBend) {
+              configY = entry.conversionParams.pitchPadConfig;
+              yControlLabel = "PitchBend";
+              break;
+            }
           }
         }
       }

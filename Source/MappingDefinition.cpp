@@ -33,6 +33,8 @@ const std::unordered_map<juce::String, juce::var> &getDefaultsMap() {
     map["touchpadOutputMax"] = juce::var(TouchpadOutputMax);
     map["pitchPadCustomStart"] = juce::var(static_cast<double>(PitchPadCustomStart));
     map["pitchPadRestingPercent"] = juce::var(static_cast<double>(PitchPadRestingPercent));
+    map["pitchPadRestZonePercent"] = juce::var(static_cast<double>(PitchPadRestZonePercent));
+    map["pitchPadTransitionZonePercent"] = juce::var(static_cast<double>(PitchPadTransitionZonePercent));
     map["pitchPadMode"] = juce::var("Absolute");
     map["pitchPadStart"] = juce::var("Center");
     map["transposeModify"] = juce::var(TransposeModify);
@@ -419,15 +421,24 @@ InspectorSchema MappingDefinition::getSchema(const juce::ValueTree &mapping,
         stepMax.max = 12.0;
       }
       schema.push_back(stepMax);
-      InspectorControl resting;
-      resting.propertyId = "pitchPadRestingPercent";
-      resting.label = "Resting space %";
-      resting.controlType = InspectorControl::Type::Slider;
-      resting.min = 0.0;
-      resting.max = 50.0;
-      resting.step = 1.0;
-      setControlDefaultFromMap(resting);
-      schema.push_back(resting);
+      InspectorControl restZone;
+      restZone.propertyId = "pitchPadRestZonePercent";
+      restZone.label = "Rest zone size";
+      restZone.controlType = InspectorControl::Type::Slider;
+      restZone.min = 0.0;
+      restZone.max = 50.0;
+      restZone.step = 1.0;
+      setControlDefaultFromMap(restZone);
+      schema.push_back(restZone);
+      InspectorControl transitionZone;
+      transitionZone.propertyId = "pitchPadTransitionZonePercent";
+      transitionZone.label = "Transition zone size";
+      transitionZone.controlType = InspectorControl::Type::Slider;
+      transitionZone.min = 0.0;
+      transitionZone.max = 50.0;
+      transitionZone.step = 1.0;
+      setControlDefaultFromMap(transitionZone);
+      schema.push_back(transitionZone);
     }
 
     if (adsrTargetStr.equalsIgnoreCase("CC") &&

@@ -75,6 +75,8 @@ constexpr int TouchpadTriggerAbove = 2;
 constexpr float TouchpadInputMin = 0.0f;
 constexpr float TouchpadInputMax = 1.0f;
 constexpr float PitchPadRestingPercent = 10.0f;
+constexpr float PitchPadRestZonePercent = 10.0f;
+constexpr float PitchPadTransitionZonePercent = 10.0f;
 constexpr float PitchPadCustomStart = 0.5f;
 
 // Touchpad output range
