@@ -23,6 +23,7 @@ const std::unordered_map<juce::String, juce::var> &getDefaultsMap() {
     map["touchpadValueWhenOff"] = juce::var(TouchpadValueWhenOff);
     map["inputTouchpadEvent"] = juce::var(InputTouchpadEvent);
     map["releaseValue"] = juce::var(ReleaseValue);
+    map["sendReleaseValue"] = juce::var(true); // Reset pitch on release: true by default for PitchBend/SmartScaleBend
     map["touchpadLayoutGroupId"] = juce::var(TouchpadLayoutGroupId);
     map["touchpadSoloScope"] = juce::var(TouchpadSoloScope);
     map["touchpadThreshold"] = juce::var(static_cast<double>(TouchpadThreshold));
@@ -37,6 +38,7 @@ const std::unordered_map<juce::String, juce::var> &getDefaultsMap() {
     map["pitchPadTransitionZonePercent"] = juce::var(static_cast<double>(PitchPadTransitionZonePercent));
     map["pitchPadMode"] = juce::var("Absolute");
     map["pitchPadStart"] = juce::var("Center");
+    map["pitchPadUseCustomRange"] = juce::var(false);
     map["transposeModify"] = juce::var(TransposeModify);
     map["transposeSemitones"] = juce::var(TransposeSemitones);
     map["rootModify"] = juce::var(RootModify);
@@ -335,7 +337,9 @@ InspectorSchema MappingDefinition::getSchema(const juce::ValueTree &mapping,
       setControlDefaultFromMap(ccMode);
       schema.push_back(ccMode);
     }
-    if (adsrTargetStr.equalsIgnoreCase("PitchBend")) {
+    const bool pitchPadUseCustomRange =
+        (bool)mapping.getProperty("pitchPadUseCustomRange", false);
+    if (adsrTargetStr.equalsIgnoreCase("PitchBend") && !pitchPadUseCustomRange) {
       InspectorControl bend;
       bend.propertyId = "data2";
       bend.label = "Bend (semitones)";
@@ -391,36 +395,49 @@ InspectorSchema MappingDefinition::getSchema(const juce::ValueTree &mapping,
         setControlDefaultFromMap(customStart);
         schema.push_back(customStart);
       }
-      InspectorControl stepMin;
-      stepMin.propertyId = "touchpadOutputMin";
-      stepMin.controlType = InspectorControl::Type::Slider;
-      stepMin.step = 1.0;
-      setControlDefaultFromMap(stepMin);
       if (adsrTargetStr.equalsIgnoreCase("PitchBend")) {
-        stepMin.label = "Pitch range min (semitones)";
-        stepMin.min = -static_cast<double>(pitchBendRange);
-        stepMin.max = static_cast<double>(pitchBendRange);
-      } else {
-        stepMin.label = "Scale step min";
-        stepMin.min = -12.0;
-        stepMin.max = 12.0;
+        InspectorControl customRangeToggle;
+        customRangeToggle.propertyId = "pitchPadUseCustomRange";
+        customRangeToggle.label = "Custom min/max";
+        customRangeToggle.controlType = InspectorControl::Type::Toggle;
+        customRangeToggle.widthWeight = 1.0f;
+        setControlDefaultFromMap(customRangeToggle);
+        schema.push_back(customRangeToggle);
       }
-      schema.push_back(stepMin);
-      InspectorControl stepMax;
-      stepMax.propertyId = "touchpadOutputMax";
-      stepMax.controlType = InspectorControl::Type::Slider;
-      stepMax.step = 1.0;
-      setControlDefaultFromMap(stepMax);
-      if (adsrTargetStr.equalsIgnoreCase("PitchBend")) {
-        stepMax.label = "Pitch range max (semitones)";
-        stepMax.min = -static_cast<double>(pitchBendRange);
-        stepMax.max = static_cast<double>(pitchBendRange);
-      } else {
-        stepMax.label = "Scale step max";
-        stepMax.min = -12.0;
-        stepMax.max = 12.0;
+      const bool showPitchRangeSliders =
+          adsrTargetStr.equalsIgnoreCase("SmartScaleBend") || pitchPadUseCustomRange;
+      if (showPitchRangeSliders) {
+        InspectorControl stepMin;
+        stepMin.propertyId = "touchpadOutputMin";
+        stepMin.controlType = InspectorControl::Type::Slider;
+        stepMin.step = 1.0;
+        setControlDefaultFromMap(stepMin);
+        if (adsrTargetStr.equalsIgnoreCase("PitchBend")) {
+          stepMin.label = "Pitch range min (semitones)";
+          stepMin.min = -static_cast<double>(pitchBendRange);
+          stepMin.max = static_cast<double>(pitchBendRange);
+        } else {
+          stepMin.label = "Scale step min";
+          stepMin.min = -12.0;
+          stepMin.max = 12.0;
+        }
+        schema.push_back(stepMin);
+        InspectorControl stepMax;
+        stepMax.propertyId = "touchpadOutputMax";
+        stepMax.controlType = InspectorControl::Type::Slider;
+        stepMax.step = 1.0;
+        setControlDefaultFromMap(stepMax);
+        if (adsrTargetStr.equalsIgnoreCase("PitchBend")) {
+          stepMax.label = "Pitch range max (semitones)";
+          stepMax.min = -static_cast<double>(pitchBendRange);
+          stepMax.max = static_cast<double>(pitchBendRange);
+        } else {
+          stepMax.label = "Scale step max";
+          stepMax.min = -12.0;
+          stepMax.max = 12.0;
+        }
+        schema.push_back(stepMax);
       }
-      schema.push_back(stepMax);
       InspectorControl restZone;
       restZone.propertyId = "pitchPadRestZonePercent";
       restZone.label = "Rest zone size";
@@ -772,18 +789,17 @@ InspectorSchema MappingDefinition::getSchema(const juce::ValueTree &mapping,
     if (showDynamics) {
     schema.push_back(
         createSeparator("Dynamics", juce::Justification::centredLeft));
-    InspectorControl useEnv;
-    useEnv.propertyId = "useCustomEnvelope";
-    useEnv.label = "Use Custom ADSR Curve";
-    useEnv.controlType = InspectorControl::Type::Toggle;
-    useEnv.widthWeight = 1.0f;
-    // Disable custom envelope for PitchBend and SmartScaleBend (not supported)
-    useEnv.isEnabled = !isPitchOrSmart;
-    setControlDefaultFromMap(useEnv);
-    schema.push_back(useEnv);
-
-    // 3. Conditional Branch
-    // Only show ADSR sliders if custom envelope is enabled AND not pitch bend
+    // Custom ADSR is only for CC; don't show it for PitchBend/SmartScaleBend (code ignores it).
+    if (!isPitchOrSmart) {
+      InspectorControl useEnv;
+      useEnv.propertyId = "useCustomEnvelope";
+      useEnv.label = "Use Custom ADSR Curve";
+      useEnv.controlType = InspectorControl::Type::Toggle;
+      useEnv.widthWeight = 1.0f;
+      setControlDefaultFromMap(useEnv);
+      schema.push_back(useEnv);
+    }
+    // ADSR sliders only when custom envelope is enabled (CC only).
     if (useCustomEnvelope && !isPitchOrSmart) {
       auto addAdsrSlider = [&schema](const juce::String &propId,
                                      const juce::String &lbl, double maxVal) {
@@ -801,18 +817,15 @@ InspectorSchema MappingDefinition::getSchema(const juce::ValueTree &mapping,
       addAdsrSlider("adsrDecay", "Decay (ms)", 5000.0);
       addAdsrSlider("adsrSustain", "Sustain (0-1)", 1.0);
       addAdsrSlider("adsrRelease", "Release (ms)", 5000.0);
-    } else {
-      // Only PitchBend/SmartScaleBend get "Reset pitch on release". CC always
-      // sends Value when Off on release (no toggle/slider).
-      if (isPitchOrSmart) {
-        InspectorControl sendRel;
-        sendRel.propertyId = "sendReleaseValue";
-        sendRel.label = "Reset pitch on release";
-        sendRel.controlType = InspectorControl::Type::Toggle;
-        sendRel.widthWeight = 1.0f;
-        setControlDefaultFromMap(sendRel);
-        schema.push_back(sendRel);
-      }
+    } else if (isPitchOrSmart) {
+      // PitchBend/SmartScaleBend: only "Reset pitch on release". CC has no toggle (always sends value when off).
+      InspectorControl sendRel;
+      sendRel.propertyId = "sendReleaseValue";
+      sendRel.label = "Reset pitch on release";
+      sendRel.controlType = InspectorControl::Type::Toggle;
+      sendRel.widthWeight = 1.0f;
+      setControlDefaultFromMap(sendRel);
+      schema.push_back(sendRel);
     }
     } // showDynamics
   } else if (typeStr.equalsIgnoreCase("Command")) {

@@ -460,12 +460,21 @@ TEST(TouchpadTabTest, TouchpadTab_PitchBendMappingSchemaHasPitchPadControls) {
       << "Touchpad PitchBend schema should have pitchPadMode";
   EXPECT_TRUE(schemaHasPropertyId(schema, "pitchPadStart"))
       << "Touchpad PitchBend schema should have pitchPadStart";
+  EXPECT_TRUE(schemaHasPropertyId(schema, "pitchPadUseCustomRange"))
+      << "Touchpad PitchBend schema should have Custom min/max toggle";
   EXPECT_TRUE(schemaHasPropertyId(schema, "pitchPadRestZonePercent"))
       << "Touchpad PitchBend schema should have pitchPadRestZonePercent";
   EXPECT_TRUE(schemaHasPropertyId(schema, "pitchPadTransitionZonePercent"))
       << "Touchpad PitchBend schema should have pitchPadTransitionZonePercent";
-  EXPECT_TRUE(schemaHasPropertyId(schema, "touchpadOutputMin"))
-      << "Touchpad PitchBend schema should have touchpadOutputMin (step range)";
-  EXPECT_TRUE(schemaHasPropertyId(schema, "touchpadOutputMax"))
-      << "Touchpad PitchBend schema should have touchpadOutputMax (step range)";
+  // With default pitchPadUseCustomRange=false, Bend (semitones) is shown, not min/max sliders.
+  EXPECT_TRUE(schemaHasPropertyId(schema, "data2"))
+      << "Touchpad PitchBend schema should have data2 (Bend semitones) when not custom range";
+  // When Custom min/max is true, Pitch range min/max sliders appear.
+  cfg.mapping.setProperty("pitchPadUseCustomRange", true, nullptr);
+  InspectorSchema schemaCustom =
+      MappingDefinition::getSchema(cfg.mapping, 2, true /* forTouchpadEditor */);
+  EXPECT_TRUE(schemaHasPropertyId(schemaCustom, "touchpadOutputMin"))
+      << "Touchpad PitchBend schema should have touchpadOutputMin when Custom min/max is on";
+  EXPECT_TRUE(schemaHasPropertyId(schemaCustom, "touchpadOutputMax"))
+      << "Touchpad PitchBend schema should have touchpadOutputMax when Custom min/max is on";
 }

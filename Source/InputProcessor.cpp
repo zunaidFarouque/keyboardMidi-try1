@@ -384,6 +384,7 @@ void InputProcessor::valueTreePropertyChanged(
       property == juce::Identifier("touchpadOutputMax") ||
       property == juce::Identifier("pitchPadMode") ||
       property == juce::Identifier("pitchPadStart") ||
+      property == juce::Identifier("pitchPadUseCustomRange") ||
       property == juce::Identifier("pitchPadRestingPercent") ||
       property == juce::Identifier("pitchPadRestZonePercent") ||
       property == juce::Identifier("pitchPadTransitionZonePercent") ||

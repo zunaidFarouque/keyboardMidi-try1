@@ -697,7 +697,8 @@ void TouchpadMixerEditorComponent::applyConfigValue(
           propertyId == "adsrTarget" || propertyId == "expressionCCMode" ||
           propertyId == "encoderAxis" || propertyId == "encoderOutputMode" ||
           propertyId == "encoderPushMode" || propertyId == "encoderPushOutputType" ||
-          propertyId == "pitchPadStart" || propertyId == "pitchPadMode")
+          propertyId == "pitchPadStart" || propertyId == "pitchPadMode" ||
+          propertyId == "pitchPadUseCustomRange")
         rebuildUI();
       return;
     }

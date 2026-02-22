@@ -902,8 +902,18 @@ static void compileTouchpadMappingFromValueTree(
         // For pitch-based Expression targets, interpret the existing
         // touchpadOutputMin/Max as discrete step bounds and also store them
         // in a PitchPadConfig for shared runtime/visualizer use.
-        p.outputMin = (int)mapping.getProperty("touchpadOutputMin", -1);
-        p.outputMax = (int)mapping.getProperty("touchpadOutputMax", MappingDefaults::TouchpadOutputMaxPitchBend);
+        if (isPB && !(bool)mapping.getProperty("pitchPadUseCustomRange", false)) {
+          const int pbRange = settingsMgr.getPitchBendRange();
+          int semitones = (int)mapping.getProperty("data2", 0);
+          semitones = juce::jlimit(-juce::jmax(1, pbRange),
+                                  juce::jmax(1, pbRange), semitones);
+          const int half = juce::jmax(0, std::abs(semitones));
+          p.outputMin = -half;
+          p.outputMax = half;
+        } else {
+          p.outputMin = (int)mapping.getProperty("touchpadOutputMin", -1);
+          p.outputMax = (int)mapping.getProperty("touchpadOutputMax", MappingDefaults::TouchpadOutputMaxPitchBend);
+        }
 
         PitchPadConfig cfg;
 

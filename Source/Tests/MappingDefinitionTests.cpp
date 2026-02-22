@@ -325,36 +325,34 @@ TEST(MappingDefinitionTest, ExpressionCCCustomEnvelopeShowsAdsrSliders) {
 }
 
 // --- Expression: PitchBend/SmartScaleBend -> custom envelope disabled in schema ---
-TEST(MappingDefinitionTest, ExpressionPitchBendDisablesCustomEnvelopeControl) {
+TEST(MappingDefinitionTest, ExpressionPitchBendHidesCustomEnvelopeControl) {
   juce::ValueTree mapping("Mapping");
   mapping.setProperty("type", "Expression", nullptr);
   mapping.setProperty("adsrTarget", "PitchBend", nullptr);
   InspectorSchema schema = MappingDefinition::getSchema(mapping);
-  const InspectorControl *useEnvCtrl = nullptr;
+  bool hasUseCustomEnvelope = false;
   for (const auto &c : schema)
     if (c.propertyId == "useCustomEnvelope") {
-      useEnvCtrl = &c;
+      hasUseCustomEnvelope = true;
       break;
     }
-  ASSERT_NE(useEnvCtrl, nullptr);
-  EXPECT_FALSE(useEnvCtrl->isEnabled)
-      << "PitchBend target should disable Use Custom ADSR control";
+  EXPECT_FALSE(hasUseCustomEnvelope)
+      << "PitchBend target should not show Use Custom ADSR (code ignores it)";
 }
 
-TEST(MappingDefinitionTest, ExpressionSmartScaleBendDisablesCustomEnvelopeControl) {
+TEST(MappingDefinitionTest, ExpressionSmartScaleBendHidesCustomEnvelopeControl) {
   juce::ValueTree mapping("Mapping");
   mapping.setProperty("type", "Expression", nullptr);
   mapping.setProperty("adsrTarget", "SmartScaleBend", nullptr);
   InspectorSchema schema = MappingDefinition::getSchema(mapping);
-  const InspectorControl *useEnvCtrl = nullptr;
+  bool hasUseCustomEnvelope = false;
   for (const auto &c : schema)
     if (c.propertyId == "useCustomEnvelope") {
-      useEnvCtrl = &c;
+      hasUseCustomEnvelope = true;
       break;
     }
-  ASSERT_NE(useEnvCtrl, nullptr);
-  EXPECT_FALSE(useEnvCtrl->isEnabled)
-      << "SmartScaleBend target should disable Use Custom ADSR control";
+  EXPECT_FALSE(hasUseCustomEnvelope)
+      << "SmartScaleBend target should not show Use Custom ADSR (code ignores it)";
 }
 
 // --- Expression: CC -> value when on/off (used for keyboard CC in Mappings tab) ---
