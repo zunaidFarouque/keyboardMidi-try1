@@ -39,6 +39,7 @@ const std::unordered_map<juce::String, juce::var> &getDefaultsMap() {
     map["pitchPadMode"] = juce::var("Absolute");
     map["pitchPadStart"] = juce::var("Center");
     map["pitchPadUseCustomRange"] = juce::var(false);
+    map["pitchPadTouchGlideMs"] = juce::var(PitchPadTouchGlideMs);
     map["transposeModify"] = juce::var(TransposeModify);
     map["transposeSemitones"] = juce::var(TransposeSemitones);
     map["rootModify"] = juce::var(RootModify);
@@ -373,27 +374,30 @@ InspectorSchema MappingDefinition::getSchema(const juce::ValueTree &mapping,
       pitchMode.options[2] = "Relative";
       setControlDefaultFromMap(pitchMode);
       schema.push_back(pitchMode);
-      InspectorControl pitchStart;
-      pitchStart.propertyId = "pitchPadStart";
-      pitchStart.label = "Starting position";
-      pitchStart.controlType = InspectorControl::Type::ComboBox;
-      pitchStart.options[1] = "Left";
-      pitchStart.options[2] = "Center";
-      pitchStart.options[3] = "Right";
-      pitchStart.options[4] = "Custom";
-      setControlDefaultFromMap(pitchStart);
-      schema.push_back(pitchStart);
-      juce::String pitchStartStr = mapping.getProperty("pitchPadStart", "Center").toString().trim();
-      if (pitchStartStr.equalsIgnoreCase("Custom")) {
-        InspectorControl customStart;
-        customStart.propertyId = "pitchPadCustomStart";
-        customStart.label = "Custom start (X)";
-        customStart.controlType = InspectorControl::Type::Slider;
-        customStart.min = 0.0;
-        customStart.max = 1.0;
-        customStart.step = 0.01;
-        setControlDefaultFromMap(customStart);
-        schema.push_back(customStart);
+      juce::String pitchModeStr = mapping.getProperty("pitchPadMode", "Absolute").toString().trim();
+      if (pitchModeStr.equalsIgnoreCase("Absolute")) {
+        InspectorControl pitchStart;
+        pitchStart.propertyId = "pitchPadStart";
+        pitchStart.label = "Starting position";
+        pitchStart.controlType = InspectorControl::Type::ComboBox;
+        pitchStart.options[1] = "Left";
+        pitchStart.options[2] = "Center";
+        pitchStart.options[3] = "Right";
+        pitchStart.options[4] = "Custom";
+        setControlDefaultFromMap(pitchStart);
+        schema.push_back(pitchStart);
+        juce::String pitchStartStr = mapping.getProperty("pitchPadStart", "Center").toString().trim();
+        if (pitchStartStr.equalsIgnoreCase("Custom")) {
+          InspectorControl customStart;
+          customStart.propertyId = "pitchPadCustomStart";
+          customStart.label = "Custom start (X)";
+          customStart.controlType = InspectorControl::Type::Slider;
+          customStart.min = 0.0;
+          customStart.max = 1.0;
+          customStart.step = 0.01;
+          setControlDefaultFromMap(customStart);
+          schema.push_back(customStart);
+        }
       }
       if (adsrTargetStr.equalsIgnoreCase("PitchBend")) {
         InspectorControl customRangeToggle;
@@ -456,6 +460,16 @@ InspectorSchema MappingDefinition::getSchema(const juce::ValueTree &mapping,
       transitionZone.step = 1.0;
       setControlDefaultFromMap(transitionZone);
       schema.push_back(transitionZone);
+      InspectorControl touchGlide;
+      touchGlide.propertyId = "pitchPadTouchGlideMs";
+      touchGlide.label = "Touch glide (ms)";
+      touchGlide.controlType = InspectorControl::Type::Slider;
+      touchGlide.min = 0.0;
+      touchGlide.max = 200.0;
+      touchGlide.step = 5.0;
+      touchGlide.suffix = " ms";
+      setControlDefaultFromMap(touchGlide);
+      schema.push_back(touchGlide);
     }
 
     if (adsrTargetStr.equalsIgnoreCase("CC") &&

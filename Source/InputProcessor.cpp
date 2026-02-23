@@ -103,6 +103,7 @@ void InputProcessor::runExpressionEngineOneTick() {
 }
 
 InputProcessor::~InputProcessor() {
+  stopTimer(); // Touch glide release timer
   // Remove listeners
   presetManager.getRootNode().removeListener(this);
   presetManager.getLayersList().removeListener(
@@ -161,6 +162,8 @@ void InputProcessor::rebuildGrid() {
   }
   touchpadNoteOnSent.clear();
   touchpadPrevState.clear();
+  touchpadPitchGlideState.clear();
+  stopTouchGlideTimerIfIdle();
   {
     juce::ScopedWriteLock wl(mixerStateLock);
     touchpadMixerContactPrev.clear();
@@ -385,6 +388,7 @@ void InputProcessor::valueTreePropertyChanged(
       property == juce::Identifier("pitchPadMode") ||
       property == juce::Identifier("pitchPadStart") ||
       property == juce::Identifier("pitchPadUseCustomRange") ||
+      property == juce::Identifier("pitchPadTouchGlideMs") ||
       property == juce::Identifier("pitchPadRestingPercent") ||
       property == juce::Identifier("pitchPadRestZonePercent") ||
       property == juce::Identifier("pitchPadTransitionZonePercent") ||
@@ -2104,17 +2108,33 @@ void InputProcessor::processTouchpadContacts(
           if (!eventActive) {
             auto itLast = lastTouchpadContinuousValues.find(keyCont);
             if (itLast != lastTouchpadContinuousValues.end()) {
-              if (act.sendReleaseValue) {
-                if (act.adsrSettings.target == AdsrTarget::CC) {
-                  voiceManager.sendCC(act.channel, act.adsrSettings.ccNumber,
-                                      act.releaseValue);
-                } else if (act.adsrSettings.target == AdsrTarget::PitchBend ||
-                           act.adsrSettings.target ==
-                               AdsrTarget::SmartScaleBend) {
-                  voiceManager.sendPitchBend(act.channel, 8192);
+              const bool isPB =
+                  (act.adsrSettings.target == AdsrTarget::PitchBend ||
+                   act.adsrSettings.target == AdsrTarget::SmartScaleBend);
+              if (isPB && entry.touchGlideMs > 0 && act.sendReleaseValue) {
+                // Touch glide: transition to center over duration; timer will send.
+                auto &g = touchpadPitchGlideState[keyCont];
+                g.phase = TouchGlidePhase::GlidingToCenter;
+                g.startValue = itLast->second;
+                g.targetValue = 8192;
+                g.startTimeMs = static_cast<uint32_t>(juce::Time::getMillisecondCounter());
+                g.durationMs = entry.touchGlideMs;
+                g.lastSentValue = itLast->second;
+                lastTouchpadContinuousValues.erase(itLast);
+                startTouchGlideTimerIfNeeded();
+              } else {
+                if (act.sendReleaseValue) {
+                  if (act.adsrSettings.target == AdsrTarget::CC) {
+                    voiceManager.sendCC(act.channel, act.adsrSettings.ccNumber,
+                                        act.releaseValue);
+                  } else if (act.adsrSettings.target == AdsrTarget::PitchBend ||
+                             act.adsrSettings.target ==
+                                 AdsrTarget::SmartScaleBend) {
+                    voiceManager.sendPitchBend(act.channel, 8192);
+                  }
                 }
+                lastTouchpadContinuousValues.erase(itLast);
               }
-              lastTouchpadContinuousValues.erase(itLast);
             }
             break;
           }
@@ -2264,13 +2284,68 @@ void InputProcessor::processTouchpadContacts(
               pbVal = juce::jlimit(0, 16383, pbVal);
             }
 
-            auto itLast = lastTouchpadContinuousValues.find(keyCont);
-            if (itLast != lastTouchpadContinuousValues.end() &&
-                itLast->second == pbVal) {
-              break; // No PB change – skip send
+            if (entry.touchGlideMs <= 0) {
+              auto itLast = lastTouchpadContinuousValues.find(keyCont);
+              if (itLast != lastTouchpadContinuousValues.end() &&
+                  itLast->second == pbVal) {
+                break; // No PB change – skip send
+              }
+              voiceManager.sendPitchBend(act.channel, pbVal);
+              lastTouchpadContinuousValues[keyCont] = pbVal;
+            } else {
+              // Touch glide: state machine
+              const uint32_t nowMs =
+                  static_cast<uint32_t>(juce::Time::getMillisecondCounter());
+              TouchGlideState &g = touchpadPitchGlideState[keyCont];
+              if (g.phase == TouchGlidePhase::Idle ||
+                  g.phase == TouchGlidePhase::GlidingToCenter) {
+                g.phase = TouchGlidePhase::GlidingToFinger;
+                auto itLast = lastTouchpadContinuousValues.find(keyCont);
+                g.startValue = (itLast != lastTouchpadContinuousValues.end())
+                                   ? itLast->second
+                                   : 8192;
+                g.targetValue = pbVal;
+                g.startTimeMs = nowMs;
+                g.durationMs = entry.touchGlideMs;
+                g.lastSentValue = -1;
+              }
+              if (g.phase == TouchGlidePhase::GlidingToFinger) {
+                double progress = (g.durationMs > 0)
+                    ? std::min(1.0, static_cast<double>(nowMs - g.startTimeMs) /
+                                        static_cast<double>(g.durationMs))
+                    : 1.0;
+                if (pbVal != g.targetValue) {
+                  int currentOutput = juce::jlimit(
+                      0, 16383,
+                      static_cast<int>(std::round(
+                          g.startValue +
+                          progress * (g.targetValue - g.startValue))));
+                  g.startValue = currentOutput;
+                  g.targetValue = pbVal;
+                }
+                int output = juce::jlimit(
+                    0, 16383,
+                    static_cast<int>(std::round(
+                        g.startValue +
+                        progress * (g.targetValue - g.startValue))));
+                if (output != g.lastSentValue) {
+                  voiceManager.sendPitchBend(act.channel, output);
+                  g.lastSentValue = output;
+                  lastTouchpadContinuousValues[keyCont] = output;
+                }
+                if (progress >= 1.0)
+                  g.phase = TouchGlidePhase::FollowingFinger;
+              } else if (g.phase == TouchGlidePhase::FollowingFinger) {
+                auto itLast = lastTouchpadContinuousValues.find(keyCont);
+                if (itLast != lastTouchpadContinuousValues.end() &&
+                    itLast->second == pbVal) {
+                  break;
+                }
+                voiceManager.sendPitchBend(act.channel, pbVal);
+                lastTouchpadContinuousValues[keyCont] = pbVal;
+                g.lastSentValue = pbVal;
+              }
             }
-            voiceManager.sendPitchBend(act.channel, pbVal);
-            lastTouchpadContinuousValues[keyCont] = pbVal;
           }
         }
         break;
@@ -3632,4 +3707,55 @@ void InputProcessor::processTouchpadContacts(
   prev.y1 = y1;
   prev.x2 = x2;
   prev.y2 = y2;
+}
+
+void InputProcessor::startTouchGlideTimerIfNeeded() {
+  for (const auto &kv : touchpadPitchGlideState) {
+    if (kv.second.phase == TouchGlidePhase::GlidingToCenter) {
+      if (!isTimerRunning())
+        startTimer(5);
+      return;
+    }
+  }
+}
+
+void InputProcessor::stopTouchGlideTimerIfIdle() {
+  for (const auto &kv : touchpadPitchGlideState) {
+    if (kv.second.phase == TouchGlidePhase::GlidingToCenter)
+      return;
+  }
+  stopTimer();
+}
+
+void InputProcessor::timerCallback() {
+  const uint32_t nowMs =
+      static_cast<uint32_t>(juce::Time::getMillisecondCounter());
+  std::vector<TouchpadPitchGlideKey> toRemove;
+  for (auto &kv : touchpadPitchGlideState) {
+    if (kv.second.phase != TouchGlidePhase::GlidingToCenter)
+      continue;
+    TouchGlideState &g = kv.second;
+    double progress = (g.durationMs > 0)
+        ? std::min(1.0, static_cast<double>(nowMs - g.startTimeMs) /
+                            static_cast<double>(g.durationMs))
+        : 1.0;
+    int output = juce::jlimit(
+        0, 16383,
+        static_cast<int>(std::round(
+            g.startValue + progress * (8192 - g.startValue))));
+    if (output != g.lastSentValue) {
+      int ch = std::get<3>(kv.first);
+      voiceManager.sendPitchBend(ch, output);
+      g.lastSentValue = output;
+    }
+    if (progress >= 1.0) {
+      int ch = std::get<3>(kv.first);
+      voiceManager.sendPitchBend(ch, 8192);
+      lastTouchpadContinuousValues.erase(kv.first);
+      toRemove.push_back(kv.first);
+    }
+  }
+  for (const auto &k : toRemove)
+    touchpadPitchGlideState.erase(k);
+  stopTouchGlideTimerIfIdle();
 }

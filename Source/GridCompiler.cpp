@@ -1008,6 +1008,10 @@ static void compileTouchpadMappingFromValueTree(
     if (entry.action.adsrSettings.target == AdsrTarget::CC)
       entry.action.sendReleaseValue = true;
 
+    if (isPB || isSmartBend)
+      entry.touchGlideMs = juce::jlimit(0, 200,
+          (int)mapping.getProperty("pitchPadTouchGlideMs", MappingDefaults::PitchPadTouchGlideMs));
+
     if (entry.action.adsrSettings.target == AdsrTarget::CC) {
       entry.action.adsrSettings.ccNumber =
           (int)mapping.getProperty("data1", MappingDefaults::ExpressionData1);

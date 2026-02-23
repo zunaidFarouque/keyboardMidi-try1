@@ -1166,6 +1166,36 @@ TEST_F(GridCompilerTest, TouchpadPitchPadConfigCompiledForPitchBend) {
   EXPECT_TRUE(entry.action.sendReleaseValue)
       << "Pitch-bend touchpad expression should default to resetting PB on "
          "release";
+  EXPECT_EQ(entry.touchGlideMs, 0) << "Default touch glide is off";
+}
+
+TEST_F(GridCompilerTest, TouchpadPitchBendTouchGlideMsCompiledFromMapping) {
+  TouchpadMappingConfig cfg;
+  cfg.name = "PB Glide";
+  cfg.layerId = 0;
+  cfg.midiChannel = 1;
+  juce::ValueTree m("Mapping");
+  m.setProperty("inputAlias", "Touchpad", nullptr);
+  m.setProperty("inputTouchpadEvent", TouchpadEvent::Finger1Down, nullptr);
+  m.setProperty("type", "Expression", nullptr);
+  m.setProperty("adsrTarget", "PitchBend", nullptr);
+  m.setProperty("data2", 2, nullptr);
+  m.setProperty("touchpadInputMin", 0.0, nullptr);
+  m.setProperty("touchpadInputMax", 1.0, nullptr);
+  m.setProperty("touchpadOutputMin", -2, nullptr);
+  m.setProperty("touchpadOutputMax", 2, nullptr);
+  m.setProperty("pitchPadTouchGlideMs", 80, nullptr);
+  cfg.mapping = m;
+  touchpadMixerMgr.addTouchpadMapping(cfg);
+
+  auto context = GridCompiler::compile(presetMgr, deviceMgr, zoneMgr,
+                                       touchpadMixerMgr, settingsMgr);
+
+  ASSERT_EQ(context->touchpadMappings.size(), 1u);
+  const auto &entry = context->touchpadMappings.front();
+  EXPECT_EQ(entry.conversionKind, TouchpadConversionKind::ContinuousToRange);
+  EXPECT_EQ(entry.touchGlideMs, 80)
+      << "Touch glide ms should be read from mapping";
 }
 
 TEST_F(GridCompilerTest, TouchpadExpressionCCModePosition_CompilesContinuousToRange) {

@@ -466,6 +466,8 @@ TEST(TouchpadTabTest, TouchpadTab_PitchBendMappingSchemaHasPitchPadControls) {
       << "Touchpad PitchBend schema should have pitchPadRestZonePercent";
   EXPECT_TRUE(schemaHasPropertyId(schema, "pitchPadTransitionZonePercent"))
       << "Touchpad PitchBend schema should have pitchPadTransitionZonePercent";
+  EXPECT_TRUE(schemaHasPropertyId(schema, "pitchPadTouchGlideMs"))
+      << "Touchpad PitchBend schema should have Touch glide (ms)";
   // With default pitchPadUseCustomRange=false, Bend (semitones) is shown, not min/max sliders.
   EXPECT_TRUE(schemaHasPropertyId(schema, "data2"))
       << "Touchpad PitchBend schema should have data2 (Bend semitones) when not custom range";

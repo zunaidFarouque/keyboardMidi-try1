@@ -693,6 +693,8 @@ void TouchpadMixerEditorComponent::applyConfigValue(
       currentMapping.mapping.setProperty(propertyId, valueToSet, nullptr);
       manager->updateTouchpadMapping(selectedMappingIndex, currentMapping);
       // Rebuild UI when schema structure changes (controls show/hide).
+      // pitchPadTouchGlideMs omitted: changing it doesn't show/hide controls, and
+      // rebuilding on every slider tick destroyed the slider and caused crashes.
       if (propertyId == "type" || propertyId == "useCustomEnvelope" ||
           propertyId == "adsrTarget" || propertyId == "expressionCCMode" ||
           propertyId == "encoderAxis" || propertyId == "encoderOutputMode" ||

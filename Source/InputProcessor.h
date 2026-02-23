@@ -50,7 +50,8 @@ class SettingsManager;
 
 class InputProcessor : public juce::ChangeBroadcaster,
                        public juce::ValueTree::Listener,
-                       public juce::ChangeListener {
+                       public juce::ChangeListener,
+                       public juce::Timer {
 public:
   InputProcessor(VoiceManager &voiceMgr, PresetManager &presetMgr,
                  DeviceManager &deviceMgr, ScaleLibrary &scaleLib,
@@ -181,6 +182,9 @@ public:
   // ChangeListener implementation
   void changeListenerCallback(juce::ChangeBroadcaster *source) override;
 
+  // juce::Timer: drives touch glide release (GlidingToCenter)
+  void timerCallback() override;
+
 private:
   VoiceManager &voiceManager;
   PresetManager &presetManager;
@@ -272,6 +276,23 @@ private:
     float x1 = 0.0f, y1 = 0.0f, x2 = 0.0f, y2 = 0.0f;
   };
   std::unordered_map<uintptr_t, TouchpadPrevState> touchpadPrevState;
+
+  // Touch glide: smooth transition on touch/release for touchpad PitchBend.
+  // Key = (deviceHandle, layerId, eventId, channel, -1) same as lastTouchpadContinuousValues.
+  enum class TouchGlidePhase { Idle, GlidingToFinger, FollowingFinger, GlidingToCenter };
+  struct TouchGlideState {
+    TouchGlidePhase phase = TouchGlidePhase::Idle;
+    int startValue = 8192;
+    int targetValue = 8192;
+    uint32_t startTimeMs = 0;
+    int durationMs = 0;
+    int lastSentValue = -1;
+  };
+  using TouchpadPitchGlideKey = std::tuple<uintptr_t, int, int, int, int>;
+  std::map<TouchpadPitchGlideKey, TouchGlideState> touchpadPitchGlideState;
+  void startTouchGlideTimerIfNeeded();
+  void stopTouchGlideTimerIfIdle();
+
   // Continuous->Note: track whether note is currently "on" per (device,
   // layerId, eventId) to send note off
   std::set<std::tuple<uintptr_t, int, int>> touchpadNoteOnSent;

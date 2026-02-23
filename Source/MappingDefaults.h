@@ -79,7 +79,8 @@ constexpr float PitchPadRestZonePercent = 10.0f;
 constexpr float PitchPadTransitionZonePercent = 10.0f;
 constexpr float PitchPadCustomStart = 0.5f;
 
-// Touchpad output range
+// Touch glide: smooth transition on touch/release (0 = off, ms when > 0)
+constexpr int PitchPadTouchGlideMs = 0;
 constexpr int TouchpadOutputMin = 0;
 constexpr int TouchpadOutputMax = 127;
 constexpr int TouchpadOutputMaxPitchBend = 3; // 0-3 semitones display

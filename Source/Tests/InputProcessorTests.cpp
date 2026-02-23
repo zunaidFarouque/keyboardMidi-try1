@@ -6433,6 +6433,138 @@ TEST_F(InputProcessorTest, TouchpadTab_PitchBendRangeAffectsSentPitchBend) {
   EXPECT_LE(sentVal, 16383);
 }
 
+// --- Touch glide: when disabled (touchGlideMs 0), behavior unchanged ---
+TEST_F(InputProcessorTest, TouchpadTouchGlide_Disabled_ImmediateSendToFingerAndRelease) {
+  MockMidiEngine mockEng;
+  TouchpadMixerManager touchpadMixerMgr;
+  VoiceManager voiceMgr(mockEng, settingsMgr);
+  InputProcessor proc(voiceMgr, presetMgr, deviceMgr, scaleLib, mockEng,
+                      settingsMgr, touchpadMixerMgr);
+  presetMgr.getLayersList().removeAllChildren(nullptr);
+  presetMgr.ensureStaticLayers();
+  settingsMgr.setMidiModeActive(true);
+  settingsMgr.setPitchBendRange(2);
+
+  TouchpadMappingConfig cfg;
+  cfg.name = "PB No Glide";
+  cfg.layerId = 0;
+  juce::ValueTree m("Mapping");
+  m.setProperty("inputAlias", "Touchpad", nullptr);
+  m.setProperty("inputTouchpadEvent", TouchpadEvent::Finger1X, nullptr);
+  m.setProperty("type", "Expression", nullptr);
+  m.setProperty("adsrTarget", "PitchBend", nullptr);
+  m.setProperty("channel", 1, nullptr);
+  m.setProperty("touchpadInputMin", 0.0, nullptr);
+  m.setProperty("touchpadInputMax", 1.0, nullptr);
+  m.setProperty("touchpadOutputMin", -2, nullptr);
+  m.setProperty("touchpadOutputMax", 2, nullptr);
+  m.setProperty("pitchPadMode", "Absolute", nullptr);
+  m.setProperty("data2", 2, nullptr); // Bend ±2 semitones so max sends 16383
+  m.setProperty("pitchPadTouchGlideMs", 0, nullptr);
+  cfg.mapping = m;
+  touchpadMixerMgr.addTouchpadMapping(cfg);
+
+  proc.initialize();
+  proc.forceRebuildMappings();
+  mockEng.clear();
+
+  uintptr_t dev = 0xabcd;
+  proc.processTouchpadContacts(dev, {{0, 0, 0, 1.0f, 0.5f, true}});
+  ASSERT_FALSE(mockEng.pitchEvents.empty());
+  EXPECT_GE(mockEng.pitchEvents.back().value, 16380)
+      << "With touch glide off, finger at max should send max PB immediately";
+
+  mockEng.clear();
+  proc.processTouchpadContacts(dev, {});
+  ASSERT_FALSE(mockEng.pitchEvents.empty());
+  EXPECT_EQ(mockEng.pitchEvents.back().value, 8192)
+      << "With touch glide off, finger up should send center (8192) immediately";
+}
+
+// --- Touch glide: finger down at center -> no transition, stay at 8192 ---
+TEST_F(InputProcessorTest, TouchpadTouchGlide_Enabled_FingerDownAtCenter_StaysAt8192) {
+  MockMidiEngine mockEng;
+  TouchpadMixerManager touchpadMixerMgr;
+  VoiceManager voiceMgr(mockEng, settingsMgr);
+  InputProcessor proc(voiceMgr, presetMgr, deviceMgr, scaleLib, mockEng,
+                      settingsMgr, touchpadMixerMgr);
+  presetMgr.getLayersList().removeAllChildren(nullptr);
+  presetMgr.ensureStaticLayers();
+  settingsMgr.setMidiModeActive(true);
+  settingsMgr.setPitchBendRange(2);
+
+  TouchpadMappingConfig cfg;
+  cfg.name = "PB Glide";
+  cfg.layerId = 0;
+  juce::ValueTree m("Mapping");
+  m.setProperty("inputAlias", "Touchpad", nullptr);
+  m.setProperty("inputTouchpadEvent", TouchpadEvent::Finger1X, nullptr);
+  m.setProperty("type", "Expression", nullptr);
+  m.setProperty("adsrTarget", "PitchBend", nullptr);
+  m.setProperty("channel", 1, nullptr);
+  m.setProperty("touchpadInputMin", 0.0, nullptr);
+  m.setProperty("touchpadInputMax", 1.0, nullptr);
+  m.setProperty("touchpadOutputMin", -2, nullptr);
+  m.setProperty("touchpadOutputMax", 2, nullptr);
+  m.setProperty("pitchPadMode", "Absolute", nullptr);
+  m.setProperty("data2", 2, nullptr);
+  m.setProperty("pitchPadTouchGlideMs", 80, nullptr);
+  cfg.mapping = m;
+  touchpadMixerMgr.addTouchpadMapping(cfg);
+
+  proc.initialize();
+  proc.forceRebuildMappings();
+  mockEng.clear();
+
+  uintptr_t dev = 0xabcd;
+  proc.processTouchpadContacts(dev, {{0, 0, 0, 0.5f, 0.5f, true}});
+  ASSERT_FALSE(mockEng.pitchEvents.empty());
+  EXPECT_NEAR(mockEng.pitchEvents.back().value, 8192, 100)
+      << "Finger down at center with glide on: value should stay 8192 (no transition)";
+}
+
+// --- Touch glide: finger down at max -> first sent value is 8192 (glide start) ---
+TEST_F(InputProcessorTest, TouchpadTouchGlide_Enabled_FingerDownAtMax_StartsFromCenter) {
+  MockMidiEngine mockEng;
+  TouchpadMixerManager touchpadMixerMgr;
+  VoiceManager voiceMgr(mockEng, settingsMgr);
+  InputProcessor proc(voiceMgr, presetMgr, deviceMgr, scaleLib, mockEng,
+                      settingsMgr, touchpadMixerMgr);
+  presetMgr.getLayersList().removeAllChildren(nullptr);
+  presetMgr.ensureStaticLayers();
+  settingsMgr.setMidiModeActive(true);
+  settingsMgr.setPitchBendRange(2);
+
+  TouchpadMappingConfig cfg;
+  cfg.name = "PB Glide";
+  cfg.layerId = 0;
+  juce::ValueTree m("Mapping");
+  m.setProperty("inputAlias", "Touchpad", nullptr);
+  m.setProperty("inputTouchpadEvent", TouchpadEvent::Finger1X, nullptr);
+  m.setProperty("type", "Expression", nullptr);
+  m.setProperty("adsrTarget", "PitchBend", nullptr);
+  m.setProperty("channel", 1, nullptr);
+  m.setProperty("touchpadInputMin", 0.0, nullptr);
+  m.setProperty("touchpadInputMax", 1.0, nullptr);
+  m.setProperty("touchpadOutputMin", -2, nullptr);
+  m.setProperty("touchpadOutputMax", 2, nullptr);
+  m.setProperty("pitchPadMode", "Absolute", nullptr);
+  m.setProperty("data2", 2, nullptr);
+  m.setProperty("pitchPadTouchGlideMs", 80, nullptr);
+  cfg.mapping = m;
+  touchpadMixerMgr.addTouchpadMapping(cfg);
+
+  proc.initialize();
+  proc.forceRebuildMappings();
+  mockEng.clear();
+
+  uintptr_t dev = 0xabcd;
+  proc.processTouchpadContacts(dev, {{0, 0, 0, 1.0f, 0.5f, true}});
+  ASSERT_FALSE(mockEng.pitchEvents.empty());
+  EXPECT_NEAR(mockEng.pitchEvents.front().value, 8192, 100)
+      << "With touch glide on, first send on finger down at max should be 8192 (glide start)";
+}
+
 TEST_F(InputProcessorTest, TouchpadTab_PitchPadStartLeft_ZeroAtLeftEdge) {
   MockMidiEngine mockEng;
   TouchpadMixerManager touchpadMixerMgr;
