@@ -902,7 +902,8 @@ static void compileTouchpadMappingFromValueTree(
         // For pitch-based Expression targets, interpret the existing
         // touchpadOutputMin/Max as discrete step bounds and also store them
         // in a PitchPadConfig for shared runtime/visualizer use.
-        if (isPB && !(bool)mapping.getProperty("pitchPadUseCustomRange", false)) {
+        const bool useCustomRange = (bool)mapping.getProperty("pitchPadUseCustomRange", false);
+        if (isPB && !useCustomRange) {
           const int pbRange = settingsMgr.getPitchBendRange();
           int semitones = (int)mapping.getProperty("data2", 0);
           semitones = juce::jlimit(-juce::jmax(1, pbRange),
@@ -910,6 +911,11 @@ static void compileTouchpadMappingFromValueTree(
           const int half = juce::jmax(0, std::abs(semitones));
           p.outputMin = -half;
           p.outputMax = half;
+        } else if (isSmartBend && !useCustomRange) {
+          int stepShift = (int)mapping.getProperty("smartStepShift", MappingDefaults::SmartStepShift);
+          stepShift = juce::jlimit(0, 12, std::abs(stepShift));
+          p.outputMin = -stepShift;
+          p.outputMax = stepShift;
         } else {
           p.outputMin = (int)mapping.getProperty("touchpadOutputMin", -1);
           p.outputMax = (int)mapping.getProperty("touchpadOutputMax", MappingDefaults::TouchpadOutputMaxPitchBend);
@@ -1011,6 +1017,15 @@ static void compileTouchpadMappingFromValueTree(
     if (isPB || isSmartBend)
       entry.touchGlideMs = juce::jlimit(0, 200,
           (int)mapping.getProperty("pitchPadTouchGlideMs", MappingDefaults::PitchPadTouchGlideMs));
+
+    if (isSmartBend) {
+      entry.smartScaleFollowGlobal =
+          (bool)mapping.getProperty("smartScaleFollowGlobal", MappingDefaults::SmartScaleFollowGlobal);
+      entry.smartScaleName =
+          mapping.getProperty("smartScaleName", MappingDefaults::SmartScaleName).toString().trim();
+      if (entry.smartScaleName.isEmpty())
+        entry.smartScaleName = "Major";
+    }
 
     if (entry.action.adsrSettings.target == AdsrTarget::CC) {
       entry.action.adsrSettings.ccNumber =

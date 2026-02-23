@@ -9,11 +9,13 @@
 #include <vector>
 
 class SettingsManager;
+class ScaleLibrary;
 
 class TouchpadMixerEditorComponent : public juce::Component {
 public:
   explicit TouchpadMixerEditorComponent(TouchpadMixerManager *mgr,
-                                        SettingsManager *settingsMgr = nullptr);
+                                        SettingsManager *settingsMgr = nullptr,
+                                        ScaleLibrary *scaleLib = nullptr);
   ~TouchpadMixerEditorComponent() override;
 
   void paint(juce::Graphics &) override;
@@ -50,6 +52,7 @@ private:
 
   TouchpadMixerManager *manager;
   SettingsManager *settingsManager;
+  ScaleLibrary *scaleLibrary = nullptr;
   enum class SelectionKind { None, Layout, Mapping };
   SelectionKind selectionKind = SelectionKind::None;
   int selectedLayoutIndex = -1;

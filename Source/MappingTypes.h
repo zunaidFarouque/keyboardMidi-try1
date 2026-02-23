@@ -392,6 +392,9 @@ struct TouchpadMappingEntry {
   TouchpadConversionParams conversionParams;
   // Touch glide: 0 = off; >0 = smooth transition on touch/release (ms)
   int touchGlideMs = 0;
+  // SmartScaleBend: when false use smartScaleName for scale intervals
+  bool smartScaleFollowGlobal = true;
+  juce::String smartScaleName = "Major";
   // Active region on touchpad (0-1 normalized). Full pad when not set.
   float regionLeft = 0.0f, regionTop = 0.0f, regionRight = 1.0f, regionBottom = 1.0f;
   float invRegionWidth = 1.0f, invRegionHeight = 1.0f;

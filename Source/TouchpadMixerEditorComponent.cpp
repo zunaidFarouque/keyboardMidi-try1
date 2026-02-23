@@ -3,6 +3,8 @@
 #include "MappingTypes.h"
 #include "TouchpadMixerDefinition.h"
 #include "SettingsManager.h"
+#include "ScaleEditorComponent.h"
+#include "ScaleLibrary.h"
 #include <functional>
 
 namespace {
@@ -94,8 +96,9 @@ void TouchpadMixerEditorComponent::SeparatorComponent::paint(
 }
 
 TouchpadMixerEditorComponent::TouchpadMixerEditorComponent(
-    TouchpadMixerManager *mgr, SettingsManager *settingsMgr)
-    : manager(mgr), settingsManager(settingsMgr) {
+    TouchpadMixerManager *mgr, SettingsManager *settingsMgr,
+    ScaleLibrary *scaleLib)
+    : manager(mgr), settingsManager(settingsMgr), scaleLibrary(scaleLib) {
   setLookAndFeel(&comboPopupLAF);
 }
 
@@ -272,6 +275,10 @@ juce::var TouchpadMixerEditorComponent::getConfigValue(
         if (str.equalsIgnoreCase("Right")) return juce::var(3);
         if (str.equalsIgnoreCase("Custom")) return juce::var(4);
         return juce::var(2); // Center default
+      } else if (propertyId == "smartScaleFollowGlobal") {
+        return juce::var(static_cast<bool>(propVal));
+      } else if (propertyId == "smartScaleName") {
+        return propVal;
       } else if (propertyId == "slideQuickPrecision" || propertyId == "slideAbsRel" || propertyId == "slideLockFree" || propertyId == "slideAxis") {
         // Convert 0/1 to 1/2 for ComboBox (JUCE uses 1-based IDs)
         int val = static_cast<int>(propVal);
@@ -358,6 +365,10 @@ juce::var TouchpadMixerEditorComponent::getConfigValue(
         int val = static_cast<int>(defVal);
         return juce::var(val == 0 ? 1 : 2);
       }
+      if (propertyId == "smartScaleFollowGlobal")
+        return juce::var(static_cast<bool>(defVal));
+      if (propertyId == "smartScaleName")
+        return defVal;
       return defVal;
     }
     return juce::var();
@@ -679,6 +690,10 @@ void TouchpadMixerEditorComponent::applyConfigValue(
       } else if (propertyId == "pitchPadMode") {
         int id = juce::jlimit(1, 2, static_cast<int>(value));
         valueToSet = juce::var(id == 1 ? "Absolute" : "Relative");
+      } else if (propertyId == "smartScaleFollowGlobal") {
+        valueToSet = juce::var(static_cast<bool>(value));
+      } else if (propertyId == "smartScaleName") {
+        valueToSet = value;
       } else if (propertyId == "pitchPadStart") {
         int id = juce::jlimit(1, 4, static_cast<int>(value));
         if (id == 1) valueToSet = juce::var("Left");
@@ -700,7 +715,8 @@ void TouchpadMixerEditorComponent::applyConfigValue(
           propertyId == "encoderAxis" || propertyId == "encoderOutputMode" ||
           propertyId == "encoderPushMode" || propertyId == "encoderPushOutputType" ||
           propertyId == "pitchPadStart" || propertyId == "pitchPadMode" ||
-          propertyId == "pitchPadUseCustomRange")
+          propertyId == "pitchPadUseCustomRange" ||
+          propertyId == "smartScaleFollowGlobal")
         rebuildUI();
       return;
     }
@@ -825,15 +841,32 @@ void TouchpadMixerEditorComponent::createControl(
                                      : juce::String(g.name),
                       g.id + 1);
       }
+    } else if (propId == "smartScaleName" && scaleLibrary) {
+      juce::StringArray names = scaleLibrary->getScaleNames();
+      for (int i = 0; i < names.size(); ++i)
+        cb->addItem(names[i], i + 1);
+      juce::String currentName = currentVal.toString().trim();
+      for (int i = 0; i < names.size(); ++i) {
+        if (names[i] == currentName) {
+          cb->setSelectedId(i + 1, juce::dontSendNotification);
+          break;
+        }
+      }
+      if (cb->getSelectedId() == 0 && names.size() > 0)
+        cb->setSelectedId(1, juce::dontSendNotification);
     } else {
       for (const auto &p : def.options)
         cb->addItem(p.second, p.first);
     }
-    if (propId == "type")
+    if (propId == "smartScaleName")
+      cb->setEnabled(def.isEnabled);
+    else if (propId != "type")
       ; // Both Mixer and Drum Pad are enabled
     int id = static_cast<int>(currentVal);
     if (propId == "layoutGroupId") {
       cb->setSelectedId(id + 1, juce::dontSendNotification);
+    } else if (propId == "smartScaleName") {
+      // Selection already set above
     } else if (id > 0) {
       cb->setSelectedId(id, juce::dontSendNotification);
     } else if (!def.options.empty()) {
@@ -859,6 +892,10 @@ void TouchpadMixerEditorComponent::createControl(
                      "is selected.");
     juce::ComboBox *cbPtr = cb.get();
     cb->onChange = [this, propId, cbPtr]() {
+      if (propId == "smartScaleName") {
+        applyConfigValue(propId, juce::var(cbPtr->getText()));
+        return;
+      }
       int sel = cbPtr->getSelectedId();
       if (propId == "layoutGroupId")
         applyConfigValue(propId, juce::var(sel - 1)); // map back to groupId
@@ -891,12 +928,27 @@ void TouchpadMixerEditorComponent::createControl(
   }
   case InspectorControl::Type::Button: {
     auto btn = std::make_unique<juce::TextButton>(def.label);
+    btn->setEnabled(def.isEnabled);
     juce::TextButton *btnPtr = btn.get();
     btnPtr->onClick = [this, propId]() {
       if (propId == "relayoutRegion" && manager &&
           ((selectionKind == SelectionKind::Layout && selectedLayoutIndex >= 0) ||
            (selectionKind == SelectionKind::Mapping && selectedMappingIndex >= 0)))
         launchRelayoutDialog();
+      else if (propId == "smartScaleEdit" && scaleLibrary) {
+        auto *editor = new ScaleEditorComponent(scaleLibrary);
+        editor->setSize(600, 400);
+        juce::DialogWindow::LaunchOptions opts;
+        opts.content.setOwned(editor);
+        opts.dialogTitle = "Scale Editor";
+        opts.dialogBackgroundColour = juce::Colour(0xff222222);
+        opts.escapeKeyTriggersCloseButton = true;
+        opts.useNativeTitleBar = false;
+        opts.resizable = true;
+        opts.useBottomRightCornerResizer = true;
+        opts.componentToCentreAround = this;
+        opts.launchAsync();
+      }
     };
 
     auto rowComp = std::make_unique<LabelEditorRow>();

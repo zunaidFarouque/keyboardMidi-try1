@@ -96,6 +96,8 @@ constexpr int RootNote = 60;
 constexpr int ScaleModify = 0;
 constexpr int ScaleIndex = 0;
 constexpr int SmartStepShift = 1;
+constexpr bool SmartScaleFollowGlobal = true;
+inline const juce::String SmartScaleName{ "Major" };
 
 // Expression CC controller number (data1 when target is CC)
 constexpr int ExpressionData1 = 1;

@@ -2,9 +2,10 @@
 #include "SettingsManager.h"
 
 TouchpadTabComponent::TouchpadTabComponent(TouchpadMixerManager *mgr,
-                                           SettingsManager *settingsMgr)
+                                           SettingsManager *settingsMgr,
+                                           ScaleLibrary *scaleLib)
     : manager(mgr), settingsManager(settingsMgr), listPanel(mgr),
-      editorPanel(mgr, settingsMgr), resizerBar(&layout, 1, true) {
+      editorPanel(mgr, settingsMgr, scaleLib), resizerBar(&layout, 1, true) {
   addAndMakeVisible(listPanel);
   addAndMakeVisible(editorViewport);
   editorViewport.setViewedComponent(&editorPanel, false);

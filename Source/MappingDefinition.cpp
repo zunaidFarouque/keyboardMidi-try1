@@ -47,6 +47,8 @@ const std::unordered_map<juce::String, juce::var> &getDefaultsMap() {
     map["scaleModify"] = juce::var(ScaleModify);
     map["scaleIndex"] = juce::var(ScaleIndex);
     map["smartStepShift"] = juce::var(SmartStepShift);
+    map["smartScaleFollowGlobal"] = juce::var(SmartScaleFollowGlobal);
+    map["smartScaleName"] = juce::var(SmartScaleName);
     map["inputKey"] = juce::var(InputKey);
     map["expressionCCMode"] = juce::var(ExpressionCCModePosition);
     map["slideQuickPrecision"] = juce::var(SlideQuickPrecision);
@@ -352,12 +354,12 @@ InspectorSchema MappingDefinition::getSchema(const juce::ValueTree &mapping,
       setControlDefaultFromMap(bend);
       schema.push_back(bend);
     }
-    if (adsrTargetStr.equalsIgnoreCase("SmartScaleBend")) {
+    if (adsrTargetStr.equalsIgnoreCase("SmartScaleBend") && !pitchPadUseCustomRange) {
       InspectorControl steps;
       steps.propertyId = "smartStepShift";
       steps.label = "Scale Steps";
       steps.controlType = InspectorControl::Type::Slider;
-      steps.min = -12.0;
+      steps.min = 0.0;
       steps.max = 12.0;
       steps.step = 1.0;
       setControlDefaultFromMap(steps);
@@ -399,7 +401,7 @@ InspectorSchema MappingDefinition::getSchema(const juce::ValueTree &mapping,
           schema.push_back(customStart);
         }
       }
-      if (adsrTargetStr.equalsIgnoreCase("PitchBend")) {
+      if (isPitchOrSmart) {
         InspectorControl customRangeToggle;
         customRangeToggle.propertyId = "pitchPadUseCustomRange";
         customRangeToggle.label = "Custom min/max";
@@ -408,8 +410,7 @@ InspectorSchema MappingDefinition::getSchema(const juce::ValueTree &mapping,
         setControlDefaultFromMap(customRangeToggle);
         schema.push_back(customRangeToggle);
       }
-      const bool showPitchRangeSliders =
-          adsrTargetStr.equalsIgnoreCase("SmartScaleBend") || pitchPadUseCustomRange;
+      const bool showPitchRangeSliders = pitchPadUseCustomRange;
       if (showPitchRangeSliders) {
         InspectorControl stepMin;
         stepMin.propertyId = "touchpadOutputMin";
@@ -470,6 +471,33 @@ InspectorSchema MappingDefinition::getSchema(const juce::ValueTree &mapping,
       touchGlide.suffix = " ms";
       setControlDefaultFromMap(touchGlide);
       schema.push_back(touchGlide);
+
+      // SmartScaleBend only: Follow global scale, scale selection, Edit button
+      if (adsrTargetStr.equalsIgnoreCase("SmartScaleBend")) {
+        const bool followGlobal =
+            (bool)mapping.getProperty("smartScaleFollowGlobal", MappingDefaults::SmartScaleFollowGlobal);
+        InspectorControl followGlobalCtrl;
+        followGlobalCtrl.propertyId = "smartScaleFollowGlobal";
+        followGlobalCtrl.label = "Follow global scale";
+        followGlobalCtrl.controlType = InspectorControl::Type::Toggle;
+        setControlDefaultFromMap(followGlobalCtrl);
+        schema.push_back(followGlobalCtrl);
+
+        InspectorControl scaleNameCtrl;
+        scaleNameCtrl.propertyId = "smartScaleName";
+        scaleNameCtrl.label = "Scale";
+        scaleNameCtrl.controlType = InspectorControl::Type::ComboBox;
+        scaleNameCtrl.isEnabled = !followGlobal;
+        setControlDefaultFromMap(scaleNameCtrl);
+        schema.push_back(scaleNameCtrl);
+
+        InspectorControl editBtn;
+        editBtn.propertyId = "smartScaleEdit";
+        editBtn.label = "Edit...";
+        editBtn.controlType = InspectorControl::Type::Button;
+        editBtn.isEnabled = !followGlobal;
+        schema.push_back(editBtn);
+      }
     }
 
     if (adsrTargetStr.equalsIgnoreCase("CC") &&

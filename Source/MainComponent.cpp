@@ -85,7 +85,8 @@ MainComponent::MainComponent()
       &inputProcessor.getZoneManager(), &deviceManager, rawInputManager.get(),
       &scaleLibrary, &settingsManager);
   touchpadTab = std::make_unique<TouchpadTabComponent>(&touchpadMixerManager,
-                                                        &settingsManager);
+                                                        &settingsManager,
+                                                        &scaleLibrary);
   touchpadTab->onSelectionChangedForVisualizer = [this](int layoutIndex,
                                                         int layerId) {
     if (visualizer) {

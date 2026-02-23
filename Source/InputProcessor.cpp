@@ -395,6 +395,8 @@ void InputProcessor::valueTreePropertyChanged(
       property == juce::Identifier("pitchPadCustomStart") ||
       property == juce::Identifier("adsrTarget") ||
       property == juce::Identifier("smartStepShift") ||
+      property == juce::Identifier("smartScaleFollowGlobal") ||
+      property == juce::Identifier("smartScaleName") ||
       property == juce::Identifier("pbRange") ||
       property == juce::Identifier("pbShift") ||
       property == juce::Identifier("adsrAttack") ||
@@ -2245,13 +2247,16 @@ void InputProcessor::processTouchpadContacts(
               // D, bend up 2 = E. Do not clamp stepOffset by semitone range;
               // pass scale steps through. smartStepOffsetToPitchBend clips the
               // final PB to [0,16383] and respects global PB range.
+              // Use global scale or per-mapping scale depending on entry.smartScaleFollowGlobal.
               int currentNote = voiceManager.getCurrentPlayingNote(act.channel);
               if (currentNote < 0) {
                 currentNote = lastTriggeredNote;
               }
               if (currentNote >= 0 && currentNote < 128) {
                 std::vector<int> intervals =
-                    zoneManager.getGlobalScaleIntervals();
+                    entry.smartScaleFollowGlobal
+                        ? zoneManager.getGlobalScaleIntervals()
+                        : scaleLibrary.getIntervals(entry.smartScaleName);
                 if (intervals.empty())
                   intervals = {0, 2, 4, 5, 7, 9, 11}; // Major fallback
                 int root = zoneManager.getGlobalRootNote();

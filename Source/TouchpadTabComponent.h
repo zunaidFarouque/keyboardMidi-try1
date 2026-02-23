@@ -5,11 +5,13 @@
 #include <functional>
 
 class SettingsManager;
+class ScaleLibrary;
 
 class TouchpadTabComponent : public juce::Component, public juce::ChangeListener, public juce::Timer {
 public:
   explicit TouchpadTabComponent(TouchpadMixerManager *mgr,
-                                SettingsManager *settingsMgr = nullptr);
+                                SettingsManager *settingsMgr = nullptr,
+                                ScaleLibrary *scaleLib = nullptr);
   ~TouchpadTabComponent() override;
 
   /// Notified when layout selection changes: (layoutIndex, layerId). (-1, 0)
