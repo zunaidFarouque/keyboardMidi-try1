@@ -3089,6 +3089,226 @@ TEST_F(InputProcessorTest, TouchpadSlideToCC_AbsoluteSendsCC) {
   EXPECT_GE(mockEng.ccEvents[0].value, 117) << "Top (Y=0) should send high CC";
 }
 
+// CC Position (Expression CC mode Position): instant release sends ValueOff on finger up.
+TEST_F(InputProcessorTest,
+       TouchpadCCPosition_Instant_SendsReleaseOnFingerUp) {
+  MockMidiEngine mockEng;
+  TouchpadMixerManager touchpadMixerMgr;
+  VoiceManager voiceMgr(mockEng, settingsMgr);
+  InputProcessor proc(voiceMgr, presetMgr, deviceMgr, scaleLib, mockEng,
+                      settingsMgr, touchpadMixerMgr);
+
+  presetMgr.getLayersList().removeAllChildren(nullptr);
+  presetMgr.ensureStaticLayers();
+  settingsMgr.setMidiModeActive(true);
+
+  TouchpadMappingConfig cfg;
+  cfg.name = "CC Position Instant";
+  cfg.layerId = 0;
+  cfg.midiChannel = 1;
+  juce::ValueTree m("Mapping");
+  m.setProperty("inputAlias", "Touchpad", nullptr);
+  m.setProperty("inputTouchpadEvent", TouchpadEvent::Finger1Down, nullptr);
+  m.setProperty("type", "Expression", nullptr);
+  m.setProperty("adsrTarget", "CC", nullptr);
+  m.setProperty("expressionCCMode", "Position", nullptr);
+  m.setProperty("channel", 1, nullptr);
+  m.setProperty("data1", 10, nullptr);
+  m.setProperty("touchpadValueWhenOn", 100, nullptr);
+  m.setProperty("touchpadValueWhenOff", 0, nullptr);
+  m.setProperty("ccReleaseBehavior", "Send release (instant)", nullptr);
+  cfg.mapping = m;
+  touchpadMixerMgr.addTouchpadMapping(cfg);
+
+  proc.initialize();
+  proc.forceRebuildMappings();
+  mockEng.clear();
+
+  uintptr_t deviceHandle = 0x1234;
+  // Finger down then up inside region.
+  proc.processTouchpadContacts(deviceHandle,
+                               {{0, 100, 100, 0.5f, 0.5f, true}});
+  proc.processTouchpadContacts(deviceHandle,
+                               {{0, 100, 100, 0.5f, 0.5f, false}});
+
+  ASSERT_GE(mockEng.ccEvents.size(), 2u)
+      << "Expected at least one CC for press and one for release";
+  EXPECT_EQ(mockEng.ccEvents.front().controller, 10);
+  EXPECT_EQ(mockEng.ccEvents.front().value, 100);
+  EXPECT_EQ(mockEng.ccEvents.back().controller, 10);
+  EXPECT_EQ(mockEng.ccEvents.back().value, 0);
+}
+
+// CC Position latch: first press sends ValueOn, second press sends ValueOff,
+// releases do nothing.
+TEST_F(InputProcessorTest, TouchpadCCPosition_Latch_TogglesOnPresses) {
+  MockMidiEngine mockEng;
+  TouchpadMixerManager touchpadMixerMgr;
+  VoiceManager voiceMgr(mockEng, settingsMgr);
+  InputProcessor proc(voiceMgr, presetMgr, deviceMgr, scaleLib, mockEng,
+                      settingsMgr, touchpadMixerMgr);
+
+  presetMgr.getLayersList().removeAllChildren(nullptr);
+  presetMgr.ensureStaticLayers();
+  settingsMgr.setMidiModeActive(true);
+
+  TouchpadMappingConfig cfg;
+  cfg.name = "CC Position Latch";
+  cfg.layerId = 0;
+  cfg.midiChannel = 1;
+  juce::ValueTree m("Mapping");
+  m.setProperty("inputAlias", "Touchpad", nullptr);
+  m.setProperty("inputTouchpadEvent", TouchpadEvent::Finger1Down, nullptr);
+  m.setProperty("type", "Expression", nullptr);
+  m.setProperty("adsrTarget", "CC", nullptr);
+  m.setProperty("expressionCCMode", "Position", nullptr);
+  m.setProperty("channel", 1, nullptr);
+  m.setProperty("data1", 11, nullptr);
+  m.setProperty("touchpadValueWhenOn", 100, nullptr);
+  m.setProperty("touchpadValueWhenOff", 0, nullptr);
+  m.setProperty("ccReleaseBehavior", "Always Latch", nullptr);
+  cfg.mapping = m;
+  touchpadMixerMgr.addTouchpadMapping(cfg);
+
+  proc.initialize();
+  proc.forceRebuildMappings();
+  mockEng.clear();
+  uintptr_t deviceHandle = 0x1234;
+
+  // First press / release.
+  proc.processTouchpadContacts(deviceHandle,
+                               {{0, 100, 100, 0.5f, 0.5f, true}});
+  proc.processTouchpadContacts(deviceHandle,
+                               {{0, 100, 100, 0.5f, 0.5f, false}});
+  // Second press / release.
+  proc.processTouchpadContacts(deviceHandle,
+                               {{0, 100, 100, 0.5f, 0.5f, true}});
+  proc.processTouchpadContacts(deviceHandle,
+                               {{0, 100, 100, 0.5f, 0.5f, false}});
+
+  ASSERT_EQ(mockEng.ccEvents.size(), 2u)
+      << "Latch mode should send exactly two CC messages (on, off)";
+  EXPECT_EQ(mockEng.ccEvents[0].controller, 11);
+  EXPECT_EQ(mockEng.ccEvents[0].value, 100);
+  EXPECT_EQ(mockEng.ccEvents[1].controller, 11);
+  EXPECT_EQ(mockEng.ccEvents[1].value, 0);
+}
+
+// SlideToCC rest-on-release: when enabled with zero glide, finger up sends
+// rest value immediately.
+TEST_F(InputProcessorTest, TouchpadSlideToCC_RestImmediateOnRelease) {
+  MockMidiEngine mockEng;
+  TouchpadMixerManager touchpadMixerMgr;
+  VoiceManager voiceMgr(mockEng, settingsMgr);
+  InputProcessor proc(voiceMgr, presetMgr, deviceMgr, scaleLib, mockEng,
+                      settingsMgr, touchpadMixerMgr);
+
+  presetMgr.getLayersList().removeAllChildren(nullptr);
+  presetMgr.ensureStaticLayers();
+  settingsMgr.setMidiModeActive(true);
+
+  TouchpadMappingConfig cfg;
+  cfg.name = "Slide CC Rest";
+  cfg.layerId = 0;
+  cfg.midiChannel = 1;
+  juce::ValueTree m("Mapping");
+  m.setProperty("inputAlias", "Touchpad", nullptr);
+  m.setProperty("inputTouchpadEvent", TouchpadEvent::Finger1Y, nullptr);
+  m.setProperty("type", "Expression", nullptr);
+  m.setProperty("adsrTarget", "CC", nullptr);
+  m.setProperty("expressionCCMode", "Slide", nullptr);
+  m.setProperty("channel", 1, nullptr);
+  m.setProperty("data1", 21, nullptr);
+  m.setProperty("touchpadInputMin", 0.0, nullptr);
+  m.setProperty("touchpadInputMax", 1.0, nullptr);
+  m.setProperty("touchpadOutputMin", 0, nullptr);
+  m.setProperty("touchpadOutputMax", 127, nullptr);
+  m.setProperty("slideQuickPrecision", 0, nullptr);
+  m.setProperty("slideAbsRel", 0, nullptr);
+  m.setProperty("slideLockFree", 1, nullptr);
+  m.setProperty("slideReturnOnRelease", true, nullptr);
+  m.setProperty("slideRestValue", 64, nullptr);
+  m.setProperty("slideReturnGlideMs", 0, nullptr);
+  cfg.mapping = m;
+  touchpadMixerMgr.addTouchpadMapping(cfg);
+
+  proc.initialize();
+  proc.forceRebuildMappings();
+  mockEng.clear();
+
+  uintptr_t deviceHandle = 0x1234;
+  // Finger down inside region to send a non-rest CC value.
+  proc.processTouchpadContacts(deviceHandle,
+                               {{0, 0, 0, 0.5f, 0.0f, true}});
+  // Finger up: should send rest value immediately.
+  proc.processTouchpadContacts(deviceHandle,
+                               {{0, 0, 0, 0.5f, 0.0f, false}});
+
+  ASSERT_GE(mockEng.ccEvents.size(), 2u)
+      << "Expected CC on touch and CC on rest";
+  EXPECT_EQ(mockEng.ccEvents.back().controller, 21);
+  EXPECT_EQ(mockEng.ccEvents.back().value, 64);
+}
+
+// SlideToCC XY pad: Both axis mode sends CC for X and Y using shared ranges.
+TEST_F(InputProcessorTest, TouchpadSlideToCC_XYPad_SharedRanges_SendsTwoCC) {
+  MockMidiEngine mockEng;
+  TouchpadMixerManager touchpadMixerMgr;
+  VoiceManager voiceMgr(mockEng, settingsMgr);
+  InputProcessor proc(voiceMgr, presetMgr, deviceMgr, scaleLib, mockEng,
+                      settingsMgr, touchpadMixerMgr);
+
+  presetMgr.getLayersList().removeAllChildren(nullptr);
+  presetMgr.ensureStaticLayers();
+  settingsMgr.setMidiModeActive(true);
+
+  TouchpadMappingConfig cfg;
+  cfg.name = "Slide CC XY";
+  cfg.layerId = 0;
+  cfg.midiChannel = 1;
+  juce::ValueTree m("Mapping");
+  m.setProperty("inputAlias", "Touchpad", nullptr);
+  m.setProperty("inputTouchpadEvent", TouchpadEvent::Finger1Y, nullptr);
+  m.setProperty("type", "Expression", nullptr);
+  m.setProperty("adsrTarget", "CC", nullptr);
+  m.setProperty("expressionCCMode", "Slide", nullptr);
+  m.setProperty("channel", 1, nullptr);
+  m.setProperty("data1", 30, nullptr); // default CC when XY not set
+  m.setProperty("touchpadInputMin", 0.0, nullptr);
+  m.setProperty("touchpadInputMax", 1.0, nullptr);
+  m.setProperty("touchpadOutputMin", 0, nullptr);
+  m.setProperty("touchpadOutputMax", 127, nullptr);
+  m.setProperty("slideQuickPrecision", 0, nullptr);
+  m.setProperty("slideAbsRel", 0, nullptr);
+  m.setProperty("slideLockFree", 1, nullptr);
+  m.setProperty("slideAxis", 2, nullptr); // Both (XY pad)
+  m.setProperty("slideCcNumberX", 30, nullptr);
+  m.setProperty("slideCcNumberY", 31, nullptr);
+  cfg.mapping = m;
+  touchpadMixerMgr.addTouchpadMapping(cfg);
+
+  proc.initialize();
+  proc.forceRebuildMappings();
+  mockEng.clear();
+  uintptr_t deviceHandle = 0x1234;
+
+  // Finger inside region; one or more frames should produce CC for both axes.
+  proc.processTouchpadContacts(deviceHandle,
+                               {{0, 0, 0, 0.25f, 0.25f, true}});
+  proc.processTouchpadContacts(deviceHandle,
+                               {{0, 0, 0, 0.75f, 0.75f, true}});
+
+  bool sawX = false, sawY = false;
+  for (const auto &cc : mockEng.ccEvents) {
+    if (cc.controller == 30)
+      sawX = true;
+    if (cc.controller == 31)
+      sawY = true;
+  }
+  EXPECT_TRUE(sawX) << "XY pad should send CC for X axis";
+  EXPECT_TRUE(sawY) << "XY pad should send CC for Y axis";
+}
+
 // EncoderCC Absolute: swipe up (Y decreases) increases CC value.
 TEST_F(InputProcessorTest, TouchpadEncoderCC_AbsoluteMode_SendsCC) {
   MockMidiEngine mockEng;

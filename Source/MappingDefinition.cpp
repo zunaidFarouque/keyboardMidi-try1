@@ -13,6 +13,7 @@ const std::unordered_map<juce::String, juce::var> &getDefaultsMap() {
     map["data2"] = juce::var(Data2);
     map["velRandom"] = juce::var(VelRandom);
     map["releaseBehavior"] = juce::var(ReleaseBehaviorSendNoteOff);
+    map["ccReleaseBehavior"] = juce::var(CcReleaseBehaviorInstant);
     map["touchpadHoldBehavior"] = juce::var(TouchpadHoldBehaviorHold);
     map["adsrTarget"] = juce::var(AdsrTargetCC);
     map["adsrAttack"] = juce::var(ADSRAttackMs);
@@ -55,6 +56,9 @@ const std::unordered_map<juce::String, juce::var> &getDefaultsMap() {
     map["slideAbsRel"] = juce::var(SlideAbsRel);
     map["slideLockFree"] = juce::var(SlideLockFree);
     map["slideAxis"] = juce::var(SlideAxis);
+    map["slideReturnOnRelease"] = juce::var(SlideReturnOnRelease);
+    map["slideRestValue"] = juce::var(SlideRestValue);
+    map["slideReturnGlideMs"] = juce::var(SlideReturnGlideMs);
     map["encoderAxis"] = juce::var(EncoderAxis);
     map["encoderSensitivity"] = juce::var(static_cast<double>(EncoderSensitivity));
     map["encoderStepSize"] = juce::var(EncoderStepSize);
@@ -74,6 +78,22 @@ const std::unordered_map<juce::String, juce::var> &getDefaultsMap() {
     map["encoderPushProgram"] = juce::var(EncoderPushProgram);
     map["encoderPushChannel"] = juce::var(EncoderPushChannel);
     map["encoderDeadZone"] = juce::var(static_cast<double>(EncoderDeadZone));
+    // Slide XY pad defaults
+    map["slideCcNumberX"] = juce::var(ExpressionData1);
+    map["slideCcNumberY"] = juce::var(ExpressionData1);
+    map["slideSeparateAxisRanges"] = juce::var(false);
+    map["touchpadInputMinX"] =
+        juce::var(static_cast<double>(TouchpadInputMin));
+    map["touchpadInputMaxX"] =
+        juce::var(static_cast<double>(TouchpadInputMax));
+    map["touchpadOutputMinX"] = juce::var(TouchpadOutputMin);
+    map["touchpadOutputMaxX"] = juce::var(TouchpadOutputMax);
+    map["touchpadInputMinY"] =
+        juce::var(static_cast<double>(TouchpadInputMin));
+    map["touchpadInputMaxY"] =
+        juce::var(static_cast<double>(TouchpadInputMax));
+    map["touchpadOutputMinY"] = juce::var(TouchpadOutputMin);
+    map["touchpadOutputMaxY"] = juce::var(TouchpadOutputMax);
     // Command-type virtual defaults
     map["commandCategory"] = juce::var(100);      // Sustain
     map["globalModeDirection"] = juce::var(1);    // Up
@@ -334,7 +354,21 @@ InspectorSchema MappingDefinition::getSchema(const juce::ValueTree &mapping,
       data1.max = 127.0;
       data1.step = 1.0;
       setControlDefaultFromMap(data1);
-      schema.push_back(data1);
+
+      // When CC input mode is Slide and Axis is Both (XY pad), CC numbers are
+      // managed in the XY pad section instead of the generic Controller
+      // slider. Hide the Controller slider in that specific case.
+      bool hideControllerForXYSlide = false;
+      if (forTouchpadEditor &&
+          expressionCCModeStr.equalsIgnoreCase("Slide")) {
+        int slideAxisVal =
+            (int)mapping.getProperty("slideAxis", MappingDefaults::SlideAxis);
+        if (slideAxisVal == 2)
+          hideControllerForXYSlide = true;
+      }
+      if (!hideControllerForXYSlide)
+        schema.push_back(data1);
+
       InspectorControl ccMode;
       ccMode.propertyId = "expressionCCMode";
       ccMode.label = "CC input mode";
@@ -527,47 +561,69 @@ InspectorSchema MappingDefinition::getSchema(const juce::ValueTree &mapping,
       valOff.step = 1.0;
       setControlDefaultFromMap(valOff);
       schema.push_back(valOff);
+
+      // Touchpad-only: CC release behaviour (instant vs latch) for Position mode.
+      if (forTouchpadEditor) {
+        InspectorControl ccRelease;
+        ccRelease.propertyId = "ccReleaseBehavior";
+        ccRelease.label = "Release behaviour";
+        ccRelease.controlType = InspectorControl::Type::ComboBox;
+        ccRelease.options[1] = "Send release (instant)";
+        ccRelease.options[2] = "Always Latch";
+        setControlDefaultFromMap(ccRelease);
+        schema.push_back(ccRelease);
+      }
     }
 
     if (adsrTargetStr.equalsIgnoreCase("CC") &&
         expressionCCModeStr.equalsIgnoreCase("Slide")) {
       schema.push_back(createSeparator("Slide", juce::Justification::centredLeft));
-      InspectorControl inputMin;
-      inputMin.propertyId = "touchpadInputMin";
-      inputMin.label = "Input min";
-      inputMin.controlType = InspectorControl::Type::Slider;
-      inputMin.min = 0.0;
-      inputMin.max = 1.0;
-      inputMin.step = 0.01;
-      setControlDefaultFromMap(inputMin);
-      schema.push_back(inputMin);
-      InspectorControl inputMax;
-      inputMax.propertyId = "touchpadInputMax";
-      inputMax.label = "Input max";
-      inputMax.controlType = InspectorControl::Type::Slider;
-      inputMax.min = 0.0;
-      inputMax.max = 1.0;
-      inputMax.step = 0.01;
-      setControlDefaultFromMap(inputMax);
-      schema.push_back(inputMax);
-      InspectorControl outputMin;
-      outputMin.propertyId = "touchpadOutputMin";
-      outputMin.label = "Output min";
-      outputMin.controlType = InspectorControl::Type::Slider;
-      outputMin.min = 0.0;
-      outputMin.max = 127.0;
-      outputMin.step = 1.0;
-      setControlDefaultFromMap(outputMin);
-      schema.push_back(outputMin);
-      InspectorControl outputMax;
-      outputMax.propertyId = "touchpadOutputMax";
-      outputMax.label = "Output max";
-      outputMax.controlType = InspectorControl::Type::Slider;
-      outputMax.min = 0.0;
-      outputMax.max = 127.0;
-      outputMax.step = 1.0;
-      setControlDefaultFromMap(outputMax);
-      schema.push_back(outputMax);
+
+      const int slideAxisVal =
+          (int)mapping.getProperty("slideAxis", MappingDefaults::SlideAxis);
+      const bool isXYPad = (slideAxisVal == 2);
+      const bool separateRanges =
+          (bool)mapping.getProperty("slideSeparateAxisRanges", false);
+      const bool showSharedRanges = !(isXYPad && separateRanges);
+
+      if (showSharedRanges) {
+        InspectorControl inputMin;
+        inputMin.propertyId = "touchpadInputMin";
+        inputMin.label = "Input min";
+        inputMin.controlType = InspectorControl::Type::Slider;
+        inputMin.min = 0.0;
+        inputMin.max = 1.0;
+        inputMin.step = 0.01;
+        setControlDefaultFromMap(inputMin);
+        schema.push_back(inputMin);
+        InspectorControl inputMax;
+        inputMax.propertyId = "touchpadInputMax";
+        inputMax.label = "Input max";
+        inputMax.controlType = InspectorControl::Type::Slider;
+        inputMax.min = 0.0;
+        inputMax.max = 1.0;
+        inputMax.step = 0.01;
+        setControlDefaultFromMap(inputMax);
+        schema.push_back(inputMax);
+        InspectorControl outputMin;
+        outputMin.propertyId = "touchpadOutputMin";
+        outputMin.label = "Output min";
+        outputMin.controlType = InspectorControl::Type::Slider;
+        outputMin.min = 0.0;
+        outputMin.max = 127.0;
+        outputMin.step = 1.0;
+        setControlDefaultFromMap(outputMin);
+        schema.push_back(outputMin);
+        InspectorControl outputMax;
+        outputMax.propertyId = "touchpadOutputMax";
+        outputMax.label = "Output max";
+        outputMax.controlType = InspectorControl::Type::Slider;
+        outputMax.min = 0.0;
+        outputMax.max = 127.0;
+        outputMax.step = 1.0;
+        setControlDefaultFromMap(outputMax);
+        schema.push_back(outputMax);
+      }
       InspectorControl quickPrecision;
       quickPrecision.propertyId = "slideQuickPrecision";
       quickPrecision.label = "Quick / Precision";
@@ -598,8 +654,151 @@ InspectorSchema MappingDefinition::getSchema(const juce::ValueTree &mapping,
       slideAxis.controlType = InspectorControl::Type::ComboBox;
       slideAxis.options[1] = "Vertical";
       slideAxis.options[2] = "Horizontal";
+      slideAxis.options[3] = "Both (XY pad)";
       setControlDefaultFromMap(slideAxis);
       schema.push_back(slideAxis);
+      InspectorControl returnToggle;
+      returnToggle.propertyId = "slideReturnOnRelease";
+      returnToggle.label = "Return to rest on finger release";
+      returnToggle.controlType = InspectorControl::Type::Toggle;
+      returnToggle.widthWeight = 1.0f;
+      setControlDefaultFromMap(returnToggle);
+      schema.push_back(returnToggle);
+      InspectorControl restVal;
+      restVal.propertyId = "slideRestValue";
+      restVal.label = "Rest value";
+      restVal.controlType = InspectorControl::Type::Slider;
+      restVal.min = 0.0;
+      restVal.max = 127.0;
+      restVal.step = 1.0;
+      setControlDefaultFromMap(restVal);
+      schema.push_back(restVal);
+      InspectorControl glideMs;
+      glideMs.propertyId = "slideReturnGlideMs";
+      glideMs.label = "Rest glide (ms)";
+      glideMs.controlType = InspectorControl::Type::Slider;
+      glideMs.min = 0.0;
+      glideMs.max = 2000.0;
+      glideMs.step = 10.0;
+      glideMs.suffix = " ms";
+      setControlDefaultFromMap(glideMs);
+      schema.push_back(glideMs);
+
+      if (slideAxisVal == 2) {
+        schema.push_back(createSeparator("XY pad",
+                                         juce::Justification::centredLeft));
+        InspectorControl ccX;
+        ccX.propertyId = "slideCcNumberX";
+        ccX.label = "Controller X (horizontal)";
+        ccX.controlType = InspectorControl::Type::Slider;
+        ccX.min = 0.0;
+        ccX.max = 127.0;
+        ccX.step = 1.0;
+        setControlDefaultFromMap(ccX);
+        schema.push_back(ccX);
+
+        InspectorControl ccY;
+        ccY.propertyId = "slideCcNumberY";
+        ccY.label = "Controller Y (vertical)";
+        ccY.controlType = InspectorControl::Type::Slider;
+        ccY.min = 0.0;
+        ccY.max = 127.0;
+        ccY.step = 1.0;
+        setControlDefaultFromMap(ccY);
+        schema.push_back(ccY);
+
+        InspectorControl separateRanges;
+        separateRanges.propertyId = "slideSeparateAxisRanges";
+        separateRanges.label = "Separate axis ranges";
+        separateRanges.controlType = InspectorControl::Type::Toggle;
+        separateRanges.widthWeight = 1.0f;
+        setControlDefaultFromMap(separateRanges);
+        schema.push_back(separateRanges);
+
+        const bool useSeparate =
+            (bool)mapping.getProperty("slideSeparateAxisRanges", false);
+        if (useSeparate) {
+          InspectorControl inMinX;
+          inMinX.propertyId = "touchpadInputMinX";
+          inMinX.label = "Input min (X)";
+          inMinX.controlType = InspectorControl::Type::Slider;
+          inMinX.min = 0.0;
+          inMinX.max = 1.0;
+          inMinX.step = 0.01;
+          setControlDefaultFromMap(inMinX);
+          schema.push_back(inMinX);
+
+          InspectorControl inMaxX;
+          inMaxX.propertyId = "touchpadInputMaxX";
+          inMaxX.label = "Input max (X)";
+          inMaxX.controlType = InspectorControl::Type::Slider;
+          inMaxX.min = 0.0;
+          inMaxX.max = 1.0;
+          inMaxX.step = 0.01;
+          setControlDefaultFromMap(inMaxX);
+          schema.push_back(inMaxX);
+
+          InspectorControl outMinX;
+          outMinX.propertyId = "touchpadOutputMinX";
+          outMinX.label = "Output min (X)";
+          outMinX.controlType = InspectorControl::Type::Slider;
+          outMinX.min = 0.0;
+          outMinX.max = 127.0;
+          outMinX.step = 1.0;
+          setControlDefaultFromMap(outMinX);
+          schema.push_back(outMinX);
+
+          InspectorControl outMaxX;
+          outMaxX.propertyId = "touchpadOutputMaxX";
+          outMaxX.label = "Output max (X)";
+          outMaxX.controlType = InspectorControl::Type::Slider;
+          outMaxX.min = 0.0;
+          outMaxX.max = 127.0;
+          outMaxX.step = 1.0;
+          setControlDefaultFromMap(outMaxX);
+          schema.push_back(outMaxX);
+
+          InspectorControl inMinY;
+          inMinY.propertyId = "touchpadInputMinY";
+          inMinY.label = "Input min (Y)";
+          inMinY.controlType = InspectorControl::Type::Slider;
+          inMinY.min = 0.0;
+          inMinY.max = 1.0;
+          inMinY.step = 0.01;
+          setControlDefaultFromMap(inMinY);
+          schema.push_back(inMinY);
+
+          InspectorControl inMaxY;
+          inMaxY.propertyId = "touchpadInputMaxY";
+          inMaxY.label = "Input max (Y)";
+          inMaxY.controlType = InspectorControl::Type::Slider;
+          inMaxY.min = 0.0;
+          inMaxY.max = 1.0;
+          inMaxY.step = 0.01;
+          setControlDefaultFromMap(inMaxY);
+          schema.push_back(inMaxY);
+
+          InspectorControl outMinY;
+          outMinY.propertyId = "touchpadOutputMinY";
+          outMinY.label = "Output min (Y)";
+          outMinY.controlType = InspectorControl::Type::Slider;
+          outMinY.min = 0.0;
+          outMinY.max = 127.0;
+          outMinY.step = 1.0;
+          setControlDefaultFromMap(outMinY);
+          schema.push_back(outMinY);
+
+          InspectorControl outMaxY;
+          outMaxY.propertyId = "touchpadOutputMaxY";
+          outMaxY.label = "Output max (Y)";
+          outMaxY.controlType = InspectorControl::Type::Slider;
+          outMaxY.min = 0.0;
+          outMaxY.max = 127.0;
+          outMaxY.step = 1.0;
+          setControlDefaultFromMap(outMaxY);
+          schema.push_back(outMaxY);
+        }
+      }
     }
 
     if (adsrTargetStr.equalsIgnoreCase("CC") &&

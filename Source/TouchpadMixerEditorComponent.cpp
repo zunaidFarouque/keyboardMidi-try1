@@ -289,6 +289,13 @@ juce::var TouchpadMixerEditorComponent::getConfigValue(
         else if (str.equalsIgnoreCase("Always Latch"))
           return juce::var(3);
         return juce::var(1); // default
+      } else if (propertyId == "ccReleaseBehavior") {
+        juce::String str = propVal.toString().trim();
+        if (str.equalsIgnoreCase("Send release (instant)"))
+          return juce::var(1);
+        else if (str.equalsIgnoreCase("Always Latch"))
+          return juce::var(2);
+        return juce::var(1);
       } else if (propertyId == "touchpadHoldBehavior") {
         juce::String str = propVal.toString().trim();
         if (str.equalsIgnoreCase("Hold to not send note off immediately"))
@@ -359,8 +366,13 @@ juce::var TouchpadMixerEditorComponent::getConfigValue(
         int modify = static_cast<int>(propVal);
         return juce::var((modify >= 0 && modify <= 4) ? (modify + 1) : 1);
       } else if (propertyId == "slideQuickPrecision" || propertyId == "slideAbsRel" || propertyId == "slideLockFree" || propertyId == "slideAxis") {
-        // Convert 0/1 to 1/2 for ComboBox (JUCE uses 1-based IDs)
+        // Convert stored ints to ComboBox IDs (JUCE uses 1-based IDs)
         int val = static_cast<int>(propVal);
+        if (propertyId == "slideAxis") {
+          // 0=Vertical,1=Horizontal,2=Both -> 1/2/3
+          return juce::var(juce::jlimit(0, 2, val) + 1);
+        }
+        // Quick/Precision, Abs/Rel, Lock/Free: 0/1 -> 1/2
         return juce::var(val == 0 ? 1 : 2);
       }
       return propVal;
@@ -374,6 +386,12 @@ juce::var TouchpadMixerEditorComponent::getConfigValue(
         if (str.equalsIgnoreCase("Send Note Off")) return juce::var(1);
         if (str.equalsIgnoreCase("Sustain until retrigger")) return juce::var(2);
         if (str.equalsIgnoreCase("Always Latch")) return juce::var(3);
+        return juce::var(1);
+      }
+      if (propertyId == "ccReleaseBehavior") {
+        juce::String str = defVal.toString().trim();
+        if (str.equalsIgnoreCase("Send release (instant)")) return juce::var(1);
+        if (str.equalsIgnoreCase("Always Latch")) return juce::var(2);
         return juce::var(1);
       }
       if (propertyId == "touchpadHoldBehavior") {
@@ -440,8 +458,13 @@ juce::var TouchpadMixerEditorComponent::getConfigValue(
         return juce::var(2); // Center default
       }
       if (propertyId == "slideQuickPrecision" || propertyId == "slideAbsRel" || propertyId == "slideLockFree" || propertyId == "slideAxis") {
-        // Convert 0/1 default to 1/2 for ComboBox
+        // Convert stored ints to ComboBox IDs
         int val = static_cast<int>(defVal);
+        if (propertyId == "slideAxis") {
+          // 0=Vertical,1=Horizontal,2=Both -> 1/2/3
+          return juce::var(juce::jlimit(0, 2, val) + 1);
+        }
+        // Quick/Precision, Abs/Rel, Lock/Free: 0/1 -> 1/2
         return juce::var(val == 0 ? 1 : 2);
       }
       if (propertyId == "smartScaleFollowGlobal")
@@ -730,6 +753,12 @@ void TouchpadMixerEditorComponent::applyConfigValue(
           valueToSet = juce::var("Sustain until retrigger");
         else if (id == 3)
           valueToSet = juce::var("Always Latch");
+      } else if (propertyId == "ccReleaseBehavior") {
+        int id = static_cast<int>(value);
+        if (id == 1)
+          valueToSet = juce::var("Send release (instant)");
+        else if (id == 2)
+          valueToSet = juce::var("Always Latch");
       } else if (propertyId == "touchpadHoldBehavior") {
         int id = static_cast<int>(value);
         if (id == 1)
@@ -788,9 +817,15 @@ void TouchpadMixerEditorComponent::applyConfigValue(
         else if (id == 3) valueToSet = juce::var("Right");
         else valueToSet = juce::var("Custom");
       } else if (propertyId == "slideQuickPrecision" || propertyId == "slideAbsRel" || propertyId == "slideLockFree" || propertyId == "slideAxis") {
-        // Convert ComboBox ID (1/2) back to stored value (0/1)
+        // Convert ComboBox IDs back to stored ints
         int id = static_cast<int>(value);
-        valueToSet = juce::var(id == 1 ? 0 : 1);
+        if (propertyId == "slideAxis") {
+          // 1/2/3 -> 0/1/2
+          valueToSet = juce::var(juce::jlimit(1, 3, id) - 1);
+        } else {
+          // Quick/Precision, Abs/Rel, Lock/Free: 1/2 -> 0/1
+          valueToSet = juce::var(id == 1 ? 0 : 1);
+        }
       }
       currentMapping.mapping.setProperty(propertyId, valueToSet, nullptr);
       manager->updateTouchpadMapping(selectedMappingIndex, currentMapping);
@@ -800,14 +835,16 @@ void TouchpadMixerEditorComponent::applyConfigValue(
       if (propertyId == "type" || propertyId == "useCustomEnvelope" ||
           propertyId == "adsrTarget" || propertyId == "expressionCCMode" ||
           propertyId == "encoderAxis" || propertyId == "encoderOutputMode" ||
-          propertyId == "encoderPushMode" || propertyId == "encoderPushOutputType" ||
+          propertyId == "encoderPushMode" ||
+          propertyId == "encoderPushOutputType" ||
           propertyId == "pitchPadStart" || propertyId == "pitchPadMode" ||
           propertyId == "pitchPadUseCustomRange" ||
           propertyId == "smartScaleFollowGlobal" ||
           propertyId == "data1" || propertyId == "commandCategory" ||
           propertyId == "sustainStyle" || propertyId == "panicMode" ||
           propertyId == "layerStyle" || propertyId == "transposeMode" ||
-          propertyId == "transposeModify")
+          propertyId == "transposeModify" || propertyId == "slideAxis" ||
+          propertyId == "slideSeparateAxisRanges")
         rebuildUI();
       return;
     }

@@ -2032,28 +2032,61 @@ void InputProcessor::processTouchpadContacts(
         break;
       case TouchpadConversionKind::BoolToCC:
         if (act.type == ActionType::Expression) {
-          if (boolVal) {
-            InputID touchpadExprInput{deviceHandle,
-                                      static_cast<int>(entry.eventId)};
-            int peakValue;
-            if (act.adsrSettings.target == AdsrTarget::CC) {
-              peakValue = act.adsrSettings.valueWhenOn;
-            } else if (act.adsrSettings.target == AdsrTarget::PitchBend) {
-              double stepsPerSemitone = settingsManager.getStepsPerSemitone();
-              peakValue =
-                  static_cast<int>(8192.0 + (act.data2 * stepsPerSemitone));
-              peakValue = juce::jlimit(0, 16383, peakValue);
-            } else {
-              if (!act.smartBendLookup.empty() && lastTriggeredNote >= 0 &&
-                  lastTriggeredNote < 128)
-                peakValue = act.smartBendLookup[lastTriggeredNote];
-              else
-                peakValue = 8192;
+          const bool isCcTarget = (act.adsrSettings.target == AdsrTarget::CC);
+          const bool isLatchMode =
+              (p.ccReleaseBehavior == CcReleaseBehavior::AlwaysLatch);
+
+          if (!isLatchMode) {
+            // Existing behaviour: trigger Expression envelope and rely on
+            // touchpadExpressionActive / releaseEnvelope to send the release
+            // value when the finger lifts.
+            if (boolVal) {
+              InputID touchpadExprInput{deviceHandle,
+                                        static_cast<int>(entry.eventId)};
+              int peakValue;
+              if (act.adsrSettings.target == AdsrTarget::CC) {
+                peakValue = act.adsrSettings.valueWhenOn;
+              } else if (act.adsrSettings.target == AdsrTarget::PitchBend) {
+                double stepsPerSemitone =
+                    settingsManager.getStepsPerSemitone();
+                peakValue = static_cast<int>(
+                    8192.0 + (act.data2 * stepsPerSemitone));
+                peakValue = juce::jlimit(0, 16383, peakValue);
+              } else {
+                if (!act.smartBendLookup.empty() && lastTriggeredNote >= 0 &&
+                    lastTriggeredNote < 128)
+                  peakValue = act.smartBendLookup[lastTriggeredNote];
+                else
+                  peakValue = 8192;
+              }
+              expressionEngine.triggerEnvelope(touchpadExprInput, act.channel,
+                                               act.adsrSettings, peakValue);
+              touchpadExpressionActive.insert(
+                  std::make_tuple(deviceHandle, entry.layerId, entry.eventId));
             }
-            expressionEngine.triggerEnvelope(touchpadExprInput, act.channel,
-                                             act.adsrSettings, peakValue);
-            touchpadExpressionActive.insert(
-                std::make_tuple(deviceHandle, entry.layerId, entry.eventId));
+          } else if (isCcTarget) {
+            // Latch mode for CC Position: first press sends valueWhenOn,
+            // second press sends valueWhenOff, releases do nothing.
+            if (boolVal) {
+              auto latchKey =
+                  std::make_tuple(deviceHandle, entry.layerId, entry.eventId,
+                                  act.channel, act.adsrSettings.ccNumber);
+              const bool currentlyLatched =
+                  touchpadCcLatchedOn.find(latchKey) !=
+                  touchpadCcLatchedOn.end();
+
+              const int valueToSend = currentlyLatched
+                                          ? act.adsrSettings.valueWhenOff
+                                          : act.adsrSettings.valueWhenOn;
+
+              voiceManager.sendCC(act.channel, act.adsrSettings.ccNumber,
+                                  valueToSend);
+
+              if (currentlyLatched)
+                touchpadCcLatchedOn.erase(latchKey);
+              else
+                touchpadCcLatchedOn.insert(latchKey);
+            }
           }
         }
         break;
@@ -2431,9 +2464,50 @@ void InputProcessor::processTouchpadContacts(
             prevApplierDown = it->second;
         }
         bool applierDownEdge = applierDownNow && !prevApplierDown;
+        bool applierUpEdge = !applierDownNow && prevApplierDown;
         touchpadSlideApplierDownPrev[entryKey] = applierDownNow;
 
+        // Any new touch cancels an in-progress return-to-rest glide.
+        if (applierDownNow) {
+          auto itGlide = touchpadSlideReturnState.find(
+              std::make_tuple(deviceHandle, entry.layerId, entry.eventId,
+                              act.channel, act.adsrSettings.ccNumber));
+          if (itGlide != touchpadSlideReturnState.end())
+            touchpadSlideReturnState.erase(itGlide);
+        }
+
         if (!applierDownNow) {
+          // When the controlling finger(s) lift and rest-on-release is enabled,
+          // optionally glide the last CC value back to the configured rest
+          // value.
+          if (applierUpEdge && p.slideReturnOnRelease) {
+            auto itLast = lastTouchpadSlideCCValues.find(keySlideEnc);
+            if (itLast != lastTouchpadSlideCCValues.end()) {
+              const int currentVal = itLast->second;
+              const int restVal = juce::jlimit(p.outputMin, p.outputMax,
+                                               p.slideRestValue);
+              if (currentVal != restVal) {
+                if (p.slideReturnGlideMs <= 0) {
+                  voiceManager.sendCC(act.channel, act.adsrSettings.ccNumber,
+                                      restVal);
+                  lastTouchpadSlideCCValues[keySlideEnc] = restVal;
+                } else {
+                  TouchGlideState &g = touchpadSlideReturnState[
+                      std::make_tuple(deviceHandle, entry.layerId, entry.eventId,
+                                      act.channel, act.adsrSettings.ccNumber)];
+                  g.phase = TouchGlidePhase::GlidingToCenter;
+                  g.startValue = currentVal;
+                  g.targetValue = restVal;
+                  g.startTimeMs = static_cast<uint32_t>(
+                      juce::Time::getMillisecondCounter());
+                  g.durationMs = p.slideReturnGlideMs;
+                  g.lastSentValue = currentVal;
+                  startTouchGlideTimerIfNeeded();
+                }
+              }
+            }
+          }
+
           auto itLock = touchpadSlideLockedContact.find(entryKey);
           if (itLock != touchpadSlideLockedContact.end())
             touchpadSlideLockedContact.erase(itLock);
@@ -3722,10 +3796,21 @@ void InputProcessor::startTouchGlideTimerIfNeeded() {
       return;
     }
   }
+  for (const auto &kv : touchpadSlideReturnState) {
+    if (kv.second.phase == TouchGlidePhase::GlidingToCenter) {
+      if (!isTimerRunning())
+        startTimer(5);
+      return;
+    }
+  }
 }
 
 void InputProcessor::stopTouchGlideTimerIfIdle() {
   for (const auto &kv : touchpadPitchGlideState) {
+    if (kv.second.phase == TouchGlidePhase::GlidingToCenter)
+      return;
+  }
+  for (const auto &kv : touchpadSlideReturnState) {
     if (kv.second.phase == TouchGlidePhase::GlidingToCenter)
       return;
   }
@@ -3762,5 +3847,40 @@ void InputProcessor::timerCallback() {
   }
   for (const auto &k : toRemove)
     touchpadPitchGlideState.erase(k);
+
+  // Slide CC: glide back to rest value when configured.
+  std::vector<TouchpadSlideReturnKey> slideToRemove;
+  for (auto &kv : touchpadSlideReturnState) {
+    if (kv.second.phase != TouchGlidePhase::GlidingToCenter)
+      continue;
+    TouchGlideState &g = kv.second;
+    double progress = (g.durationMs > 0)
+        ? std::min(1.0, static_cast<double>(nowMs - g.startTimeMs) /
+                            static_cast<double>(g.durationMs))
+        : 1.0;
+    const int target = g.targetValue;
+    int output = juce::jlimit(
+        0, 127,
+        static_cast<int>(std::round(
+            g.startValue + progress * (target - g.startValue))));
+    if (output != g.lastSentValue) {
+      int ch = std::get<3>(kv.first);
+      int cc = std::get<4>(kv.first);
+      voiceManager.sendCC(ch, cc, output);
+      g.lastSentValue = output;
+      // Keep slide CC last-value map in sync so future gestures pick up from
+      // the latest value.
+      auto slideKey = std::make_tuple(std::get<0>(kv.first),
+                                      std::get<1>(kv.first),
+                                      std::get<2>(kv.first), ch, cc);
+      lastTouchpadSlideCCValues[slideKey] = output;
+    }
+    if (progress >= 1.0) {
+      slideToRemove.push_back(kv.first);
+    }
+  }
+  for (const auto &k : slideToRemove)
+    touchpadSlideReturnState.erase(k);
+
   stopTouchGlideTimerIfIdle();
 }

@@ -1,4 +1,10 @@
 
+Touchpad mappings currently does not have regions assignment properly working.
+
+
+===
+
+
 Currently, there is no way to visualize the other layers of mapping if not physically went there.
 So, create a switch/checkbox that when enabled, shows the specific layer that has been selected.
 

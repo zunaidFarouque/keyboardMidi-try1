@@ -31,6 +31,14 @@ enum class TouchpadHoldBehavior {
   IgnoreSendNoteOffImmediately     // Send note off immediately after note on (one-shot)
 };
 
+// Touchpad CC release behavior for Expression -> CC Position mode.
+// Controls how boolean touchpad events (e.g. Finger1Down/Finger1Up) drive CC
+// release when used in Position mode.
+enum class CcReleaseBehavior {
+  SendReleaseInstant, // Press sends valueWhenOn; release sends valueWhenOff
+  AlwaysLatch         // Press toggles between valueWhenOn and valueWhenOff; release does nothing
+};
+
 // Polyphony modes (Phase 26)
 enum class PolyphonyMode {
   Poly,  // Polyphonic (multiple notes simultaneously)
@@ -346,11 +354,17 @@ struct TouchpadConversionParams {
   int outputMax = 127;
   int valueWhenOn = 127;
   int valueWhenOff = 0;
+  CcReleaseBehavior ccReleaseBehavior =
+      CcReleaseBehavior::SendReleaseInstant;
 
   // SlideToCC: same bit layout as TouchpadMixerEntry modeFlags (Quick/Precision, Lock/Free, Relative)
   uint8_t slideModeFlags = 0;
   // SlideToCC axis: 0 = Vertical (Y), 1 = Horizontal (X)
   uint8_t slideAxis = 0;
+  // SlideToCC: optional rest-on-release behaviour
+  bool slideReturnOnRelease = false;
+  int slideRestValue = 0;       // 0-127 CC value to return to
+  int slideReturnGlideMs = 0;   // 0 = instant, >0 = glide duration in ms
 
   // Optional per-mapping pitch-pad configuration for Expression mappings where
   // the ADSR target is PitchBend or SmartScaleBend and conversionKind is

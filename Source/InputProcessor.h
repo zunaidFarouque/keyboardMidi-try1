@@ -290,6 +290,8 @@ private:
   };
   using TouchpadPitchGlideKey = std::tuple<uintptr_t, int, int, int, int>;
   std::map<TouchpadPitchGlideKey, TouchGlideState> touchpadPitchGlideState;
+  using TouchpadSlideReturnKey = std::tuple<uintptr_t, int, int, int, int>;
+  std::map<TouchpadSlideReturnKey, TouchGlideState> touchpadSlideReturnState;
   void startTouchGlideTimerIfNeeded();
   void stopTouchGlideTimerIfIdle();
 
@@ -298,6 +300,10 @@ private:
   std::set<std::tuple<uintptr_t, int, int>> touchpadNoteOnSent;
   // Touchpad BoolToCC Expression: active envelopes to release when finger lifts
   std::set<std::tuple<uintptr_t, int, int>> touchpadExpressionActive;
+  // Touchpad BoolToCC Expression (CC Position): latched-on state per
+  // (deviceHandle, layerId, eventId, channel, ccNumber) when using
+  // CcReleaseBehavior::AlwaysLatch.
+  std::set<std::tuple<uintptr_t, int, int, int, int>> touchpadCcLatchedOn;
 
   // Touchpad mixer: per-strip per-contact prev state for edge detection
   struct TouchpadContactPrev {

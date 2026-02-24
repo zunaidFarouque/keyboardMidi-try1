@@ -817,6 +817,10 @@ static void compileTouchpadMappingFromValueTree(
       entry.conversionKind = TouchpadConversionKind::SlideToCC;
       entry.action.adsrSettings.target = AdsrTarget::CC;
       entry.action.adsrSettings.ccNumber = (int)mapping.getProperty("data1", MappingDefaults::ExpressionData1);
+      const int slideAxisVal =
+          (int)mapping.getProperty("slideAxis", MappingDefaults::SlideAxis);
+      const bool isXYPad = (slideAxisVal == 2);
+
       p.inputMin = (float)mapping.getProperty("touchpadInputMin", static_cast<double>(MappingDefaults::TouchpadInputMin));
       p.inputMax = (float)mapping.getProperty("touchpadInputMax", static_cast<double>(MappingDefaults::TouchpadInputMax));
       float r = p.inputMax - p.inputMin;
@@ -830,8 +834,100 @@ static void compileTouchpadMappingFromValueTree(
       p.slideModeFlags = (quickPrecision == 0 ? kMixerModeUseFinger1 : 0) |
                          (lockFree == 0 ? kMixerModeLock : 0) |
                          (absRel ? kMixerModeRelative : 0);
-      p.slideAxis = (uint8_t)juce::jlimit(0, 1,
-          (int)mapping.getProperty("slideAxis", MappingDefaults::SlideAxis));
+      p.slideAxis = (uint8_t)juce::jlimit(0, 2, slideAxisVal);
+      p.slideReturnOnRelease =
+          (bool)mapping.getProperty("slideReturnOnRelease",
+                                    MappingDefaults::SlideReturnOnRelease);
+      p.slideRestValue = juce::jlimit(0, 127,
+          (int)mapping.getProperty("slideRestValue",
+                                   MappingDefaults::SlideRestValue));
+      p.slideReturnGlideMs = juce::jlimit(0, 5000,
+          (int)mapping.getProperty("slideReturnGlideMs",
+                                   MappingDefaults::SlideReturnGlideMs));
+
+      if (isXYPad) {
+        // XY pad: duplicate this mapping into two entries, one per axis.
+        const int ccX = juce::jlimit(
+            0, 127,
+            (int)mapping.getProperty("slideCcNumberX",
+                                     entry.action.adsrSettings.ccNumber));
+        const int ccY = juce::jlimit(
+            0, 127,
+            (int)mapping.getProperty("slideCcNumberY",
+                                     entry.action.adsrSettings.ccNumber));
+        const bool separateRanges =
+            (bool)mapping.getProperty("slideSeparateAxisRanges", false);
+
+        auto populateRangesForAxis =
+            [&](bool isX, float &inMin, float &inMax, int &outMin,
+                int &outMax) {
+              if (!separateRanges) {
+                inMin = p.inputMin;
+                inMax = p.inputMax;
+                outMin = p.outputMin;
+                outMax = p.outputMax;
+                return;
+              }
+              if (isX) {
+                inMin = (float)mapping.getProperty(
+                    "touchpadInputMinX",
+                    static_cast<double>(MappingDefaults::TouchpadInputMin));
+                inMax = (float)mapping.getProperty(
+                    "touchpadInputMaxX",
+                    static_cast<double>(MappingDefaults::TouchpadInputMax));
+                outMin = (int)mapping.getProperty(
+                    "touchpadOutputMinX", MappingDefaults::TouchpadOutputMin);
+                outMax = (int)mapping.getProperty(
+                    "touchpadOutputMaxX", MappingDefaults::TouchpadOutputMax);
+              } else {
+                inMin = (float)mapping.getProperty(
+                    "touchpadInputMinY",
+                    static_cast<double>(MappingDefaults::TouchpadInputMin));
+                inMax = (float)mapping.getProperty(
+                    "touchpadInputMaxY",
+                    static_cast<double>(MappingDefaults::TouchpadInputMax));
+                outMin = (int)mapping.getProperty(
+                    "touchpadOutputMinY", MappingDefaults::TouchpadOutputMin);
+                outMax = (int)mapping.getProperty(
+                    "touchpadOutputMaxY", MappingDefaults::TouchpadOutputMax);
+              }
+            };
+
+        float inMinX = 0.0f, inMaxX = 1.0f;
+        int outMinX = 0, outMaxX = 127;
+        float inMinY = 0.0f, inMaxY = 1.0f;
+        int outMinY = 0, outMaxY = 127;
+        populateRangesForAxis(true, inMinX, inMaxX, outMinX, outMaxX);
+        populateRangesForAxis(false, inMinY, inMaxY, outMinY, outMaxY);
+
+        // Y axis entry (vertical)
+        TouchpadMappingEntry entryY = entry;
+        TouchpadConversionParams &pY = entryY.conversionParams;
+        pY.slideAxis = 0;
+        pY.inputMin = inMinY;
+        pY.inputMax = inMaxY;
+        float rY = pY.inputMax - pY.inputMin;
+        pY.invInputRange = (rY > 0.0f) ? (1.0f / rY) : 0.0f;
+        pY.outputMin = outMinY;
+        pY.outputMax = outMaxY;
+        entryY.action.adsrSettings.ccNumber = ccY;
+
+        // X axis entry (horizontal)
+        TouchpadMappingEntry entryX = entry;
+        TouchpadConversionParams &pX = entryX.conversionParams;
+        pX.slideAxis = 1;
+        pX.inputMin = inMinX;
+        pX.inputMax = inMaxX;
+        float rX = pX.inputMax - pX.inputMin;
+        pX.invInputRange = (rX > 0.0f) ? (1.0f / rX) : 0.0f;
+        pX.outputMin = outMinX;
+        pX.outputMax = outMaxX;
+        entryX.action.adsrSettings.ccNumber = ccX;
+
+        out.push_back(std::move(entryY));
+        out.push_back(std::move(entryX));
+        return;
+      }
     } else if (isCC && expressionCCModeStr.equalsIgnoreCase("Encoder")) {
       // Encoder: rotation (swipe) + optional push. Requires continuous X/Y; auto-promote boolean events.
       if (eventId == TouchpadEvent::Finger1Down || eventId == TouchpadEvent::Finger1Up ||
@@ -884,6 +980,19 @@ static void compileTouchpadMappingFromValueTree(
           (int)mapping.getProperty("touchpadValueWhenOn", MappingDefaults::TouchpadValueWhenOn);
       p.valueWhenOff =
           (int)mapping.getProperty("touchpadValueWhenOff", MappingDefaults::TouchpadValueWhenOff);
+
+      // CC Position mode release behaviour (instant vs latch). Defaults to instant
+      // for existing presets that do not have ccReleaseBehavior set.
+      juce::String ccReleaseStr =
+          mapping
+              .getProperty("ccReleaseBehavior",
+                           MappingDefaults::CcReleaseBehaviorInstant)
+              .toString()
+              .trim();
+      if (ccReleaseStr.equalsIgnoreCase("Always Latch"))
+        p.ccReleaseBehavior = CcReleaseBehavior::AlwaysLatch;
+      else
+        p.ccReleaseBehavior = CcReleaseBehavior::SendReleaseInstant;
     } else {
       entry.conversionKind = TouchpadConversionKind::ContinuousToRange;
       // PitchBend/SmartScaleBend need continuous X/Y; auto-promote boolean

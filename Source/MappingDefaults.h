@@ -25,6 +25,7 @@ constexpr bool Enabled = true;
 // Note release / hold (stored as string in ValueTree)
 inline const juce::String ReleaseBehaviorSendNoteOff{ "Send Note Off" };
 inline const juce::String TouchpadHoldBehaviorHold{ "Hold to not send note off immediately" };
+inline const juce::String CcReleaseBehaviorInstant{ "Send release (instant)" };
 
 // Expression target (stored as string)
 inline const juce::String AdsrTargetCC{ "CC" };
@@ -38,6 +39,10 @@ constexpr int SlideAbsRel = 0;
 constexpr int SlideLockFree = 1;
 // Slide axis: 0 = Vertical (Y), 1 = Horizontal (X)
 constexpr int SlideAxis = 0;
+// Slide CC rest-on-release defaults
+constexpr bool SlideReturnOnRelease = false;
+constexpr int SlideRestValue = 0;
+constexpr int SlideReturnGlideMs = 0;
 
 // Encoder (Expression CC mode = Encoder)
 inline const juce::String ExpressionCCModeEncoder{ "Encoder" };
