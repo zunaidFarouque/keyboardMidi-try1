@@ -1,5 +1,6 @@
 #include "TouchpadMixerEditorComponent.h"
 #include "MappingDefinition.h"
+#include "MappingInspectorLogic.h"
 #include "MappingTypes.h"
 #include "TouchpadMixerDefinition.h"
 #include "SettingsManager.h"
@@ -205,6 +206,76 @@ juce::var TouchpadMixerEditorComponent::getConfigValue(
 
   // Mapping-specific properties (read from mapping ValueTree).
   if (isMapping && currentMapping.mapping.isValid()) {
+    // Command virtual properties: read from data1/data2, return combo ID
+    if (propertyId == "sustainStyle") {
+      int data1 = (int)currentMapping.mapping.getProperty("data1", 0);
+      return juce::var((data1 >= 0 && data1 <= 2) ? (data1 + 1) : 1);
+    }
+    if (propertyId == "panicMode") {
+      int data1 = (int)currentMapping.mapping.getProperty("data1", 0);
+      int data2 = (int)currentMapping.mapping.getProperty("data2", 0);
+      return juce::var((data2 == 2) ? 3 : (data1 == 5 || data2 == 1) ? 2 : 1);
+    }
+    if (propertyId == "layerStyle") {
+      int data1 = (int)currentMapping.mapping.getProperty("data1", 0);
+      return juce::var((data1 == 11) ? 2 : 1);
+    }
+    if (propertyId == "commandCategory") {
+      int data1 = (int)currentMapping.mapping.getProperty("data1", 0);
+      const int sustainMin = 0, sustainMax = 2;
+      if (data1 >= sustainMin && data1 <= sustainMax)
+        return juce::var(100); // Sustain
+      if (data1 == (int)MIDIQy::CommandID::LatchToggle)
+        return juce::var(101); // Latch
+      if (data1 == (int)MIDIQy::CommandID::Panic ||
+          data1 == (int)MIDIQy::CommandID::PanicLatch)
+        return juce::var(102); // Panic
+      if (data1 == (int)MIDIQy::CommandID::Transpose ||
+          data1 == (int)MIDIQy::CommandID::GlobalPitchDown)
+        return juce::var(103); // Transpose
+      if (data1 == (int)MIDIQy::CommandID::GlobalModeUp ||
+          data1 == (int)MIDIQy::CommandID::GlobalModeDown)
+        return juce::var(104); // Global mode
+      if (data1 == (int)MIDIQy::CommandID::GlobalRootUp ||
+          data1 == (int)MIDIQy::CommandID::GlobalRootDown ||
+          data1 == (int)MIDIQy::CommandID::GlobalRootSet)
+        return juce::var(105); // Global Root
+      if (data1 == (int)MIDIQy::CommandID::GlobalScaleNext ||
+          data1 == (int)MIDIQy::CommandID::GlobalScalePrev ||
+          data1 == (int)MIDIQy::CommandID::GlobalScaleSet)
+        return juce::var(106); // Global Scale
+      const int layerMomentary =
+          static_cast<int>(MIDIQy::CommandID::LayerMomentary);
+      const int layerToggle =
+          static_cast<int>(MIDIQy::CommandID::LayerToggle);
+      if (data1 == layerMomentary || data1 == layerToggle)
+        return juce::var(110); // Layer
+      return juce::var(100);
+    }
+    if (propertyId == "globalModeDirection") {
+      int data1 = (int)currentMapping.mapping.getProperty("data1", 0);
+      int id =
+          (data1 == (int)MIDIQy::CommandID::GlobalModeDown) ? 2 : 1;
+      return juce::var(id);
+    }
+    if (propertyId == "globalRootMode") {
+      int data1 = (int)currentMapping.mapping.getProperty("data1", 0);
+      int id = 1;
+      if (data1 == (int)MIDIQy::CommandID::GlobalRootDown)
+        id = 2;
+      else if (data1 == (int)MIDIQy::CommandID::GlobalRootSet)
+        id = 3;
+      return juce::var(id);
+    }
+    if (propertyId == "globalScaleMode") {
+      int data1 = (int)currentMapping.mapping.getProperty("data1", 0);
+      int id = 1;
+      if (data1 == (int)MIDIQy::CommandID::GlobalScalePrev)
+        id = 2;
+      else if (data1 == (int)MIDIQy::CommandID::GlobalScaleSet)
+        id = 3;
+      return juce::var(id);
+    }
     // All mapping properties are stored in the ValueTree.
     if (currentMapping.mapping.hasProperty(propertyId)) {
       juce::var propVal = currentMapping.mapping.getProperty(propertyId);
@@ -279,6 +350,14 @@ juce::var TouchpadMixerEditorComponent::getConfigValue(
         return juce::var(static_cast<bool>(propVal));
       } else if (propertyId == "smartScaleName") {
         return propVal;
+      } else if (propertyId == "transposeMode") {
+        juce::String modeStr = propVal.toString().trim();
+        if (modeStr.isEmpty())
+          modeStr = "Global";
+        return juce::var(modeStr.equalsIgnoreCase("Local") ? 2 : 1);
+      } else if (propertyId == "transposeModify") {
+        int modify = static_cast<int>(propVal);
+        return juce::var((modify >= 0 && modify <= 4) ? (modify + 1) : 1);
       } else if (propertyId == "slideQuickPrecision" || propertyId == "slideAbsRel" || propertyId == "slideLockFree" || propertyId == "slideAxis") {
         // Convert 0/1 to 1/2 for ComboBox (JUCE uses 1-based IDs)
         int val = static_cast<int>(propVal);
@@ -369,6 +448,14 @@ juce::var TouchpadMixerEditorComponent::getConfigValue(
         return juce::var(static_cast<bool>(defVal));
       if (propertyId == "smartScaleName")
         return defVal;
+      if (propertyId == "transposeMode") {
+        juce::String str = defVal.toString().trim();
+        return juce::var(str.equalsIgnoreCase("Local") ? 2 : 1);
+      }
+      if (propertyId == "transposeModify") {
+        int modify = static_cast<int>(defVal);
+        return juce::var((modify >= 0 && modify <= 4) ? (modify + 1) : 1);
+      }
       return defVal;
     }
     return juce::var();
@@ -716,7 +803,11 @@ void TouchpadMixerEditorComponent::applyConfigValue(
           propertyId == "encoderPushMode" || propertyId == "encoderPushOutputType" ||
           propertyId == "pitchPadStart" || propertyId == "pitchPadMode" ||
           propertyId == "pitchPadUseCustomRange" ||
-          propertyId == "smartScaleFollowGlobal")
+          propertyId == "smartScaleFollowGlobal" ||
+          propertyId == "data1" || propertyId == "commandCategory" ||
+          propertyId == "sustainStyle" || propertyId == "panicMode" ||
+          propertyId == "layerStyle" || propertyId == "transposeMode" ||
+          propertyId == "transposeModify")
         rebuildUI();
       return;
     }
@@ -867,6 +958,15 @@ void TouchpadMixerEditorComponent::createControl(
       cb->setSelectedId(id + 1, juce::dontSendNotification);
     } else if (propId == "smartScaleName") {
       // Selection already set above
+    } else if (propId == "data1" && def.options.count(5) == 0) {
+      // Command combo: Panic Latch (5) -> 4, GlobalPitchDown (7) -> 6
+      int data1 = static_cast<int>(currentVal);
+      int display = data1;
+      if (data1 == 5)
+        display = 4;
+      else if (data1 == 7)
+        display = 6;
+      cb->setSelectedId(display, juce::dontSendNotification);
     } else if (id > 0) {
       cb->setSelectedId(id, juce::dontSendNotification);
     } else if (!def.options.empty()) {
@@ -891,16 +991,31 @@ void TouchpadMixerEditorComponent::createControl(
       cb->setTooltip("Layer this strip belongs to. Only active when this layer "
                      "is selected.");
     juce::ComboBox *cbPtr = cb.get();
-    cb->onChange = [this, propId, cbPtr]() {
+    const bool useMappingInspectorLogic =
+        (propId == "commandCategory" || propId == "sustainStyle" ||
+         propId == "panicMode" || propId == "layerStyle" ||
+         propId == "transposeMode" || propId == "transposeModify" ||
+         propId == "globalModeDirection" || propId == "globalRootMode" ||
+         propId == "globalScaleMode");
+    cb->onChange = [this, propId, cbPtr, useMappingInspectorLogic, def]() {
       if (propId == "smartScaleName") {
         applyConfigValue(propId, juce::var(cbPtr->getText()));
         return;
       }
       int sel = cbPtr->getSelectedId();
-      if (propId == "layoutGroupId")
+      if (propId == "layoutGroupId") {
         applyConfigValue(propId, juce::var(sel - 1)); // map back to groupId
-      else
-        applyConfigValue(propId, juce::var(sel));
+        return;
+      }
+      if (useMappingInspectorLogic && selectionKind == SelectionKind::Mapping &&
+          currentMapping.mapping.isValid() && manager) {
+        MappingInspectorLogic::applyComboSelectionToMapping(
+            currentMapping.mapping, def, sel, nullptr);
+        manager->updateTouchpadMapping(selectedMappingIndex, currentMapping);
+        rebuildUI();
+        return;
+      }
+      applyConfigValue(propId, juce::var(sel));
     };
     auto rowComp = std::make_unique<LabelEditorRow>();
     rowComp->label = std::make_unique<juce::Label>();

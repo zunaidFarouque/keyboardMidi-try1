@@ -411,36 +411,66 @@ void MappingInspector::createControl(const InspectorControl &def,
       int id = (data1 == 10) ? 1 : (data1 == 11) ? 2 : 1;
       cb->setSelectedId(id, juce::dontSendNotification);
     } else if (def.propertyId == "commandCategory") {
-      // Virtual: data1 0,1,2 -> Sustain (100); 5 -> Panic (4); 7 -> Transpose
-      // (6); 10,11 -> Layer (110); touchpad solo commands -> Touchpad (120)
+      // Virtual: map underlying CommandID in data1 to high-level categories.
       int data1 = static_cast<int>(getCommonValue("data1"));
       const int sustainMin = 0, sustainMax = 2;
-      const int layerMomentary =
-          static_cast<int>(MIDIQy::CommandID::LayerMomentary);
-      const int layerToggle =
-          static_cast<int>(MIDIQy::CommandID::LayerToggle);
-      const int touchpadSoloMin =
-          static_cast<int>(MIDIQy::CommandID::TouchpadLayoutGroupSoloMomentary);
-      const int touchpadSoloMax =
-          static_cast<int>(MIDIQy::CommandID::TouchpadLayoutGroupSoloClear);
-      if (data1 >= sustainMin && data1 <= sustainMax)
-        cb->setSelectedId(100, juce::dontSendNotification);
-      else if (data1 == 5)
-        cb->setSelectedId(4,
-                          juce::dontSendNotification); // Panic Latch -> Panic
-      else if (data1 == 7)
-        cb->setSelectedId(6, juce::dontSendNotification); // Legacy -> Transpose
-      else if (data1 == layerMomentary || data1 == layerToggle)
-        cb->setSelectedId(110,
-                          juce::dontSendNotification); // Layer (Hold/Toggle)
-      else if (data1 >= touchpadSoloMin && data1 <= touchpadSoloMax)
-        cb->setSelectedId(120,
-                          juce::dontSendNotification); // Touchpad solo group
-      else if (data1 >= 3 && data1 <= 9)
-        cb->setSelectedId(data1, juce::dontSendNotification);
-      else if (data1 >= static_cast<int>(MIDIQy::CommandID::TouchpadLayoutGroupSoloMomentary) &&
-               data1 <= static_cast<int>(MIDIQy::CommandID::TouchpadLayoutGroupSoloClear))
-        cb->setSelectedId(data1, juce::dontSendNotification);
+      if (data1 >= sustainMin && data1 <= sustainMax) {
+        cb->setSelectedId(100, juce::dontSendNotification); // Sustain
+      } else if (data1 ==
+                 static_cast<int>(MIDIQy::CommandID::LatchToggle)) {
+        cb->setSelectedId(101, juce::dontSendNotification); // Latch
+      } else if (data1 == static_cast<int>(MIDIQy::CommandID::Panic) ||
+                 data1 == static_cast<int>(MIDIQy::CommandID::PanicLatch)) {
+        cb->setSelectedId(102, juce::dontSendNotification); // Panic
+      } else if (data1 == static_cast<int>(MIDIQy::CommandID::Transpose) ||
+                 data1 ==
+                     static_cast<int>(MIDIQy::CommandID::GlobalPitchDown)) {
+        cb->setSelectedId(103, juce::dontSendNotification); // Transpose
+      } else if (data1 == static_cast<int>(MIDIQy::CommandID::GlobalModeUp) ||
+                 data1 ==
+                     static_cast<int>(MIDIQy::CommandID::GlobalModeDown)) {
+        cb->setSelectedId(104, juce::dontSendNotification); // Global mode
+      } else if (data1 == static_cast<int>(MIDIQy::CommandID::GlobalRootUp) ||
+                 data1 ==
+                     static_cast<int>(MIDIQy::CommandID::GlobalRootDown) ||
+                 data1 ==
+                     static_cast<int>(MIDIQy::CommandID::GlobalRootSet)) {
+        cb->setSelectedId(105, juce::dontSendNotification); // Global Root
+      } else if (data1 ==
+                     static_cast<int>(MIDIQy::CommandID::GlobalScaleNext) ||
+                 data1 ==
+                     static_cast<int>(MIDIQy::CommandID::GlobalScalePrev) ||
+                 data1 ==
+                     static_cast<int>(MIDIQy::CommandID::GlobalScaleSet)) {
+        cb->setSelectedId(106, juce::dontSendNotification); // Global Scale
+      } else if (data1 ==
+                     static_cast<int>(MIDIQy::CommandID::LayerMomentary) ||
+                 data1 ==
+                     static_cast<int>(MIDIQy::CommandID::LayerToggle)) {
+        cb->setSelectedId(110, juce::dontSendNotification); // Layer
+      }
+    } else if (def.propertyId == "globalModeDirection") {
+      int data1 = static_cast<int>(getCommonValue("data1"));
+      int id = (data1 == static_cast<int>(MIDIQy::CommandID::GlobalModeDown))
+                   ? 2
+                   : 1;
+      cb->setSelectedId(id, juce::dontSendNotification);
+    } else if (def.propertyId == "globalRootMode") {
+      int data1 = static_cast<int>(getCommonValue("data1"));
+      int id = 1;
+      if (data1 == static_cast<int>(MIDIQy::CommandID::GlobalRootDown))
+        id = 2;
+      else if (data1 == static_cast<int>(MIDIQy::CommandID::GlobalRootSet))
+        id = 3;
+      cb->setSelectedId(id, juce::dontSendNotification);
+    } else if (def.propertyId == "globalScaleMode") {
+      int data1 = static_cast<int>(getCommonValue("data1"));
+      int id = 1;
+      if (data1 == static_cast<int>(MIDIQy::CommandID::GlobalScalePrev))
+        id = 2;
+      else if (data1 == static_cast<int>(MIDIQy::CommandID::GlobalScaleSet))
+        id = 3;
+      cb->setSelectedId(id, juce::dontSendNotification);
     } else if (def.propertyId == "touchpadSoloScope") {
       int v = static_cast<int>(getCommonValue("touchpadSoloScope"));
       int id = (v == 1) ? 2 : (v == 2) ? 3 : 1;
@@ -497,6 +527,9 @@ void MappingInspector::createControl(const InspectorControl &def,
           def.propertyId == "layerStyle" ||
           def.propertyId == "transposeMode" ||
           def.propertyId == "transposeModify" ||
+          def.propertyId == "globalModeDirection" ||
+          def.propertyId == "globalRootMode" ||
+          def.propertyId == "globalScaleMode" ||
           def.propertyId == "touchpadSoloType" ||
           def.propertyId == "touchpadLayoutGroupId" ||
           def.propertyId == "touchpadSoloScope") {

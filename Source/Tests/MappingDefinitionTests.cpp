@@ -458,33 +458,37 @@ TEST(MappingDefinitionTest, TransposeLocalShowsZonePlaceholder) {
       << "Transpose Local should show Affected zones placeholder";
 }
 
-// --- Command: Global Mode Up/Down -> no extra controls (just Command dropdown) ---
-TEST(MappingDefinitionTest, GlobalModeUpHasNoExtraControls) {
+// --- Command: Global Mode Up/Down -> uses Global mode section with direction ---
+TEST(MappingDefinitionTest, GlobalModeUpHasDirectionControl) {
   juce::ValueTree mapping("Mapping");
   mapping.setProperty("type", "Command", nullptr);
   mapping.setProperty("data1", (int)MIDIQy::CommandID::GlobalModeUp, nullptr);
   InspectorSchema schema = MappingDefinition::getSchema(mapping);
-  // Should have commandCategory/data1 as "Command" and no data2, no style, etc.
-  size_t controlCount = 0;
-  for (const auto &c : schema)
-    if (c.propertyId == "data1" || c.propertyId == "commandCategory")
-      controlCount++;
-  EXPECT_GE(controlCount, 1u);
   bool hasData2 = false;
+  bool hasDirection = false;
   for (const auto &c : schema)
-    if (c.propertyId == "data2") hasData2 = true;
+    if (c.propertyId == "data2")
+      hasData2 = true;
+    else if (c.propertyId == "globalModeDirection")
+      hasDirection = true;
   EXPECT_FALSE(hasData2) << "Global Mode Up should not have Target Layer (data2)";
+  EXPECT_TRUE(hasDirection) << "Global Mode Up should have Global mode direction control";
 }
 
-TEST(MappingDefinitionTest, GlobalModeDownHasNoExtraControls) {
+TEST(MappingDefinitionTest, GlobalModeDownHasDirectionControl) {
   juce::ValueTree mapping("Mapping");
   mapping.setProperty("type", "Command", nullptr);
   mapping.setProperty("data1", (int)MIDIQy::CommandID::GlobalModeDown, nullptr);
   InspectorSchema schema = MappingDefinition::getSchema(mapping);
   bool hasData2 = false;
+  bool hasDirection = false;
   for (const auto &c : schema)
-    if (c.propertyId == "data2") hasData2 = true;
+    if (c.propertyId == "data2")
+      hasData2 = true;
+    else if (c.propertyId == "globalModeDirection")
+      hasDirection = true;
   EXPECT_FALSE(hasData2) << "Global Mode Down should not have Target Layer (data2)";
+  EXPECT_TRUE(hasDirection) << "Global Mode Down should have Global mode direction control";
 }
 
 // --- getTypeName for all ActionTypes ---

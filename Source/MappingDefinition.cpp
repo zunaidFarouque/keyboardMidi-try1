@@ -74,6 +74,11 @@ const std::unordered_map<juce::String, juce::var> &getDefaultsMap() {
     map["encoderPushProgram"] = juce::var(EncoderPushProgram);
     map["encoderPushChannel"] = juce::var(EncoderPushChannel);
     map["encoderDeadZone"] = juce::var(static_cast<double>(EncoderDeadZone));
+    // Command-type virtual defaults
+    map["commandCategory"] = juce::var(100);      // Sustain
+    map["globalModeDirection"] = juce::var(1);    // Up
+    map["globalRootMode"] = juce::var(1);         // +1
+    map["globalScaleMode"] = juce::var(1);        // Next
   }
   return map;
 }
@@ -871,30 +876,53 @@ InspectorSchema MappingDefinition::getSchema(const juce::ValueTree &mapping,
     }
     } // showDynamics
   } else if (typeStr.equalsIgnoreCase("Command")) {
-    static constexpr int kSustainCategoryId = 100;
-    static constexpr int kLayerCategoryId = 110;
+    // Command categories – virtual UI ids, mapped to concrete CommandIDs by
+    // MappingInspectorLogic.
+    static constexpr int kCmdCategorySustain     = 100;
+    static constexpr int kCmdCategoryLatch       = 101;
+    static constexpr int kCmdCategoryPanic       = 102;
+    static constexpr int kCmdCategoryTranspose   = 103;
+    static constexpr int kCmdCategoryGlobalMode  = 104;
+    static constexpr int kCmdCategoryGlobalRoot  = 105;
+    static constexpr int kCmdCategoryGlobalScale = 106;
+    static constexpr int kCmdCategoryLayer       = 110;
+
     int cmdId = (int)mapping.getProperty("data1", 0);
     const bool isSustain = (cmdId >= 0 && cmdId <= 2);
-    const bool isLayer = (cmdId == 10 || cmdId == 11);
+    const bool isLatch = (cmdId == (int)MIDIQy::CommandID::LatchToggle);
+    const bool isPanic =
+        (cmdId == (int)MIDIQy::CommandID::Panic ||
+         cmdId == (int)MIDIQy::CommandID::PanicLatch);
+    const bool isTranspose =
+        (cmdId == (int)MIDIQy::CommandID::Transpose ||
+         cmdId == (int)MIDIQy::CommandID::GlobalPitchDown);
+    const bool isGlobalMode =
+        (cmdId == (int)MIDIQy::CommandID::GlobalModeUp ||
+         cmdId == (int)MIDIQy::CommandID::GlobalModeDown);
+    const bool isGlobalRoot =
+        (cmdId == (int)MIDIQy::CommandID::GlobalRootUp ||
+         cmdId == (int)MIDIQy::CommandID::GlobalRootDown ||
+         cmdId == (int)MIDIQy::CommandID::GlobalRootSet);
+    const bool isGlobalScale =
+        (cmdId == (int)MIDIQy::CommandID::GlobalScaleNext ||
+         cmdId == (int)MIDIQy::CommandID::GlobalScalePrev ||
+         cmdId == (int)MIDIQy::CommandID::GlobalScaleSet);
+    const bool isLayer =
+        (cmdId == (int)MIDIQy::CommandID::LayerMomentary ||
+         cmdId == (int)MIDIQy::CommandID::LayerToggle);
 
     InspectorControl cmdCtrl;
-    cmdCtrl.propertyId =
-        (isSustain || isLayer) ? "commandCategory" : "data1";
+    cmdCtrl.propertyId = "commandCategory";
     cmdCtrl.label = "Command";
     cmdCtrl.controlType = InspectorControl::Type::ComboBox;
-    cmdCtrl.options[kSustainCategoryId] = "Sustain";
-    cmdCtrl.options[3] = "Latch Toggle";
-    cmdCtrl.options[4] = "Panic";
-    cmdCtrl.options[6] = "Transpose";
-    cmdCtrl.options[8] = "Global Mode Up";
-    cmdCtrl.options[9] = "Global Mode Down";
-    cmdCtrl.options[12] = "Global Root +1";
-    cmdCtrl.options[13] = "Global Root -1";
-    cmdCtrl.options[14] = "Global Root Set";
-    cmdCtrl.options[15] = "Global Scale Next";
-    cmdCtrl.options[16] = "Global Scale Prev";
-    cmdCtrl.options[17] = "Global Scale Set";
-    cmdCtrl.options[kLayerCategoryId] = "Layer";
+    cmdCtrl.options[kCmdCategorySustain] = "Sustain";
+    cmdCtrl.options[kCmdCategoryLatch] = "Latch";
+    cmdCtrl.options[kCmdCategoryPanic] = "Panic";
+    cmdCtrl.options[kCmdCategoryTranspose] = "Transpose";
+    cmdCtrl.options[kCmdCategoryGlobalMode] = "Global mode";
+    cmdCtrl.options[kCmdCategoryGlobalRoot] = "Global Root";
+    cmdCtrl.options[kCmdCategoryGlobalScale] = "Global Scale";
+    cmdCtrl.options[kCmdCategoryLayer] = "Layer";
     setControlDefaultFromMap(cmdCtrl);
     schema.push_back(cmdCtrl);
 
@@ -921,7 +949,6 @@ InspectorSchema MappingDefinition::getSchema(const juce::ValueTree &mapping,
       schema.push_back(styleCtrl);
     }
 
-    cmdId = (int)mapping.getProperty("data1", 0);
     const int layerMomentary =
         static_cast<int>(MIDIQy::CommandID::LayerMomentary);
     const int layerToggle = static_cast<int>(MIDIQy::CommandID::LayerToggle);
@@ -957,10 +984,7 @@ InspectorSchema MappingDefinition::getSchema(const juce::ValueTree &mapping,
       setControlDefaultFromMap(panicMode);
       schema.push_back(panicMode);
     }
-    const int transpose = static_cast<int>(MIDIQy::CommandID::Transpose);
-    const int globalPitchDown =
-        static_cast<int>(MIDIQy::CommandID::GlobalPitchDown);
-    if (cmdId == transpose || cmdId == globalPitchDown) {
+    if (isTranspose) {
       schema.push_back(
           createSeparator("Transpose", juce::Justification::centredLeft));
       InspectorControl modeCtrl;
@@ -1014,14 +1038,35 @@ InspectorSchema MappingDefinition::getSchema(const juce::ValueTree &mapping,
       }
     }
 
-    const int globalRootSet = static_cast<int>(MIDIQy::CommandID::GlobalRootSet);
+    if (isGlobalMode) {
+      schema.push_back(
+          createSeparator("Global mode", juce::Justification::centredLeft));
+      InspectorControl dirCtrl;
+      dirCtrl.propertyId = "globalModeDirection";
+      dirCtrl.label = "Direction";
+      dirCtrl.controlType = InspectorControl::Type::ComboBox;
+      dirCtrl.options[1] = "Up";
+      dirCtrl.options[2] = "Down";
+      setControlDefaultFromMap(dirCtrl);
+      schema.push_back(dirCtrl);
+    }
+
+    const int globalRootSet =
+        static_cast<int>(MIDIQy::CommandID::GlobalRootSet);
     const int globalScaleSet =
         static_cast<int>(MIDIQy::CommandID::GlobalScaleSet);
-    if (cmdId == static_cast<int>(MIDIQy::CommandID::GlobalRootUp) ||
-        cmdId == static_cast<int>(MIDIQy::CommandID::GlobalRootDown) ||
-        cmdId == globalRootSet) {
+    if (isGlobalRoot) {
       schema.push_back(
           createSeparator("Global Root", juce::Justification::centredLeft));
+      InspectorControl rootMode;
+      rootMode.propertyId = "globalRootMode";
+      rootMode.label = "Mode";
+      rootMode.controlType = InspectorControl::Type::ComboBox;
+      rootMode.options[1] = "Root +1";
+      rootMode.options[2] = "Root -1";
+      rootMode.options[3] = "Set root note";
+      setControlDefaultFromMap(rootMode);
+      schema.push_back(rootMode);
       if (cmdId == globalRootSet) {
         InspectorControl rootNoteCtrl;
         rootNoteCtrl.propertyId = "rootNote";
@@ -1035,11 +1080,18 @@ InspectorSchema MappingDefinition::getSchema(const juce::ValueTree &mapping,
         schema.push_back(rootNoteCtrl);
       }
     }
-    if (cmdId == static_cast<int>(MIDIQy::CommandID::GlobalScaleNext) ||
-        cmdId == static_cast<int>(MIDIQy::CommandID::GlobalScalePrev) ||
-        cmdId == globalScaleSet) {
+    if (isGlobalScale) {
       schema.push_back(
           createSeparator("Global Scale", juce::Justification::centredLeft));
+      InspectorControl scaleMode;
+      scaleMode.propertyId = "globalScaleMode";
+      scaleMode.label = "Mode";
+      scaleMode.controlType = InspectorControl::Type::ComboBox;
+      scaleMode.options[1] = "Next scale";
+      scaleMode.options[2] = "Previous scale";
+      scaleMode.options[3] = "Set scale index";
+      setControlDefaultFromMap(scaleMode);
+      schema.push_back(scaleMode);
       if (cmdId == globalScaleSet) {
         InspectorControl scaleIndexCtrl;
         scaleIndexCtrl.propertyId = "scaleIndex";

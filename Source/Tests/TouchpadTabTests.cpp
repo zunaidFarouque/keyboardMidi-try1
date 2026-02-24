@@ -411,6 +411,30 @@ TEST(TouchpadTabTest, TouchpadTab_MappingSchemaCommandTypeHasCommandControls) {
       << "Layer command should have data2 (Target Layer)";
 }
 
+TEST(TouchpadTabTest, TouchpadTab_CommandTransposeSchemaHasTransposeOptions) {
+  TouchpadMappingConfig cfg = makeEmptyTouchpadMapping();
+  cfg.mapping.setProperty("type", "Command", nullptr);
+  cfg.mapping.setProperty("data1", (int)MIDIQy::CommandID::Transpose, nullptr);
+  
+  InspectorSchema schema = MappingDefinition::getSchema(cfg.mapping, 12, true);
+  
+  EXPECT_TRUE(schemaHasPropertyId(schema, "transposeMode"))
+      << "Transpose command schema should have transposeMode";
+  EXPECT_TRUE(schemaHasPropertyId(schema, "transposeModify"))
+      << "Transpose command schema should have transposeModify";
+}
+
+TEST(TouchpadTabTest, TouchpadTab_CommandPanicSchemaHasPanicMode) {
+  TouchpadMappingConfig cfg = makeEmptyTouchpadMapping();
+  cfg.mapping.setProperty("type", "Command", nullptr);
+  cfg.mapping.setProperty("data1", (int)MIDIQy::CommandID::Panic, nullptr);
+  
+  InspectorSchema schema = MappingDefinition::getSchema(cfg.mapping, 12, true);
+  
+  EXPECT_TRUE(schemaHasPropertyId(schema, "panicMode"))
+      << "Panic command schema should have panicMode";
+}
+
 TEST(TouchpadTabTest, TouchpadTab_MappingSchemaRespectsPitchBendRange) {
   TouchpadMappingConfig cfg = makeEmptyTouchpadMapping();
   cfg.mapping.setProperty("type", "Expression", nullptr);
