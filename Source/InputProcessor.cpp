@@ -73,6 +73,52 @@ int InputProcessor::getEffectiveSoloLayoutGroupForLayer(int layerIdx) const {
   return touchpadSoloLayoutGroupPerLayer[(size_t)layerIdx];
 }
 
+// Shared helpers for touchpad mapping region logic. These centralize the
+// notion of a mapping "drive point" (which contact/coordinate controls the
+// mapping for a given eventId) and the region hit-test so all conversion kinds
+// use consistent rules.
+static bool touchpadMappingHasRegion(const TouchpadMappingEntry &entry) {
+  return (entry.regionLeft != 0.0f || entry.regionTop != 0.0f ||
+          entry.regionRight != 1.0f || entry.regionBottom != 1.0f);
+}
+
+static std::pair<float, float>
+touchpadMappingDrivePoint(const TouchpadMappingEntry &entry, float x1,
+                          float y1, float x2, float y2, float avgX,
+                          float avgY) {
+  switch (entry.eventId) {
+  case TouchpadEvent::Finger1Down:
+  case TouchpadEvent::Finger1Up:
+  case TouchpadEvent::Finger1X:
+  case TouchpadEvent::Finger1Y:
+    return {x1, y1};
+  case TouchpadEvent::Finger2Down:
+  case TouchpadEvent::Finger2Up:
+  case TouchpadEvent::Finger2X:
+  case TouchpadEvent::Finger2Y:
+    return {x2, y2};
+  case TouchpadEvent::Finger1And2Dist:
+  case TouchpadEvent::Finger1And2AvgX:
+  case TouchpadEvent::Finger1And2AvgY:
+    return {avgX, avgY};
+  default:
+    break;
+  }
+  return {0.0f, 0.0f};
+}
+
+static bool touchpadMappingContainsDrivePoint(
+    const TouchpadMappingEntry &entry, float x1, float y1, float x2, float y2,
+    float avgX, float avgY) {
+  if (!touchpadMappingHasRegion(entry))
+    return true;
+  auto drive = touchpadMappingDrivePoint(entry, x1, y1, x2, y2, avgX, avgY);
+  const float testX = drive.first;
+  const float testY = drive.second;
+  return (testX >= entry.regionLeft && testX < entry.regionRight &&
+          testY >= entry.regionTop && testY < entry.regionBottom);
+}
+
 void InputProcessor::clearForgetScopeSolosForInactiveLayers() {
   juce::ScopedLock sl(stateLock);
   for (int i = 0; i < 9; ++i) {
@@ -177,7 +223,20 @@ void InputProcessor::rebuildGrid() {
     lastTouchpadMixerCCValues.clear();
     touchpadMixerValueBeforeMute.clear();
     drumPadActiveNotes.clear();
+    chordPadActiveChords.clear();
+    chordPadLatchedPads.clear();
   }
+  contactMappingLock.clear();
+  touchpadMappingPrevState.clear();
+  // SlideToCC / EncoderCC state: clear so mappings work after rebuild (no stale
+  // lastTouchpadSlideCCValues preventing first send).
+  lastTouchpadSlideCCValues.clear();
+  touchpadSlideRelativeValue.clear();
+  touchpadSlideRelativeAnchor.clear();
+  touchpadSlideLockedContact.clear();
+  touchpadSlideContactPrev.clear();
+  touchpadSlideApplierDownPrev.clear();
+  touchpadSlideReturnState.clear();
   // Phase 53.7: Layer state under stateLock only
   {
     juce::ScopedLock sl(stateLock);
@@ -1870,57 +1929,176 @@ void InputProcessor::processTouchpadContacts(
 
   // When finger is in any layout region (mixer or drum), skip Finger1Down/
   // Finger2Down Note mappings so the layout owns that finger.
-  auto layout1 = (idxFinger1 >= 0 && (size_t)idxFinger1 < layoutPerContact.size())
-                     ? layoutPerContact[(size_t)idxFinger1]
-                     : std::nullopt;
-  auto layout2 = (idxFinger2 >= 0 && (size_t)idxFinger2 < layoutPerContact.size())
-                     ? layoutPerContact[(size_t)idxFinger2]
-                     : std::nullopt;
-  bool layoutConsumesFinger1Down = tip1 && layout1.has_value();
-  bool layoutConsumesFinger2Down = tip2 && layout2.has_value();
+  // Clear per-contact mapping lock when a contact lifts (same semantics as
+  // contactLayoutLock for layouts).
+  for (size_t i = 0; i < contacts.size(); ++i) {
+    if (!contacts[i].tipDown)
+      contactMappingLock.erase(
+          std::make_tuple(deviceHandle, contacts[i].contactId));
+  }
+
+  // Per-mapping contact list and local finger state (like layouts: each
+  // mapping counts only contacts in its region or locked to it).
+  struct MappingLocalState {
+    std::vector<std::pair<size_t, const TouchpadContact *>> inRegion;
+    float x1 = 0.0f, y1 = 0.0f, x2 = 0.0f, y2 = 0.0f, avgX = 0.0f, avgY = 0.0f,
+        dist = 0.0f;
+    bool tip1 = false, tip2 = false;
+    size_t idxContact1 = SIZE_MAX, idxContact2 = SIZE_MAX;
+  };
+  auto buildMappingContactList =
+      [&](const TouchpadMappingEntry &entry, size_t mapIdx) -> MappingLocalState {
+    MappingLocalState out;
+    const bool fullPad = !touchpadMappingHasRegion(entry);
+    for (size_t i = 0; i < contacts.size(); ++i) {
+      const auto &c = contacts[i];
+      bool inRegion;
+      if (fullPad) {
+        inRegion = true; // Full pad: every contact belongs to this mapping
+      } else {
+        // Explicit region: inclusive bounds so 1.0 is inside
+        inRegion =
+            (c.normX >= entry.regionLeft && c.normX <= entry.regionRight &&
+             c.normY >= entry.regionTop && c.normY <= entry.regionBottom);
+      }
+      auto lockKey = std::make_tuple(deviceHandle, c.contactId);
+      bool lockedToThis = false;
+      {
+        auto it = contactMappingLock.find(lockKey);
+        lockedToThis =
+            (it != contactMappingLock.end() && it->second == mapIdx);
+      }
+      if (inRegion || lockedToThis) {
+        out.inRegion.push_back({i, &c});
+        if (inRegion && entry.regionLock && c.tipDown)
+          contactMappingLock[lockKey] = mapIdx;
+      }
+    }
+    std::sort(out.inRegion.begin(), out.inRegion.end(),
+              [](const auto &a, const auto &b) {
+                return a.second->contactId < b.second->contactId;
+              });
+    if (out.inRegion.size() >= 1) {
+      const auto *c1 = out.inRegion[0].second;
+      out.idxContact1 = out.inRegion[0].first;
+      out.tip1 = c1->tipDown;
+      float nx1 = c1->normX, ny1 = c1->normY;
+      if (entry.regionLock) {
+        auto it = contactMappingLock.find(
+            std::make_tuple(deviceHandle, c1->contactId));
+        if (it != contactMappingLock.end() && it->second == mapIdx) {
+          nx1 = std::clamp(nx1, entry.regionLeft, entry.regionRight);
+          ny1 = std::clamp(ny1, entry.regionTop, entry.regionBottom);
+        }
+      }
+      out.x1 = nx1;
+      out.y1 = ny1;
+      out.avgX = nx1;
+      out.avgY = ny1;
+    }
+    if (out.inRegion.size() >= 2) {
+      const auto *c2 = out.inRegion[1].second;
+      out.idxContact2 = out.inRegion[1].first;
+      out.tip2 = c2->tipDown;
+      float nx2 = c2->normX, ny2 = c2->normY;
+      if (entry.regionLock) {
+        auto it = contactMappingLock.find(
+            std::make_tuple(deviceHandle, c2->contactId));
+        if (it != contactMappingLock.end() && it->second == mapIdx) {
+          nx2 = std::clamp(nx2, entry.regionLeft, entry.regionRight);
+          ny2 = std::clamp(ny2, entry.regionTop, entry.regionBottom);
+        }
+      }
+      out.x2 = nx2;
+      out.y2 = ny2;
+      out.avgX = (out.x1 + out.x2) * 0.5f;
+      out.avgY = (out.y1 + out.y2) * 0.5f;
+      float dx = out.x2 - out.x1, dy = out.y2 - out.y1;
+      out.dist = std::sqrt(dx * dx + dy * dy);
+    }
+    return out;
+  };
 
   if (!ctx->touchpadMappings.empty()) {
-    for (const auto &entry : ctx->touchpadMappings) {
+    for (size_t mapIdx = 0; mapIdx < ctx->touchpadMappings.size(); ++mapIdx) {
+      const auto &entry = ctx->touchpadMappings[mapIdx];
       if (!activeLayersSnapshot[(size_t)entry.layerId])
         continue;
       if (entry.conversionKind == TouchpadConversionKind::EncoderCC)
         continue;
 
+      // Layout group solo: apply the same visibility rules as touchpad layouts
+      int soloGroup =
+          getEffectiveSoloLayoutGroupForLayer(juce::jlimit(0, 8, entry.layerId));
+      if ((soloGroup == 0 && entry.layoutGroupId != 0) ||
+          (soloGroup > 0 && entry.layoutGroupId != soloGroup))
+        continue;
+
+      MappingLocalState local = buildMappingContactList(entry, mapIdx);
+      // Skip if mapping has a region and no contacts belong to it
+      if (touchpadMappingHasRegion(entry) && local.inRegion.empty())
+        continue;
+
+      // Per-mapping finger 1/2 and edge detection
+      auto mapPrevKey = std::make_tuple(deviceHandle, static_cast<int>(mapIdx));
+      bool prevTip1 = false, prevTip2 = false;
+      {
+        auto itPrev = touchpadMappingPrevState.find(mapPrevKey);
+        if (itPrev != touchpadMappingPrevState.end()) {
+          prevTip1 = itPrev->second.tip1;
+          prevTip2 = itPrev->second.tip2;
+        }
+      }
+      bool localFinger1Down = local.tip1 && !prevTip1;
+      bool localFinger1Up = !local.tip1 && prevTip1;
+      bool localFinger2Down = local.tip2 && !prevTip2;
+      bool localFinger2Up = !local.tip2 && prevTip2;
+      touchpadMappingPrevState[mapPrevKey] = {local.tip1, local.tip2};
+
+      bool layoutConsumesLocalFinger1 =
+          local.tip1 &&
+          (local.idxContact1 < layoutPerContact.size() &&
+           layoutPerContact[local.idxContact1].has_value());
+      bool layoutConsumesLocalFinger2 =
+          local.tip2 &&
+          (local.idxContact2 < layoutPerContact.size() &&
+           layoutPerContact[local.idxContact2].has_value());
+
       bool boolVal = false;
       float continuousVal = 0.0f;
       switch (entry.eventId) {
       case TouchpadEvent::Finger1Down:
-        boolVal = finger1Down;
+        boolVal = localFinger1Down;
         break;
       case TouchpadEvent::Finger1Up:
-        boolVal = finger1Up;
+        boolVal = localFinger1Up;
         break;
       case TouchpadEvent::Finger1X:
-        continuousVal = x1;
+        continuousVal = local.x1;
         break;
       case TouchpadEvent::Finger1Y:
-        continuousVal = y1;
+        continuousVal = local.y1;
         break;
       case TouchpadEvent::Finger2Down:
-        boolVal = finger2Down;
+        boolVal = localFinger2Down;
         break;
       case TouchpadEvent::Finger2Up:
-        boolVal = finger2Up;
+        boolVal = localFinger2Up;
         break;
       case TouchpadEvent::Finger2X:
-        continuousVal = x2;
+        continuousVal = local.x2;
         break;
       case TouchpadEvent::Finger2Y:
-        continuousVal = y2;
+        continuousVal = local.y2;
         break;
       case TouchpadEvent::Finger1And2Dist:
-        continuousVal = dist;
+        continuousVal = local.dist;
         break;
       case TouchpadEvent::Finger1And2AvgX:
-        continuousVal = avgX;
+        continuousVal = local.avgX;
         break;
       case TouchpadEvent::Finger1And2AvgY:
-        continuousVal = avgY;
+        continuousVal = local.avgY;
         break;
       default:
         continue;
@@ -1930,62 +2108,26 @@ void InputProcessor::processTouchpadContacts(
       const auto &p = entry.conversionParams;
       auto key = std::make_tuple(deviceHandle, entry.layerId, entry.eventId);
 
-      // Region test: skip if this mapping has a non-full region and the
-      // driving contact is outside it.
-      {
-        float testX = 0.0f, testY = 0.0f;
-        switch (entry.eventId) {
-        case TouchpadEvent::Finger1Down:
-        case TouchpadEvent::Finger1Up:
-        case TouchpadEvent::Finger1X:
-        case TouchpadEvent::Finger1Y:
-          testX = x1;
-          testY = y1;
-          break;
-        case TouchpadEvent::Finger2Down:
-        case TouchpadEvent::Finger2Up:
-        case TouchpadEvent::Finger2X:
-        case TouchpadEvent::Finger2Y:
-          testX = x2;
-          testY = y2;
-          break;
-        case TouchpadEvent::Finger1And2Dist:
-        case TouchpadEvent::Finger1And2AvgX:
-        case TouchpadEvent::Finger1And2AvgY:
-          testX = avgX;
-          testY = avgY;
-          break;
-        default:
-          break;
-        }
-        const bool hasRegion =
-            (entry.regionLeft != 0.0f || entry.regionTop != 0.0f ||
-             entry.regionRight != 1.0f || entry.regionBottom != 1.0f);
-        if (hasRegion &&
-            (testX < entry.regionLeft || testX >= entry.regionRight ||
-             testY < entry.regionTop || testY >= entry.regionBottom))
-          continue;
-      }
-
       switch (entry.conversionKind) {
       case TouchpadConversionKind::BoolToGate:
         if (act.type == ActionType::Note) {
           bool isDownEvent = (entry.eventId == TouchpadEvent::Finger1Down ||
                               entry.eventId == TouchpadEvent::Finger2Down);
-          bool layoutConsumes = (entry.eventId == TouchpadEvent::Finger1Down &&
-                                 layoutConsumesFinger1Down) ||
-                                (entry.eventId == TouchpadEvent::Finger2Down &&
-                                 layoutConsumesFinger2Down);
+          bool layoutConsumes =
+              (entry.eventId == TouchpadEvent::Finger1Down &&
+               layoutConsumesLocalFinger1) ||
+              (entry.eventId == TouchpadEvent::Finger2Down &&
+               layoutConsumesLocalFinger2);
           if (isDownEvent && layoutConsumes)
-            continue; // Layout (mixer/drum) owns finger; skip fixed-note
-                      // mapping
-          
+            continue; // Layout (mixer/drum) owns finger; skip fixed-note mapping
+
           // Track note state: check if note is currently active
-          bool noteIsActive = (touchpadNoteOnSent.find(key) != touchpadNoteOnSent.end());
-          
+          bool noteIsActive =
+              (touchpadNoteOnSent.find(key) != touchpadNoteOnSent.end());
+
           bool releaseThisFrame =
-              (entry.eventId == TouchpadEvent::Finger1Down && finger1Up) ||
-              (entry.eventId == TouchpadEvent::Finger2Down && finger2Up);
+              (entry.eventId == TouchpadEvent::Finger1Down && localFinger1Up) ||
+              (entry.eventId == TouchpadEvent::Finger2Down && localFinger2Up);
           InputID touchpadInput{deviceHandle, 0};
           
           // Check hold behavior: if "Ignore, send note off immediately", send note off right after note on
@@ -2108,21 +2250,21 @@ void InputProcessor::processTouchpadContacts(
       case TouchpadConversionKind::ContinuousToRange:
         if (act.type == ActionType::Expression) {
           // Determine whether this continuous event is currently active based
-          // on the touch contact state.
+          // on this mapping's local finger state.
           bool eventActive = true;
           switch (entry.eventId) {
           case TouchpadEvent::Finger1X:
           case TouchpadEvent::Finger1Y:
           case TouchpadEvent::Finger1And2AvgX:
           case TouchpadEvent::Finger1And2AvgY:
-            eventActive = tip1;
+            eventActive = local.tip1;
             break;
           case TouchpadEvent::Finger2X:
           case TouchpadEvent::Finger2Y:
-            eventActive = tip2;
+            eventActive = local.tip2;
             break;
           case TouchpadEvent::Finger1And2Dist:
-            eventActive = tip1 && tip2;
+            eventActive = local.tip1 && local.tip2;
             break;
           default:
             break;
@@ -2205,10 +2347,10 @@ void InputProcessor::processTouchpadContacts(
                   entry.eventId == TouchpadEvent::Finger1And2Dist ||
                   entry.eventId == TouchpadEvent::Finger1And2AvgX ||
                   entry.eventId == TouchpadEvent::Finger1And2AvgY) {
-                startGesture = finger1Down;
+                startGesture = localFinger1Down;
               } else if (entry.eventId == TouchpadEvent::Finger2X ||
                          entry.eventId == TouchpadEvent::Finger2Y) {
-                startGesture = finger2Down;
+                startGesture = localFinger2Down;
               }
 
               if (startGesture) {
@@ -2391,9 +2533,10 @@ void InputProcessor::processTouchpadContacts(
     }
   }
 
-  // Slide CC: second pass (single-fader slide)
+  // Slide CC: second pass (single-fader slide). Per-mapping contact list.
   if (!ctx->touchpadMappings.empty()) {
-    for (const auto &entry : ctx->touchpadMappings) {
+    for (size_t mapIdx = 0; mapIdx < ctx->touchpadMappings.size(); ++mapIdx) {
+      const auto &entry = ctx->touchpadMappings[mapIdx];
       if (entry.conversionKind != TouchpadConversionKind::SlideToCC)
         continue;
       if (!activeLayersSnapshot[(size_t)entry.layerId])
@@ -2403,60 +2546,41 @@ void InputProcessor::processTouchpadContacts(
         continue;
       const auto &act = entry.action;
       const auto &p = entry.conversionParams;
+
+      int soloGroup =
+          getEffectiveSoloLayoutGroupForLayer(juce::jlimit(0, 8, entry.layerId));
+      if ((soloGroup == 0 && entry.layoutGroupId != 0) ||
+          (soloGroup > 0 && entry.layoutGroupId != soloGroup))
+        continue;
       auto keySlideEnc = std::make_tuple(deviceHandle, entry.layerId,
           entry.eventId, act.channel, act.adsrSettings.ccNumber);
       auto entryKey = std::make_tuple(deviceHandle, entry.layerId, entry.eventId);
 
-      // Region test: which contact drives this mapping
-      float testX = 0.0f, testY = 0.0f;
       switch (entry.eventId) {
       case TouchpadEvent::Finger1X:
       case TouchpadEvent::Finger1Y:
-        testX = x1;
-        testY = y1;
-        break;
       case TouchpadEvent::Finger2X:
       case TouchpadEvent::Finger2Y:
-        testX = x2;
-        testY = y2;
-        break;
       case TouchpadEvent::Finger1And2AvgX:
       case TouchpadEvent::Finger1And2AvgY:
-        testX = avgX;
-        testY = avgY;
         break;
       default:
         continue;
       }
-      const bool hasRegion =
-          (entry.regionLeft != 0.0f || entry.regionTop != 0.0f ||
-           entry.regionRight != 1.0f || entry.regionBottom != 1.0f);
-      if (hasRegion &&
-          (testX < entry.regionLeft || testX >= entry.regionRight ||
-           testY < entry.regionTop || testY >= entry.regionBottom))
+
+      MappingLocalState local = buildMappingContactList(entry, mapIdx);
+      if (touchpadMappingHasRegion(entry) && local.inRegion.empty())
         continue;
 
-      if (entry.conversionKind == TouchpadConversionKind::SlideToCC) {
-        // Build inRegion: contacts inside this entry's region
-        std::vector<std::pair<size_t, const TouchpadContact *>> inRegion;
-        for (size_t i = 0; i < contacts.size(); ++i) {
-          const auto &c = contacts[i];
-          if (c.normX >= entry.regionLeft && c.normX < entry.regionRight &&
-              c.normY >= entry.regionTop && c.normY < entry.regionBottom)
-            inRegion.push_back({i, &c});
-        }
-        std::sort(inRegion.begin(), inRegion.end(),
-            [](const auto &a, const auto &b) {
-              return a.second->contactId < b.second->contactId;
-            });
-        std::vector<std::pair<size_t, const TouchpadContact *>> active;
-        for (const auto &pairs : inRegion) {
-          if (pairs.second->tipDown)
-            active.push_back(pairs);
-        }
-        bool usePrecision = (p.slideModeFlags & kMixerModeUseFinger1) == 0;
-        bool applierDownNow =
-            usePrecision ? (active.size() >= 2) : !active.empty();
+      std::vector<std::pair<size_t, const TouchpadContact *>> active;
+      for (const auto &pairs : local.inRegion) {
+        if (pairs.second->tipDown)
+          active.push_back(pairs);
+      }
+        // At least one finger drives the slide; Precision mode only affects
+        // "apply" semantics (e.g. second finger to commit). So we send CC
+        // whenever we have any active contact.
+        bool applierDownNow = !active.empty();
         bool prevApplierDown = false;
         {
           auto it = touchpadSlideApplierDownPrev.find(entryKey);
@@ -2511,7 +2635,7 @@ void InputProcessor::processTouchpadContacts(
           auto itLock = touchpadSlideLockedContact.find(entryKey);
           if (itLock != touchpadSlideLockedContact.end())
             touchpadSlideLockedContact.erase(itLock);
-          for (const auto &pairs : inRegion) {
+          for (const auto &pairs : local.inRegion) {
             auto k = std::make_tuple(deviceHandle, entry.layerId, entry.eventId,
                 pairs.second->contactId);
             touchpadSlideContactPrev[k] = {pairs.second->tipDown,
@@ -2520,10 +2644,11 @@ void InputProcessor::processTouchpadContacts(
           continue;
         }
 
-        const TouchpadContact *positionContact = active[0].second;
-        float positionX = positionContact->normX;
-        float positionY = positionContact->normY;
-        if ((p.slideModeFlags & kMixerModeLock) != 0) {
+        const TouchpadContact *positionContact =
+            active.empty() ? nullptr : active[0].second;
+        float positionX = local.x1;
+        float positionY = local.y1;
+        if (positionContact && (p.slideModeFlags & kMixerModeLock) != 0) {
           auto itLock = touchpadSlideLockedContact.find(entryKey);
           if (applierDownEdge) {
             touchpadSlideLockedContact[entryKey] = positionContact->contactId;
@@ -2535,12 +2660,22 @@ void InputProcessor::processTouchpadContacts(
                 positionContact = pairs.second;
                 positionX = positionContact->normX;
                 positionY = positionContact->normY;
+                if (entry.regionLock) {
+                  auto it = contactMappingLock.find(
+                      std::make_tuple(deviceHandle, positionContact->contactId));
+                  if (it != contactMappingLock.end() && it->second == mapIdx) {
+                    positionX = std::clamp(positionX, entry.regionLeft,
+                                         entry.regionRight);
+                    positionY = std::clamp(positionY, entry.regionTop,
+                                           entry.regionBottom);
+                  }
+                }
                 found = true;
                 break;
               }
             }
             if (!found) {
-              for (const auto &pairs : inRegion) {
+              for (const auto &pairs : local.inRegion) {
                 auto k = std::make_tuple(deviceHandle, entry.layerId,
                     entry.eventId, pairs.second->contactId);
                 touchpadSlideContactPrev[k] = {pairs.second->tipDown,
@@ -2599,7 +2734,7 @@ void InputProcessor::processTouchpadContacts(
             }
             anchor = posInWindow;
           }
-          for (const auto &pairs : inRegion) {
+          for (const auto &pairs : local.inRegion) {
             auto k = std::make_tuple(deviceHandle, entry.layerId, entry.eventId,
                 pairs.second->contactId);
             touchpadSlideContactPrev[k] = {pairs.second->tipDown,
@@ -2635,14 +2770,19 @@ void InputProcessor::processTouchpadContacts(
           }
         }
 
+        // Always send on first touch (applierDownEdge) in absolute mode so
+        // Expression CC Slide produces a value immediately; change-only below
+        // avoids duplicates on subsequent frames.
         if (!skipSendThisFrame) {
           auto itLast = lastTouchpadSlideCCValues.find(keySlideEnc);
-          if (itLast == lastTouchpadSlideCCValues.end() || itLast->second != ccVal) {
+          const bool firstTouch =
+              (itLast == lastTouchpadSlideCCValues.end()) || applierDownEdge;
+          if (firstTouch || itLast->second != ccVal) {
             voiceManager.sendCC(act.channel, act.adsrSettings.ccNumber, ccVal);
             lastTouchpadSlideCCValues[keySlideEnc] = ccVal;
           }
         }
-        for (const auto &pairs : inRegion) {
+        for (const auto &pairs : local.inRegion) {
           auto k = std::make_tuple(deviceHandle, entry.layerId, entry.eventId,
               pairs.second->contactId);
           touchpadSlideContactPrev[k] = {pairs.second->tipDown,
@@ -2651,12 +2791,12 @@ void InputProcessor::processTouchpadContacts(
         continue;
       }
     }
-  }
 
-  // Encoder CC: rotation (swipe) + push
+  // Encoder CC: rotation (swipe) + push. Per-mapping contact list.
   constexpr float kEncoderBaselineMovement = 0.02f;
   if (!ctx->touchpadMappings.empty()) {
-    for (const auto &entry : ctx->touchpadMappings) {
+    for (size_t mapIdx = 0; mapIdx < ctx->touchpadMappings.size(); ++mapIdx) {
+      const auto &entry = ctx->touchpadMappings[mapIdx];
       if (entry.conversionKind != TouchpadConversionKind::EncoderCC)
         continue;
       if (!activeLayersSnapshot[(size_t)entry.layerId])
@@ -2667,19 +2807,18 @@ void InputProcessor::processTouchpadContacts(
       const auto &act = entry.action;
       const auto &p = entry.conversionParams;
 
-      std::vector<std::pair<size_t, const TouchpadContact *>> inRegion;
-      for (size_t i = 0; i < contacts.size(); ++i) {
-        const auto &c = contacts[i];
-        if (c.normX >= entry.regionLeft && c.normX < entry.regionRight &&
-            c.normY >= entry.regionTop && c.normY < entry.regionBottom)
-          inRegion.push_back({i, &c});
-      }
-      std::sort(inRegion.begin(), inRegion.end(),
-                [](const auto &a, const auto &b) {
-                  return a.second->contactId < b.second->contactId;
-                });
+      int soloGroup =
+          getEffectiveSoloLayoutGroupForLayer(juce::jlimit(0, 8, entry.layerId));
+      if ((soloGroup == 0 && entry.layoutGroupId != 0) ||
+          (soloGroup > 0 && entry.layoutGroupId != soloGroup))
+        continue;
+
+      MappingLocalState local = buildMappingContactList(entry, mapIdx);
+      if (touchpadMappingHasRegion(entry) && local.inRegion.empty())
+        continue;
+
       std::vector<std::pair<size_t, const TouchpadContact *>> active;
-      for (const auto &pair : inRegion) {
+      for (const auto &pair : local.inRegion) {
         if (pair.second->tipDown)
           active.push_back(pair);
       }
@@ -2690,10 +2829,10 @@ void InputProcessor::processTouchpadContacts(
 
       float posX = 0.0f, posY = 0.0f;
       if (!active.empty()) {
-        float localX = (active[0].second->normX - entry.regionLeft) * entry.invRegionWidth;
-        float localY = (active[0].second->normY - entry.regionTop) * entry.invRegionHeight;
-        posX = std::clamp(localX, 0.0f, 1.0f);
-        posY = std::clamp(localY, 0.0f, 1.0f);
+        posX = (local.x1 - entry.regionLeft) * entry.invRegionWidth;
+        posY = (local.y1 - entry.regionTop) * entry.invRegionHeight;
+        posX = std::clamp(posX, 0.0f, 1.0f);
+        posY = std::clamp(posY, 0.0f, 1.0f);
       }
 
       // Rotation: purely distance from anchor (gesture start), not per-frame delta.
@@ -3747,16 +3886,34 @@ void InputProcessor::processTouchpadContacts(
     }
   }
 
-  // Release touchpad Expression envelopes when finger is no longer active
+  // Release touchpad Expression envelopes when no mapping with this
+  // (layerId, eventId) has its local finger still active (per-mapping finger
+  // counting).
   for (auto it = touchpadExpressionActive.begin();
        it != touchpadExpressionActive.end();) {
     uintptr_t dev = std::get<0>(*it);
     int layerId = std::get<1>(*it);
     int evId = std::get<2>(*it);
-    bool fingerActive = (evId == TouchpadEvent::Finger1Down && tip1) ||
-                        (evId == TouchpadEvent::Finger1Up && !tip1) ||
-                        (evId == TouchpadEvent::Finger2Down && tip2) ||
-                        (evId == TouchpadEvent::Finger2Up && !tip2);
+    bool fingerActive = false;
+    if (dev == deviceHandle && ctx && !ctx->touchpadMappings.empty()) {
+      for (size_t mapIdx = 0; mapIdx < ctx->touchpadMappings.size();
+           ++mapIdx) {
+        const auto &entry = ctx->touchpadMappings[mapIdx];
+        if (entry.layerId != layerId ||
+            static_cast<int>(entry.eventId) != evId)
+          continue;
+        MappingLocalState local = buildMappingContactList(entry, mapIdx);
+        if ((evId == TouchpadEvent::Finger1Down && local.tip1) ||
+            (evId == TouchpadEvent::Finger1Up && !local.tip1) ||
+            (evId == TouchpadEvent::Finger2Down && local.tip2) ||
+            (evId == TouchpadEvent::Finger2Up && !local.tip2)) {
+          fingerActive = true;
+          break;
+        }
+      }
+    } else if (dev != deviceHandle) {
+      fingerActive = true; // other device: keep entry
+    }
     if (!fingerActive) {
       // For Expression CC, send release value when finger lifts. When ADSR is
       // off (fast path) no envelope is in ExpressionEngine so releaseEnvelope

@@ -2099,26 +2099,35 @@ TEST_F(InputProcessorTest, TouchpadNote_Finger2DownSendsNoteOnThenNoteOff) {
   mockEng.clear();
   uintptr_t deviceHandle = 0x1234;
 
-  // Finger 2 down: Note On
-  proc.processTouchpadContacts(deviceHandle, {{1, 100, 100, 0.5f, 0.5f, true}});
+  // Per-mapping finger counting: finger 2 = second contact. Frame 1: finger 1 down only.
+  proc.processTouchpadContacts(deviceHandle, {{0, 100, 100, 0.3f, 0.5f, true}});
+  EXPECT_EQ(mockEng.events.size(), 0u);
+
+  // Frame 2: finger 2 down -> two contacts, Finger2Down triggers Note On
+  proc.processTouchpadContacts(deviceHandle,
+                               {{0, 100, 100, 0.3f, 0.5f, true},
+                                {1, 100, 100, 0.7f, 0.5f, true}});
   ASSERT_EQ(mockEng.events.size(), 1u);
   EXPECT_TRUE(mockEng.events[0].isNoteOn);
   EXPECT_EQ(mockEng.events[0].note, 64);
   EXPECT_EQ(mockEng.events[0].channel, 1);
 
   // Finger 2 still down: no events
-  proc.processTouchpadContacts(deviceHandle, {{1, 100, 100, 0.5f, 0.5f, true}});
+  proc.processTouchpadContacts(deviceHandle,
+                               {{0, 100, 100, 0.3f, 0.5f, true},
+                                {1, 100, 100, 0.7f, 0.5f, true}});
   EXPECT_EQ(mockEng.events.size(), 1u);
 
-  // Finger 2 up: Note Off
-  proc.processTouchpadContacts(deviceHandle, {{1, 100, 100, 0.5f, 0.5f, false}});
+  // Finger 2 up: Note Off (only contact 0 left)
+  proc.processTouchpadContacts(deviceHandle, {{0, 100, 100, 0.3f, 0.5f, true}});
   ASSERT_EQ(mockEng.events.size(), 2u);
   EXPECT_FALSE(mockEng.events[1].isNoteOn);
   EXPECT_EQ(mockEng.events[1].note, 64);
   EXPECT_EQ(mockEng.events[1].channel, 1);
 }
 
-// Finger 2 Up -> Note: trigger note when finger lifts (one-shot), no note off
+// Finger 2 Up -> Note: trigger note when finger 2 lifts (one-shot), no note off.
+// Per-mapping finger counting: need two contacts then lift the second.
 TEST_F(InputProcessorTest, TouchpadNote_Finger2UpTriggersNoteOnOnly) {
   MockMidiEngine mockEng;
   TouchpadMixerManager touchpadMixerMgr;
@@ -2136,13 +2145,16 @@ TEST_F(InputProcessorTest, TouchpadNote_Finger2UpTriggersNoteOnOnly) {
   mockEng.clear();
   uintptr_t deviceHandle = 0x1234;
 
-  // Frame 1: finger 2 down (establishes prev.tip2 so frame 2 can detect finger2Up)
-  proc.processTouchpadContacts(deviceHandle, {{1, 100, 100, 0.5f, 0.5f, true}});
+  // Frame 1: finger 1 and finger 2 down (establishes prev.tip2 so frame 2 can detect finger2Up)
+  proc.processTouchpadContacts(deviceHandle,
+                               {{0, 100, 100, 0.3f, 0.5f, true},
+                                {1, 100, 100, 0.7f, 0.5f, true}});
   // Frame 2: finger 2 up -> finger2Up true, triggers Note On for Finger 2 Up mapping
-  proc.processTouchpadContacts(deviceHandle, {{1, 100, 100, 0.5f, 0.5f, false}});
+  proc.processTouchpadContacts(deviceHandle, {{0, 100, 100, 0.3f, 0.5f, true},
+                                             {1, 100, 100, 0.7f, 0.5f, false}});
 
   ASSERT_EQ(mockEng.events.size(), 1u)
-      << "Finger 2 Up -> Note: one Note On when finger lifts";
+      << "Finger 2 Up -> Note: one Note On when finger 2 lifts";
   EXPECT_TRUE(mockEng.events[0].isNoteOn);
   EXPECT_EQ(mockEng.events[0].note, 65);
 }

@@ -7,6 +7,13 @@
 #include <optional>
 #include <set>
 
+namespace {
+struct TouchpadMappingVisual {
+  const TouchpadMappingEntry *entry = nullptr;
+  juce::Rectangle<float> regionRect;
+};
+} // namespace
+
 TouchpadVisualizerPanel::TouchpadVisualizerPanel(InputProcessor *inputProc,
                                                  SettingsManager *settingsMgr)
     : inputProcessor(inputProc), settingsManager(settingsMgr) {}
@@ -195,6 +202,13 @@ void TouchpadVisualizerPanel::paint(juce::Graphics &g) {
                      }),
       contactsSnapshot.end());
 
+  int soloGroupForLayer = 0;
+  if (inputProcessor) {
+    soloGroupForLayer =
+        inputProcessor->getEffectiveSoloLayoutGroupForLayer(
+            currentVisualizedLayer);
+  }
+
   std::optional<PitchPadConfig> configX;
   std::optional<PitchPadConfig> configY;
   std::optional<std::pair<float, float>> yCcInputRange;
@@ -205,6 +219,10 @@ void TouchpadVisualizerPanel::paint(juce::Graphics &g) {
     if (ctx) {
       for (const auto &entry : ctx->touchpadMappings) {
         if (entry.layerId != currentVisualizedLayer)
+          continue;
+        if ((soloGroupForLayer == 0 && entry.layoutGroupId != 0) ||
+            (soloGroupForLayer > 0 &&
+             entry.layoutGroupId != soloGroupForLayer))
           continue;
         if (entry.eventId == TouchpadEvent::Finger1X &&
             entry.conversionParams.pitchPadConfig.has_value()) {
@@ -245,6 +263,10 @@ void TouchpadVisualizerPanel::paint(juce::Graphics &g) {
       // entry in context so bands always show when such a mapping exists.
       if (!configX) {
         for (const auto &entry : ctx->touchpadMappings) {
+          if ((soloGroupForLayer == 0 && entry.layoutGroupId != 0) ||
+              (soloGroupForLayer > 0 &&
+               entry.layoutGroupId != soloGroupForLayer))
+            continue;
           if (entry.eventId == TouchpadEvent::Finger1X &&
               entry.conversionParams.pitchPadConfig.has_value()) {
             auto target = entry.action.adsrSettings.target;
@@ -259,6 +281,10 @@ void TouchpadVisualizerPanel::paint(juce::Graphics &g) {
       }
       if (!configY) {
         for (const auto &entry : ctx->touchpadMappings) {
+          if ((soloGroupForLayer == 0 && entry.layoutGroupId != 0) ||
+              (soloGroupForLayer > 0 &&
+               entry.layoutGroupId != soloGroupForLayer))
+            continue;
           if (entry.eventId == TouchpadEvent::Finger1Y &&
               entry.conversionParams.pitchPadConfig.has_value()) {
             auto target = entry.action.adsrSettings.target;
@@ -316,6 +342,38 @@ void TouchpadVisualizerPanel::paint(juce::Graphics &g) {
   const juce::Colour yCcActiveCol =
       juce::Colour(0xff405538)
           .withAlpha(juce::jlimit(0.0f, 1.0f, yOpacity + 0.1f));
+
+  // Build per-mapping visuals for current layer/group based on compiled
+  // regions. These are derived from CompiledContext each paint so the
+  // visualizer stays in sync with runtime behaviour.
+  std::vector<TouchpadMappingVisual> mappingVisuals;
+  if (inputProcessor) {
+    auto ctx = inputProcessor->getContext();
+    if (ctx) {
+      mappingVisuals.reserve(ctx->touchpadMappings.size());
+      for (const auto &entry : ctx->touchpadMappings) {
+        if (entry.layerId != currentVisualizedLayer)
+          continue;
+        if ((soloGroupForLayer == 0 && entry.layoutGroupId != 0) ||
+            (soloGroupForLayer > 0 &&
+             entry.layoutGroupId != soloGroupForLayer))
+          continue;
+        TouchpadMappingVisual vis;
+        vis.entry = &entry;
+        vis.regionRect = juce::Rectangle<float>(
+            touchpadRect.getX() +
+                entry.regionLeft * touchpadRect.getWidth(),
+            touchpadRect.getY() +
+                entry.regionTop * touchpadRect.getHeight(),
+            (entry.regionRight - entry.regionLeft) * touchpadRect.getWidth(),
+            (entry.regionBottom - entry.regionTop) * touchpadRect.getHeight());
+        if (vis.regionRect.getWidth() <= 0.5f ||
+            vis.regionRect.getHeight() <= 0.5f)
+          continue;
+        mappingVisuals.push_back(std::move(vis));
+      }
+    }
+  }
 
   if (configX) {
     PitchPadLayout layoutX = buildPitchPadLayout(*configX);
@@ -727,6 +785,44 @@ void TouchpadVisualizerPanel::paint(juce::Graphics &g) {
       g.drawText(line, panelLeft, y, panelWidth, lineHeight,
                  juce::Justification::centredLeft, false);
       y += lineHeight;
+    }
+  }
+
+  // Per-mapping region overlays: visualize every compiled touchpad mapping as a
+  // bounding box, filtered by the same layer + layout-group solo rules used at
+  // runtime.
+  if (!mappingVisuals.empty()) {
+    for (const auto &vis : mappingVisuals) {
+      if (!vis.entry)
+        continue;
+      const auto &entry = *vis.entry;
+
+      juce::Colour baseCol = juce::Colours::lightgrey.withAlpha(0.4f);
+      if (settingsManager) {
+        try {
+          baseCol =
+              settingsManager->getTypeColor(entry.action.type).withAlpha(0.4f);
+        } catch (...) {
+          // Fallback to default color on any error.
+        }
+      }
+
+      // Conversion-kind hints via border thickness.
+      float borderThickness = 1.0f;
+      if (entry.conversionKind ==
+              TouchpadConversionKind::ContinuousToRange &&
+          (entry.action.adsrSettings.target == AdsrTarget::PitchBend ||
+           entry.action.adsrSettings.target == AdsrTarget::SmartScaleBend)) {
+        borderThickness = 1.5f; // Pitch pad-style mappings
+      } else if (entry.conversionKind == TouchpadConversionKind::SlideToCC ||
+                 entry.conversionKind == TouchpadConversionKind::EncoderCC) {
+        borderThickness = 1.2f; // Slider/encoder-style mappings
+      }
+
+      g.setColour(baseCol.withAlpha(0.18f));
+      g.fillRect(vis.regionRect);
+      g.setColour(baseCol.brighter(0.4f));
+      g.drawRect(vis.regionRect, borderThickness);
     }
   }
 }

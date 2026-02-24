@@ -401,6 +401,11 @@ struct TouchpadConversionParams {
 struct TouchpadMappingEntry {
   int layerId = 0;
   int eventId = 0; // TouchpadEvent::Finger1Down etc.
+  // Optional layout group + z-order metadata (mirrors TouchpadMappingConfig)
+  // so runtime and visualizer can apply the same solo/group and stacking rules
+  // as touchpad layouts.
+  int layoutGroupId = 0; // 0 = none/default, >0 = TouchpadLayoutGroup::id
+  int zIndex = 0;        // higher = drawn/evaluated above lower when needed
   MidiAction action;
   TouchpadConversionKind conversionKind = TouchpadConversionKind::BoolToGate;
   TouchpadConversionParams conversionParams;
@@ -412,6 +417,10 @@ struct TouchpadMappingEntry {
   // Active region on touchpad (0-1 normalized). Full pad when not set.
   float regionLeft = 0.0f, regionTop = 0.0f, regionRight = 1.0f, regionBottom = 1.0f;
   float invRegionWidth = 1.0f, invRegionHeight = 1.0f;
+  // Optional region lock for manual mappings: when true, once a gesture starts
+  // inside this region, the mapping keeps responding for the rest of that
+  // gesture even if the drive point moves slightly outside.
+  bool regionLock = false;
 };
 
 // Holds the entire pre-calculated state of the engine.

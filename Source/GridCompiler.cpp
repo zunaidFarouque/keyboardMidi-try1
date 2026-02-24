@@ -738,8 +738,12 @@ static void collectForcedMappings(
 // it to out. Used by the Touchpad tab (TouchpadMixerManager). Channel is taken
 // from the header (headerChannel), not from the mapping ValueTree.
 // If region is non-null, entry region is set from it; otherwise full pad (0,0,1,1).
+// layoutGroupId / zIndex / regionLock are propagated from the Touchpad tab
+// header so runtime + visualizer can apply the same group/stacking rules as
+// layouts and respect per-mapping region lock.
 static void compileTouchpadMappingFromValueTree(
     const juce::ValueTree &mapping, int layerId, int headerChannel,
+    int layoutGroupId, int zIndex, bool regionLock,
     ZoneManager &zoneMgr, SettingsManager &settingsMgr,
     std::vector<TouchpadMappingEntry> &out,
     const TouchpadLayoutRegion *region = nullptr) {
@@ -760,6 +764,9 @@ static void compileTouchpadMappingFromValueTree(
   TouchpadMappingEntry entry;
   entry.layerId = layerId;
   entry.eventId = eventId;
+  entry.layoutGroupId = juce::jmax(0, layoutGroupId);
+  entry.zIndex = zIndex;
+  entry.regionLock = regionLock;
   entry.action = std::move(action);
   if (region) {
     entry.regionLeft = region->left;
@@ -1413,6 +1420,8 @@ std::shared_ptr<CompiledMapContext> GridCompiler::compile(
       // Use cfg.layerId as the authoritative layer for this mapping.
       int layerId = juce::jlimit(0, 8, cfg.layerId);
       compileTouchpadMappingFromValueTree(cfg.mapping, layerId, cfg.midiChannel,
+                                          cfg.layoutGroupId, cfg.zIndex,
+                                          cfg.regionLock,
                                           zoneMgr, settingsMgr,
                                           context->touchpadMappings, &cfg.region);
     }

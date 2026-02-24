@@ -304,6 +304,22 @@ private:
   // (deviceHandle, layerId, eventId, channel, ccNumber) when using
   // CcReleaseBehavior::AlwaysLatch.
   std::set<std::tuple<uintptr_t, int, int, int, int>> touchpadCcLatchedOn;
+  // Per-contact mapping lock: when a contact first touches inside a mapping's
+  // region and that mapping has regionLock, we assign the contact to that
+  // mapping for the rest of the gesture. (deviceHandle, contactId) -> index
+  // into touchpadMappings. Enables per-mapping finger counting: each mapping
+  // sees only contacts in its region or locked to it (like layouts).
+  std::unordered_map<std::tuple<uintptr_t, int>, size_t, Tuple2Hash>
+      contactMappingLock;
+  // Per-mapping prev tip state for edge detection (Finger1Down/Up etc.).
+  // Key = (deviceHandle, mapIdx). Cleared on grid rebuild.
+  struct TouchpadMappingPrevState {
+    bool tip1 = false;
+    bool tip2 = false;
+  };
+  std::unordered_map<std::tuple<uintptr_t, int>, TouchpadMappingPrevState,
+                    Tuple2Hash>
+      touchpadMappingPrevState;
 
   // Touchpad mixer: per-strip per-contact prev state for edge detection
   struct TouchpadContactPrev {

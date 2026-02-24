@@ -671,6 +671,7 @@ InspectorSchema MappingDefinition::getSchema(const juce::ValueTree &mapping,
       restVal.min = 0.0;
       restVal.max = 127.0;
       restVal.step = 1.0;
+      restVal.enabledConditionProperty = "slideReturnOnRelease";
       setControlDefaultFromMap(restVal);
       schema.push_back(restVal);
       InspectorControl glideMs;
@@ -681,6 +682,7 @@ InspectorSchema MappingDefinition::getSchema(const juce::ValueTree &mapping,
       glideMs.max = 2000.0;
       glideMs.step = 10.0;
       glideMs.suffix = " ms";
+      glideMs.enabledConditionProperty = "slideReturnOnRelease";
       setControlDefaultFromMap(glideMs);
       schema.push_back(glideMs);
 
