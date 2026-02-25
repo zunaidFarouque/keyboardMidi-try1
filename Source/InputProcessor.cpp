@@ -1395,6 +1395,77 @@ InputProcessor::getEffectiveContactPositions(
   return result;
 }
 
+std::optional<float> InputProcessor::getTouchpadMappingValue01(
+    uintptr_t deviceHandle, const TouchpadMappingEntry &entry) const {
+  if (deviceHandle == 0)
+    return std::nullopt;
+
+  const auto &act = entry.action;
+  const auto &p = entry.conversionParams;
+
+  const bool isCC =
+      (act.adsrSettings.target == AdsrTarget::CC);
+  const bool isPitch =
+      (act.adsrSettings.target == AdsrTarget::PitchBend ||
+       act.adsrSettings.target == AdsrTarget::SmartScaleBend);
+
+  const int layerId = juce::jlimit(0, 8, entry.layerId);
+  const int eventId = entry.eventId;
+  const int channel = act.channel;
+
+  // SlideToCC: single-CC fader remembers last CC value.
+  if (entry.conversionKind == TouchpadConversionKind::SlideToCC && isCC) {
+    auto key = std::make_tuple(deviceHandle, layerId, eventId, channel,
+                               act.adsrSettings.ccNumber);
+    auto it = lastTouchpadSlideCCValues.find(key);
+    if (it == lastTouchpadSlideCCValues.end())
+      return std::nullopt;
+    int ccVal = juce::jlimit(0, 127, it->second);
+    return static_cast<float>(ccVal) / 127.0f;
+  }
+
+  // EncoderCC: derive value when operating in absolute/NRPN mode.
+  if (entry.conversionKind == TouchpadConversionKind::EncoderCC && isCC) {
+    auto keyEnc = std::make_tuple(deviceHandle, layerId, eventId, channel,
+                                  act.adsrSettings.ccNumber);
+    auto it = lastTouchpadEncoderCCValues.find(keyEnc);
+    if (it == lastTouchpadEncoderCCValues.end())
+      return std::nullopt;
+
+    if (p.encoderOutputMode == 0) {
+      int ccVal = juce::jlimit(0, 127, it->second);
+      return static_cast<float>(ccVal) / 127.0f;
+    }
+    if (p.encoderOutputMode == 2) {
+      int nrpnVal = juce::jlimit(0, 16383, it->second);
+      return static_cast<float>(nrpnVal) / 16383.0f;
+    }
+
+    // Relative mode (encoderOutputMode == 1) has no absolute remembered value.
+    return std::nullopt;
+  }
+
+  // Continuous CC/PB, including pitch-pad based mappings.
+  const int ccOrMinusOne = isCC ? act.adsrSettings.ccNumber : -1;
+  auto keyCont = std::make_tuple(deviceHandle, layerId, eventId, channel,
+                                 ccOrMinusOne);
+  auto itCont = lastTouchpadContinuousValues.find(keyCont);
+  if (itCont == lastTouchpadContinuousValues.end())
+    return std::nullopt;
+
+  if (isCC) {
+    int ccVal = juce::jlimit(0, 127, itCont->second);
+    return static_cast<float>(ccVal) / 127.0f;
+  }
+
+  if (isPitch) {
+    int pbVal = juce::jlimit(0, 16383, itCont->second);
+    return static_cast<float>(pbVal) / 16383.0f;
+  }
+
+  return std::nullopt;
+}
+
 bool InputProcessor::hasManualMappingForKey(int keyCode) {
   std::array<bool, 9> activeLayersSnapshot{};
   {
@@ -1930,11 +2001,26 @@ void InputProcessor::processTouchpadContacts(
   // When finger is in any layout region (mixer or drum), skip Finger1Down/
   // Finger2Down Note mappings so the layout owns that finger.
   // Clear per-contact mapping lock when a contact lifts (same semantics as
-  // contactLayoutLock for layouts).
-  for (size_t i = 0; i < contacts.size(); ++i) {
-    if (!contacts[i].tipDown)
-      contactMappingLock.erase(
-          std::make_tuple(deviceHandle, contacts[i].contactId));
+  // contactLayoutLock for layouts). Region lock for mappings should be
+  // exclusive: once a contact is locked to one mapping, no other mapping sees
+  // that contact until it lifts.
+  {
+    // First remove locks for contacts that are no longer present or whose tip
+    // is up.
+    std::set<int> activeContactIds;
+    for (const auto &c : contacts) {
+      if (c.tipDown)
+        activeContactIds.insert(c.contactId);
+    }
+    for (auto it = contactMappingLock.begin(); it != contactMappingLock.end();) {
+      auto &[dev, contactId] = it->first;
+      if (dev != deviceHandle ||
+          activeContactIds.find(contactId) == activeContactIds.end()) {
+        it = contactMappingLock.erase(it);
+      } else {
+        ++it;
+      }
+    }
   }
 
   // Per-mapping contact list and local finger state (like layouts: each
@@ -1952,7 +2038,21 @@ void InputProcessor::processTouchpadContacts(
     const bool fullPad = !touchpadMappingHasRegion(entry);
     for (size_t i = 0; i < contacts.size(); ++i) {
       const auto &c = contacts[i];
-      bool inRegion;
+      auto lockKey = std::make_tuple(deviceHandle, c.contactId);
+      bool hasLock = false;
+      size_t lockedIdx = 0;
+      if (auto it = contactMappingLock.find(lockKey);
+          it != contactMappingLock.end()) {
+        hasLock = true;
+        lockedIdx = it->second;
+      }
+
+      // If this contact is already locked to a *different* mapping, it is
+      // invisible here (exclusive ownership).
+      if (hasLock && lockedIdx != mapIdx)
+        continue;
+
+      bool inRegion = false;
       if (fullPad) {
         inRegion = true; // Full pad: every contact belongs to this mapping
       } else {
@@ -1961,18 +2061,16 @@ void InputProcessor::processTouchpadContacts(
             (c.normX >= entry.regionLeft && c.normX <= entry.regionRight &&
              c.normY >= entry.regionTop && c.normY <= entry.regionBottom);
       }
-      auto lockKey = std::make_tuple(deviceHandle, c.contactId);
-      bool lockedToThis = false;
-      {
-        auto it = contactMappingLock.find(lockKey);
-        lockedToThis =
-            (it != contactMappingLock.end() && it->second == mapIdx);
-      }
-      if (inRegion || lockedToThis) {
-        out.inRegion.push_back({i, &c});
-        if (inRegion && entry.regionLock && c.tipDown)
-          contactMappingLock[lockKey] = mapIdx;
-      }
+
+      // For an already-locked contact, we treat it as "in region" for this
+      // mapping even if the raw coordinates have drifted outside; clamping is
+      // applied later when computing effective positions.
+      if (!inRegion && !hasLock)
+        continue;
+
+      out.inRegion.push_back({i, &c});
+      if (inRegion && entry.regionLock && c.tipDown)
+        contactMappingLock[lockKey] = mapIdx;
     }
     std::sort(out.inRegion.begin(), out.inRegion.end(),
               [](const auto &a, const auto &b) {
@@ -2577,10 +2675,13 @@ void InputProcessor::processTouchpadContacts(
         if (pairs.second->tipDown)
           active.push_back(pairs);
       }
-        // At least one finger drives the slide; Precision mode only affects
-        // "apply" semantics (e.g. second finger to commit). So we send CC
-        // whenever we have any active contact.
-        bool applierDownNow = !active.empty();
+        // Quick vs Precision:
+        // - Quick: any active finger both positions and applies the value.
+        // - Precision: first finger positions only; second finger (2+ active)
+        //   enables "apply". This matches mixer behaviour.
+        bool usePrecision = (p.slideModeFlags & kMixerModeUseFinger1) == 0;
+        bool applierDownNow =
+            usePrecision ? (active.size() >= 2) : !active.empty();
         bool prevApplierDown = false;
         {
           auto it = touchpadSlideApplierDownPrev.find(entryKey);

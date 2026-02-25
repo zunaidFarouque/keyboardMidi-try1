@@ -157,6 +157,12 @@ public:
       uintptr_t deviceHandle,
       const std::vector<TouchpadContact> &contacts) const;
 
+  // Touchpad mappings: last known normalized value for visualizer. Returns a
+  // value in [0,1] when the mapping keeps a remembered CC/PB/slide/encoder
+  // value, or std::nullopt when no value is available.
+  std::optional<float> getTouchpadMappingValue01(
+      uintptr_t deviceHandle, const TouchpadMappingEntry &entry) const;
+
   // True if any manual mapping exists for this keyCode (for conflict highlight
   // in visualizer)
   bool hasManualMappingForKey(int keyCode);

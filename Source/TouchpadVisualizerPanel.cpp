@@ -8,10 +8,179 @@
 #include <set>
 
 namespace {
+
+enum class TouchpadMappingVisualKind {
+  Note,
+  ExpressionCC,
+  Pitch,
+  Slide,
+  Encoder,
+  Command,
+  Macro,
+  Other
+};
+
+enum class TouchpadVisualAxis { None, Horizontal, Vertical, Both };
+
 struct TouchpadMappingVisual {
   const TouchpadMappingEntry *entry = nullptr;
   juce::Rectangle<float> regionRect;
+  TouchpadMappingVisualKind kind = TouchpadMappingVisualKind::Other;
+  TouchpadVisualAxis axis = TouchpadVisualAxis::None;
+  bool isPositionDependent = false;
+  bool hasRememberedValue = false;
+  bool isLatched = false;
+  bool isRegionLocked = false;
+  std::optional<float> currentValue01;
 };
+
+static bool isPitchTarget(const MidiAction &act) {
+  return act.adsrSettings.target == AdsrTarget::PitchBend ||
+         act.adsrSettings.target == AdsrTarget::SmartScaleBend;
+}
+
+static TouchpadMappingVisualKind classifyVisualKind(
+    const TouchpadMappingEntry &entry) {
+  if (entry.conversionKind == TouchpadConversionKind::SlideToCC)
+    return TouchpadMappingVisualKind::Slide;
+  if (entry.conversionKind == TouchpadConversionKind::EncoderCC)
+    return TouchpadMappingVisualKind::Encoder;
+
+  switch (entry.action.type) {
+  case ActionType::Note:
+    return TouchpadMappingVisualKind::Note;
+  case ActionType::Expression:
+    return isPitchTarget(entry.action) ? TouchpadMappingVisualKind::Pitch
+                                       : TouchpadMappingVisualKind::ExpressionCC;
+  case ActionType::Command:
+    return TouchpadMappingVisualKind::Command;
+  case ActionType::Macro:
+    return TouchpadMappingVisualKind::Macro;
+  default:
+    break;
+  }
+  return TouchpadMappingVisualKind::Other;
+}
+
+static TouchpadVisualAxis getVisualAxis(const TouchpadMappingEntry &entry) {
+  if (entry.conversionKind == TouchpadConversionKind::SlideToCC) {
+    switch (entry.conversionParams.slideAxis) {
+    case 0:
+      return TouchpadVisualAxis::Vertical;
+    case 1:
+      return TouchpadVisualAxis::Horizontal;
+    case 2:
+      return TouchpadVisualAxis::Both;
+    default:
+      break;
+    }
+  } else if (entry.conversionKind == TouchpadConversionKind::EncoderCC) {
+    switch (entry.conversionParams.encoderAxis) {
+    case 0:
+      return TouchpadVisualAxis::Vertical;
+    case 1:
+      return TouchpadVisualAxis::Horizontal;
+    case 2:
+      return TouchpadVisualAxis::Both;
+    default:
+      break;
+    }
+  }
+
+  switch (entry.eventId) {
+  case TouchpadEvent::Finger1X:
+  case TouchpadEvent::Finger2X:
+  case TouchpadEvent::Finger1And2AvgX:
+    return TouchpadVisualAxis::Horizontal;
+  case TouchpadEvent::Finger1Y:
+  case TouchpadEvent::Finger2Y:
+  case TouchpadEvent::Finger1And2AvgY:
+    return TouchpadVisualAxis::Vertical;
+  case TouchpadEvent::Finger1And2Dist:
+    return TouchpadVisualAxis::Both;
+  default:
+    break;
+  }
+  return TouchpadVisualAxis::None;
+}
+
+static bool isPositionDependentMapping(const TouchpadMappingEntry &entry) {
+  switch (entry.eventId) {
+  case TouchpadEvent::Finger1X:
+  case TouchpadEvent::Finger1Y:
+  case TouchpadEvent::Finger2X:
+  case TouchpadEvent::Finger2Y:
+  case TouchpadEvent::Finger1And2Dist:
+  case TouchpadEvent::Finger1And2AvgX:
+  case TouchpadEvent::Finger1And2AvgY:
+    return true;
+  default:
+    break;
+  }
+  return entry.conversionKind == TouchpadConversionKind::SlideToCC ||
+         entry.conversionKind == TouchpadConversionKind::EncoderCC;
+}
+
+static bool isLatchedMapping(const TouchpadMappingEntry &entry) {
+  if (entry.action.type == ActionType::Note &&
+      entry.action.releaseBehavior == NoteReleaseBehavior::AlwaysLatch)
+    return true;
+
+  if (entry.conversionKind == TouchpadConversionKind::BoolToCC &&
+      entry.conversionParams.ccReleaseBehavior ==
+          CcReleaseBehavior::AlwaysLatch)
+    return true;
+
+  return false;
+}
+
+static bool hasRememberedValueMapping(const TouchpadMappingEntry &entry) {
+  if (entry.conversionKind == TouchpadConversionKind::SlideToCC ||
+      entry.conversionKind == TouchpadConversionKind::EncoderCC)
+    return true;
+
+  if (entry.conversionKind == TouchpadConversionKind::ContinuousToRange &&
+      entry.action.type == ActionType::Expression)
+    return true;
+
+  if (entry.conversionKind == TouchpadConversionKind::BoolToCC &&
+      entry.conversionParams.ccReleaseBehavior ==
+          CcReleaseBehavior::AlwaysLatch)
+    return true;
+
+  return false;
+}
+
+static juce::String touchpadEventToLabel(int eventId) {
+  switch (eventId) {
+  case TouchpadEvent::Finger1Down:
+    return "F1Down";
+  case TouchpadEvent::Finger1Up:
+    return "F1Up";
+  case TouchpadEvent::Finger1X:
+    return "F1X";
+  case TouchpadEvent::Finger1Y:
+    return "F1Y";
+  case TouchpadEvent::Finger2Down:
+    return "F2Down";
+  case TouchpadEvent::Finger2Up:
+    return "F2Up";
+  case TouchpadEvent::Finger2X:
+    return "F2X";
+  case TouchpadEvent::Finger2Y:
+    return "F2Y";
+  case TouchpadEvent::Finger1And2Dist:
+    return "Dist";
+  case TouchpadEvent::Finger1And2AvgX:
+    return "AvgX";
+  case TouchpadEvent::Finger1And2AvgY:
+    return "AvgY";
+  default:
+    break;
+  }
+  return {};
+}
+
 } // namespace
 
 TouchpadVisualizerPanel::TouchpadVisualizerPanel(InputProcessor *inputProc,
@@ -351,6 +520,8 @@ void TouchpadVisualizerPanel::paint(juce::Graphics &g) {
     auto ctx = inputProcessor->getContext();
     if (ctx) {
       mappingVisuals.reserve(ctx->touchpadMappings.size());
+      uintptr_t dev =
+          lastDeviceHandle_.load(std::memory_order_acquire);
       for (const auto &entry : ctx->touchpadMappings) {
         if (entry.layerId != currentVisualizedLayer)
           continue;
@@ -360,6 +531,16 @@ void TouchpadVisualizerPanel::paint(juce::Graphics &g) {
           continue;
         TouchpadMappingVisual vis;
         vis.entry = &entry;
+        vis.kind = classifyVisualKind(entry);
+        vis.axis = getVisualAxis(entry);
+        vis.isRegionLocked = entry.regionLock;
+        vis.isPositionDependent = isPositionDependentMapping(entry);
+        vis.isLatched = isLatchedMapping(entry);
+        vis.hasRememberedValue = hasRememberedValueMapping(entry);
+        if (vis.hasRememberedValue) {
+          if (auto v = inputProcessor->getTouchpadMappingValue01(dev, entry))
+            vis.currentValue01 = *v;
+        }
         vis.regionRect = juce::Rectangle<float>(
             touchpadRect.getX() +
                 entry.regionLeft * touchpadRect.getWidth(),
@@ -372,6 +553,14 @@ void TouchpadVisualizerPanel::paint(juce::Graphics &g) {
           continue;
         mappingVisuals.push_back(std::move(vis));
       }
+
+      std::sort(mappingVisuals.begin(), mappingVisuals.end(),
+                [](const TouchpadMappingVisual &a,
+                   const TouchpadMappingVisual &b) {
+                  int za = a.entry ? a.entry->zIndex : 0;
+                  int zb = b.entry ? b.entry->zIndex : 0;
+                  return za < zb; // lower first, higher drawn on top
+                });
     }
   }
 
@@ -432,25 +621,30 @@ void TouchpadVisualizerPanel::paint(juce::Graphics &g) {
     }
   }
 
-  g.setColour(juce::Colours::lightgrey);
-  g.setFont(10.0f);
-  juce::String xLabel =
-      xControlLabel.isNotEmpty() ? (xControlLabel + "   X") : "X";
-  juce::String yLabel =
-      yControlLabel.isNotEmpty() ? (yControlLabel + "   Y") : "Y";
-  g.drawText(xLabel, touchpadRect.getX(), touchpadRect.getBottom() - 14.0f,
-             touchpadRect.getWidth(), 12, juce::Justification::centredRight,
-             false);
-  {
-    juce::Graphics::ScopedSaveState save(g);
-    float cx = touchpadRect.getX() + 6.0f;
-    float cy = touchpadRect.getCentreY();
-    g.addTransform(
-        juce::AffineTransform::rotation(-juce::MathConstants<float>::halfPi, cx,
-                                        cy));
-    g.drawText(yLabel, static_cast<int>(cx - 40.0f),
-               static_cast<int>(cy - 6.0f), 80, 12,
-               juce::Justification::centred, false);
+  // Axis labels are helpful for pitch-pad and CC-position views, but when we
+  // have explicit per-mapping overlays they can visually clash. Hide them
+  // whenever mapping visuals are present to keep the UI clean.
+  if (mappingVisuals.empty()) {
+    g.setColour(juce::Colours::lightgrey.withAlpha(0.85f));
+    g.setFont(10.0f);
+    juce::String xLabel =
+        xControlLabel.isNotEmpty() ? (xControlLabel + "   X") : "X";
+    juce::String yLabel =
+        yControlLabel.isNotEmpty() ? (yControlLabel + "   Y") : "Y";
+    g.drawText(xLabel, touchpadRect.getX(), touchpadRect.getBottom() - 14.0f,
+               touchpadRect.getWidth(), 12, juce::Justification::centredRight,
+               false);
+    {
+      juce::Graphics::ScopedSaveState save(g);
+      float cx = touchpadRect.getX() + 6.0f;
+      float cy = touchpadRect.getCentreY();
+      g.addTransform(
+          juce::AffineTransform::rotation(-juce::MathConstants<float>::halfPi,
+                                          cx, cy));
+      g.drawText(yLabel, static_cast<int>(cx - 40.0f),
+                 static_cast<int>(cy - 6.0f), 80, 12,
+                 juce::Justification::centred, false);
+    }
   }
 
   static const juce::Colour fingerColours[] = {
@@ -797,32 +991,220 @@ void TouchpadVisualizerPanel::paint(juce::Graphics &g) {
         continue;
       const auto &entry = *vis.entry;
 
-      juce::Colour baseCol = juce::Colours::lightgrey.withAlpha(0.4f);
-      if (settingsManager) {
-        try {
-          baseCol =
-              settingsManager->getTypeColor(entry.action.type).withAlpha(0.4f);
-        } catch (...) {
-          // Fallback to default color on any error.
+      juce::Colour baseCol;
+      switch (vis.kind) {
+      case TouchpadMappingVisualKind::Note:
+        baseCol = juce::Colour(0xff3a5f9f); // soft blue
+        break;
+      case TouchpadMappingVisualKind::ExpressionCC:
+        baseCol = juce::Colour(0xff2f7f4f); // soft green
+        break;
+      case TouchpadMappingVisualKind::Pitch:
+        baseCol = juce::Colour(0xff7a4fb8); // soft purple
+        break;
+      case TouchpadMappingVisualKind::Slide:
+        baseCol = juce::Colour(0xff3f8f6f); // slider-style green
+        break;
+      case TouchpadMappingVisualKind::Encoder:
+        baseCol = juce::Colour(0xff9f7f3a); // amber
+        break;
+      case TouchpadMappingVisualKind::Command:
+      case TouchpadMappingVisualKind::Macro:
+        baseCol = juce::Colour(0xffc28b2f); // command amber
+        break;
+      default:
+        baseCol = juce::Colour(0xff555555); // neutral
+        break;
+      }
+
+      float cornerRadius = 3.0f;
+      float borderThickness = 1.0f;
+      if (vis.kind == TouchpadMappingVisualKind::Pitch)
+        borderThickness = 1.5f;
+      else if (vis.kind == TouchpadMappingVisualKind::Slide ||
+               vis.kind == TouchpadMappingVisualKind::Encoder)
+        borderThickness = 1.2f;
+      if (vis.isRegionLocked)
+        borderThickness += 0.4f;
+
+      // Fill: solid or simple gradient along axis for position-dependent
+      // mappings. Use a slightly stronger contrast so the direction is
+      // immediately legible without feeling heavy.
+      if (vis.isPositionDependent) {
+        juce::Colour cLow = baseCol.darker(0.4f).withAlpha(0.45f);
+        juce::Colour cHigh = baseCol.brighter(0.35f).withAlpha(0.85f);
+        juce::ColourGradient grad(cLow, 0.0f, 0.0f, cHigh, 1.0f, 1.0f, false);
+        auto r = vis.regionRect;
+        if (vis.axis == TouchpadVisualAxis::Horizontal) {
+          grad.point1 = {r.getX(), r.getCentreY()};
+          grad.point2 = {r.getRight(), r.getCentreY()};
+        } else if (vis.axis == TouchpadVisualAxis::Vertical) {
+          grad.point1 = {r.getCentreX(), r.getY()};
+          grad.point2 = {r.getCentreX(), r.getBottom()};
+        } else { // Both / None -> subtle diagonal
+          grad.point1 = {r.getX(), r.getY()};
+          grad.point2 = {r.getRight(), r.getBottom()};
+        }
+        g.setGradientFill(grad);
+        g.fillRoundedRectangle(r, cornerRadius);
+      } else {
+        g.setColour(baseCol.withAlpha(0.24f));
+        g.fillRoundedRectangle(vis.regionRect, cornerRadius);
+      }
+
+      g.setColour(baseCol.brighter(0.35f).withAlpha(0.9f));
+      g.drawRoundedRectangle(vis.regionRect, cornerRadius, borderThickness);
+
+      // Value bar for mappings with remembered values.
+      if (vis.hasRememberedValue && vis.currentValue01.has_value()) {
+        float v = juce::jlimit(0.0f, 1.0f, *vis.currentValue01);
+        juce::Colour barCol =
+            baseCol.brighter(0.6f).withAlpha(0.95f);
+        g.setColour(barCol);
+        auto r = vis.regionRect.reduced(1.0f, 1.0f);
+        if (vis.axis == TouchpadVisualAxis::Horizontal) {
+          float w = r.getWidth() * v;
+          g.fillRect(r.getX(), r.getBottom() - 3.0f, w, 3.0f);
+        } else {
+          float h = r.getHeight() * v;
+          float y = r.getBottom() - h;
+          g.fillRect(r.getRight() - 3.0f, y, 3.0f, h);
         }
       }
 
-      // Conversion-kind hints via border thickness.
-      float borderThickness = 1.0f;
-      if (entry.conversionKind ==
-              TouchpadConversionKind::ContinuousToRange &&
-          (entry.action.adsrSettings.target == AdsrTarget::PitchBend ||
-           entry.action.adsrSettings.target == AdsrTarget::SmartScaleBend)) {
-        borderThickness = 1.5f; // Pitch pad-style mappings
-      } else if (entry.conversionKind == TouchpadConversionKind::SlideToCC ||
-                 entry.conversionKind == TouchpadConversionKind::EncoderCC) {
-        borderThickness = 1.2f; // Slider/encoder-style mappings
+      // Header + centre text labels.
+      juce::String typeLabel;
+      switch (vis.kind) {
+      case TouchpadMappingVisualKind::Note:
+        typeLabel = "Note";
+        break;
+      case TouchpadMappingVisualKind::ExpressionCC:
+        typeLabel = "Expr";
+        break;
+      case TouchpadMappingVisualKind::Pitch:
+        typeLabel = "Pitch";
+        break;
+      case TouchpadMappingVisualKind::Slide:
+        typeLabel = "Slide";
+        break;
+      case TouchpadMappingVisualKind::Encoder:
+        typeLabel = "Enc";
+        break;
+      case TouchpadMappingVisualKind::Command:
+        typeLabel = "Cmd";
+        break;
+      case TouchpadMappingVisualKind::Macro:
+        typeLabel = "Macro";
+        break;
+      default:
+        typeLabel = "Map";
+        break;
       }
 
-      g.setColour(baseCol.withAlpha(0.18f));
-      g.fillRect(vis.regionRect);
-      g.setColour(baseCol.brighter(0.4f));
-      g.drawRect(vis.regionRect, borderThickness);
+      juce::String targetLabel;
+      if (entry.action.type == ActionType::Note) {
+        int note = juce::jlimit(0, 127, entry.action.data1);
+        targetLabel = MidiNoteUtilities::getMidiNoteName(note);
+      } else if (entry.action.type == ActionType::Expression) {
+        if (entry.action.adsrSettings.target == AdsrTarget::CC)
+          targetLabel =
+              "CC" + juce::String(entry.action.adsrSettings.ccNumber);
+        else if (isPitchTarget(entry.action))
+          targetLabel = "PB";
+      }
+
+      juce::String eventLabel = touchpadEventToLabel(entry.eventId);
+      // Compact header: focus on type + target to avoid cramped text and keep
+      // the most important information visible at small sizes.
+      juce::String header = typeLabel;
+      if (targetLabel.isNotEmpty())
+        header += "  " + targetLabel;
+
+      g.setColour(juce::Colours::white.withAlpha(0.85f));
+      float headerFontSize =
+          juce::jmin(10.0f, vis.regionRect.getHeight() * 0.26f);
+      g.setFont(headerFontSize);
+      juce::Rectangle<float> headerArea =
+          vis.regionRect.reduced(5.0f, 4.0f);
+      headerArea.setHeight(headerFontSize + 2.0f);
+      g.drawText(header, headerArea, juce::Justification::centredLeft,
+                 false);
+
+      juce::String mainLabel;
+      if (vis.kind == TouchpadMappingVisualKind::Note) {
+        mainLabel = targetLabel;
+      } else if (vis.kind == TouchpadMappingVisualKind::Pitch) {
+        mainLabel = "PB";
+      } else if (vis.kind == TouchpadMappingVisualKind::Encoder) {
+        if (targetLabel.isNotEmpty())
+          mainLabel = "Enc " + targetLabel;
+        else
+          mainLabel = "Enc";
+      } else if (targetLabel.isNotEmpty()) {
+        mainLabel = targetLabel;
+      } else {
+        mainLabel = typeLabel;
+      }
+
+      float mainFontSize =
+          juce::jmin(12.0f, vis.regionRect.getHeight() * 0.45f);
+      g.setFont(mainFontSize);
+      g.drawText(mainLabel, vis.regionRect,
+                 juce::Justification::centred, false);
+
+      // Axis arrows.
+      g.setColour(baseCol.brighter(0.7f).withAlpha(0.9f));
+      float arrowFontSize =
+          juce::jmin(9.0f, vis.regionRect.getHeight() * 0.35f);
+      g.setFont(arrowFontSize);
+      if (vis.axis == TouchpadVisualAxis::Horizontal ||
+          vis.axis == TouchpadVisualAxis::Both) {
+        juce::Rectangle<float> r = vis.regionRect;
+        r = r.withHeight(arrowFontSize + 2.0f);
+        r.setY(vis.regionRect.getBottom() - r.getHeight());
+        g.drawText(">", r.reduced(4.0f, 0.0f),
+                   juce::Justification::centredRight, false);
+      }
+      if (vis.axis == TouchpadVisualAxis::Vertical ||
+          vis.axis == TouchpadVisualAxis::Both) {
+        juce::Rectangle<float> r = vis.regionRect;
+        // Place vertical axis arrow around the vertical centre on the left edge
+        // so it does not clash with the header text at the top.
+        r = r.withWidth(arrowFontSize + 4.0f);
+        r.setHeight(arrowFontSize + 2.0f);
+        r.setY(vis.regionRect.getCentreY() - r.getHeight() * 0.5f);
+        g.drawText("^", r, juce::Justification::centred, false);
+      }
+
+      // Region lock glyph (top-right) – draw a tiny lock outline instead of
+      // text so the icon is clear but unobtrusive.
+      if (vis.isRegionLocked) {
+        g.setColour(juce::Colours::white.withAlpha(0.9f));
+        juce::Rectangle<float> r = vis.regionRect.reduced(3.0f, 3.0f);
+        float bodyW = juce::jmin(8.0f, r.getWidth() * 0.35f);
+        float bodyH = juce::jmin(6.0f, r.getHeight() * 0.3f);
+        float bodyX = r.getRight() - bodyW;
+        float bodyY = r.getY() + (bodyH * 0.8f);
+        g.drawRoundedRectangle(bodyX, bodyY, bodyW, bodyH, 1.5f, 1.0f);
+        float shackleW = bodyW * 0.6f;
+        float shackleX = bodyX + (bodyW - shackleW) * 0.5f;
+        float shackleY = bodyY - 3.0f;
+        g.drawLine(shackleX, shackleY + 1.0f, shackleX, bodyY, 1.0f);
+        g.drawLine(shackleX + shackleW, shackleY + 1.0f,
+                   shackleX + shackleW, bodyY, 1.0f);
+        g.drawLine(shackleX, shackleY + 1.0f,
+                   shackleX + shackleW, shackleY + 1.0f, 1.0f);
+      }
+
+      // Latched indicator (bottom-left small dot).
+      if (vis.isLatched) {
+        g.setColour(juce::Colours::white.withAlpha(0.9f));
+        float radius = 2.0f;
+        float cx = vis.regionRect.getX() + 4.0f;
+        float cy = vis.regionRect.getBottom() - 4.0f;
+        g.fillEllipse(cx - radius, cy - radius, radius * 2.0f,
+                      radius * 2.0f);
+      }
     }
   }
 }

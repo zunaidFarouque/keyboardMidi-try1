@@ -934,6 +934,20 @@ void TouchpadMixerEditorComponent::createControl(
     break;
   }
   case InspectorControl::Type::Slider: {
+    // For mapping sliders that have an enabledConditionProperty (e.g. Slide
+    // rest value/glide driven by slideReturnOnRelease), hide the control
+    // entirely when the condition is false to avoid clutter.
+    if (selectionKind == SelectionKind::Mapping &&
+        def.enabledConditionProperty.isNotEmpty() &&
+        currentMapping.mapping.isValid()) {
+      const juce::Identifier condId(
+          def.enabledConditionProperty.toStdString());
+      bool cond =
+          static_cast<bool>(currentMapping.mapping.getProperty(condId, false));
+      if (!cond)
+        return;
+    }
+
     auto sl = std::make_unique<juce::Slider>();
     sl->setRange(def.min, def.max, def.step);
     if (def.suffix.isNotEmpty())
@@ -1070,6 +1084,11 @@ void TouchpadMixerEditorComponent::createControl(
     juce::ToggleButton *tbPtr = tb.get();
     tb->onClick = [this, propId, tbPtr]() {
       applyConfigValue(propId, juce::var(tbPtr->getToggleState()));
+      // Some toggles (e.g. slideReturnOnRelease) control visibility of other
+      // controls via enabledConditionProperty. Rebuild the UI so dependent
+      // sliders appear/disappear immediately.
+      if (selectionKind == SelectionKind::Mapping)
+        rebuildUI();
     };
     auto lbl = std::make_unique<juce::Label>("", def.label + ":");
     lbl->setJustificationType(juce::Justification::centredLeft);

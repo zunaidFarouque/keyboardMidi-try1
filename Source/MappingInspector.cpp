@@ -246,18 +246,23 @@ void MappingInspector::createControl(const InspectorControl &def,
 
   switch (def.controlType) {
   case InspectorControl::Type::Slider: {
+    // If this slider is conditionally enabled by another boolean property and
+    // that condition is currently false, hide the control entirely to avoid
+    // visual clutter (e.g. Slide rest value/glide when return-to-rest is off).
+    if (def.enabledConditionProperty.isNotEmpty()) {
+      if (selectedTrees.empty())
+        return;
+      const bool isEnabledCond = selectedTrees[0].getProperty(
+          juce::Identifier(def.enabledConditionProperty.toStdString()), false);
+      if (!isEnabledCond)
+        return;
+    }
+
     auto sl = std::make_unique<juce::Slider>();
     sl->setRange(def.min, def.max, def.step);
     if (def.suffix.isNotEmpty())
       sl->setTextValueSuffix(" " + def.suffix);
     sl->setEnabled(def.isEnabled);
-
-    // Phase 55.7: Handle enabled condition property
-    if (def.enabledConditionProperty.isNotEmpty()) {
-      bool isEnabled = selectedTrees[0].getProperty(
-          juce::Identifier(def.enabledConditionProperty.toStdString()), false);
-      sl->setEnabled(isEnabled);
-    }
 
     if (def.valueFormat == InspectorControl::Format::NoteName) {
       sl->textFromValueFunction = [](double val) {
@@ -577,6 +582,12 @@ void MappingInspector::createControl(const InspectorControl &def,
       for (auto &tree : selectedTrees) {
         if (tree.isValid())
           tree.setProperty(propId, v, &undoManager);
+      }
+      // When this toggle controls other controls' enabledConditionProperty
+      // (e.g. Slide "Return to rest on finger release"), rebuild the UI so
+      // dependent sliders can appear/disappear immediately.
+      if (def.propertyId == "slideReturnOnRelease") {
+        juce::MessageManager::callAsync([this]() { rebuildUI(); });
       }
     };
 

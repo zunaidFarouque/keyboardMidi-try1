@@ -1,6 +1,5 @@
 
-Touchpad mappings currently does not have regions assignment properly working.
-
+Determine how much calculation overhead happening because of the gredients, and how to solve the issue.
 
 ===
 
