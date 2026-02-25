@@ -56,6 +56,35 @@ struct InspectorControl {
 
 using InspectorSchema = std::vector<InspectorControl>;
 
+// Schema contract (shared across editors)
+//
+// MappingDefinition::getSchema is the single source of truth for mapping UI
+// controls that are shared across all editors (Mappings tab, Touchpad tab,
+// and any future consumers).
+//
+// - Keyboard vs touchpad mappings are distinguished by the mapping ValueTree
+//   property "inputAlias". When inputAlias is "Touchpad", the mapping is
+//   treated as a touchpad mapping (isTouchpadMapping == true).
+// - The forTouchpadEditor flag tells getSchema where the schema will be
+//   rendered: false for the generic Mappings tab, true for the Touchpad tab.
+//
+// Rules:
+// - Shared controls (type, CC target, controller number, envelope controls,
+//   basic Expression controls, etc.) must be added unconditionally so both
+//   editors see the same core parameters.
+// - Touchpad‑only controls (Pitch pad, Slide, Encoder, CC release behaviour,
+//   touchpad hold behaviour, etc.) must always be gated by the mapping alias
+//   (inputAlias == "Touchpad") and, when they are only meaningful in the
+//   Touchpad tab UI, also by forTouchpadEditor.
+// - Keyboard mappings should never see touchpad‑only controls. If a new
+//   control is only relevant for a specific UI (for example, a Touchpad‑tab‑
+//   only layout/header widget), it should be defined in that editor
+//   (TouchpadMixerDefinition, TouchpadMixerEditorComponent, MappingInspector)
+//   instead of being added here without alias/forTouchpadEditor guards.
+//
+// Any changes to this schema should be validated in both contexts:
+// - MappingInspector::rebuildUI (Mappings tab)
+// - TouchpadMixerEditorComponent::rebuildUI (Touchpad tab)
 class MappingDefinition {
 public:
   // Factory: Inspects the mapping state and returns the UI schema.

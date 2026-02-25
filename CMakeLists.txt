@@ -61,6 +61,7 @@ add_library(MIDIQy_Core STATIC
     Source/ZonePropertiesLogic.cpp
     Source/TouchpadMixerManager.cpp
     Source/TouchpadMixerDefinition.cpp
+    Source/CrashLogger.cpp
 )
 
 # 3a. Link Libraries to Core
@@ -196,6 +197,7 @@ add_executable(MIDIQy_Tests
     Source/Tests/ZonePropertiesLogicTests.cpp
     Source/Tests/ZoneTests.cpp
     Source/Tests/UiStatePersistenceTests.cpp
+    Source/Tests/CrashLoggerTests.cpp
 )
 
 # 12. Link Dependencies

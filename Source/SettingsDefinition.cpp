@@ -108,6 +108,18 @@ InspectorSchema SettingsDefinition::getSchema() {
     schema.push_back(rememberUi);
   }
 
+  // --- Debugging section ---
+  schema.push_back(
+      MappingDefinition::createSeparator("Debugging",
+                                         juce::Justification::centredLeft));
+  {
+    InspectorControl debugMode;
+    debugMode.propertyId = "debugModeEnabled";
+    debugMode.label = "Enable Debug mode (write crash logs)";
+    debugMode.controlType = InspectorControl::Type::Toggle;
+    schema.push_back(debugMode);
+  }
+
   return schema;
 }
 

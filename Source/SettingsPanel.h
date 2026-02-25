@@ -79,6 +79,7 @@ private:
   juce::ToggleButton *delayMidiCheckbox = nullptr;
   juce::Slider *delayMidiSlider = nullptr;
   juce::ToggleButton *rememberUiStateToggle = nullptr;
+  juce::ToggleButton *debugModeToggle = nullptr;
 
   // Key-learning buttons (non-owning; used by helper methods and callbacks)
   juce::TextButton *toggleKeyButton = nullptr;                 // Set toggle key

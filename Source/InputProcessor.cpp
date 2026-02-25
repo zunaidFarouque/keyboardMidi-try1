@@ -2526,10 +2526,9 @@ void InputProcessor::processTouchpadContacts(
                 currentNote = lastTriggeredNote;
               }
               if (currentNote >= 0 && currentNote < 128) {
-                std::vector<int> intervals =
-                    entry.smartScaleFollowGlobal
-                        ? zoneManager.getGlobalScaleIntervals()
-                        : scaleLibrary.getIntervals(entry.smartScaleName);
+                // SmartScaleBend always uses the global scale and root; per-
+                // mapping scale selection is no longer respected.
+                std::vector<int> intervals = zoneManager.getGlobalScaleIntervals();
                 if (intervals.empty())
                   intervals = {0, 2, 4, 5, 7, 9, 11}; // Major fallback
                 int root = zoneManager.getGlobalRootNote();

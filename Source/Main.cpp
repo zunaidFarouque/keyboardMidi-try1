@@ -1,4 +1,5 @@
 #include "MainComponent.h"
+#include "CrashLogger.h"
 #include <JuceHeader.h>
 
 namespace {
@@ -72,6 +73,7 @@ public:
   bool moreThanOneInstanceAllowed() override { return true; }
 
   void initialise(const juce::String &) override {
+    CrashLogger::installGlobalHandlers();
     mainWindow.reset(new MainWindow(getApplicationName()));
   }
 

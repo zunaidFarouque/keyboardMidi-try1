@@ -39,6 +39,10 @@ public:
   void setCapWindowRefresh30Fps(bool cap);
   int getWindowRefreshIntervalMs() const;
 
+  // Debug mode (controls crash logging and other debug-only behavior)
+  bool getDebugModeEnabled() const;
+  void setDebugModeEnabled(bool enabled);
+
   // Delay MIDI messages (for binding in other software)
   bool isDelayMidiEnabled() const;
   void setDelayMidiEnabled(bool enabled);

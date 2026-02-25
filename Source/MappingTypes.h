@@ -411,7 +411,9 @@ struct TouchpadMappingEntry {
   TouchpadConversionParams conversionParams;
   // Touch glide: 0 = off; >0 = smooth transition on touch/release (ms)
   int touchGlideMs = 0;
-  // SmartScaleBend: when false use smartScaleName for scale intervals
+  // SmartScaleBend: legacy per-mapping scale selection fields. Runtime now
+  // always uses the global scale and root; these are kept only for backwards-
+  // compatible serialization.
   bool smartScaleFollowGlobal = true;
   juce::String smartScaleName = "Major";
   // Active region on touchpad (0-1 normalized). Full pad when not set.

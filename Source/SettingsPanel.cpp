@@ -1,5 +1,6 @@
 #include "SettingsPanel.h"
 #include "MappingTypes.h"
+#include "CrashLogger.h"
 #include <windows.h>
 
 namespace {
@@ -98,6 +99,7 @@ void SettingsPanel::rebuildUI() {
   delayMidiCheckbox = nullptr;
   delayMidiSlider = nullptr;
   rememberUiStateToggle = nullptr;
+  debugModeToggle = nullptr;
   toggleKeyButton = nullptr;
   resetToggleKeyButton = nullptr;
   performanceModeKeyButton = nullptr;
@@ -372,6 +374,9 @@ void SettingsPanel::changeListenerCallback(juce::ChangeBroadcaster *source) {
     if (rememberUiStateToggle)
       rememberUiStateToggle->setToggleState(
           settingsManager.getRememberUiState(), juce::dontSendNotification);
+    if (debugModeToggle)
+      debugModeToggle->setToggleState(
+          settingsManager.getDebugModeEnabled(), juce::dontSendNotification);
   }
 }
 
@@ -473,6 +478,8 @@ juce::var SettingsPanel::getSettingsValue(const juce::String &propertyId) const 
     return juce::var(settingsManager.getDelayMidiSeconds());
   if (propertyId == "rememberUiState")
     return juce::var(settingsManager.getRememberUiState());
+  if (propertyId == "debugModeEnabled")
+    return juce::var(settingsManager.getDebugModeEnabled());
   return juce::var();
 }
 
@@ -508,6 +515,11 @@ void SettingsPanel::applySettingsValue(const juce::String &propertyId,
     settingsManager.setDelayMidiSeconds(v);
   } else if (propertyId == "rememberUiState") {
     settingsManager.setRememberUiState(static_cast<bool>(value));
+  } else if (propertyId == "debugModeEnabled") {
+    bool enabled = static_cast<bool>(value);
+    settingsManager.setDebugModeEnabled(enabled);
+    CrashLogger::addBreadcrumb("Settings: Debug mode " +
+                               juce::String(enabled ? "ON" : "OFF"));
   }
 }
 
@@ -580,6 +592,8 @@ void SettingsPanel::createControl(const InspectorControl &def, UiRow &currentRow
       delayMidiCheckbox = tbPtr;
     else if (propId == "rememberUiState")
       rememberUiStateToggle = tbPtr;
+    else if (propId == "debugModeEnabled")
+      debugModeToggle = tbPtr;
 
     tb->onClick = [this, propId, tbPtr]() {
       applySettingsValue(propId, juce::var(tbPtr->getToggleState()));

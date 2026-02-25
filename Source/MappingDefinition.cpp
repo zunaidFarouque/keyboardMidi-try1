@@ -183,6 +183,16 @@ InspectorSchema MappingDefinition::getSchema(const juce::ValueTree &mapping,
                                              bool forTouchpadEditor) {
   InspectorSchema schema;
 
+  // Alias context: many controls are shared between keyboard and touchpad
+  // mappings, but some (Pitch pad, Slide, Encoder, touchpad hold behaviour,
+  // etc.) only make sense for touchpad mappings. We derive a simple flag once
+  // here and use it throughout the schema below. See MappingDefinition.h for
+  // the full shared-schema contract.
+  juce::String inputAlias =
+      mapping.getProperty("inputAlias", "").toString().trim();
+  const bool isTouchpadMapping =
+      inputAlias.equalsIgnoreCase("Touchpad");
+
   // Enabled: mapping can be turned off without deleting (omit when in touchpad
   // header)
   if (!forTouchpadEditor) {
@@ -277,11 +287,8 @@ InspectorSchema MappingDefinition::getSchema(const juce::ValueTree &mapping,
     setControlDefaultFromMap(releaseBehavior);
     schema.push_back(releaseBehavior);
 
-    // Touchpad-specific: Hold behavior dropdown (only for touchpad Note mappings)
-    juce::String inputAlias =
-        mapping.getProperty("inputAlias", "").toString().trim();
-    bool isTouchpadMapping =
-        inputAlias.equalsIgnoreCase("Touchpad");
+    // Touchpad-specific: Hold behavior dropdown (only for touchpad Note
+    // mappings)
     if (isTouchpadMapping) {
       InspectorControl holdBehavior;
       holdBehavior.propertyId = "touchpadHoldBehavior";
@@ -344,7 +351,11 @@ InspectorSchema MappingDefinition::getSchema(const juce::ValueTree &mapping,
     schema.push_back(target);
 
     juce::String expressionCCModeStr =
-        mapping.getProperty("expressionCCMode", MappingDefaults::ExpressionCCModePosition).toString().trim();
+        mapping
+            .getProperty("expressionCCMode",
+                         MappingDefaults::ExpressionCCModePosition)
+            .toString()
+            .trim();
     if (adsrTargetStr.equalsIgnoreCase("CC")) {
       InspectorControl data1;
       data1.propertyId = "data1";
@@ -369,15 +380,20 @@ InspectorSchema MappingDefinition::getSchema(const juce::ValueTree &mapping,
       if (!hideControllerForXYSlide)
         schema.push_back(data1);
 
-      InspectorControl ccMode;
-      ccMode.propertyId = "expressionCCMode";
-      ccMode.label = "CC input mode";
-      ccMode.controlType = InspectorControl::Type::ComboBox;
-      ccMode.options[1] = "Position";
-      ccMode.options[2] = "Slide";
-      ccMode.options[3] = "Encoder";
-      setControlDefaultFromMap(ccMode);
-      schema.push_back(ccMode);
+      // Touchpad-only: CC input mode (Position / Slide / Encoder). Keyboard
+      // mappings behave like simple Position mode and never expose this
+      // dropdown.
+      if (isTouchpadMapping && forTouchpadEditor) {
+        InspectorControl ccMode;
+        ccMode.propertyId = "expressionCCMode";
+        ccMode.label = "CC input mode";
+        ccMode.controlType = InspectorControl::Type::ComboBox;
+        ccMode.options[1] = "Position";
+        ccMode.options[2] = "Slide";
+        ccMode.options[3] = "Encoder";
+        setControlDefaultFromMap(ccMode);
+        schema.push_back(ccMode);
+      }
     }
     const bool pitchPadUseCustomRange =
         (bool)mapping.getProperty("pitchPadUseCustomRange", false);
@@ -398,14 +414,22 @@ InspectorSchema MappingDefinition::getSchema(const juce::ValueTree &mapping,
       steps.propertyId = "smartStepShift";
       steps.label = "Scale Steps";
       steps.controlType = InspectorControl::Type::Slider;
-      steps.min = 0.0;
-      steps.max = 12.0;
+      // Keyboard / button mappings: allow negative and positive step shifts.
+      // Touchpad tab: interpret this as a maximum range, so restrict to
+      // positive values only.
+      if (forTouchpadEditor && isTouchpadMapping) {
+        steps.min = 1.0;
+        steps.max = 12.0;
+      } else {
+        steps.min = -12.0;
+        steps.max = 12.0;
+      }
       steps.step = 1.0;
       setControlDefaultFromMap(steps);
       schema.push_back(steps);
     }
 
-    if (forTouchpadEditor && isPitchOrSmart) {
+    if (forTouchpadEditor && isTouchpadMapping && isPitchOrSmart) {
       schema.push_back(createSeparator("Pitch pad", juce::Justification::centredLeft));
       InspectorControl pitchMode;
       pitchMode.propertyId = "pitchPadMode";
@@ -511,31 +535,17 @@ InspectorSchema MappingDefinition::getSchema(const juce::ValueTree &mapping,
       setControlDefaultFromMap(touchGlide);
       schema.push_back(touchGlide);
 
-      // SmartScaleBend only: Follow global scale, scale selection, Edit button
+      // SmartScaleBend always uses the global scale and root; per-mapping scale
+      // selection is no longer supported. Show an informational label instead
+      // of a per-mapping scale chooser.
       if (adsrTargetStr.equalsIgnoreCase("SmartScaleBend")) {
-        const bool followGlobal =
-            (bool)mapping.getProperty("smartScaleFollowGlobal", MappingDefaults::SmartScaleFollowGlobal);
-        InspectorControl followGlobalCtrl;
-        followGlobalCtrl.propertyId = "smartScaleFollowGlobal";
-        followGlobalCtrl.label = "Follow global scale";
-        followGlobalCtrl.controlType = InspectorControl::Type::Toggle;
-        setControlDefaultFromMap(followGlobalCtrl);
-        schema.push_back(followGlobalCtrl);
-
-        InspectorControl scaleNameCtrl;
-        scaleNameCtrl.propertyId = "smartScaleName";
-        scaleNameCtrl.label = "Scale";
-        scaleNameCtrl.controlType = InspectorControl::Type::ComboBox;
-        scaleNameCtrl.isEnabled = !followGlobal;
-        setControlDefaultFromMap(scaleNameCtrl);
-        schema.push_back(scaleNameCtrl);
-
-        InspectorControl editBtn;
-        editBtn.propertyId = "smartScaleEdit";
-        editBtn.label = "Edit...";
-        editBtn.controlType = InspectorControl::Type::Button;
-        editBtn.isEnabled = !followGlobal;
-        schema.push_back(editBtn);
+        InspectorControl info;
+        info.propertyId = "smartScaleInfo";
+        info.label =
+            "Smart Scale Bend always uses the global scale and root.\n"
+            "Change them from the Global Scale settings.";
+        info.controlType = InspectorControl::Type::LabelOnly;
+        schema.push_back(info);
       }
     }
 
@@ -562,8 +572,9 @@ InspectorSchema MappingDefinition::getSchema(const juce::ValueTree &mapping,
       setControlDefaultFromMap(valOff);
       schema.push_back(valOff);
 
-      // Touchpad-only: CC release behaviour (instant vs latch) for Position mode.
-      if (forTouchpadEditor) {
+      // Touchpad-only: CC release behaviour (instant vs latch) for Position
+      // mode.
+      if (isTouchpadMapping && forTouchpadEditor) {
         InspectorControl ccRelease;
         ccRelease.propertyId = "ccReleaseBehavior";
         ccRelease.label = "Release behaviour";
@@ -575,7 +586,8 @@ InspectorSchema MappingDefinition::getSchema(const juce::ValueTree &mapping,
       }
     }
 
-    if (adsrTargetStr.equalsIgnoreCase("CC") &&
+    if (isTouchpadMapping && forTouchpadEditor &&
+        adsrTargetStr.equalsIgnoreCase("CC") &&
         expressionCCModeStr.equalsIgnoreCase("Slide")) {
       schema.push_back(createSeparator("Slide", juce::Justification::centredLeft));
 
@@ -803,7 +815,8 @@ InspectorSchema MappingDefinition::getSchema(const juce::ValueTree &mapping,
       }
     }
 
-    if (adsrTargetStr.equalsIgnoreCase("CC") &&
+    if (isTouchpadMapping && forTouchpadEditor &&
+        adsrTargetStr.equalsIgnoreCase("CC") &&
         expressionCCModeStr.equalsIgnoreCase("Encoder")) {
       schema.push_back(createSeparator("Encoder", juce::Justification::centredLeft));
       InspectorControl encAxis;

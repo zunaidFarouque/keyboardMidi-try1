@@ -1,4 +1,5 @@
 #include "SettingsManager.h"
+#include "CrashLogger.h"
 
 SettingsManager::SettingsManager() {
   rootNode = juce::ValueTree("MIDIQySettings");
@@ -11,6 +12,7 @@ SettingsManager::SettingsManager() {
                        nullptr); // Default: Studio Mode OFF
   rootNode.setProperty("capWindowRefresh30Fps", true,
                        nullptr); // Default: cap at 30 FPS
+  rootNode.setProperty("debugModeEnabled", false, nullptr);
   // Visualizer opacity defaults: semi-transparent overlays so X/Y can be
   // layered.
   rootNode.setProperty("visualizerXOpacity", 0.45, nullptr);
@@ -110,6 +112,16 @@ void SettingsManager::setCapWindowRefresh30Fps(bool cap) {
 
 int SettingsManager::getWindowRefreshIntervalMs() const {
   return isCapWindowRefresh30Fps() ? 34 : 16; // 30 FPS cap vs ~60 FPS
+}
+
+bool SettingsManager::getDebugModeEnabled() const {
+  return rootNode.getProperty("debugModeEnabled", false);
+}
+
+void SettingsManager::setDebugModeEnabled(bool enabled) {
+  rootNode.setProperty("debugModeEnabled", enabled, nullptr);
+  CrashLogger::setDebugModeEnabled(enabled);
+  sendChangeMessage();
 }
 
 bool SettingsManager::isDelayMidiEnabled() const {
@@ -583,6 +595,7 @@ void SettingsManager::loadFromXml(juce::File file) {
         rootNode.setProperty("capWindowRefresh30Fps", true, nullptr);
         rootNode.setProperty("visualizerXOpacity", 0.45, nullptr);
         rootNode.setProperty("visualizerYOpacity", 0.45, nullptr);
+        rootNode.setProperty("debugModeEnabled", false, nullptr);
         rootNode.setProperty("delayMidiEnabled", false, nullptr);
         rootNode.setProperty("delayMidiSeconds", 1, nullptr);
         rootNode.setProperty("rememberUiState", true, nullptr);
@@ -598,6 +611,8 @@ void SettingsManager::loadFromXml(juce::File file) {
           rootNode.setProperty("visualizerXOpacity", 0.45, nullptr);
         if (!rootNode.hasProperty("visualizerYOpacity"))
           rootNode.setProperty("visualizerYOpacity", 0.45, nullptr);
+        if (!rootNode.hasProperty("debugModeEnabled"))
+          rootNode.setProperty("debugModeEnabled", false, nullptr);
         if (!rootNode.hasProperty("delayMidiEnabled"))
           rootNode.setProperty("delayMidiEnabled", false, nullptr);
         if (!rootNode.hasProperty("delayMidiSeconds"))

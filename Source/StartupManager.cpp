@@ -4,6 +4,7 @@
 #include "SettingsManager.h"
 #include "TouchpadMixerManager.h"
 #include "Zone.h"
+#include "CrashLogger.h"
 
 StartupManager::StartupManager(PresetManager *presetMgr,
                                DeviceManager *deviceMgr, ZoneManager *zoneMgr,
@@ -63,6 +64,7 @@ void StartupManager::initApp() {
   // 1. Load Settings (global) – loadFromXml validates pitchBendRange etc.
   if (settingsManager) {
     settingsManager->loadFromXml(settingsFile);
+    CrashLogger::setDebugModeEnabled(settingsManager->getDebugModeEnabled());
   }
 
   // Load DeviceManager config (global settings)

@@ -2,6 +2,7 @@
 #include "ChordUtilities.h"
 #include "DeviceSetupComponent.h"
 #include "KeyNameUtilities.h"
+#include "CrashLogger.h"
 #include "MappingTypes.h"
 #include "MidiNoteUtilities.h"
 #include "ScaleUtilities.h"
@@ -474,6 +475,18 @@ MainComponent::MainComponent()
   // show)
   tooltipWindow = std::make_unique<juce::TooltipWindow>(this, 500);
   addChildComponent(tooltipWindow.get());
+
+  // Initialize crash-logger UI context for this session.
+  int initialTab = mainTabs.getCurrentTabIndex();
+  juce::String tabName;
+  if (auto *btn = mainTabs.getTabbedButtonBar().getTabButton(initialTab))
+    tabName = btn->getButtonText();
+  int activeLayer = inputProcessor.getHighestActiveLayerIndex();
+  CrashLogger::setUiContext(initialTab, tabName, settingsManager.isStudioMode(),
+                            settingsManager.isMidiModeActive(), activeLayer,
+                            settingsManager.getZonesSelectedIndex(),
+                            settingsManager.getTouchpadSelectedRow());
+  CrashLogger::addBreadcrumb("App started");
 }
 
 MainComponent::~MainComponent() {
@@ -653,6 +666,9 @@ void MainComponent::changeListenerCallback(juce::ChangeBroadcaster *source) {
     int idx = mainTabs.getCurrentTabIndex();
     if (settingsManager.getRememberUiState())
       settingsManager.setMainTabIndex(idx);
+    juce::String tabName;
+    if (auto *btn = mainTabs.getTabbedButtonBar().getTabButton(idx))
+      tabName = btn->getButtonText();
     bool touchpadActive = (idx == kTouchpadTabIndex);
     if (visualizer)
       visualizer->setTouchpadTabActive(touchpadActive);
@@ -667,6 +683,12 @@ void MainComponent::changeListenerCallback(juce::ChangeBroadcaster *source) {
         miniWindow->setSelectedTouchpadLayout(-1, activeLayer);
       }
     }
+    int activeLayer = inputProcessor.getHighestActiveLayerIndex();
+    CrashLogger::setUiContext(idx, tabName, settingsManager.isStudioMode(),
+                              settingsManager.isMidiModeActive(), activeLayer,
+                              settingsManager.getZonesSelectedIndex(),
+                              settingsManager.getTouchpadSelectedRow());
+    CrashLogger::addBreadcrumb("Main tab changed to: " + tabName);
   } else if (source == &settingsManager) {
     // Handle MIDI mode changes
     if (!settingsManager.isMidiModeActive()) {
@@ -683,6 +705,7 @@ void MainComponent::changeListenerCallback(juce::ChangeBroadcaster *source) {
         ClipCursor(nullptr);
         updatePerformanceModeButtonText();
       }
+      CrashLogger::addBreadcrumb("MIDI mode OFF");
     } else {
       // MIDI mode turned on - show mini window if main window is minimized
       if (miniWindow) {
@@ -693,6 +716,7 @@ void MainComponent::changeListenerCallback(juce::ChangeBroadcaster *source) {
           }
         }
       }
+      CrashLogger::addBreadcrumb("MIDI mode ON");
     }
 
     // Handle Studio Mode changes - update Device Setup button visibility
@@ -705,6 +729,21 @@ void MainComponent::changeListenerCallback(juce::ChangeBroadcaster *source) {
     if (visualizer)
       visualizer->restartTimerWithInterval(
           settingsManager.getWindowRefreshIntervalMs());
+
+    // Update UI context snapshot with latest settings.
+    int idx = mainTabs.getCurrentTabIndex();
+    juce::String tabName;
+    if (auto *btn = mainTabs.getTabbedButtonBar().getTabButton(idx))
+      tabName = btn->getButtonText();
+    int activeLayer = inputProcessor.getHighestActiveLayerIndex();
+    CrashLogger::setUiContext(idx, tabName, settingsManager.isStudioMode(),
+                              settingsManager.isMidiModeActive(), activeLayer,
+                              settingsManager.getZonesSelectedIndex(),
+                              settingsManager.getTouchpadSelectedRow());
+    CrashLogger::addBreadcrumb("StudioMode=" +
+                               juce::String(settingsManager.isStudioMode()
+                                                ? "ON"
+                                                : "OFF"));
   } else if (source == &deviceManager) {
     rebuildTouchpadHandleCache();
   }

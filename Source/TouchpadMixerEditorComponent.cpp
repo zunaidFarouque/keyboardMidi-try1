@@ -587,7 +587,9 @@ void TouchpadMixerEditorComponent::applyConfigValue(
         break;
       }
       manager->updateLayout(selectedLayoutIndex, currentConfig);
-      rebuildUI();
+      // Changing layout type changes the schema; rebuild UI asynchronously so
+      // we don't destroy controls while callbacks are still running.
+      juce::MessageManager::callAsync([this]() { rebuildUI(); });
       return;
     } else if (isMapping && currentMapping.mapping.isValid()) {
       // Mapping type: Note/Expression/Command
@@ -609,7 +611,9 @@ void TouchpadMixerEditorComponent::applyConfigValue(
       }
       currentMapping.mapping.setProperty("type", typeStr, nullptr);
       manager->updateTouchpadMapping(selectedMappingIndex, currentMapping);
-      rebuildUI();
+      // Changing mapping type changes the schema; rebuild UI asynchronously so
+      // we don't destroy controls while callbacks are still running.
+      juce::MessageManager::callAsync([this]() { rebuildUI(); });
       return;
     }
     return;
@@ -844,8 +848,9 @@ void TouchpadMixerEditorComponent::applyConfigValue(
           propertyId == "sustainStyle" || propertyId == "panicMode" ||
           propertyId == "layerStyle" || propertyId == "transposeMode" ||
           propertyId == "transposeModify" || propertyId == "slideAxis" ||
-          propertyId == "slideSeparateAxisRanges")
-        rebuildUI();
+          propertyId == "slideSeparateAxisRanges") {
+        juce::MessageManager::callAsync([this]() { rebuildUI(); });
+      }
       return;
     }
     return;
@@ -1084,11 +1089,14 @@ void TouchpadMixerEditorComponent::createControl(
     juce::ToggleButton *tbPtr = tb.get();
     tb->onClick = [this, propId, tbPtr]() {
       applyConfigValue(propId, juce::var(tbPtr->getToggleState()));
-      // Some toggles (e.g. slideReturnOnRelease) control visibility of other
-      // controls via enabledConditionProperty. Rebuild the UI so dependent
-      // sliders appear/disappear immediately.
-      if (selectionKind == SelectionKind::Mapping)
-        rebuildUI();
+      // Some toggles (e.g. slideReturnOnRelease, pitchPadUseCustomRange)
+      // control visibility of other controls via enabledConditionProperty.
+      // Schedule a UI rebuild asynchronously so the current click handler can
+      // finish before we destroy and recreate controls, avoiding callbacks
+      // into deleted components.
+      if (selectionKind == SelectionKind::Mapping) {
+        juce::MessageManager::callAsync([this]() { rebuildUI(); });
+      }
     };
     auto lbl = std::make_unique<juce::Label>("", def.label + ":");
     lbl->setJustificationType(juce::Justification::centredLeft);
