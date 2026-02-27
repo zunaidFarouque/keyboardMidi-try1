@@ -564,43 +564,7 @@ void TouchpadVisualizerPanel::paint(juce::Graphics &g) {
     }
   }
 
-  if (configX) {
-    PitchPadLayout layoutX = buildPitchPadLayout(*configX);
-    float offset = 0.0f;
-    if (anchorNormX && configX->mode == PitchPadMode::Relative) {
-      float zeroX = 0.5f;
-      for (const auto &b : layoutX.bands) {
-        if (b.step == static_cast<int>(configX->zeroStep)) {
-          zeroX = (b.xStart + b.xEnd) * 0.5f;
-          break;
-        }
-      }
-      offset = *anchorNormX - zeroX;
-    }
-    for (const auto &band : layoutX.bands) {
-      float xStart = juce::jlimit(0.0f, 1.0f, band.xStart + offset);
-      float xEnd = juce::jlimit(0.0f, 1.0f, band.xEnd + offset);
-      if (xEnd <= xStart)
-        continue;
-      float bx = touchpadRect.getX() + xStart * touchpadRect.getWidth();
-      float bw = (xEnd - xStart) * touchpadRect.getWidth();
-      if (bw > 0.5f) {
-        g.setColour(band.isRest ? xRestCol : xTransCol);
-        g.fillRect(bx, touchpadRect.getY(), bw, touchpadRect.getHeight());
-      }
-    }
-  }
-  if (configY) {
-    PitchPadLayout layoutY = buildPitchPadLayout(*configY);
-    for (const auto &band : layoutY.bands) {
-      float by = touchpadRect.getY() + band.xStart * touchpadRect.getHeight();
-      float bh = (band.xEnd - band.xStart) * touchpadRect.getHeight();
-      if (bh > 0.5f) {
-        g.setColour(band.isRest ? yRestCol : yTransCol);
-        g.fillRect(touchpadRect.getX(), by, touchpadRect.getWidth(), bh);
-      }
-    }
-  } else if (yCcInputRange) {
+  if (yCcInputRange) {
     float imin = juce::jlimit(0.0f, 1.0f, yCcInputRange->first);
     float imax = juce::jlimit(0.0f, 1.0f, yCcInputRange->second);
     float baseY = touchpadRect.getY();
@@ -1027,10 +991,55 @@ void TouchpadVisualizerPanel::paint(juce::Graphics &g) {
       if (vis.isRegionLocked)
         borderThickness += 0.4f;
 
+      // Pitch/SmartScaleBend: draw bands inside this mapping's region only.
+      if (vis.kind == TouchpadMappingVisualKind::Pitch &&
+          entry.conversionParams.pitchPadConfig.has_value()) {
+        const auto &config = *entry.conversionParams.pitchPadConfig;
+        PitchPadLayout layout = buildPitchPadLayout(config);
+        juce::Graphics::ScopedSaveState save(g);
+        g.reduceClipRegion(vis.regionRect.toNearestInt());
+        const auto &r = vis.regionRect;
+        if (entry.eventId == TouchpadEvent::Finger1X) {
+          float offset = 0.0f;
+          if (anchorNormX && config.mode == PitchPadMode::Relative) {
+            float zeroX = 0.5f;
+            for (const auto &b : layout.bands) {
+              if (b.step == static_cast<int>(config.zeroStep)) {
+                zeroX = (b.xStart + b.xEnd) * 0.5f;
+                break;
+              }
+            }
+            offset = *anchorNormX - zeroX;
+          }
+          for (const auto &band : layout.bands) {
+            float xStart = juce::jlimit(0.0f, 1.0f, band.xStart + offset);
+            float xEnd = juce::jlimit(0.0f, 1.0f, band.xEnd + offset);
+            if (xEnd <= xStart)
+              continue;
+            float bx = r.getX() + xStart * r.getWidth();
+            float bw = (xEnd - xStart) * r.getWidth();
+            if (bw > 0.5f) {
+              g.setColour(band.isRest ? xRestCol : xTransCol);
+              g.fillRect(bx, r.getY(), bw, r.getHeight());
+            }
+          }
+        } else if (entry.eventId == TouchpadEvent::Finger1Y) {
+          for (const auto &band : layout.bands) {
+            float by = r.getY() + band.xStart * r.getHeight();
+            float bh = (band.xEnd - band.xStart) * r.getHeight();
+            if (bh > 0.5f) {
+              g.setColour(band.isRest ? yRestCol : yTransCol);
+              g.fillRect(r.getX(), by, r.getWidth(), bh);
+            }
+          }
+        }
+      }
+
       // Fill: solid or simple gradient along axis for position-dependent
-      // mappings. Use a slightly stronger contrast so the direction is
-      // immediately legible without feeling heavy.
-      if (vis.isPositionDependent) {
+      // mappings. For pitch-pad mappings, keep the fill subtle so the
+      // underlying band-based visualization remains clearly visible.
+      if (vis.isPositionDependent &&
+          vis.kind != TouchpadMappingVisualKind::Pitch) {
         juce::Colour cLow = baseCol.darker(0.4f).withAlpha(0.45f);
         juce::Colour cHigh = baseCol.brighter(0.35f).withAlpha(0.85f);
         juce::ColourGradient grad(cLow, 0.0f, 0.0f, cHigh, 1.0f, 1.0f, false);
@@ -1047,7 +1056,7 @@ void TouchpadVisualizerPanel::paint(juce::Graphics &g) {
         }
         g.setGradientFill(grad);
         g.fillRoundedRectangle(r, cornerRadius);
-      } else {
+      } else if (vis.kind != TouchpadMappingVisualKind::Pitch) {
         g.setColour(baseCol.withAlpha(0.24f));
         g.fillRoundedRectangle(vis.regionRect, cornerRadius);
       }

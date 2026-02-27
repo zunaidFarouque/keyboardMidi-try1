@@ -2421,9 +2421,51 @@ void InputProcessor::processTouchpadContacts(
                          static_cast<float>(p.outputMax - p.outputMin) * t;
           float stepOffset = 0.0f;
 
+          // Precompute region-local normalized axis for pitch-pad mappings so
+          // runtime matches the visualizer's region-relative bands. This is
+          // only used for pitch-based targets that actually use pitch-pad
+          // layouts; CC ContinuousToRange keeps using the global axis.
+          float tPitchPad = t;
+          if (p.pitchPadConfig.has_value() &&
+              (act.adsrSettings.target == AdsrTarget::PitchBend ||
+               act.adsrSettings.target == AdsrTarget::SmartScaleBend)) {
+            float axis01Global = continuousVal;
+            float axis01 = std::clamp(axis01Global, 0.0f, 1.0f);
+
+            // For explicit regions, remap X/Y-driven events into region-local
+            // 0..1 so that the left/top edge of the region is 0 and the
+            // right/bottom edge is 1. Distance-based events keep using the
+            // global 0..1 axis.
+            bool isXEvent =
+                (entry.eventId == TouchpadEvent::Finger1X ||
+                 entry.eventId == TouchpadEvent::Finger2X ||
+                 entry.eventId == TouchpadEvent::Finger1And2AvgX);
+            bool isYEvent =
+                (entry.eventId == TouchpadEvent::Finger1Y ||
+                 entry.eventId == TouchpadEvent::Finger2Y ||
+                 entry.eventId == TouchpadEvent::Finger1And2AvgY);
+
+            if (touchpadMappingHasRegion(entry) && (isXEvent || isYEvent)) {
+              float regionStart =
+                  isYEvent ? entry.regionTop : entry.regionLeft;
+              float regionEnd =
+                  isYEvent ? entry.regionBottom : entry.regionRight;
+              float regionSpan = regionEnd - regionStart;
+              if (regionSpan > 1.0e-6f) {
+                axis01 = (axis01Global - regionStart) / regionSpan;
+                axis01 = std::clamp(axis01, 0.0f, 1.0f);
+              } else {
+                axis01 = 0.0f;
+              }
+            }
+
+            tPitchPad = (axis01 - p.inputMin) * p.invInputRange;
+            tPitchPad = std::clamp(tPitchPad, 0.0f, 1.0f);
+          }
+
           // If a pitch-pad config is present and this is a pitch-based target,
-          // use the shared pitch-pad layout to derive the discrete step from X
-          // instead of direct linear min/max mapping.
+          // use the shared pitch-pad layout to derive the discrete step from
+          // the normalized axis instead of direct linear min/max mapping.
           if (p.pitchPadConfig.has_value() &&
               (act.adsrSettings.target == AdsrTarget::PitchBend ||
                act.adsrSettings.target == AdsrTarget::SmartScaleBend)) {
@@ -2455,8 +2497,9 @@ void InputProcessor::processTouchpadContacts(
                 // Store anchor X position and the absolute step it maps to.
                 {
                   juce::ScopedLock al(anchorLock);
-                  pitchPadRelativeAnchorT[relKey] = t;
-                  float anchorXClamped = juce::jlimit(0.0f, 1.0f, t);
+                  pitchPadRelativeAnchorT[relKey] = tPitchPad;
+                  float anchorXClamped =
+                      juce::jlimit(0.0f, 1.0f, tPitchPad);
                   PitchSample anchorSample = mapXToStep(layout, anchorXClamped);
                   pitchPadRelativeAnchorStep[relKey] = anchorSample.step;
                 }
@@ -2473,7 +2516,7 @@ void InputProcessor::processTouchpadContacts(
                 }
               }
               if (hasAnchor) {
-                float xClamped = juce::jlimit(0.0f, 1.0f, t);
+                float xClamped = juce::jlimit(0.0f, 1.0f, tPitchPad);
                 PitchSample sample = mapXToStep(layout, xClamped);
                 stepOffset = sample.step - anchorStepVal;
               } else {
@@ -2482,7 +2525,7 @@ void InputProcessor::processTouchpadContacts(
             } else {
               // Absolute mode: use normalized coordinate directly. zeroStep is
               // the configured center (currently 0.0f so middle of range).
-              float xClamped = juce::jlimit(0.0f, 1.0f, t);
+              float xClamped = juce::jlimit(0.0f, 1.0f, tPitchPad);
               PitchSample sample = mapXToStep(layout, xClamped);
               stepOffset = sample.step - cfg.zeroStep;
             }
