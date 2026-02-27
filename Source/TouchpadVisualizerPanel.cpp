@@ -32,6 +32,7 @@ struct TouchpadMappingVisual {
   bool isLatched = false;
   bool isRegionLocked = false;
   std::optional<float> currentValue01;
+  std::optional<float> pitchSemitoneOffset;
 };
 
 static bool isPitchTarget(const MidiAction &act) {
@@ -472,8 +473,18 @@ void TouchpadVisualizerPanel::paint(juce::Graphics &g) {
   std::optional<float> anchorNormX;
   if (configX && configX->mode == PitchPadMode::Relative && inputProcessor) {
     anchorNormX = inputProcessor->getPitchPadRelativeAnchorNormX(
-        lastDeviceHandle_.load(std::memory_order_acquire), currentVisualizedLayer,
-        TouchpadEvent::Finger1X);
+        lastDeviceHandle_.load(std::memory_order_acquire),
+        currentVisualizedLayer, TouchpadEvent::Finger1X);
+  }
+
+  // Relative pitch-pad mode: also track anchor for Y-driven pads so that the
+  // zero-step band visually follows the starting Y position, mirroring the X
+  // behaviour.
+  std::optional<float> anchorNormY;
+  if (configY && configY->mode == PitchPadMode::Relative && inputProcessor) {
+    anchorNormY = inputProcessor->getPitchPadRelativeAnchorNormX(
+        lastDeviceHandle_.load(std::memory_order_acquire),
+        currentVisualizedLayer, TouchpadEvent::Finger1Y);
   }
 
   float rectW = panelWidth;
@@ -540,6 +551,11 @@ void TouchpadVisualizerPanel::paint(juce::Graphics &g) {
         if (vis.hasRememberedValue) {
           if (auto v = inputProcessor->getTouchpadMappingValue01(dev, entry))
             vis.currentValue01 = *v;
+        }
+        if (vis.kind == TouchpadMappingVisualKind::Pitch && inputProcessor) {
+          if (auto semis =
+                  inputProcessor->getTouchpadPitchSemitoneOffset(dev, entry))
+            vis.pitchSemitoneOffset = *semis;
         }
         vis.regionRect = juce::Rectangle<float>(
             touchpadRect.getX() +
@@ -1024,9 +1040,24 @@ void TouchpadVisualizerPanel::paint(juce::Graphics &g) {
             }
           }
         } else if (entry.eventId == TouchpadEvent::Finger1Y) {
+          float offset = 0.0f;
+          if (anchorNormY && config.mode == PitchPadMode::Relative) {
+            float zeroY = 0.5f;
+            for (const auto &b : layout.bands) {
+              if (b.step == static_cast<int>(config.zeroStep)) {
+                zeroY = (b.xStart + b.xEnd) * 0.5f;
+                break;
+              }
+            }
+            offset = *anchorNormY - zeroY;
+          }
           for (const auto &band : layout.bands) {
-            float by = r.getY() + band.xStart * r.getHeight();
-            float bh = (band.xEnd - band.xStart) * r.getHeight();
+            float yStart = juce::jlimit(0.0f, 1.0f, band.xStart + offset);
+            float yEnd = juce::jlimit(0.0f, 1.0f, band.xEnd + offset);
+            if (yEnd <= yStart)
+              continue;
+            float by = r.getY() + yStart * r.getHeight();
+            float bh = (yEnd - yStart) * r.getHeight();
             if (bh > 0.5f) {
               g.setColour(band.isRest ? yRestCol : yTransCol);
               g.fillRect(r.getX(), by, r.getWidth(), bh);
@@ -1064,8 +1095,10 @@ void TouchpadVisualizerPanel::paint(juce::Graphics &g) {
       g.setColour(baseCol.brighter(0.35f).withAlpha(0.9f));
       g.drawRoundedRectangle(vis.regionRect, cornerRadius, borderThickness);
 
-      // Value bar for mappings with remembered values.
-      if (vis.hasRememberedValue && vis.currentValue01.has_value()) {
+      // Value bar for mappings with remembered values. Skip for pitch mappings
+      // where we instead show a semitone offset label.
+      if (vis.kind != TouchpadMappingVisualKind::Pitch &&
+          vis.hasRememberedValue && vis.currentValue01.has_value()) {
         float v = juce::jlimit(0.0f, 1.0f, *vis.currentValue01);
         juce::Colour barCol =
             baseCol.brighter(0.6f).withAlpha(0.95f);
@@ -1161,28 +1194,51 @@ void TouchpadVisualizerPanel::paint(juce::Graphics &g) {
       g.drawText(mainLabel, vis.regionRect,
                  juce::Justification::centred, false);
 
+      // Semitone offset label for pitch mappings: show how many semitones the
+      // current pitch-bend is away from centre, derived from the actual PB
+      // value being sent.
+      if (vis.kind == TouchpadMappingVisualKind::Pitch &&
+          vis.pitchSemitoneOffset.has_value()) {
+        float semis = *vis.pitchSemitoneOffset;
+        juce::String semisText =
+            juce::String::formatted("%+0.1f st", semis);
+        g.setColour(juce::Colours::white.withAlpha(0.85f));
+        float semisFontSize =
+            juce::jmin(9.0f, vis.regionRect.getHeight() * 0.3f);
+        g.setFont(semisFontSize);
+        juce::Rectangle<float> semisArea =
+            vis.regionRect.reduced(3.0f, 3.0f);
+        semisArea.setHeight(semisFontSize + 2.0f);
+        semisArea.setY(
+            vis.regionRect.getBottom() - semisArea.getHeight());
+        g.drawText(semisText, semisArea,
+                   juce::Justification::centredRight, false);
+      }
+
       // Axis arrows.
       g.setColour(baseCol.brighter(0.7f).withAlpha(0.9f));
       float arrowFontSize =
           juce::jmin(9.0f, vis.regionRect.getHeight() * 0.35f);
       g.setFont(arrowFontSize);
-      if (vis.axis == TouchpadVisualAxis::Horizontal ||
-          vis.axis == TouchpadVisualAxis::Both) {
-        juce::Rectangle<float> r = vis.regionRect;
-        r = r.withHeight(arrowFontSize + 2.0f);
-        r.setY(vis.regionRect.getBottom() - r.getHeight());
-        g.drawText(">", r.reduced(4.0f, 0.0f),
-                   juce::Justification::centredRight, false);
-      }
-      if (vis.axis == TouchpadVisualAxis::Vertical ||
-          vis.axis == TouchpadVisualAxis::Both) {
-        juce::Rectangle<float> r = vis.regionRect;
-        // Place vertical axis arrow around the vertical centre on the left edge
-        // so it does not clash with the header text at the top.
-        r = r.withWidth(arrowFontSize + 4.0f);
-        r.setHeight(arrowFontSize + 2.0f);
-        r.setY(vis.regionRect.getCentreY() - r.getHeight() * 0.5f);
-        g.drawText("^", r, juce::Justification::centred, false);
+      if (vis.kind != TouchpadMappingVisualKind::Pitch) {
+        if (vis.axis == TouchpadVisualAxis::Horizontal ||
+            vis.axis == TouchpadVisualAxis::Both) {
+          juce::Rectangle<float> r = vis.regionRect;
+          r = r.withHeight(arrowFontSize + 2.0f);
+          r.setY(vis.regionRect.getBottom() - r.getHeight());
+          g.drawText(">", r.reduced(4.0f, 0.0f),
+                     juce::Justification::centredRight, false);
+        }
+        if (vis.axis == TouchpadVisualAxis::Vertical ||
+            vis.axis == TouchpadVisualAxis::Both) {
+          juce::Rectangle<float> r = vis.regionRect;
+          // Place vertical axis arrow around the vertical centre on the left
+          // edge so it does not clash with the header text at the top.
+          r = r.withWidth(arrowFontSize + 4.0f);
+          r.setHeight(arrowFontSize + 2.0f);
+          r.setY(vis.regionRect.getCentreY() - r.getHeight() * 0.5f);
+          g.drawText("^", r, juce::Justification::centred, false);
+        }
       }
 
       // Region lock glyph (top-right) – draw a tiny lock outline instead of

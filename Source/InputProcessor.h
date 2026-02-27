@@ -163,6 +163,12 @@ public:
   std::optional<float> getTouchpadMappingValue01(
       uintptr_t deviceHandle, const TouchpadMappingEntry &entry) const;
 
+  // Touchpad pitch mappings: last known pitch-bend offset in semitones for
+  // visualizer. Returns std::nullopt when no pitch-bend value has been sent
+  // yet for this mapping.
+  std::optional<float> getTouchpadPitchSemitoneOffset(
+      uintptr_t deviceHandle, const TouchpadMappingEntry &entry) const;
+
   // True if any manual mapping exists for this keyCode (for conflict highlight
   // in visualizer)
   bool hasManualMappingForKey(int keyCode);

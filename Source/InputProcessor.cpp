@@ -1466,6 +1466,39 @@ std::optional<float> InputProcessor::getTouchpadMappingValue01(
   return std::nullopt;
 }
 
+std::optional<float> InputProcessor::getTouchpadPitchSemitoneOffset(
+    uintptr_t deviceHandle, const TouchpadMappingEntry &entry) const {
+  if (deviceHandle == 0)
+    return std::nullopt;
+
+  const auto &act = entry.action;
+  const bool isPitch =
+      (act.adsrSettings.target == AdsrTarget::PitchBend ||
+       act.adsrSettings.target == AdsrTarget::SmartScaleBend);
+  if (!isPitch)
+    return std::nullopt;
+
+  const int layerId = juce::jlimit(0, 8, entry.layerId);
+  const int eventId = entry.eventId;
+  const int channel = act.channel;
+
+  // Pitch-bend values are stored in lastTouchpadContinuousValues with
+  // ccNumber = -1.
+  auto key =
+      std::make_tuple(deviceHandle, layerId, eventId, channel, -1);
+  auto it = lastTouchpadContinuousValues.find(key);
+  if (it == lastTouchpadContinuousValues.end())
+    return std::nullopt;
+
+  int pbVal = juce::jlimit(0, 16383, it->second);
+
+  int pbRange = juce::jmax(1, settingsManager.getPitchBendRange());
+  double stepsPerSemitone = 8192.0 / static_cast<double>(pbRange);
+  float offsetSemis = static_cast<float>(
+      (static_cast<double>(pbVal) - 8192.0) / stepsPerSemitone);
+  return offsetSemis;
+}
+
 bool InputProcessor::hasManualMappingForKey(int keyCode) {
   std::array<bool, 9> activeLayersSnapshot{};
   {

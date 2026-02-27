@@ -276,6 +276,20 @@ juce::var TouchpadMixerEditorComponent::getConfigValue(
         id = 3;
       return juce::var(id);
     }
+    if (propertyId == "pitchPadAxis") {
+      // Pitch-pad axis is a Touchpad editor convenience that maps to the
+      // underlying inputTouchpadEvent. Horizontal uses X-based events,
+      // Vertical uses Y-based events. Default to Horizontal when ambiguous.
+      int eventId = static_cast<int>(
+          currentMapping.mapping.getProperty("inputTouchpadEvent",
+                                             TouchpadEvent::Finger1X));
+      int id = 1; // 1 = Horizontal (X), 2 = Vertical (Y)
+      if (eventId == TouchpadEvent::Finger1Y ||
+          eventId == TouchpadEvent::Finger2Y ||
+          eventId == TouchpadEvent::Finger1And2AvgY)
+        id = 2;
+      return juce::var(id);
+    }
     // All mapping properties are stored in the ValueTree.
     if (currentMapping.mapping.hasProperty(propertyId)) {
       juce::var propVal = currentMapping.mapping.getProperty(propertyId);
@@ -743,6 +757,19 @@ void TouchpadMixerEditorComponent::applyConfigValue(
       currentConfig.regionLock = v;
     else if (isMapping)
       currentMapping.regionLock = v;
+  }
+  else if (propertyId == "pitchPadAxis") {
+    // Touchpad-only: map Axis combo (Horizontal/Vertical) to the underlying
+    // inputTouchpadEvent used by runtime and visualizer.
+    if (isMapping && currentMapping.mapping.isValid()) {
+      int id = juce::jlimit(1, 2, static_cast<int>(value));
+      int eventVal =
+          (id == 2) ? TouchpadEvent::Finger1Y : TouchpadEvent::Finger1X;
+      currentMapping.mapping.setProperty("inputTouchpadEvent", eventVal,
+                                         nullptr);
+      manager->updateTouchpadMapping(selectedMappingIndex, currentMapping);
+    }
+    return;
   }
   else {
     // Mapping-specific properties: write to mapping ValueTree.

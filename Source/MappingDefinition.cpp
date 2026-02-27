@@ -430,7 +430,22 @@ InspectorSchema MappingDefinition::getSchema(const juce::ValueTree &mapping,
     }
 
     if (forTouchpadEditor && isTouchpadMapping && isPitchOrSmart) {
-      schema.push_back(createSeparator("Pitch pad", juce::Justification::centredLeft));
+      schema.push_back(
+          createSeparator("Pitch pad", juce::Justification::centredLeft));
+
+      // Touchpad-only: pitch-pad axis (Horizontal/Vertical). This is wired to
+      // the underlying inputTouchpadEvent property in the Touchpad editor,
+      // allowing pitch pads to run along X (horizontal) or Y (vertical) while
+      // keeping keyboard mappings unaware of pitch-pad axis.
+      InspectorControl pitchAxis;
+      pitchAxis.propertyId = "pitchPadAxis";
+      pitchAxis.label = "Axis";
+      pitchAxis.controlType = InspectorControl::Type::ComboBox;
+      pitchAxis.options[1] = "Horizontal (X)";
+      pitchAxis.options[2] = "Vertical (Y)";
+      setControlDefaultFromMap(pitchAxis);
+      schema.push_back(pitchAxis);
+
       InspectorControl pitchMode;
       pitchMode.propertyId = "pitchPadMode";
       pitchMode.label = "Mode";

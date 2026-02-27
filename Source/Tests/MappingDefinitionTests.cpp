@@ -355,6 +355,33 @@ TEST(MappingDefinitionTest, ExpressionSmartScaleBendHidesCustomEnvelopeControl) 
       << "SmartScaleBend target should not show Use Custom ADSR (code ignores it)";
 }
 
+TEST(MappingDefinitionTest, TouchpadPitchPadAxisIsTouchpadEditorOnly) {
+  juce::ValueTree mapping("Mapping");
+  mapping.setProperty("type", "Expression", nullptr);
+  mapping.setProperty("adsrTarget", "PitchBend", nullptr);
+  mapping.setProperty("inputAlias", "Touchpad", nullptr);
+
+  // Generic Mappings tab schema: no pitchPadAxis control.
+  InspectorSchema keyboardViewSchema =
+      MappingDefinition::getSchema(mapping, 12, false);
+  bool hasAxisInKeyboardView = false;
+  for (const auto &c : keyboardViewSchema)
+    if (c.propertyId == "pitchPadAxis")
+      hasAxisInKeyboardView = true;
+  EXPECT_FALSE(hasAxisInKeyboardView)
+      << "Pitch pad Axis should not appear in generic Mappings tab schema";
+
+  // Touchpad editor schema: Axis control should be present.
+  InspectorSchema touchpadViewSchema =
+      MappingDefinition::getSchema(mapping, 12, true);
+  bool hasAxisInTouchpadView = false;
+  for (const auto &c : touchpadViewSchema)
+    if (c.propertyId == "pitchPadAxis")
+      hasAxisInTouchpadView = true;
+  EXPECT_TRUE(hasAxisInTouchpadView)
+      << "Pitch pad Axis should appear only in Touchpad editor schema";
+}
+
 // --- Expression: CC -> value when on/off (used for keyboard CC in Mappings tab) ---
 TEST(MappingDefinitionTest, ExpressionCCHasValueWhenOnOff) {
   juce::ValueTree mapping("Mapping");

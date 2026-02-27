@@ -191,7 +191,6 @@ protected:
     return static_cast<float>((static_cast<double>(pbVal) - 8192.0) /
                               stepsPerSemitone);
   }
-  // Helper: get last PB value from InputProcessor's internal cache.
   int getLastPitchBend(uintptr_t deviceHandle) const {
     auto key =
         std::make_tuple(deviceHandle, 0, (int)TouchpadEvent::Finger1X, 1, -1);
@@ -252,6 +251,36 @@ TEST_F(TouchpadPitchPadTest, RelativeModeAnchorAt02Maps07ToPBPlus2) {
   float semitoneAt07 = pbToSemitones(pbAt07);
   EXPECT_NEAR(semitoneAt07, 2.0f, 0.25f)
       << "At x=0.7 (anchor 0.2 + 0.5 delta), should reach PB+2";
+}
+
+
+TEST_F(TouchpadPitchPadTest, GetTouchpadPitchSemitoneOffsetFollowsPitchBend) {
+  addTouchpadPitchMapping("Absolute");
+
+  uintptr_t dev = 0x6789;
+
+  // First touch at centre should give approximately 0 semitones.
+  sendFinger1X(dev, 0.5f);
+   int pbCentre = getLastPitchBend(dev);
+   float expectedCentre = pbToSemitones(pbCentre);
+  TouchpadMappingEntry entry;
+  entry.layerId = 0;
+  entry.eventId = TouchpadEvent::Finger1X;
+  entry.action.channel = 1;
+  entry.action.adsrSettings.target = AdsrTarget::PitchBend;
+  auto offsetCentre =
+      proc.getTouchpadPitchSemitoneOffset(dev, entry);
+  ASSERT_TRUE(offsetCentre.has_value());
+  EXPECT_NEAR(*offsetCentre, expectedCentre, 0.001f);
+
+  // Move to the rightmost edge; for range +/-2 this should be close to +2.0 st.
+  sendFinger1X(dev, 1.0f);
+  int pbMax = getLastPitchBend(dev);
+  float expectedMax = pbToSemitones(pbMax);
+  auto offsetMax =
+      proc.getTouchpadPitchSemitoneOffset(dev, entry);
+  ASSERT_TRUE(offsetMax.has_value());
+  EXPECT_NEAR(*offsetMax, expectedMax, 0.001f);
 }
 
 TEST_F(TouchpadPitchPadTest, RelativeModeExtrapolatesBeyondConfiguredRange) {
