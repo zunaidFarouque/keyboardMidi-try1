@@ -21,6 +21,7 @@ public:
                               uintptr_t deviceHandle);
   void setVisualizedLayer(int layerId);
   void setSelectedTouchpadLayout(int layoutIndex, int layerId);
+  void setSoloLayoutGroupForEditing(int groupId);
 
 private:
   void changeListenerCallback(juce::ChangeBroadcaster *source) override;

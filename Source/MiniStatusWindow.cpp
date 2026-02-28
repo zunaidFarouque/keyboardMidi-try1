@@ -91,7 +91,17 @@ void MiniStatusWindow::setSelectedTouchpadLayout(int layoutIndex, int layerId) {
     if (auto *panel = dynamic_cast<TouchpadVisualizerPanel *>(
             touchpadPanelHolder.get())) {
       panel->setSelectedLayout(layoutIndex, layerId);
+      if (layoutIndex < 0)
+        panel->setSoloLayoutGroupForEditing(-1);
     }
+  }
+}
+
+void MiniStatusWindow::setSoloLayoutGroupForEditing(int groupId) {
+  if (touchpadPanelHolder) {
+    if (auto *panel = dynamic_cast<TouchpadVisualizerPanel *>(
+            touchpadPanelHolder.get()))
+      panel->setSoloLayoutGroupForEditing(groupId);
   }
 }
 

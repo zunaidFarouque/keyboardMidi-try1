@@ -24,14 +24,16 @@ TouchpadTabComponent::TouchpadTabComponent(TouchpadMixerManager *mgr,
         if (kind == TouchpadMixerListPanel::RowKind::Layout) {
           editorPanel.setLayout(index, layoutCfg);
           if (onSelectionChangedForVisualizer)
-            onSelectionChangedForVisualizer(index, layoutCfg ? layoutCfg->layerId
-                                                             : 0);
+            onSelectionChangedForVisualizer(
+                index, layoutCfg ? layoutCfg->layerId : 0,
+                layoutCfg ? layoutCfg->layoutGroupId : 0);
         } else {
           editorPanel.setMapping(index, mappingCfg);
-          // Drive visualizer by mapping's layer so pitch-pad bands show when a
-          // PitchBend/SmartScaleBend mapping is selected.
+          // Drive visualizer by mapping's layer and group so pitch-pad bands and
+          // group filtering show when a mapping is selected.
           if (onSelectionChangedForVisualizer && mappingCfg)
-            onSelectionChangedForVisualizer(-1, mappingCfg->layerId);
+            onSelectionChangedForVisualizer(-1, mappingCfg->layerId,
+                                           mappingCfg->layoutGroupId);
         }
         // Persist selection immediately when it changes (not just at shutdown)
         // Use combinedRowIndex from callback instead of getSelectedRowIndex() to avoid stale values
@@ -64,20 +66,29 @@ void TouchpadTabComponent::refreshVisualizerSelection() {
   if (!onSelectionChangedForVisualizer || !manager)
     return;
   int idx = listPanel.getSelectedRowIndex();
+  // When list selection not yet restored (e.g. right after tab switch), use
+  // persisted row so the visualizer shows the correct layer immediately.
+  if (idx < 0 && settingsManager)
+    idx = settingsManager->getTouchpadSelectedRow();
   if (idx < 0) {
-    onSelectionChangedForVisualizer(-1, 0);
+    onSelectionChangedForVisualizer(-1, 0, -1);
     return;
   }
   auto layouts = manager->getLayouts();
-  if (idx < static_cast<int>(layouts.size())) {
-    onSelectionChangedForVisualizer(idx, layouts[(size_t)idx].layerId);
+  const int numLayouts = static_cast<int>(layouts.size());
+  if (idx < numLayouts) {
+    const auto &layout = layouts[(size_t)idx];
+    onSelectionChangedForVisualizer(idx, layout.layerId, layout.layoutGroupId);
   } else {
     auto mappings = manager->getTouchpadMappings();
-    int mappingIdx = idx - static_cast<int>(layouts.size());
+    int mappingIdx = idx - numLayouts;
     int layerId = 0;
-    if (mappingIdx >= 0 && mappingIdx < static_cast<int>(mappings.size()))
+    int layoutGroupId = -1;
+    if (mappingIdx >= 0 && mappingIdx < static_cast<int>(mappings.size())) {
       layerId = mappings[(size_t)mappingIdx].layerId;
-    onSelectionChangedForVisualizer(-1, layerId);
+      layoutGroupId = mappings[(size_t)mappingIdx].layoutGroupId;
+    }
+    onSelectionChangedForVisualizer(-1, layerId, layoutGroupId);
   }
 }
 

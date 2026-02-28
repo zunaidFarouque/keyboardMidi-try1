@@ -44,6 +44,10 @@ public:
   /// and only when currentVisualizedLayer == layerId. Pass -1 to hide overlay.
   void setSelectedTouchpadLayout(int layoutIndex, int layerId);
 
+  /// When editing in Touchpad tab, show only this layout group (or no-group if 0).
+  /// Pass -1 to use runtime solo group from InputProcessor.
+  void setSoloLayoutGroupForEditing(int groupId);
+
   /// Returns black or white for legible text on the given key fill color.
   static juce::Colour getTextColorForKeyFill(juce::Colour keyFillColor);
 

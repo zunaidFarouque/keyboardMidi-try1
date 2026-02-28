@@ -21,6 +21,10 @@ public:
   void setVisualizedLayer(int layerId);
   void setSelectedLayout(int layoutIndex, int layerId);
 
+  /// When editing in Touchpad tab, override which layout group is shown.
+  /// groupId < 0: use runtime solo group from InputProcessor; >= 0: show only that group (or no-group if 0).
+  void setSoloLayoutGroupForEditing(int groupId);
+
   /// When false, hide "Touchpad: Pt1: X=... Y=..." text (used in mini window)
   void setShowContactCoordinates(bool show);
 
@@ -38,7 +42,11 @@ private:
   int currentVisualizedLayer = 0;
   int selectedLayoutIndex_ = -1;
   int selectedLayoutLayerId_ = 0;
+  /// When >= 0, used instead of getEffectiveSoloLayoutGroupForLayer for display (Touchpad tab selection).
+  int soloGroupForEditing_ = -1;
   bool showContactCoordinates_ = true;
+
+  int getEffectiveSoloGroupForDisplay() const;
 
   std::vector<TouchpadContact> contacts_;
   std::atomic<uintptr_t> lastDeviceHandle_{0};

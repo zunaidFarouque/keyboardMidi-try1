@@ -89,14 +89,17 @@ MainComponent::MainComponent()
                                                         &settingsManager,
                                                         &scaleLibrary);
   touchpadTab->onSelectionChangedForVisualizer = [this](int layoutIndex,
-                                                        int layerId) {
+                                                        int layerId,
+                                                        int layoutGroupId) {
     if (visualizer) {
       visualizer->setSelectedTouchpadLayout(layoutIndex, layerId);
       visualizer->setVisualizedLayer(layerId);
+      visualizer->setSoloLayoutGroupForEditing(layoutGroupId);
     }
     if (miniWindow && settingsManager.getShowTouchpadVisualizerInMiniWindow()) {
       miniWindow->setSelectedTouchpadLayout(layoutIndex, layerId);
       miniWindow->setVisualizedLayer(layerId);
+      miniWindow->setSoloLayoutGroupForEditing(layoutGroupId);
     }
   };
   settingsPanel = std::make_unique<SettingsPanel>(settingsManager, midiEngine,
@@ -294,6 +297,7 @@ MainComponent::MainComponent()
     if (miniWindow && settingsManager.getShowTouchpadVisualizerInMiniWindow()) {
       miniWindow->setVisualizedLayer(layerId);
       miniWindow->setSelectedTouchpadLayout(layoutIndex, layerId);
+      miniWindow->setSoloLayoutGroupForEditing(-1);
     }
   };
 

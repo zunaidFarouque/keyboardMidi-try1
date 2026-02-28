@@ -336,6 +336,23 @@ void TouchpadVisualizerPanel::setSelectedLayout(int layoutIndex, int layerId) {
   selectedLayoutLayerId_ = layoutIndex >= 0 ? layerId : 0;
 }
 
+void TouchpadVisualizerPanel::setSoloLayoutGroupForEditing(int groupId) {
+  if (soloGroupForEditing_ != groupId) {
+    soloGroupForEditing_ = groupId;
+    lastPaintedContactCount_ = -1;
+    lastPaintedStateHash_ = 0;
+  }
+}
+
+int TouchpadVisualizerPanel::getEffectiveSoloGroupForDisplay() const {
+  if (soloGroupForEditing_ >= 0)
+    return soloGroupForEditing_;
+  return inputProcessor
+             ? inputProcessor->getEffectiveSoloLayoutGroupForLayer(
+                   currentVisualizedLayer)
+             : 0;
+}
+
 void TouchpadVisualizerPanel::setShowContactCoordinates(bool show) {
   showContactCoordinates_ = show;
 }
@@ -461,12 +478,7 @@ void TouchpadVisualizerPanel::paint(juce::Graphics &g) {
                      }),
       contactsSnapshot.end());
 
-  int soloGroupForLayer = 0;
-  if (inputProcessor) {
-    soloGroupForLayer =
-        inputProcessor->getEffectiveSoloLayoutGroupForLayer(
-            currentVisualizedLayer);
-  }
+  int soloGroupForLayer = getEffectiveSoloGroupForDisplay();
 
   std::optional<PitchPadConfig> configX;
   std::optional<PitchPadConfig> configY;
@@ -829,8 +841,7 @@ void TouchpadVisualizerPanel::paint(juce::Graphics &g) {
       for (size_t listIdx = 0; listIdx < ctx->touchpadLayoutOrder.size();
            ++listIdx) {
         const auto &ref = ctx->touchpadLayoutOrder[listIdx];
-        int soloGroupId =
-            inputProcessor->getEffectiveSoloLayoutGroupForLayer(currentVisualizedLayer);
+        int soloGroupId = getEffectiveSoloGroupForDisplay();
         if (ref.type == TouchpadType::Mixer &&
             ref.index < ctx->touchpadMixerStrips.size()) {
           const auto &strip = ctx->touchpadMixerStrips[ref.index];

@@ -168,9 +168,19 @@ void VisualizerComponent::setSelectedTouchpadLayout(int layoutIndex,
                                                     int layerId) {
   selectedTouchpadLayoutIndex_ = layoutIndex;
   selectedTouchpadLayoutLayerId_ = layoutIndex >= 0 ? layerId : 0;
-  if (touchpadPanel_)
+  if (touchpadPanel_) {
     touchpadPanel_->setSelectedLayout(layoutIndex,
                                       layoutIndex >= 0 ? layerId : 0);
+    if (layoutIndex < 0)
+      touchpadPanel_->setSoloLayoutGroupForEditing(-1);
+  }
+  cacheValid = false;
+  needsRepaint = true;
+}
+
+void VisualizerComponent::setSoloLayoutGroupForEditing(int groupId) {
+  if (touchpadPanel_)
+    touchpadPanel_->setSoloLayoutGroupForEditing(groupId);
   cacheValid = false;
   needsRepaint = true;
 }

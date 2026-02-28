@@ -14,9 +14,9 @@ public:
                                 ScaleLibrary *scaleLib = nullptr);
   ~TouchpadTabComponent() override;
 
-  /// Notified when layout selection changes: (layoutIndex, layerId). (-1, 0)
-  /// when none.
-  std::function<void(int layoutIndex, int layerId)>
+  /// Notified when layout/mapping selection changes: (layoutIndex, layerId, layoutGroupId).
+  /// layoutIndex -1 = mapping selected. layoutGroupId is the selected entry's group (0 = no group); used to show that group in the visualizer.
+  std::function<void(int layoutIndex, int layerId, int layoutGroupId)>
       onSelectionChangedForVisualizer;
 
   /// Sync visualizer with current list selection (call when tab is shown or
