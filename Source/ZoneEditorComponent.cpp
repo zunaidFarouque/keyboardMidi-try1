@@ -52,6 +52,10 @@ ZoneEditorComponent::ZoneEditorComponent(ZoneManager *zoneMgr, DeviceManager *de
       juce::Logger::writeToLog("ZoneEditorComponent: Persisting zonesSelectedIndex=" + juce::String(rowIndex));
       settingsManager->setZonesSelectedIndex(rowIndex);
     }
+    if (zone && onZoneSelectionChangedForVisualizer) {
+      int layerId = juce::jlimit(0, 8, zone->layerID);
+      onZoneSelectionChangedForVisualizer(layerId);
+    }
     resized(); // Update viewport bounds when zone changes
   };
 }

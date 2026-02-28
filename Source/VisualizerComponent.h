@@ -57,6 +57,10 @@ public:
 
   std::function<void(int layerId, int layoutIndex)> onTouchpadViewChanged;
 
+  /// Called when "Show selected layer" is turned ON so the host can immediately
+  /// push the current UI layer (e.g. from Mappings/Zones tab selection).
+  std::function<void()> onShowSelectedLayerToggledOn;
+
   void paint(juce::Graphics &) override;
   void resized() override;
 
@@ -126,6 +130,11 @@ private:
   // Phase 50.9.1: Follow toggle UI (kept simple for clarity)
   juce::TextButton followButton{"Follow Input"};
   void updateFollowButtonAppearance();
+
+  // Show selected layer: when on, visualizer shows UI-selected layer (Mappings/Zones tab)
+  juce::TextButton showSelectedLayerButton{"Show selected layer"};
+  bool showSelectedLayerEnabled_ = false;
+  void updateShowSelectedLayerButtonAppearance();
 
   bool touchpadTabActive_ = false; // when false, touchpad view follows active layer
 

@@ -59,6 +59,14 @@ public:
   bool getShowTouchpadVisualizerInMiniWindow() const;
   void setShowTouchpadVisualizerInMiniWindow(bool show);
 
+  // Light visualizer: solid fills instead of gradients (lighter CPU for live performance)
+  bool getVisualizerLightMode() const;
+  void setVisualizerLightMode(bool light);
+
+  // Show selected layer in visualizer (Mappings/Zones tab selection drives layer)
+  bool getVisualizerShowSelectedLayer() const;
+  void setVisualizerShowSelectedLayer(bool show);
+
   // Hide cursor when in performance mode (cursor still clipped)
   bool getHideCursorInPerformanceMode() const;
   void setHideCursorInPerformanceMode(bool hide);

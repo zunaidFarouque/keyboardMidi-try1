@@ -1,5 +1,6 @@
 #pragma once
 #include "InputProcessor.h"
+#include "MappingTypes.h"
 #include "SettingsManager.h"
 #include "TouchpadTypes.h"
 #include <JuceHeader.h>
@@ -55,6 +56,10 @@ private:
   static constexpr float kTouchpadAspectH = 2.0f;
   static constexpr int kDefaultRefreshIntervalMs = 34;
   static constexpr int kContactTimeoutMs = 1000; // 1 second timeout for stale contacts
+
+  // Cache PitchPadLayout by config hash for light live performance
+  std::unordered_map<size_t, PitchPadLayout> pitchPadLayoutCache_;
+  const void *lastContextForLayoutCache_ = nullptr;
 
   JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(TouchpadVisualizerPanel)
 };

@@ -4,6 +4,8 @@
 #include "PitchPadUtilities.h"
 #include "TouchpadMixerTypes.h"
 #include <algorithm>
+#include <array>
+#include <mutex>
 #include <optional>
 #include <set>
 
@@ -33,6 +35,17 @@ struct TouchpadMappingVisual {
   bool isRegionLocked = false;
   std::optional<float> currentValue01;
   std::optional<float> pitchSemitoneOffset;
+};
+
+// Structural part of a mapping visual (for cache); regionRect and values filled each paint.
+struct MappingVisualStructure {
+  const TouchpadMappingEntry *entry = nullptr;
+  TouchpadMappingVisualKind kind = TouchpadMappingVisualKind::Other;
+  TouchpadVisualAxis axis = TouchpadVisualAxis::None;
+  bool isPositionDependent = false;
+  bool hasRememberedValue = false;
+  bool isLatched = false;
+  bool isRegionLocked = false;
 };
 
 static bool isPitchTarget(const MidiAction &act) {
@@ -180,6 +193,82 @@ static juce::String touchpadEventToLabel(int eventId) {
     break;
   }
   return {};
+}
+
+static size_t hashPitchPadConfig(const PitchPadConfig &c) {
+  size_t h = 0;
+  h ^= std::hash<int>{}(static_cast<int>(c.mode)) + 0x9e3779b9u + (h << 6) + (h >> 2);
+  h ^= std::hash<int>{}(static_cast<int>(c.start)) + 0x9e3779b9u + (h << 6) + (h >> 2);
+  h ^= std::hash<float>{}(c.customStartX) + 0x9e3779b9u + (h << 6) + (h >> 2);
+  h ^= std::hash<int>{}(c.minStep) + 0x9e3779b9u + (h << 6) + (h >> 2);
+  h ^= std::hash<int>{}(c.maxStep) + 0x9e3779b9u + (h << 6) + (h >> 2);
+  h ^= std::hash<float>{}(c.restZonePercent) + 0x9e3779b9u + (h << 6) + (h >> 2);
+  h ^= std::hash<float>{}(c.transitionZonePercent) + 0x9e3779b9u + (h << 6) + (h >> 2);
+  h ^= std::hash<float>{}(c.restingSpacePercent) + 0x9e3779b9u + (h << 6) + (h >> 2);
+  h ^= std::hash<float>{}(c.zeroStep) + 0x9e3779b9u + (h << 6) + (h >> 2);
+  return h;
+}
+
+static juce::Colour baseColourForKind(TouchpadMappingVisualKind kind) {
+  switch (kind) {
+  case TouchpadMappingVisualKind::Note:
+    return juce::Colour(0xff3a5f9f);
+  case TouchpadMappingVisualKind::ExpressionCC:
+    return juce::Colour(0xff2f7f4f);
+  case TouchpadMappingVisualKind::Pitch:
+    return juce::Colour(0xff7a4fb8);
+  case TouchpadMappingVisualKind::Slide:
+    return juce::Colour(0xff3f8f6f);
+  case TouchpadMappingVisualKind::Encoder:
+    return juce::Colour(0xff9f7f3a);
+  case TouchpadMappingVisualKind::Command:
+  case TouchpadMappingVisualKind::Macro:
+    return juce::Colour(0xffc28b2f);
+  default:
+    return juce::Colour(0xff555555);
+  }
+}
+
+// Cache mapping visuals structure; invalidate when context/layer/group changes.
+static std::vector<MappingVisualStructure> s_mappingVisualsCache;
+static const void *s_mappingVisualsCacheCtx = nullptr;
+static int s_mappingVisualsCacheLayer = -1;
+static int s_mappingVisualsCacheSoloGroup = -2;
+
+// Cache gradients by (kind, axis) in normalized 0-1 space for light live performance.
+static const juce::ColourGradient &getCachedRegionGradient(
+    TouchpadMappingVisualKind kind, TouchpadVisualAxis axis) {
+  static constexpr int kNumKinds = 9;
+  static constexpr int kNumAxes = 4;
+  static std::array<juce::ColourGradient, kNumKinds * kNumAxes> cache;
+  static std::once_flag once;
+  std::call_once(once, []() {
+    for (int k = 0; k < kNumKinds; ++k) {
+      juce::Colour baseCol =
+          baseColourForKind(static_cast<TouchpadMappingVisualKind>(k));
+      juce::Colour cLow = baseCol.darker(0.4f).withAlpha(0.45f);
+      juce::Colour cHigh = baseCol.brighter(0.35f).withAlpha(0.85f);
+      for (int a = 0; a < kNumAxes; ++a) {
+        float x1 = 0.0f, y1 = 0.0f, x2 = 1.0f, y2 = 1.0f;
+        switch (static_cast<TouchpadVisualAxis>(a)) {
+        case TouchpadVisualAxis::Horizontal:
+          x1 = 0.0f; y1 = 0.5f; x2 = 1.0f; y2 = 0.5f;
+          break;
+        case TouchpadVisualAxis::Vertical:
+          x1 = 0.5f; y1 = 0.0f; x2 = 0.5f; y2 = 1.0f;
+          break;
+        case TouchpadVisualAxis::None:
+        case TouchpadVisualAxis::Both:
+        default:
+          break;
+        }
+        cache[k * kNumAxes + a] =
+            juce::ColourGradient(cLow, x1, y1, cHigh, x2, y2, false);
+      }
+    }
+  });
+  int idx = static_cast<int>(kind) * kNumAxes + static_cast<int>(axis);
+  return cache[static_cast<size_t>(idx)];
 }
 
 } // namespace
@@ -530,53 +619,119 @@ void TouchpadVisualizerPanel::paint(juce::Graphics &g) {
   if (inputProcessor) {
     auto ctx = inputProcessor->getContext();
     if (ctx) {
-      mappingVisuals.reserve(ctx->touchpadMappings.size());
-      uintptr_t dev =
-          lastDeviceHandle_.load(std::memory_order_acquire);
-      for (const auto &entry : ctx->touchpadMappings) {
-        if (entry.layerId != currentVisualizedLayer)
-          continue;
-        if ((soloGroupForLayer == 0 && entry.layoutGroupId != 0) ||
-            (soloGroupForLayer > 0 &&
-             entry.layoutGroupId != soloGroupForLayer))
-          continue;
-        TouchpadMappingVisual vis;
-        vis.entry = &entry;
-        vis.kind = classifyVisualKind(entry);
-        vis.axis = getVisualAxis(entry);
-        vis.isRegionLocked = entry.regionLock;
-        vis.isPositionDependent = isPositionDependentMapping(entry);
-        vis.isLatched = isLatchedMapping(entry);
-        vis.hasRememberedValue = hasRememberedValueMapping(entry);
-        if (vis.hasRememberedValue) {
-          if (auto v = inputProcessor->getTouchpadMappingValue01(dev, entry))
-            vis.currentValue01 = *v;
-        }
-        if (vis.kind == TouchpadMappingVisualKind::Pitch && inputProcessor) {
-          if (auto semis =
-                  inputProcessor->getTouchpadPitchSemitoneOffset(dev, entry))
-            vis.pitchSemitoneOffset = *semis;
-        }
-        vis.regionRect = juce::Rectangle<float>(
-            touchpadRect.getX() +
-                entry.regionLeft * touchpadRect.getWidth(),
-            touchpadRect.getY() +
-                entry.regionTop * touchpadRect.getHeight(),
-            (entry.regionRight - entry.regionLeft) * touchpadRect.getWidth(),
-            (entry.regionBottom - entry.regionTop) * touchpadRect.getHeight());
-        if (vis.regionRect.getWidth() <= 0.5f ||
-            vis.regionRect.getHeight() <= 0.5f)
-          continue;
-        mappingVisuals.push_back(std::move(vis));
+      // Invalidate PitchPadLayout cache when context changes (e.g. preset load)
+      if (ctx.get() != lastContextForLayoutCache_) {
+        pitchPadLayoutCache_.clear();
+        lastContextForLayoutCache_ = ctx.get();
       }
+      const bool cacheHit =
+          (ctx.get() == s_mappingVisualsCacheCtx &&
+           currentVisualizedLayer == s_mappingVisualsCacheLayer &&
+           soloGroupForLayer == s_mappingVisualsCacheSoloGroup);
 
-      std::sort(mappingVisuals.begin(), mappingVisuals.end(),
-                [](const TouchpadMappingVisual &a,
-                   const TouchpadMappingVisual &b) {
-                  int za = a.entry ? a.entry->zIndex : 0;
-                  int zb = b.entry ? b.entry->zIndex : 0;
-                  return za < zb; // lower first, higher drawn on top
-                });
+      if (cacheHit && !s_mappingVisualsCache.empty()) {
+        uintptr_t dev =
+            lastDeviceHandle_.load(std::memory_order_acquire);
+        mappingVisuals.reserve(s_mappingVisualsCache.size());
+        for (const auto &s : s_mappingVisualsCache) {
+          if (!s.entry)
+            continue;
+          const auto &entry = *s.entry;
+          TouchpadMappingVisual vis;
+          vis.entry = s.entry;
+          vis.kind = s.kind;
+          vis.axis = s.axis;
+          vis.isRegionLocked = s.isRegionLocked;
+          vis.isPositionDependent = s.isPositionDependent;
+          vis.isLatched = s.isLatched;
+          vis.hasRememberedValue = s.hasRememberedValue;
+          if (vis.hasRememberedValue) {
+            if (auto v = inputProcessor->getTouchpadMappingValue01(dev, entry))
+              vis.currentValue01 = *v;
+          }
+          if (vis.kind == TouchpadMappingVisualKind::Pitch && inputProcessor) {
+            if (auto semis =
+                    inputProcessor->getTouchpadPitchSemitoneOffset(dev, entry))
+              vis.pitchSemitoneOffset = *semis;
+          }
+          vis.regionRect = juce::Rectangle<float>(
+              touchpadRect.getX() +
+                  entry.regionLeft * touchpadRect.getWidth(),
+              touchpadRect.getY() +
+                  entry.regionTop * touchpadRect.getHeight(),
+              (entry.regionRight - entry.regionLeft) * touchpadRect.getWidth(),
+              (entry.regionBottom - entry.regionTop) * touchpadRect.getHeight());
+          if (vis.regionRect.getWidth() <= 0.5f ||
+              vis.regionRect.getHeight() <= 0.5f)
+            continue;
+          mappingVisuals.push_back(std::move(vis));
+        }
+      } else {
+        mappingVisuals.reserve(ctx->touchpadMappings.size());
+        uintptr_t dev =
+            lastDeviceHandle_.load(std::memory_order_acquire);
+        for (const auto &entry : ctx->touchpadMappings) {
+          if (entry.layerId != currentVisualizedLayer)
+            continue;
+          if ((soloGroupForLayer == 0 && entry.layoutGroupId != 0) ||
+              (soloGroupForLayer > 0 &&
+               entry.layoutGroupId != soloGroupForLayer))
+            continue;
+          TouchpadMappingVisual vis;
+          vis.entry = &entry;
+          vis.kind = classifyVisualKind(entry);
+          vis.axis = getVisualAxis(entry);
+          vis.isRegionLocked = entry.regionLock;
+          vis.isPositionDependent = isPositionDependentMapping(entry);
+          vis.isLatched = isLatchedMapping(entry);
+          vis.hasRememberedValue = hasRememberedValueMapping(entry);
+          if (vis.hasRememberedValue) {
+            if (auto v = inputProcessor->getTouchpadMappingValue01(dev, entry))
+              vis.currentValue01 = *v;
+          }
+          if (vis.kind == TouchpadMappingVisualKind::Pitch && inputProcessor) {
+            if (auto semis =
+                    inputProcessor->getTouchpadPitchSemitoneOffset(dev, entry))
+              vis.pitchSemitoneOffset = *semis;
+          }
+          vis.regionRect = juce::Rectangle<float>(
+              touchpadRect.getX() +
+                  entry.regionLeft * touchpadRect.getWidth(),
+              touchpadRect.getY() +
+                  entry.regionTop * touchpadRect.getHeight(),
+              (entry.regionRight - entry.regionLeft) * touchpadRect.getWidth(),
+              (entry.regionBottom - entry.regionTop) * touchpadRect.getHeight());
+          if (vis.regionRect.getWidth() <= 0.5f ||
+              vis.regionRect.getHeight() <= 0.5f)
+            continue;
+          mappingVisuals.push_back(std::move(vis));
+        }
+
+        std::sort(mappingVisuals.begin(), mappingVisuals.end(),
+                  [](const TouchpadMappingVisual &a,
+                     const TouchpadMappingVisual &b) {
+                    int za = a.entry ? a.entry->zIndex : 0;
+                    int zb = b.entry ? b.entry->zIndex : 0;
+                    return za < zb; // lower first, higher drawn on top
+                  });
+
+        s_mappingVisualsCacheCtx = ctx.get();
+        s_mappingVisualsCacheLayer = currentVisualizedLayer;
+        s_mappingVisualsCacheSoloGroup = soloGroupForLayer;
+        s_mappingVisualsCache.clear();
+        s_mappingVisualsCache.reserve(mappingVisuals.size());
+        for (const auto &vis : mappingVisuals) {
+          MappingVisualStructure s;
+          s.entry = vis.entry;
+          s.kind = vis.kind;
+          s.axis = vis.axis;
+          s.isPositionDependent = vis.isPositionDependent;
+          s.hasRememberedValue = vis.hasRememberedValue;
+          s.isLatched = vis.isLatched;
+          s.isRegionLocked = vis.isRegionLocked;
+          s_mappingVisualsCache.push_back(s);
+        }
+      }
     }
   }
 
@@ -1011,7 +1166,15 @@ void TouchpadVisualizerPanel::paint(juce::Graphics &g) {
       if (vis.kind == TouchpadMappingVisualKind::Pitch &&
           entry.conversionParams.pitchPadConfig.has_value()) {
         const auto &config = *entry.conversionParams.pitchPadConfig;
-        PitchPadLayout layout = buildPitchPadLayout(config);
+        const size_t configHash = hashPitchPadConfig(config);
+        PitchPadLayout layout;
+        auto it = pitchPadLayoutCache_.find(configHash);
+        if (it != pitchPadLayoutCache_.end()) {
+          layout = it->second;
+        } else {
+          layout = buildPitchPadLayout(config);
+          pitchPadLayoutCache_[configHash] = layout;
+        }
         juce::Graphics::ScopedSaveState save(g);
         g.reduceClipRegion(vis.regionRect.toNearestInt());
         const auto &r = vis.regionRect;
@@ -1067,26 +1230,27 @@ void TouchpadVisualizerPanel::paint(juce::Graphics &g) {
       }
 
       // Fill: solid or simple gradient along axis for position-dependent
-      // mappings. For pitch-pad mappings, keep the fill subtle so the
-      // underlying band-based visualization remains clearly visible.
+      // mappings. Light mode uses solid fill for lowest CPU; otherwise use cached gradient.
+      const bool useLightFill =
+          settingsManager && settingsManager->getVisualizerLightMode();
       if (vis.isPositionDependent &&
           vis.kind != TouchpadMappingVisualKind::Pitch) {
-        juce::Colour cLow = baseCol.darker(0.4f).withAlpha(0.45f);
-        juce::Colour cHigh = baseCol.brighter(0.35f).withAlpha(0.85f);
-        juce::ColourGradient grad(cLow, 0.0f, 0.0f, cHigh, 1.0f, 1.0f, false);
-        auto r = vis.regionRect;
-        if (vis.axis == TouchpadVisualAxis::Horizontal) {
-          grad.point1 = {r.getX(), r.getCentreY()};
-          grad.point2 = {r.getRight(), r.getCentreY()};
-        } else if (vis.axis == TouchpadVisualAxis::Vertical) {
-          grad.point1 = {r.getCentreX(), r.getY()};
-          grad.point2 = {r.getCentreX(), r.getBottom()};
-        } else { // Both / None -> subtle diagonal
-          grad.point1 = {r.getX(), r.getY()};
-          grad.point2 = {r.getRight(), r.getBottom()};
+        if (useLightFill) {
+          g.setColour(baseCol.withAlpha(0.24f));
+          g.fillRoundedRectangle(vis.regionRect, cornerRadius);
+        } else {
+          auto r = vis.regionRect;
+          const auto &grad = getCachedRegionGradient(vis.kind, vis.axis);
+          juce::Graphics::ScopedSaveState save(g);
+          g.addTransform(juce::AffineTransform::fromTargetPoints(
+              0.0f, 0.0f, r.getX(), r.getY(),
+              1.0f, 0.0f, r.getRight(), r.getY(),
+              0.0f, 1.0f, r.getX(), r.getBottom()));
+          float normRadius =
+              cornerRadius / juce::jmin(r.getWidth(), r.getHeight());
+          g.setGradientFill(grad);
+          g.fillRoundedRectangle(0.0f, 0.0f, 1.0f, 1.0f, normRadius);
         }
-        g.setGradientFill(grad);
-        g.fillRoundedRectangle(r, cornerRadius);
       } else if (vis.kind != TouchpadMappingVisualKind::Pitch) {
         g.setColour(baseCol.withAlpha(0.24f));
         g.fillRoundedRectangle(vis.regionRect, cornerRadius);

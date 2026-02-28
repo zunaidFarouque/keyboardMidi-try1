@@ -466,6 +466,8 @@ juce::var SettingsPanel::getSettingsValue(const juce::String &propertyId) const 
     return juce::var(static_cast<double>(settingsManager.getVisualizerYOpacity() * 100.0f));
   if (propertyId == "showTouchpadVisualizerInMiniWindow")
     return juce::var(settingsManager.getShowTouchpadVisualizerInMiniWindow());
+  if (propertyId == "visualizerLightMode")
+    return juce::var(settingsManager.getVisualizerLightMode());
   if (propertyId == "hideCursorInPerformanceMode")
     return juce::var(settingsManager.getHideCursorInPerformanceMode());
   if (propertyId == "studioMode")
@@ -499,6 +501,8 @@ void SettingsPanel::applySettingsValue(const juce::String &propertyId,
   } else if (propertyId == "showTouchpadVisualizerInMiniWindow") {
     settingsManager.setShowTouchpadVisualizerInMiniWindow(
         static_cast<bool>(value));
+  } else if (propertyId == "visualizerLightMode") {
+    settingsManager.setVisualizerLightMode(static_cast<bool>(value));
   } else if (propertyId == "hideCursorInPerformanceMode") {
     settingsManager.setHideCursorInPerformanceMode(static_cast<bool>(value));
   } else if (propertyId == "studioMode") {

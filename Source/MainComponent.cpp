@@ -117,6 +117,17 @@ MainComponent::MainComponent()
       miniWindow->setVisualizedLayer(layerId);
   };
 
+  zoneEditor->onZoneSelectionChangedForVisualizer = [this](int layerId) {
+    if (visualizer)
+      visualizer->setVisualizedLayer(layerId);
+    if (miniWindow && settingsManager.getShowTouchpadVisualizerInMiniWindow())
+      miniWindow->setVisualizedLayer(layerId);
+  };
+
+  visualizer->onShowSelectedLayerToggledOn = [this]() {
+    refreshVisualizerLayerFromCurrentTab();
+  };
+
   // Mini Status Window (before init; no listener storm)
   miniWindow = std::make_unique<MiniStatusWindow>(settingsManager,
                                                    &inputProcessor);
@@ -660,6 +671,35 @@ void MainComponent::updatePerformanceModeButtonText() {
   }
 }
 
+void MainComponent::refreshVisualizerLayerFromCurrentTab() {
+  static constexpr int kTouchpadTabIndex = 2; // Mappings=0, Zones=1, Touchpad=2, Settings=3
+  int idx = mainTabs.getCurrentTabIndex();
+  if (idx == kTouchpadTabIndex && touchpadTab) {
+    touchpadTab->refreshVisualizerSelection();
+    return;
+  }
+  if (!visualizer)
+    return;
+  int layerId = 0;
+  if (idx == 0 && mappingEditor)
+    layerId = mappingEditor->getSelectedLayerId();
+  else if (idx == 1) {
+    auto zones = inputProcessor.getZoneManager().getZones();
+    int zoneIdx = settingsManager.getZonesSelectedIndex();
+    if (zoneIdx >= 0 && zoneIdx < static_cast<int>(zones.size()) &&
+        zones[zoneIdx])
+      layerId = juce::jlimit(0, 8, zones[zoneIdx]->layerID);
+  } else {
+    layerId = inputProcessor.getHighestActiveLayerIndex();
+  }
+  visualizer->setVisualizedLayer(layerId);
+  visualizer->setSelectedTouchpadLayout(-1, 0);
+  if (miniWindow && settingsManager.getShowTouchpadVisualizerInMiniWindow()) {
+    miniWindow->setVisualizedLayer(layerId);
+    miniWindow->setSelectedTouchpadLayout(-1, layerId);
+  }
+}
+
 void MainComponent::changeListenerCallback(juce::ChangeBroadcaster *source) {
   static constexpr int kTouchpadTabIndex = 2; // Mappings=0, Zones=1, Touchpad=2, Settings=3
   if (source == &mainTabs.getTabbedButtonBar()) {
@@ -672,17 +712,8 @@ void MainComponent::changeListenerCallback(juce::ChangeBroadcaster *source) {
     bool touchpadActive = (idx == kTouchpadTabIndex);
     if (visualizer)
       visualizer->setTouchpadTabActive(touchpadActive);
-    if (touchpadActive && touchpadTab) {
-      touchpadTab->refreshVisualizerSelection();
-    } else if (visualizer) {
-      int activeLayer = inputProcessor.getHighestActiveLayerIndex();
-      visualizer->setVisualizedLayer(activeLayer);
-      visualizer->setSelectedTouchpadLayout(-1, 0);
-      if (miniWindow && settingsManager.getShowTouchpadVisualizerInMiniWindow()) {
-        miniWindow->setVisualizedLayer(activeLayer);
-        miniWindow->setSelectedTouchpadLayout(-1, activeLayer);
-      }
-    }
+    if (visualizer)
+      refreshVisualizerLayerFromCurrentTab();
     int activeLayer = inputProcessor.getHighestActiveLayerIndex();
     CrashLogger::setUiContext(idx, tabName, settingsManager.isStudioMode(),
                               settingsManager.isMidiModeActive(), activeLayer,

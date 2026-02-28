@@ -6,6 +6,7 @@
 #include "RawInputManager.h"
 #include "ScaleLibrary.h"
 #include <JuceHeader.h>
+#include <functional>
 
 class SettingsManager;
 
@@ -16,6 +17,10 @@ public:
 
   void paint(juce::Graphics &) override;
   void resized() override;
+
+  /// When set, called with the selected zone's layerID when zone selection
+  /// changes (for visualizer to show that layer when "Show selected layer" is on).
+  std::function<void(int)> onZoneSelectionChangedForVisualizer;
 
   // UI state persistence
   void saveUiState(SettingsManager &settings) const;

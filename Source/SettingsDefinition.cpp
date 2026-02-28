@@ -71,6 +71,12 @@ InspectorSchema SettingsDefinition::getSchema() {
     miniToggle.controlType = InspectorControl::Type::Toggle;
     schema.push_back(miniToggle);
 
+    InspectorControl lightMode;
+    lightMode.propertyId = "visualizerLightMode";
+    lightMode.label = "Light visualizer (solid fills, lower CPU)";
+    lightMode.controlType = InspectorControl::Type::Toggle;
+    schema.push_back(lightMode);
+
     InspectorControl hideCursor;
     hideCursor.propertyId = "hideCursorInPerformanceMode";
     hideCursor.label = "Hide cursor in performance mode";

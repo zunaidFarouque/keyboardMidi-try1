@@ -115,6 +115,23 @@ VisualizerComponent::VisualizerComponent(
   };
   updateFollowButtonAppearance();
 
+  // Show selected layer: when on, visualizer shows the layer selected in the
+  // current tab (Mappings = selected layer, Zones = selected zone's layer).
+  addAndMakeVisible(showSelectedLayerButton);
+  showSelectedLayerButton.setClickingTogglesState(true);
+  showSelectedLayerButton.setTooltip(
+      "When on, the visualizer shows the layer selected in the current tab "
+      "(Mappings tab = selected layer, Zones tab = selected zone's layer).");
+  showSelectedLayerButton.onClick = [this] {
+    showSelectedLayerEnabled_ = showSelectedLayerButton.getToggleState();
+    if (settingsManager)
+      settingsManager->setVisualizerShowSelectedLayer(showSelectedLayerEnabled_);
+    if (showSelectedLayerEnabled_ && onShowSelectedLayerToggledOn)
+      onShowSelectedLayerToggledOn();
+    updateShowSelectedLayerButtonAppearance();
+  };
+  updateShowSelectedLayerButtonAppearance();
+
   touchpadPanel_ =
       std::make_unique<TouchpadVisualizerPanel>(inputProc, settingsMgr);
   addAndMakeVisible(*touchpadPanel_);
@@ -161,8 +178,12 @@ void VisualizerComponent::setSelectedTouchpadLayout(int layoutIndex,
 void VisualizerComponent::initialize() {
   if (zoneManager)
     zoneManager->addChangeListener(this);
-  if (settingsManager)
+  if (settingsManager) {
     settingsManager->addChangeListener(this);
+    showSelectedLayerEnabled_ =
+        settingsManager->getVisualizerShowSelectedLayer();
+    updateShowSelectedLayerButtonAppearance();
+  }
   if (inputProcessor)
     inputProcessor->addChangeListener(
         this); // Phase 48: repaint on layer changes
@@ -706,11 +727,17 @@ void VisualizerComponent::resized() {
     int selectorX = w - effRight - selectorWidth - margin;
     int buttonX = selectorX - buttonWidth - 8;
     followButton.setBounds(buttonX, selectorY, buttonWidth, buttonHeight);
+    int showSelX = buttonX - buttonWidth - 8;
+    showSelectedLayerButton.setBounds(showSelX, selectorY, buttonWidth,
+                                     buttonHeight);
     viewSelector.setBounds(selectorX, selectorY, selectorWidth, selectorHeight);
   } else {
-    // Follow Input only: place button left of right panel
+    // Follow Input and Show selected layer: place left of right panel
     int buttonX = w - effRight - buttonWidth - margin;
     followButton.setBounds(buttonX, selectorY, buttonWidth, buttonHeight);
+    int showSelX = buttonX - buttonWidth - 8;
+    showSelectedLayerButton.setBounds(showSelX, selectorY, buttonWidth,
+                                      buttonHeight);
   }
 
   if (touchpadPanel_) {
@@ -736,6 +763,19 @@ void VisualizerComponent::updateFollowButtonAppearance() {
                          juce::Colours::white);
   followButton.setColour(juce::TextButton::textColourOnId,
                          juce::Colours::white);
+}
+
+void VisualizerComponent::updateShowSelectedLayerButtonAppearance() {
+  showSelectedLayerButton.setToggleState(showSelectedLayerEnabled_,
+                                         juce::dontSendNotification);
+  showSelectedLayerButton.setColour(juce::TextButton::buttonColourId,
+                                    showSelectedLayerEnabled_
+                                        ? juce::Colours::darkgreen
+                                        : juce::Colours::darkgrey);
+  showSelectedLayerButton.setColour(juce::TextButton::textColourOffId,
+                                    juce::Colours::white);
+  showSelectedLayerButton.setColour(juce::TextButton::textColourOnId,
+                                    juce::Colours::white);
 }
 
 void VisualizerComponent::handleRawKeyEvent(uintptr_t deviceHandle, int keyCode,
@@ -916,8 +956,10 @@ void VisualizerComponent::timerCallback() {
   // thread only.
 
   // Step 1: Dynamic View – adjust view + layer based on last input.
-  // When NOT in touchpad tab: touchpad view always follows active layer
-  if (!touchpadTabActive_ && inputProcessor) {
+  // When NOT in touchpad tab and NOT "show selected layer": touchpad view
+  // follows active layer. When show selected layer is on, MainComponent owns
+  // the layer via setVisualizedLayer; do not overwrite here.
+  if (!touchpadTabActive_ && inputProcessor && !showSelectedLayerEnabled_) {
     int activeLayer = inputProcessor->getHighestActiveLayerIndex();
     bool changed = false;
     if (currentVisualizedLayer != activeLayer) {
@@ -962,9 +1004,9 @@ void VisualizerComponent::timerCallback() {
     }
 
     // B. Layer Switching – follow the highest active layer from InputProcessor.
-    // When Touchpad tab is active, selection (layout or mapping) owns the layer;
-    // do not override so pitch-pad mapping visualization stays correct.
-    if (!touchpadTabActive_ && inputProcessor) {
+    // When Touchpad tab is active or "show selected layer" is on, do not
+    // override; selection owns the layer.
+    if (!touchpadTabActive_ && inputProcessor && !showSelectedLayerEnabled_) {
       int activeLayer = inputProcessor->getHighestActiveLayerIndex();
       if (currentVisualizedLayer != activeLayer) {
         setVisualizedLayer(activeLayer); // invalidates cache + marks dirty

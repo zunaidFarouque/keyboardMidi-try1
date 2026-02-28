@@ -66,6 +66,9 @@ public:
   // Phase 45.3: notify listeners when the current layer changes
   std::function<void(int)> onLayerChanged;
 
+  /// Currently selected layer in the Mappings tab (for visualizer / tab switch).
+  int getSelectedLayerId() const { return selectedLayerId; }
+
   // UI state persistence
   void saveUiState(SettingsManager &settings) const;
   void loadUiState(SettingsManager &settings);

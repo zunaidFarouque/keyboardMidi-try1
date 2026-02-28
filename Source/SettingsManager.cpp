@@ -18,6 +18,7 @@ SettingsManager::SettingsManager() {
   rootNode.setProperty("visualizerXOpacity", 0.45, nullptr);
   rootNode.setProperty("visualizerYOpacity", 0.45, nullptr);
   rootNode.setProperty("showTouchpadVisualizerInMiniWindow", false, nullptr);
+  rootNode.setProperty("visualizerLightMode", false, nullptr);
   rootNode.setProperty("hideCursorInPerformanceMode", false, nullptr);
   rootNode.setProperty("miniWindowPosition", "", nullptr);
   rootNode.setProperty("rememberUiState", true, nullptr);
@@ -175,6 +176,15 @@ void SettingsManager::setShowTouchpadVisualizerInMiniWindow(bool show) {
   sendChangeMessage();
 }
 
+bool SettingsManager::getVisualizerLightMode() const {
+  return static_cast<bool>(rootNode.getProperty("visualizerLightMode", false));
+}
+
+void SettingsManager::setVisualizerLightMode(bool light) {
+  rootNode.setProperty("visualizerLightMode", light, nullptr);
+  sendChangeMessage();
+}
+
 bool SettingsManager::getHideCursorInPerformanceMode() const {
   return rootNode.getProperty("hideCursorInPerformanceMode", false);
 }
@@ -312,6 +322,19 @@ juce::String SettingsManager::getVisualizerWindowState() const {
 void SettingsManager::setVisualizerWindowState(const juce::String &state) {
   auto ui = getUiStateNode();
   ui.setProperty("visualizerWindowState", state, nullptr);
+  sendChangeMessage();
+}
+
+bool SettingsManager::getVisualizerShowSelectedLayer() const {
+  auto ui = getUiStateNode();
+  if (!ui.isValid())
+    return false;
+  return static_cast<bool>(ui.getProperty("visualizerShowSelectedLayer", false));
+}
+
+void SettingsManager::setVisualizerShowSelectedLayer(bool show) {
+  auto ui = getUiStateNode();
+  ui.setProperty("visualizerShowSelectedLayer", show, nullptr);
   sendChangeMessage();
 }
 
@@ -490,6 +513,10 @@ void SettingsManager::sanitizeUiStateNode() {
       static_cast<bool>(ui.getProperty("visualizerVisible", true));
   ui.setProperty("visualizerVisible", visVisible, nullptr);
 
+  bool visShowSelected =
+      static_cast<bool>(ui.getProperty("visualizerShowSelectedLayer", false));
+  ui.setProperty("visualizerShowSelectedLayer", visShowSelected, nullptr);
+
   bool edVisible = static_cast<bool>(ui.getProperty("editorVisible", true));
   ui.setProperty("editorVisible", edVisible, nullptr);
 
@@ -611,6 +638,8 @@ void SettingsManager::loadFromXml(juce::File file) {
           rootNode.setProperty("visualizerXOpacity", 0.45, nullptr);
         if (!rootNode.hasProperty("visualizerYOpacity"))
           rootNode.setProperty("visualizerYOpacity", 0.45, nullptr);
+        if (!rootNode.hasProperty("visualizerLightMode"))
+          rootNode.setProperty("visualizerLightMode", false, nullptr);
         if (!rootNode.hasProperty("debugModeEnabled"))
           rootNode.setProperty("debugModeEnabled", false, nullptr);
         if (!rootNode.hasProperty("delayMidiEnabled"))

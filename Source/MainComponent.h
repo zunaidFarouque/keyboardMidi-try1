@@ -163,6 +163,11 @@ private:
   // ChangeListener implementation
   void changeListenerCallback(juce::ChangeBroadcaster *source) override;
 
+  // Push current tab's UI layer to visualizer (Mappings/Zones/Settings layer;
+  // Touchpad tab = refresh touchpad selection). Used on tab switch and when
+  // "Show selected layer" is turned on.
+  void refreshVisualizerLayerFromCurrentTab();
+
   // MenuBarModel implementation
   juce::StringArray getMenuBarNames() override;
   juce::PopupMenu getMenuForIndex(int topLevelMenuIndex,
