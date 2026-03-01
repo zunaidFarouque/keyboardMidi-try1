@@ -187,6 +187,18 @@ Shift + `H J K` = Melody tracks octave up (ignore RH3)\
 Shift + `L ; '` = Melody tracks octave down (ignore RH3)\
 (Bound to Layer 7) -->
 
+`F2` = Melody Tracks (LH, RH1, RH2, RH3)\
+It will also have associated buttons for Octave Up/Down on the top 25%.\
+Created using 2x5 drumpad. There is already a preset in the combo group for this.
+
+`F3` = Style Tracks (1-5)
+
+`F4` = Style Tracks (6-10)
+
+`F5` = Physical Tracks
+
+`F6` = Pads Tracks
+
 #### Lyrics
 
 `Up Arrow` = Lyrics Scroll Up
