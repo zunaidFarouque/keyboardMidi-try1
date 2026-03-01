@@ -1272,7 +1272,10 @@ void MainComponent::resized() {
   juce::Array<juce::Component *> horizontalComponents;
   if (!editorContainer.isHidden())
     horizontalComponents.add(&editorContainer);
-  if (!editorContainer.isHidden() && !logContainer.isHidden())
+  const bool showLogBar =
+      !editorContainer.isHidden() && !logContainer.isHidden();
+  horizontalBar.setVisible(showLogBar);
+  if (showLogBar)
     horizontalComponents.add(&horizontalBar);
   if (!logContainer.isHidden())
     horizontalComponents.add(&logContainer);

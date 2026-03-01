@@ -765,6 +765,7 @@ static void collectForcedMappings(
 static void compileTouchpadMappingFromValueTree(
     const juce::ValueTree &mapping, int layerId, int headerChannel,
     int layoutGroupId, int zIndex, bool regionLock,
+    const juce::String &name,
     ZoneManager &zoneMgr, SettingsManager &settingsMgr,
     std::vector<TouchpadMappingEntry> &out,
     const TouchpadLayoutRegion *region = nullptr) {
@@ -788,6 +789,7 @@ static void compileTouchpadMappingFromValueTree(
   entry.layoutGroupId = juce::jmax(0, layoutGroupId);
   entry.zIndex = zIndex;
   entry.regionLock = regionLock;
+  entry.name = name;
   entry.action = std::move(action);
   if (region) {
     entry.regionLeft = region->left;
@@ -1454,6 +1456,7 @@ std::shared_ptr<CompiledMapContext> GridCompiler::compile(
       compileTouchpadMappingFromValueTree(cfg.mapping, layerId, cfg.midiChannel,
                                           cfg.layoutGroupId, cfg.zIndex,
                                           cfg.regionLock,
+                                          juce::String(cfg.name),
                                           zoneMgr, settingsMgr,
                                           context->touchpadMappings, &cfg.region);
     }

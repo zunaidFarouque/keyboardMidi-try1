@@ -4,8 +4,11 @@
 TouchpadTabComponent::TouchpadTabComponent(TouchpadMixerManager *mgr,
                                            SettingsManager *settingsMgr,
                                            ScaleLibrary *scaleLib)
-    : manager(mgr), settingsManager(settingsMgr), listPanel(mgr),
-      editorPanel(mgr, settingsMgr, scaleLib), resizerBar(&layout, 1, true) {
+    : manager(mgr), settingsManager(settingsMgr), groupsPanel(mgr),
+      listPanel(mgr), editorPanel(mgr, settingsMgr, scaleLib),
+      groupsResizerBar(&layout, 1, true), resizerBar(&layout, 3, true) {
+  addAndMakeVisible(groupsPanel);
+  addAndMakeVisible(groupsResizerBar);
   addAndMakeVisible(listPanel);
   addAndMakeVisible(editorViewport);
   editorViewport.setViewedComponent(&editorPanel, false);
@@ -13,9 +16,16 @@ TouchpadTabComponent::TouchpadTabComponent(TouchpadMixerManager *mgr,
   editorViewport.setScrollBarThickness(10);
   addAndMakeVisible(resizerBar);
 
-  layout.setItemLayout(0, -0.25, -0.4, -0.3);
-  layout.setItemLayout(1, 5, 5, 5);
-  layout.setItemLayout(2, -0.6, -0.75, -0.7);
+  groupsPanel.onGroupSelected = [this](int filterGroupId) {
+    listPanel.setFilterGroupId(filterGroupId);
+  };
+
+  // 5 items: groupsPanel | groupsResizerBar | listPanel | resizerBar | editorViewport
+  layout.setItemLayout(0, 80, 350, 120);   // groupsPanel: min 80px, max 350px, preferred 120px
+  layout.setItemLayout(1, 5, 5, 5);       // groupsResizerBar
+  layout.setItemLayout(2, -0.25, -0.4, -0.3);  // listPanel
+  layout.setItemLayout(3, 5, 5, 5);       // resizerBar
+  layout.setItemLayout(4, -0.6, -0.75, -0.7);  // editorViewport
 
   listPanel.onSelectionChanged =
       [this](TouchpadMixerListPanel::RowKind kind, int index,
@@ -65,31 +75,26 @@ TouchpadTabComponent::~TouchpadTabComponent() {
 void TouchpadTabComponent::refreshVisualizerSelection() {
   if (!onSelectionChangedForVisualizer || !manager)
     return;
-  int idx = listPanel.getSelectedRowIndex();
-  // When list selection not yet restored (e.g. right after tab switch), use
-  // persisted row so the visualizer shows the correct layer immediately.
-  if (idx < 0 && settingsManager)
-    idx = settingsManager->getTouchpadSelectedRow();
-  if (idx < 0) {
-    onSelectionChangedForVisualizer(-1, 0, -1);
-    return;
-  }
-  auto layouts = manager->getLayouts();
-  const int numLayouts = static_cast<int>(layouts.size());
-  if (idx < numLayouts) {
-    const auto &layout = layouts[(size_t)idx];
-    onSelectionChangedForVisualizer(idx, layout.layerId, layout.layoutGroupId);
-  } else {
-    auto mappings = manager->getTouchpadMappings();
-    int mappingIdx = idx - numLayouts;
-    int layerId = 0;
-    int layoutGroupId = -1;
-    if (mappingIdx >= 0 && mappingIdx < static_cast<int>(mappings.size())) {
-      layerId = mappings[(size_t)mappingIdx].layerId;
-      layoutGroupId = mappings[(size_t)mappingIdx].layoutGroupId;
+  int layoutIdx = listPanel.getSelectedLayoutIndex();
+  int mappingIdx = listPanel.getSelectedMappingIndex();
+  if (layoutIdx >= 0) {
+    auto layouts = manager->getLayouts();
+    if (layoutIdx < static_cast<int>(layouts.size())) {
+      const auto &layout = layouts[(size_t)layoutIdx];
+      onSelectionChangedForVisualizer(layoutIdx, layout.layerId,
+                                      layout.layoutGroupId);
+      return;
     }
-    onSelectionChangedForVisualizer(-1, layerId, layoutGroupId);
   }
+  if (mappingIdx >= 0) {
+    auto mappings = manager->getTouchpadMappings();
+    if (mappingIdx < static_cast<int>(mappings.size())) {
+      const auto &m = mappings[(size_t)mappingIdx];
+      onSelectionChangedForVisualizer(-1, m.layerId, m.layoutGroupId);
+      return;
+    }
+  }
+  onSelectionChangedForVisualizer(-1, 0, -1);
 }
 
 void TouchpadTabComponent::paint(juce::Graphics &g) {
@@ -98,8 +103,9 @@ void TouchpadTabComponent::paint(juce::Graphics &g) {
 
 void TouchpadTabComponent::resized() {
   auto area = getLocalBounds().reduced(4);
-  juce::Component *comps[] = {&listPanel, &resizerBar, &editorViewport};
-  layout.layOutComponents(comps, 3, area.getX(), area.getY(), area.getWidth(),
+  juce::Component *comps[] = {&groupsPanel, &groupsResizerBar, &listPanel,
+                              &resizerBar, &editorViewport};
+  layout.layOutComponents(comps, 5, area.getX(), area.getY(), area.getWidth(),
                           area.getHeight(), false, true);
   static constexpr int kEditorMinWidth = 400;
   static constexpr int kEditorMinHeight = 120;

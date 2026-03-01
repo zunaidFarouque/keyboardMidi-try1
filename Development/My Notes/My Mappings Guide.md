@@ -64,29 +64,30 @@ use PRN to send pitch bend range.
 
 `F11` = Global performance mode
 
+**Laptop keyboard**
+
+`Del` = MIDI panic\
+&emsp; Make this in Layer 0 -> Global (ignores layering system.)
+
 ## 1-keyboard, Piano Style
 
 ### Layer-agnostic
 
-**Laptop keyboard**
-
-`Del` = MIDI panic
+> Add later
 
 ### Layer zero (Base layer)
 
-Pros: You play EVERYTHING. No scale change/reconfigure on song change. Most varsatile.
-Cons: most keyboards cannot handle multiple keypresses/key holds at once. it is their physical limitation. this sometimes might affect performance.
-
-#### Performance
+**Pros**: You play EVERYTHING. No scale change/reconfigure on song change. Most varsatile.\
+**Cons**: most keyboards cannot handle multiple keypresses/key holds at once. it is their physical limitation. this sometimes might affect performance.
 
 Map keyboard rows:\
 `1 2 3 ... - +` and\
-`Q W E ... [ ]`\
+`q w e ... [ ]`\
 to right hand piano part. No scale mapping or stuff. pure piano.
 
 Similarly, map keyboard rows:\
-`A S D ... ; '` and\
-`Z X C ... . /`\
+`a s d ... ; '` and\
+`z x c ... . /`\
 to left hand piano part. No chord mapping or stuff. pure piano.
 
 #### Tempo Related

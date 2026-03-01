@@ -683,7 +683,7 @@ void TouchpadVisualizerPanel::paint(juce::Graphics &g) {
         uintptr_t dev =
             lastDeviceHandle_.load(std::memory_order_acquire);
         for (const auto &entry : ctx->touchpadMappings) {
-          if (entry.layerId != currentVisualizedLayer)
+          if (entry.layerId > currentVisualizedLayer)
             continue;
           if ((soloGroupForLayer == 0 && entry.layoutGroupId != 0) ||
               (soloGroupForLayer > 0 &&
@@ -845,7 +845,7 @@ void TouchpadVisualizerPanel::paint(juce::Graphics &g) {
         if (ref.type == TouchpadType::Mixer &&
             ref.index < ctx->touchpadMixerStrips.size()) {
           const auto &strip = ctx->touchpadMixerStrips[ref.index];
-          if (strip.layerId == currentVisualizedLayer &&
+          if (strip.layerId <= currentVisualizedLayer &&
               strip.numFaders > 0 &&
               ((soloGroupId == 0 && strip.layoutGroupId == 0) || (soloGroupId > 0 && strip.layoutGroupId == soloGroupId))) {
             juce::Rectangle<float> layoutRect(
@@ -967,11 +967,21 @@ void TouchpadVisualizerPanel::paint(juce::Graphics &g) {
                        layoutRect.getX(), layoutRect.getBottom() + 2.0f,
                        layoutRect.getWidth(), 10,
                        juce::Justification::centredLeft, false);
+            if (strip.layerId < currentVisualizedLayer) {
+              g.setColour(juce::Colours::white.withAlpha(0.9f));
+              juce::Rectangle<float> r = layoutRect.reduced(3.0f, 3.0f);
+              float sz = juce::jmin(8.0f, r.getWidth() * 0.15f);
+              float ix = r.getRight() - sz;
+              float iy = r.getY();
+              juce::Path arrow;
+              arrow.addTriangle(ix, iy, ix + sz, iy, ix + sz * 0.5f, iy + sz);
+              g.fillPath(arrow);
+            }
           }
         } else if (ref.type == TouchpadType::DrumPad &&
                    ref.index < ctx->touchpadDrumPadStrips.size()) {
           const auto &strip = ctx->touchpadDrumPadStrips[ref.index];
-          if (strip.layerId == currentVisualizedLayer && strip.rows > 0 &&
+          if (strip.layerId <= currentVisualizedLayer && strip.rows > 0 &&
               strip.columns > 0 &&
               ((soloGroupId == 0 && strip.layoutGroupId == 0) || (soloGroupId > 0 && strip.layoutGroupId == soloGroupId))) {
             juce::Rectangle<float> layoutRect(
@@ -1054,11 +1064,21 @@ void TouchpadVisualizerPanel::paint(juce::Graphics &g) {
                          layoutRect.getBottom() + 2.0f, layoutRect.getWidth(),
                          10, juce::Justification::centredLeft, false);
             }
+            if (strip.layerId < currentVisualizedLayer) {
+              g.setColour(juce::Colours::white.withAlpha(0.9f));
+              juce::Rectangle<float> r = layoutRect.reduced(3.0f, 3.0f);
+              float sz = juce::jmin(8.0f, r.getWidth() * 0.15f);
+              float ix = r.getRight() - sz;
+              float iy = r.getY();
+              juce::Path arrow;
+              arrow.addTriangle(ix, iy, ix + sz, iy, ix + sz * 0.5f, iy + sz);
+              g.fillPath(arrow);
+            }
           }
         } else if (ref.type == TouchpadType::ChordPad &&
                    ref.index < ctx->touchpadChordPads.size()) {
           const auto &strip = ctx->touchpadChordPads[ref.index];
-          if (strip.layerId == currentVisualizedLayer && strip.rows > 0 &&
+          if (strip.layerId <= currentVisualizedLayer && strip.rows > 0 &&
               strip.columns > 0 &&
               ((soloGroupId == 0 && strip.layoutGroupId == 0) || (soloGroupId > 0 && strip.layoutGroupId == soloGroupId))) {
             juce::Rectangle<float> layoutRect(
@@ -1097,6 +1117,16 @@ void TouchpadVisualizerPanel::paint(juce::Graphics &g) {
             g.drawText("Chord Pad", layoutRect.getX(),
                        layoutRect.getBottom() + 2.0f, layoutRect.getWidth(), 10,
                        juce::Justification::centredLeft, false);
+            if (strip.layerId < currentVisualizedLayer) {
+              g.setColour(juce::Colours::white.withAlpha(0.9f));
+              juce::Rectangle<float> r = layoutRect.reduced(3.0f, 3.0f);
+              float sz = juce::jmin(8.0f, r.getWidth() * 0.15f);
+              float ix = r.getRight() - sz;
+              float iy = r.getY();
+              juce::Path arrow;
+              arrow.addTriangle(ix, iy, ix + sz, iy, ix + sz * 0.5f, iy + sz);
+              g.fillPath(arrow);
+            }
           }
         }
       }
@@ -1348,7 +1378,9 @@ void TouchpadVisualizerPanel::paint(juce::Graphics &g) {
                  false);
 
       juce::String mainLabel;
-      if (vis.kind == TouchpadMappingVisualKind::Note) {
+      if (entry.name.trim().isNotEmpty()) {
+        mainLabel = entry.name.trim();
+      } else if (vis.kind == TouchpadMappingVisualKind::Note) {
         mainLabel = targetLabel;
       } else if (vis.kind == TouchpadMappingVisualKind::Pitch) {
         mainLabel = "PB";
@@ -1414,6 +1446,20 @@ void TouchpadVisualizerPanel::paint(juce::Graphics &g) {
           r.setY(vis.regionRect.getCentreY() - r.getHeight() * 0.5f);
           g.drawText("^", r, juce::Justification::centred, false);
         }
+      }
+
+      // Inherited indicator (top-right): small down-arrow when mapping comes
+      // from a lower layer (mirroring keyboard layer inheritance).
+      if (entry.layerId < currentVisualizedLayer) {
+        g.setColour(juce::Colours::white.withAlpha(0.9f));
+        juce::Rectangle<float> r = vis.regionRect.reduced(3.0f, 3.0f);
+        float sz = juce::jmin(8.0f, r.getWidth() * 0.25f);
+        float offset = vis.isRegionLocked ? 12.0f : 0.0f;
+        float ix = r.getRight() - sz - offset;
+        float iy = r.getY();
+        juce::Path arrow;
+        arrow.addTriangle(ix, iy, ix + sz, iy, ix + sz * 0.5f, iy + sz);
+        g.fillPath(arrow);
       }
 
       // Region lock glyph (top-right) – draw a tiny lock outline instead of

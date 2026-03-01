@@ -437,6 +437,7 @@ struct TouchpadMappingEntry {
   // inside this region, the mapping keeps responding for the rest of that
   // gesture even if the drive point moves slightly outside.
   bool regionLock = false;
+  juce::String name;  // User-defined label from TouchpadMappingConfig
 };
 
 // Holds the entire pre-calculated state of the engine.

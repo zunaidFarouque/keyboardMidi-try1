@@ -1071,7 +1071,7 @@ void TouchpadMixerEditorComponent::createControl(
           "Lock: the first fader you touch stays selected until you release. "
           "Free: you can swipe to another fader while holding.");
     else if (propId == "layerId")
-      cb->setTooltip("Layer this strip belongs to. Only active when this layer "
+      cb->setTooltip("Layer this layout belongs to. Only active when this layer "
                      "is selected.");
     juce::ComboBox *cbPtr = cb.get();
     const bool useMappingInspectorLogic =
@@ -1255,7 +1255,7 @@ void TouchpadMixerEditorComponent::paint(juce::Graphics &g) {
   if (selectedLayoutIndex < 0 && selectedMappingIndex < 0) {
     g.setColour(juce::Colours::grey);
     g.setFont(14.0f);
-    g.drawText("Select a strip from the list.", getLocalBounds(),
+    g.drawText("Select a layout or mapping from the list.", getLocalBounds(),
                juce::Justification::centred);
   }
 }

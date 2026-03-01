@@ -2,6 +2,7 @@
 #include "TouchpadMixerManager.h"
 #include "TouchpadMixerTypes.h"
 #include <JuceHeader.h>
+#include <utility>
 #include <functional>
 
 class TouchpadMixerListPanel : public juce::Component,
@@ -34,13 +35,21 @@ public:
 
   /// Select a row programmatically (clamped to valid range).
   void setSelectedRowIndex(int row);
-  
+
+  /// Set filter by group id: -1 = All, 0 = Ungrouped, >0 = specific group
+  void setFilterGroupId(int filterGroupId);
+
   // Set pending selection to restore after next update
   void setPendingSelection(int row) { pendingSelectionRow = row; }
 
   /// Returns the kind of the given row (Layout / Mapping). Behavior is
   /// undefined for out-of-range indices.
   RowKind getRowKind(int rowIndex) const;
+
+  /// Returns the actual layout index for the selected row, or -1 if none or mapping selected.
+  int getSelectedLayoutIndex();
+  /// Returns the actual mapping index for the selected row, or -1 if none or layout selected.
+  int getSelectedMappingIndex();
 
   std::function<void(RowKind kind, int index,
                      const TouchpadMixerConfig *layoutCfg,
@@ -57,6 +66,9 @@ private:
 
   // Cached row kinds for the combined list (rebuilt when manager changes).
   std::vector<RowKind> rowKinds;
+  // Maps displayed row index -> (RowKind, actual layout/mapping index)
+  std::vector<std::pair<RowKind, int>> rowToSource;
+  int filterGroupId_ = -1; // -1=all, 0=ungrouped, >0=group id
   int pendingSelectionRow = -1; // Selection to restore after update
   bool isInitialLoad = true; // Track first load for synchronous updates
 

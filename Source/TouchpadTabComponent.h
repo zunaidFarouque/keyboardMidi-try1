@@ -1,4 +1,5 @@
 #pragma once
+#include "TouchpadGroupsPanel.h"
 #include "TouchpadMixerEditorComponent.h"
 #include "TouchpadMixerListPanel.h"
 #include <JuceHeader.h>
@@ -39,10 +40,12 @@ public:
 private:
   TouchpadMixerManager *manager;
   SettingsManager *settingsManager;
+  TouchpadGroupsPanel groupsPanel;
   TouchpadMixerListPanel listPanel;
   TouchpadMixerEditorComponent editorPanel;
   juce::Viewport editorViewport;
   juce::StretchableLayoutManager layout;
+  juce::StretchableLayoutResizerBar groupsResizerBar;
   juce::StretchableLayoutResizerBar resizerBar;
 
   // Flag to prevent persist-on-change during loadUiState()
