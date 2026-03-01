@@ -338,6 +338,26 @@ void SettingsManager::setVisualizerShowSelectedLayer(bool show) {
   sendChangeMessage();
 }
 
+int SettingsManager::getVisualizerLayerViewMode() const {
+  auto ui = getUiStateNode();
+  if (!ui.isValid())
+    return 0;
+  juce::var v = ui.getProperty("visualizerLayerViewMode", juce::var());
+  if (v.isVoid()) {
+    // Backward compat: derive from legacy visualizerShowSelectedLayer
+    return getVisualizerShowSelectedLayer() ? 1 : 0;
+  }
+  int mode = static_cast<int>(v);
+  return juce::jlimit(0, 2, mode);
+}
+
+void SettingsManager::setVisualizerLayerViewMode(int mode) {
+  mode = juce::jlimit(0, 2, mode);
+  auto ui = getUiStateNode();
+  ui.setProperty("visualizerLayerViewMode", mode, nullptr);
+  sendChangeMessage();
+}
+
 bool SettingsManager::getEditorVisible() const {
   auto ui = getUiStateNode();
   if (!ui.isValid())

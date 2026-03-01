@@ -15,6 +15,10 @@ LogComponent::LogComponent() {
   // Disable text editor's internal caret to speed up repaints
   console.setCaretVisible(false);
 
+  addAndMakeVisible(clearButton);
+  clearButton.setButtonText("Clear Log");
+  clearButton.onClick = [this] { clear(); };
+
   addAndMakeVisible(console);
 }
 
@@ -26,7 +30,12 @@ void LogComponent::paint(juce::Graphics &g) {
   g.drawRect(getLocalBounds(), 1);
 }
 
-void LogComponent::resized() { console.setBounds(getLocalBounds().reduced(1)); }
+void LogComponent::resized() {
+  auto area = getLocalBounds().reduced(1);
+  auto bar = area.removeFromTop(28);
+  clearButton.setBounds(bar.removeFromRight(80).reduced(2));
+  console.setBounds(area);
+}
 
 void LogComponent::addEntry(const juce::String &text) {
   // Create a SafePointer to 'this'

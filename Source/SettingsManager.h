@@ -67,6 +67,10 @@ public:
   bool getVisualizerShowSelectedLayer() const;
   void setVisualizerShowSelectedLayer(bool show);
 
+  // Layer view mode: 0=Off, 1=Show selected layer, 2=Follow Input (mutually exclusive)
+  int getVisualizerLayerViewMode() const;
+  void setVisualizerLayerViewMode(int mode);
+
   // Hide cursor when in performance mode (cursor still clipped)
   bool getHideCursorInPerformanceMode() const;
   void setHideCursorInPerformanceMode(bool hide);

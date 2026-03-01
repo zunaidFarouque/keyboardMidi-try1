@@ -104,7 +104,7 @@ We will Only add transpose settings in the MIDIQy, not Giglad.
 
 `Right Arrow` = Transpose up
 
-### Layer 6 (Giglad 1)
+### Layer 6 & 7 (Giglad 1 & 2)
 
 `Shift` = Momentary switch to Layer 7 (Giglad 2)
 
@@ -148,23 +148,26 @@ Row `A S D ... K` = Main 1-8 (Auto-filled)
 > 1. Press `S` to transition to Main 2 WITH a Fill (plays Fill 2, then plays Main 2)
 > 2. Double Press `S` to directly play Main 2 WITHOUT any Fill.
 
-#### Bank Memories and other triggers
+#### Bank and Style Memories, Pads
 
 `Q W E ... I` = Bank Memories 1-8
 
 Shift + `Q W E ... I` = Bank Memories 9-16\
 (Bound to Layer 7)
 
-`1 2 3 4` = Pad 1-4
+`1 2 3 4` = Style Memory 1-4
 
-Shift + `1 2 3 4` = Pad Synchro 1-4\
+<!-- Shift + `1 2 3 4` = ? -->
+
+`5 6 7 8` = Pad 1-4
+
+Shift + `5 6 7 8` = Pad Synchro 1-4\
 (Bound to Layer 7)
 
-`5 6 7 8` = Style Memory 1-4
-
-Shift + `5 6 7 8` = ?
-
 #### Style Track & Melody Track Layers
+
+&emsp; _Master volume will be controlled with touchpad 4 finger gesture._\
+&emsp; <small> OR, _Major mixer pads will have the right most column for Master Volume_ (Messy). </small>
 
 Shift + `Z X C ... ,` = T1-8 Mute\
 (Bound to Layer 7)

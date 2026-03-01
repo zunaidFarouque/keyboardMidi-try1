@@ -62,7 +62,6 @@ private:
   juce::ListBox listBox;
   juce::TextButton addButton;
   juce::TextButton removeButton;
-  juce::TextButton groupsButton;
 
   // Cached row kinds for the combined list (rebuilt when manager changes).
   std::vector<RowKind> rowKinds;

@@ -331,14 +331,6 @@ MainComponent::MainComponent()
       2, -0.1, -0.9,
       -0.3); // Item 2 (Right/Log): Min 10%, Max 90%, Preferred 30%
 
-  // --- Log Controls ---
-  addAndMakeVisible(clearButton);
-  clearButton.setButtonText("Clear Log");
-  clearButton.onClick = [this] {
-    if (logComponent)
-      logComponent->clear();
-  };
-
   addAndMakeVisible(performanceModeButton);
   updatePerformanceModeButtonText();
   performanceModeButton.setClickingTogglesState(true);
@@ -1279,9 +1271,6 @@ void MainComponent::resized() {
     horizontalComponents.add(&horizontalBar);
   if (!logContainer.isHidden())
     horizontalComponents.add(&logContainer);
-
-  auto logButtonArea = bottomArea.removeFromBottom(30);
-  clearButton.setBounds(logButtonArea.removeFromRight(100).reduced(2));
 
   if (horizontalComponents.size() > 0) {
     horizontalLayout.layOutComponents(

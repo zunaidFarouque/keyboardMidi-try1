@@ -102,35 +102,29 @@ VisualizerComponent::VisualizerComponent(
   // Ensure selector is on top to receive mouse events
   viewSelector.toFront(false);
 
-  // Phase 50.9.1: Follow Input toggle (always visible; layer system works
-  // regardless of Studio Mode)
-  addAndMakeVisible(followButton);
-  followButton.setClickingTogglesState(true);
-  followButton.setTooltip("When on, the visualizer follows the layer currently "
-                          "being triggered by input.");
-  followButton.onClick = [this] {
-    followInputEnabled.store(followButton.getToggleState(),
-                             std::memory_order_release);
-    updateFollowButtonAppearance();
-  };
-  updateFollowButtonAppearance();
-
-  // Show selected layer: when on, visualizer shows the layer selected in the
-  // current tab (Mappings = selected layer, Zones = selected zone's layer).
-  addAndMakeVisible(showSelectedLayerButton);
-  showSelectedLayerButton.setClickingTogglesState(true);
-  showSelectedLayerButton.setTooltip(
-      "When on, the visualizer shows the layer selected in the current tab "
-      "(Mappings tab = selected layer, Zones tab = selected zone's layer).");
-  showSelectedLayerButton.onClick = [this] {
-    showSelectedLayerEnabled_ = showSelectedLayerButton.getToggleState();
-    if (settingsManager)
+  // Layer view mode: Off, Show selected layer, or Follow Input (mutually exclusive)
+  addAndMakeVisible(layerViewCombo);
+  layerViewCombo.addItem("Off", 1);
+  layerViewCombo.addItem("Show selected layer", 2);
+  layerViewCombo.addItem("Follow Input", 3);
+  layerViewCombo.setTooltip(
+      "Off: use default layer. Show selected layer: follow Mappings/Zones tab. "
+      "Follow Input: follow the layer currently triggered by input.");
+  layerViewCombo.onChange = [this] {
+    int mode = layerViewCombo.getSelectedId() - 1; // 1->0, 2->1, 3->2
+    if (mode < 0)
+      mode = 0;
+    showSelectedLayerEnabled_ = (mode == 1);
+    followInputEnabled.store(mode == 2, std::memory_order_release);
+    if (settingsManager) {
+      settingsManager->setVisualizerLayerViewMode(mode);
       settingsManager->setVisualizerShowSelectedLayer(showSelectedLayerEnabled_);
+    }
     if (showSelectedLayerEnabled_ && onShowSelectedLayerToggledOn)
       onShowSelectedLayerToggledOn();
-    updateShowSelectedLayerButtonAppearance();
+    updateLayerViewCombo();
   };
-  updateShowSelectedLayerButtonAppearance();
+  updateLayerViewCombo();
 
   touchpadPanel_ =
       std::make_unique<TouchpadVisualizerPanel>(inputProc, settingsMgr);
@@ -146,8 +140,6 @@ VisualizerComponent::VisualizerComponent(
     }
   }
 
-  // Initial positioning (will be updated in resized(), but set initial bounds)
-  viewSelector.setBounds(0, 0, 200, 25);
   startTimer(settingsManager ? settingsManager->getWindowRefreshIntervalMs()
                              : kMainWindowRefreshIntervalMs);
 }
@@ -190,9 +182,11 @@ void VisualizerComponent::initialize() {
     zoneManager->addChangeListener(this);
   if (settingsManager) {
     settingsManager->addChangeListener(this);
-    showSelectedLayerEnabled_ =
-        settingsManager->getVisualizerShowSelectedLayer();
-    updateShowSelectedLayerButtonAppearance();
+    int mode = settingsManager->getVisualizerLayerViewMode();
+    layerViewCombo.setSelectedId(mode + 1, juce::dontSendNotification);
+    showSelectedLayerEnabled_ = (mode == 1);
+    followInputEnabled.store(mode == 2, std::memory_order_release);
+    updateLayerViewCombo();
   }
   if (inputProcessor)
     inputProcessor->addChangeListener(
@@ -283,7 +277,7 @@ void VisualizerComponent::refreshCache() {
     g.setColour(juce::Colours::white);
     g.setFont(12.0f);
 
-    // TRANSPOSE (left) – pitch only
+    // TRANSPOSE + SUSTAIN (left, grouped)
     if (zoneManager) {
       int chrom = zoneManager->getGlobalChromaticTranspose();
       juce::String chromStr =
@@ -292,12 +286,10 @@ void VisualizerComponent::refreshCache() {
       g.drawText(transposeText, 8, 0, 200, headerRect.getHeight(),
                  juce::Justification::centredLeft, false);
     }
-
-    // Sustain Indicator (right) - Use last known state for cache
     juce::Colour sustainColor =
         lastSustainState ? juce::Colours::lime : juce::Colours::grey;
     int indicatorSize = 12;
-    int indicatorX = headerRect.getRight() - 100;
+    int indicatorX = 220;
     int indicatorY = headerRect.getCentreY() - indicatorSize / 2;
     g.setColour(sustainColor);
     g.fillEllipse(indicatorX, indicatorY, indicatorSize, indicatorSize);
@@ -506,9 +498,7 @@ void VisualizerComponent::paint(juce::Graphics &g) {
   // Draw Background Cache
   g.drawImageAt(backgroundCache, 0, 0);
 
-  // Update Sustain Indicator (dynamic - always redraw since it changes
-  // frequently). Must use content area width so it's not hidden under the
-  // global panel on the right.
+  // Update Sustain Indicator (dynamic - next to Transpose on left)
   int contentW = getWidth() - static_cast<int>(getEffectiveRightPanelWidth());
   if (contentW < 0)
     contentW = 0;
@@ -517,7 +507,7 @@ void VisualizerComponent::paint(juce::Graphics &g) {
   juce::Colour sustainColor =
       sustainActive ? juce::Colours::lime : juce::Colours::grey;
   int indicatorSize = 12;
-  int indicatorX = headerRect.getRight() - 100;
+  int indicatorX = 220;
   int indicatorY = headerRect.getCentreY() - indicatorSize / 2;
   g.setColour(juce::Colour(0xff222222));
   g.fillRect(indicatorX - 5, indicatorY - 2, 80,
@@ -529,7 +519,7 @@ void VisualizerComponent::paint(juce::Graphics &g) {
   g.drawText("SUSTAIN", indicatorX + indicatorSize + 5, indicatorY, 60,
              indicatorSize, juce::Justification::centredLeft, false);
 
-  // Phase 45: Active Layers HUD (uses InputProcessor state via ReadLock)
+  // Phase 45: Active Layers HUD (middle, between left group and right controls)
   if (inputProcessor) {
     juce::StringArray activeLayers = inputProcessor->getActiveLayerNames();
     if (activeLayers.size() > 0) {
@@ -537,7 +527,7 @@ void VisualizerComponent::paint(juce::Graphics &g) {
       g.setColour(juce::Colours::cyan);
       g.setFont(12.0f);
       auto layersBounds =
-          headerRect.withLeft(300).reduced(4, 4); // to the right of TRANSPOSE
+          headerRect.withLeft(310).reduced(4, 4); // after Transpose+SUSTAIN
       g.drawFittedText("LAYERS: " + joined, layersBounds,
                        juce::Justification::centredLeft, 1);
     }
@@ -730,32 +720,32 @@ void VisualizerComponent::resized() {
 
   updateGlobalPanelLayout(w, h);
 
-  // Position Follow Input button (always visible) and View Selector (when
-  // Studio Mode)
-  int headerHeight = 30; // Status bar height
-  int selectorHeight = 25;
-  int margin = 10;
-  int selectorY = headerHeight + margin;
-  int buttonWidth = 110;
-  int buttonHeight = selectorHeight;
+  // Controls in header bar (right-aligned)
+  int headerHeight = 30;
+  int barY = 0;
+  int barHeight = juce::jmin(24, headerHeight - 2);
+  int margin = 8;
+  int contentRight = w - effRight;
 
+  int comboWidth = juce::jmin(140, contentRight - 320 - margin);
+  if (comboWidth < 80)
+    comboWidth = 80;
+  int selectorWidth = 0;
+  if (viewSelector.isVisible())
+    selectorWidth = juce::jmin(200, contentRight - 320 - comboWidth - margin * 2);
+  if (selectorWidth < 120 && viewSelector.isVisible())
+    selectorWidth = 120;
+
+  int rightX = contentRight - margin;
   if (viewSelector.isVisible()) {
-    int selectorWidth = 200;
-    int selectorX = w - effRight - selectorWidth - margin;
-    int buttonX = selectorX - buttonWidth - 8;
-    followButton.setBounds(buttonX, selectorY, buttonWidth, buttonHeight);
-    int showSelX = buttonX - buttonWidth - 8;
-    showSelectedLayerButton.setBounds(showSelX, selectorY, buttonWidth,
-                                     buttonHeight);
-    viewSelector.setBounds(selectorX, selectorY, selectorWidth, selectorHeight);
-  } else {
-    // Follow Input and Show selected layer: place left of right panel
-    int buttonX = w - effRight - buttonWidth - margin;
-    followButton.setBounds(buttonX, selectorY, buttonWidth, buttonHeight);
-    int showSelX = buttonX - buttonWidth - 8;
-    showSelectedLayerButton.setBounds(showSelX, selectorY, buttonWidth,
-                                      buttonHeight);
+    rightX -= selectorWidth;
+    viewSelector.setBounds(rightX, barY + (headerHeight - barHeight) / 2,
+                          selectorWidth, barHeight);
+    rightX -= margin;
   }
+  rightX -= comboWidth;
+  layerViewCombo.setBounds(rightX, barY + (headerHeight - barHeight) / 2,
+                          comboWidth, barHeight);
 
   if (touchpadPanel_) {
     touchpadPanel_->setBounds(0, headerHeight,
@@ -768,31 +758,11 @@ void VisualizerComponent::resized() {
   repaint();
 }
 
-void VisualizerComponent::updateFollowButtonAppearance() {
-  const bool enabled = followInputEnabled.load(std::memory_order_relaxed);
-  followButton.setToggleState(enabled, juce::dontSendNotification);
-
-  // Simple visual cue
-  followButton.setColour(juce::TextButton::buttonColourId,
-                         enabled ? juce::Colours::darkgreen
-                                 : juce::Colours::darkgrey);
-  followButton.setColour(juce::TextButton::textColourOffId,
-                         juce::Colours::white);
-  followButton.setColour(juce::TextButton::textColourOnId,
-                         juce::Colours::white);
-}
-
-void VisualizerComponent::updateShowSelectedLayerButtonAppearance() {
-  showSelectedLayerButton.setToggleState(showSelectedLayerEnabled_,
-                                         juce::dontSendNotification);
-  showSelectedLayerButton.setColour(juce::TextButton::buttonColourId,
-                                    showSelectedLayerEnabled_
-                                        ? juce::Colours::darkgreen
-                                        : juce::Colours::darkgrey);
-  showSelectedLayerButton.setColour(juce::TextButton::textColourOffId,
-                                    juce::Colours::white);
-  showSelectedLayerButton.setColour(juce::TextButton::textColourOnId,
-                                    juce::Colours::white);
+void VisualizerComponent::updateLayerViewCombo() {
+  int mode = showSelectedLayerEnabled_ ? 1
+             : followInputEnabled.load(std::memory_order_relaxed) ? 2
+                                                                  : 0;
+  layerViewCombo.setSelectedId(mode + 1, juce::dontSendNotification);
 }
 
 void VisualizerComponent::handleRawKeyEvent(uintptr_t deviceHandle, int keyCode,

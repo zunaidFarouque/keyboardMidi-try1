@@ -31,6 +31,7 @@ public:
 private:
   TouchpadMixerManager *manager;
   juce::ListBox listBox;
+  juce::TextButton groupsButton;
   int selectedFilterGroupId = -1;
 
   /// Row index -> filterGroupId: row 0 = -1 (All), row 1 = 0 (Ungrouped), row 2+ = group id

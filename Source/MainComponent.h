@@ -95,7 +95,6 @@ private:
   DetachableContainer editorContainer;
   DetachableContainer logContainer;
   bool isInputInitialized = false;
-  juce::TextButton clearButton;
   juce::ComboBox midiSelector;
   juce::TextButton saveButton;
   juce::TextButton loadButton;

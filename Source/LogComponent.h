@@ -15,6 +15,7 @@ public:
 
 private:
   juce::TextEditor console;
+  juce::TextButton clearButton;
 
   // The efficient buffer
   std::deque<juce::String> logBuffer;

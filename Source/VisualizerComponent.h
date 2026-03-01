@@ -131,14 +131,10 @@ private:
   std::atomic<uintptr_t> lastInputDeviceHandle{0}; // Written by Input Thread
   std::atomic<bool> followInputEnabled{false};     // UI State
 
-  // Phase 50.9.1: Follow toggle UI (kept simple for clarity)
-  juce::TextButton followButton{"Follow Input"};
-  void updateFollowButtonAppearance();
-
-  // Show selected layer: when on, visualizer shows UI-selected layer (Mappings/Zones tab)
-  juce::TextButton showSelectedLayerButton{"Show selected layer"};
+  // Layer view mode: 0=Off, 1=Show selected layer, 2=Follow Input (mutually exclusive)
+  juce::ComboBox layerViewCombo;
   bool showSelectedLayerEnabled_ = false;
-  void updateShowSelectedLayerButtonAppearance();
+  void updateLayerViewCombo();
 
   bool touchpadTabActive_ = false; // when false, touchpad view follows active layer
 
