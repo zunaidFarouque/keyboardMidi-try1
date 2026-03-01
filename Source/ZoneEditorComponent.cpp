@@ -1,13 +1,14 @@
 #include "ZoneEditorComponent.h"
+#include "PresetManager.h"
 #include "SettingsManager.h"
 
-ZoneEditorComponent::ZoneEditorComponent(ZoneManager *zoneMgr, DeviceManager *deviceMgr, RawInputManager *rawInputMgr, ScaleLibrary *scaleLib, SettingsManager *settingsMgr)
+ZoneEditorComponent::ZoneEditorComponent(ZoneManager *zoneMgr, DeviceManager *deviceMgr, RawInputManager *rawInputMgr, ScaleLibrary *scaleLib, SettingsManager *settingsMgr, PresetManager *presetMgr)
     : zoneManager(zoneMgr),
       deviceManager(deviceMgr),
       rawInputManager(rawInputMgr),
       settingsManager(settingsMgr),
       listPanel(zoneMgr),
-      propertiesPanel(zoneMgr, deviceMgr, rawInputMgr, scaleLib),
+      propertiesPanel(zoneMgr, deviceMgr, rawInputMgr, scaleLib, presetMgr),
       resizerBar(&horizontalLayout, 1, true) { // Item index 1, vertical bar
   
   addAndMakeVisible(listPanel);

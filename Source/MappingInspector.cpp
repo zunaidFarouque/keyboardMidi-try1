@@ -121,6 +121,7 @@ void MappingInspector::rebuildUI() {
     return;
 
   createAliasRow();
+  createKeyboardGroupRow();
   createKeyRow();
 
   // Determine whether to show Base-layer-only \"Apply on all layers\" toggle.
@@ -345,6 +346,13 @@ void MappingInspector::createControl(const InspectorControl &def,
       for (const auto &group : groups) {
         cb->addItem(group.second, group.first + 1);
       }
+    } else if ((def.propertyId == "keyboardLayoutGroupId" ||
+                def.propertyId == "keyboardGroupId") && presetManager) {
+      cb->addItem("None", 1);
+      auto names = presetManager->getKeyboardGroupNames();
+      for (const auto &p : names) {
+        cb->addItem(p.second, p.first + 1);
+      }
     } else {
       for (const auto &p : def.options)
         cb->addItem(p.second, p.first);
@@ -453,6 +461,24 @@ void MappingInspector::createControl(const InspectorControl &def,
                  data1 ==
                      static_cast<int>(MIDIQy::CommandID::LayerToggle)) {
         cb->setSelectedId(110, juce::dontSendNotification); // Layer
+      } else if (data1 ==
+                     static_cast<int>(MIDIQy::CommandID::KeyboardLayoutGroupSoloMomentary) ||
+                 data1 ==
+                     static_cast<int>(MIDIQy::CommandID::KeyboardLayoutGroupSoloToggle) ||
+                 data1 ==
+                     static_cast<int>(MIDIQy::CommandID::KeyboardLayoutGroupSoloSet) ||
+                 data1 ==
+                     static_cast<int>(MIDIQy::CommandID::KeyboardLayoutGroupSoloClear)) {
+        cb->setSelectedId(111, juce::dontSendNotification); // Keyboard group solo
+      } else if (data1 ==
+                     static_cast<int>(MIDIQy::CommandID::TouchpadLayoutGroupSoloMomentary) ||
+                 data1 ==
+                     static_cast<int>(MIDIQy::CommandID::TouchpadLayoutGroupSoloToggle) ||
+                 data1 ==
+                     static_cast<int>(MIDIQy::CommandID::TouchpadLayoutGroupSoloSet) ||
+                 data1 ==
+                     static_cast<int>(MIDIQy::CommandID::TouchpadLayoutGroupSoloClear)) {
+        cb->setSelectedId(112, juce::dontSendNotification); // Touchpad group solo
       }
     } else if (def.propertyId == "globalModeDirection") {
       int data1 = static_cast<int>(getCommonValue("data1"));
@@ -500,6 +526,26 @@ void MappingInspector::createControl(const InspectorControl &def,
       int groupId = static_cast<int>(getCommonValue("touchpadLayoutGroupId"));
       // Stored groupId (0 = none) -> combo id (1 = "- No Group -")
       cb->setSelectedId(groupId + 1, juce::dontSendNotification);
+    } else if (def.propertyId == "keyboardSoloType") {
+      int data1 = static_cast<int>(getCommonValue("data1"));
+      int id = 1;
+      if (data1 == static_cast<int>(MIDIQy::CommandID::KeyboardLayoutGroupSoloToggle))
+        id = 2;
+      else if (data1 == static_cast<int>(MIDIQy::CommandID::KeyboardLayoutGroupSoloSet))
+        id = 3;
+      else if (data1 == static_cast<int>(MIDIQy::CommandID::KeyboardLayoutGroupSoloClear))
+        id = 4;
+      cb->setSelectedId(id, juce::dontSendNotification);
+    } else if (def.propertyId == "keyboardLayoutGroupId") {
+      int groupId = static_cast<int>(getCommonValue("keyboardLayoutGroupId"));
+      cb->setSelectedId(groupId + 1, juce::dontSendNotification);
+    } else if (def.propertyId == "keyboardGroupId") {
+      int groupId = static_cast<int>(getCommonValue("keyboardGroupId"));
+      cb->setSelectedId(groupId + 1, juce::dontSendNotification);
+    } else if (def.propertyId == "keyboardSoloScope") {
+      int v = static_cast<int>(getCommonValue("keyboardSoloScope"));
+      int id = (v == 1) ? 2 : (v == 2) ? 3 : 1;
+      cb->setSelectedId(id, juce::dontSendNotification);
     } else if (def.propertyId == "data1" && !def.options.count(5)) {
       // Panic Latch (5) -> 4; GlobalPitchDown (7) -> 6
       int data1 = static_cast<int>(currentVal);
@@ -537,7 +583,11 @@ void MappingInspector::createControl(const InspectorControl &def,
           def.propertyId == "globalScaleMode" ||
           def.propertyId == "touchpadSoloType" ||
           def.propertyId == "touchpadLayoutGroupId" ||
-          def.propertyId == "touchpadSoloScope") {
+          def.propertyId == "touchpadSoloScope" ||
+          def.propertyId == "keyboardSoloType" ||
+          def.propertyId == "keyboardLayoutGroupId" ||
+          def.propertyId == "keyboardSoloScope" ||
+          def.propertyId == "keyboardGroupId") {
         juce::MessageManager::callAsync([this]() { rebuildUI(); });
       }
     };
@@ -676,6 +726,70 @@ void MappingInspector::createAliasRow() {
   };
 
   rowComp->editor = std::move(aliasCombo);
+  rowComp->addAndMakeVisible(*rowComp->label);
+  rowComp->addAndMakeVisible(*rowComp->editor);
+  addAndMakeVisible(*rowComp);
+  row.items.push_back({std::move(rowComp), 1.0f, false});
+  uiRows.push_back(std::move(row));
+}
+
+void MappingInspector::createKeyboardGroupRow() {
+  if (!presetManager || selectedTrees.empty() || !selectedTrees[0].isValid() ||
+      !selectedTrees[0].hasType("Mapping"))
+    return;
+  juce::ValueTree mapping = selectedTrees[0];
+  juce::String typeStr = mapping.getProperty("type", "Note").toString().trim();
+  if (typeStr.equalsIgnoreCase("Command")) {
+    int data1 = (int)mapping.getProperty("data1", 0);
+    bool isGroupSolo =
+        (data1 == (int)MIDIQy::CommandID::KeyboardLayoutGroupSoloMomentary ||
+         data1 == (int)MIDIQy::CommandID::KeyboardLayoutGroupSoloToggle ||
+         data1 == (int)MIDIQy::CommandID::KeyboardLayoutGroupSoloSet ||
+         data1 == (int)MIDIQy::CommandID::KeyboardLayoutGroupSoloClear) ||
+        (data1 == (int)MIDIQy::CommandID::TouchpadLayoutGroupSoloMomentary ||
+         data1 == (int)MIDIQy::CommandID::TouchpadLayoutGroupSoloToggle ||
+         data1 == (int)MIDIQy::CommandID::TouchpadLayoutGroupSoloSet ||
+         data1 == (int)MIDIQy::CommandID::TouchpadLayoutGroupSoloClear);
+    if (isGroupSolo)
+      return;
+  }
+
+  UiRow row;
+  row.isSeparatorRow = false;
+  auto rowComp = std::make_unique<LabelEditorRow>();
+  rowComp->label = std::make_unique<juce::Label>();
+  rowComp->label->setText("Keyboard group:", juce::dontSendNotification);
+
+  auto groupCombo = std::make_unique<juce::ComboBox>();
+  groupCombo->addItem("None", 1);
+  auto names = presetManager->getKeyboardGroupNames();
+  for (const auto &p : names)
+    groupCombo->addItem(p.second, p.first + 1);
+
+  const juce::Identifier propId("keyboardGroupId");
+  int groupId = 0;
+  if (allTreesHaveSameValue(propId))
+    groupId = static_cast<int>(getCommonValue(propId));
+  groupCombo->setSelectedId(groupId + 1, juce::dontSendNotification);
+  if (!allTreesHaveSameValue(propId))
+    groupCombo->setSelectedId(-1, juce::dontSendNotification);
+
+  juce::ComboBox *groupComboPtr = groupCombo.get();
+  groupCombo->onChange = [this, groupComboPtr]() {
+    if (selectedTrees.empty())
+      return;
+    int sel = groupComboPtr->getSelectedId();
+    if (sel < 0)
+      return;
+    int newId = sel - 1;
+    undoManager.beginNewTransaction("Change Keyboard group");
+    for (auto &tree : selectedTrees) {
+      if (tree.isValid())
+        tree.setProperty("keyboardGroupId", newId, &undoManager);
+    }
+  };
+
+  rowComp->editor = std::move(groupCombo);
   rowComp->addAndMakeVisible(*rowComp->label);
   rowComp->addAndMakeVisible(*rowComp->editor);
   addAndMakeVisible(*rowComp);

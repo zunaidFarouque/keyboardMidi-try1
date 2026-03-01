@@ -77,6 +77,9 @@ public:
   // Rebuild the lookup table (call when zones or their keys change)
   void rebuildLookupTable();
 
+  /// Set keyboardGroupId to 0 on all zones that had the given group (e.g. when a group is removed).
+  void clearKeyboardGroupFromAllZones(int groupId);
+
   // Serialization
   juce::ValueTree toValueTree() const;
   void restoreFromValueTree(const juce::ValueTree &vt);

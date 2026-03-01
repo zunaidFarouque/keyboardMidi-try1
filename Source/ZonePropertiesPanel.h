@@ -10,6 +10,7 @@
 #include <memory>
 #include <vector>
 
+class PresetManager;
 class ZoneManager;
 class ScaleLibrary;
 class ScaleEditorComponent;
@@ -19,7 +20,8 @@ class ZonePropertiesPanel : public juce::Component,
                             public juce::ChangeListener {
 public:
   ZonePropertiesPanel(ZoneManager *zoneMgr, DeviceManager *deviceMgr,
-                      RawInputManager *rawInputMgr, ScaleLibrary *scaleLib);
+                      RawInputManager *rawInputMgr, ScaleLibrary *scaleLib,
+                      PresetManager *presetMgr = nullptr);
   ~ZonePropertiesPanel() override;
 
   void paint(juce::Graphics &) override;
@@ -44,6 +46,7 @@ private:
   DeviceManager *deviceManager;
   RawInputManager *rawInputManager;
   ScaleLibrary *scaleLibrary;
+  PresetManager *presetManager = nullptr; // Optional: for keyboard group combo
   std::shared_ptr<Zone> currentZone;
 
   struct UiItem {
@@ -82,6 +85,7 @@ private:
   void createControl(const ZoneControl &def, UiRow &currentRow);
   void createAliasRow();
   void createLayerRow();
+  void createKeyboardGroupRow();
   void createNameRow();
   void createScaleRow();
   void createKeyAssignRow();

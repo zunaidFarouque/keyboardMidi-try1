@@ -88,6 +88,12 @@ ZoneSchema ZoneDefinition::getSchema(const Zone *zone) {
   }
   {
     ZoneControl c;
+    c.controlType = ZoneControl::Type::CustomKeyboardGroup;
+    c.label = "Keyboard group";
+    schema.push_back(c);
+  }
+  {
+    ZoneControl c;
     c.controlType = ZoneControl::Type::CustomName;
     c.label = "Zone Name";
     schema.push_back(c);

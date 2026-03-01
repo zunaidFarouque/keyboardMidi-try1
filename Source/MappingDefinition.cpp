@@ -27,6 +27,9 @@ const std::unordered_map<juce::String, juce::var> &getDefaultsMap() {
     map["sendReleaseValue"] = juce::var(true); // Reset pitch on release: true by default for PitchBend/SmartScaleBend
     map["touchpadLayoutGroupId"] = juce::var(TouchpadLayoutGroupId);
     map["touchpadSoloScope"] = juce::var(TouchpadSoloScope);
+    map["keyboardGroupId"] = juce::var(KeyboardGroupId);
+    map["keyboardLayoutGroupId"] = juce::var(KeyboardLayoutGroupId);
+    map["keyboardSoloScope"] = juce::var(KeyboardSoloScope);
     map["touchpadThreshold"] = juce::var(static_cast<double>(TouchpadThreshold));
     map["touchpadTriggerAbove"] = juce::var(TouchpadTriggerAbove);
     map["touchpadInputMin"] = juce::var(static_cast<double>(TouchpadInputMin));
@@ -1115,6 +1118,8 @@ InspectorSchema MappingDefinition::getSchema(const juce::ValueTree &mapping,
     static constexpr int kCmdCategoryGlobalRoot  = 105;
     static constexpr int kCmdCategoryGlobalScale = 106;
     static constexpr int kCmdCategoryLayer       = 110;
+    static constexpr int kCmdCategoryKeyboardGroupSolo = 111;
+    static constexpr int kCmdCategoryTouchpadGroupSolo = 112;
 
     int cmdId = (int)mapping.getProperty("data1", 0);
     const bool isSustain = (cmdId >= 0 && cmdId <= 2);
@@ -1139,6 +1144,16 @@ InspectorSchema MappingDefinition::getSchema(const juce::ValueTree &mapping,
     const bool isLayer =
         (cmdId == (int)MIDIQy::CommandID::LayerMomentary ||
          cmdId == (int)MIDIQy::CommandID::LayerToggle);
+    const bool isKeyboardGroupSolo =
+        (cmdId == (int)MIDIQy::CommandID::KeyboardLayoutGroupSoloMomentary ||
+         cmdId == (int)MIDIQy::CommandID::KeyboardLayoutGroupSoloToggle ||
+         cmdId == (int)MIDIQy::CommandID::KeyboardLayoutGroupSoloSet ||
+         cmdId == (int)MIDIQy::CommandID::KeyboardLayoutGroupSoloClear);
+    const bool isTouchpadGroupSolo =
+        (cmdId == (int)MIDIQy::CommandID::TouchpadLayoutGroupSoloMomentary ||
+         cmdId == (int)MIDIQy::CommandID::TouchpadLayoutGroupSoloToggle ||
+         cmdId == (int)MIDIQy::CommandID::TouchpadLayoutGroupSoloSet ||
+         cmdId == (int)MIDIQy::CommandID::TouchpadLayoutGroupSoloClear);
 
     InspectorControl cmdCtrl;
     cmdCtrl.propertyId = "commandCategory";
@@ -1152,6 +1167,8 @@ InspectorSchema MappingDefinition::getSchema(const juce::ValueTree &mapping,
     cmdCtrl.options[kCmdCategoryGlobalRoot] = "Global Root";
     cmdCtrl.options[kCmdCategoryGlobalScale] = "Global Scale";
     cmdCtrl.options[kCmdCategoryLayer] = "Layer";
+    cmdCtrl.options[kCmdCategoryKeyboardGroupSolo] = "Keyboard group";
+    cmdCtrl.options[kCmdCategoryTouchpadGroupSolo] = "Touchpad group";
     setControlDefaultFromMap(cmdCtrl);
     schema.push_back(cmdCtrl);
 
@@ -1190,6 +1207,62 @@ InspectorSchema MappingDefinition::getSchema(const juce::ValueTree &mapping,
       data2.options = getLayerOptions();
       setControlDefaultFromMap(data2);
       schema.push_back(data2);
+    }
+    if (isKeyboardGroupSolo) {
+      InspectorControl styleCtrl;
+      styleCtrl.propertyId = "keyboardSoloType";
+      styleCtrl.label = "Style";
+      styleCtrl.controlType = InspectorControl::Type::ComboBox;
+      styleCtrl.options[1] = "Hold to solo";
+      styleCtrl.options[2] = "Toggle solo";
+      styleCtrl.options[3] = "Set solo";
+      styleCtrl.options[4] = "Clear solo";
+      setControlDefaultFromMap(styleCtrl);
+      schema.push_back(styleCtrl);
+      InspectorControl groupCtrl;
+      groupCtrl.propertyId = "keyboardLayoutGroupId";
+      groupCtrl.label = "Keyboard group";
+      groupCtrl.controlType = InspectorControl::Type::ComboBox;
+      groupCtrl.options[0] = "None";
+      setControlDefaultFromMap(groupCtrl);
+      schema.push_back(groupCtrl);
+      InspectorControl scopeCtrl;
+      scopeCtrl.propertyId = "keyboardSoloScope";
+      scopeCtrl.label = "Scope";
+      scopeCtrl.controlType = InspectorControl::Type::ComboBox;
+      scopeCtrl.options[1] = "Global";
+      scopeCtrl.options[2] = "Layer (forget on change)";
+      scopeCtrl.options[3] = "Layer (remember)";
+      setControlDefaultFromMap(scopeCtrl);
+      schema.push_back(scopeCtrl);
+    }
+    if (isTouchpadGroupSolo) {
+      InspectorControl styleCtrl;
+      styleCtrl.propertyId = "touchpadSoloType";
+      styleCtrl.label = "Style";
+      styleCtrl.controlType = InspectorControl::Type::ComboBox;
+      styleCtrl.options[1] = "Hold to solo";
+      styleCtrl.options[2] = "Toggle solo";
+      styleCtrl.options[3] = "Set solo";
+      styleCtrl.options[4] = "Clear solo";
+      setControlDefaultFromMap(styleCtrl);
+      schema.push_back(styleCtrl);
+      InspectorControl groupCtrl;
+      groupCtrl.propertyId = "touchpadLayoutGroupId";
+      groupCtrl.label = "Touchpad group";
+      groupCtrl.controlType = InspectorControl::Type::ComboBox;
+      groupCtrl.options[0] = "None";
+      setControlDefaultFromMap(groupCtrl);
+      schema.push_back(groupCtrl);
+      InspectorControl scopeCtrl;
+      scopeCtrl.propertyId = "touchpadSoloScope";
+      scopeCtrl.label = "Scope";
+      scopeCtrl.controlType = InspectorControl::Type::ComboBox;
+      scopeCtrl.options[1] = "Global";
+      scopeCtrl.options[2] = "Layer (forget on change)";
+      scopeCtrl.options[3] = "Layer (remember)";
+      setControlDefaultFromMap(scopeCtrl);
+      schema.push_back(scopeCtrl);
     }
     const int latchToggle = static_cast<int>(MIDIQy::CommandID::LatchToggle);
     if (cmdId == latchToggle) {

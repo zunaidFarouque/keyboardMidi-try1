@@ -68,6 +68,7 @@ private:
   void rebuildUI();
   void createControl(const InspectorControl &def, UiRow &currentRow);
   void createAliasRow();
+  void createKeyboardGroupRow();
   void createKeyRow();
 
   bool allTreesHaveSameValue(const juce::Identifier &property);

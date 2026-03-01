@@ -1140,6 +1140,7 @@ TEST_F(GridCompilerTest, TouchpadPitchPadConfigCompiledForPitchBend) {
   m.setProperty("channel", 1, nullptr);
   m.setProperty("touchpadInputMin", 0.0, nullptr);
   m.setProperty("touchpadInputMax", 1.0, nullptr);
+  m.setProperty("pitchPadUseCustomRange", true, nullptr);
   m.setProperty("touchpadOutputMin", -2, nullptr);
   m.setProperty("touchpadOutputMax", 2, nullptr);
   m.setProperty("pitchPadRestZonePercent", 12.0, nullptr);
@@ -2055,6 +2056,7 @@ TEST_F(GridCompilerTest, TouchpadTab_TouchpadPitchPadConfigCompiledForPitchBend)
   m.setProperty("channel", 1, nullptr);
   m.setProperty("touchpadInputMin", 0.0, nullptr);
   m.setProperty("touchpadInputMax", 1.0, nullptr);
+  m.setProperty("pitchPadUseCustomRange", true, nullptr);
   m.setProperty("touchpadOutputMin", -2, nullptr);
   m.setProperty("touchpadOutputMax", 2, nullptr);
   m.setProperty("pitchPadRestZonePercent", 12.0, nullptr);
@@ -2122,6 +2124,7 @@ TEST_F(GridCompilerTest, TouchpadTab_PitchPadZeroStepFromStartPosition) {
     m.setProperty("type", "Expression", nullptr);
     m.setProperty("adsrTarget", "PitchBend", nullptr);
     m.setProperty("channel", 1, nullptr);
+    m.setProperty("data2", 2, nullptr);  // Bend ±2 semitones (current architecture)
     m.setProperty("touchpadOutputMin", -2, nullptr);
     m.setProperty("touchpadOutputMax", 2, nullptr);
     m.setProperty("pitchPadStart", pair.first, nullptr);

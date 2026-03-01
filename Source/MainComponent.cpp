@@ -81,10 +81,11 @@ MainComponent::MainComponent()
       &inputProcessor.getZoneManager(), &deviceManager, voiceManager,
       &settingsManager, &presetManager, &inputProcessor, &scaleLibrary);
   mappingEditor = std::make_unique<MappingEditorComponent>(
-      presetManager, *rawInputManager, deviceManager, settingsManager, &touchpadMixerManager);
+      presetManager, *rawInputManager, deviceManager, settingsManager, &touchpadMixerManager,
+      &inputProcessor.getZoneManager());
   zoneEditor = std::make_unique<ZoneEditorComponent>(
       &inputProcessor.getZoneManager(), &deviceManager, rawInputManager.get(),
-      &scaleLibrary, &settingsManager);
+      &scaleLibrary, &settingsManager, &presetManager);
   touchpadTab = std::make_unique<TouchpadTabComponent>(&touchpadMixerManager,
                                                         &settingsManager,
                                                         &scaleLibrary);
@@ -400,6 +401,7 @@ MainComponent::MainComponent()
   inputProcessor.initialize();
   mappingEditor->initialize();
   visualizer->initialize();
+  voiceManager.addChangeListener(visualizer.get());
   settingsPanel->initialize();
   settingsPanel->onResetUiLayout = [this]() { resetUiLayoutAndRestart(); };
   startupManager.initApp();
@@ -538,6 +540,8 @@ MainComponent::~MainComponent() {
   mainTabs.getTabbedButtonBar().removeChangeListener(this);
   settingsManager.removeChangeListener(this);
   deviceManager.removeChangeListener(this);
+  if (visualizer)
+    voiceManager.removeChangeListener(visualizer.get());
 
   // 7. Ensure cursor is unlocked and visible on exit
   if (performanceModeButton.getToggleState()) {

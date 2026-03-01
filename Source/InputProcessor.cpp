@@ -50,8 +50,11 @@ InputProcessor::InputProcessor(VoiceManager &voiceMgr, PresetManager &presetMgr,
     layerMomentaryCounts[(size_t)i] = 0;
     touchpadSoloLayoutGroupPerLayer[(size_t)i] = 0;
     touchpadSoloScopeForgetPerLayer[(size_t)i] = false;
+    keyboardSoloLayoutGroupPerLayer[(size_t)i] = 0;
+    keyboardSoloScopeForgetPerLayer[(size_t)i] = false;
   }
   touchpadSoloLayoutGroupGlobal = 0;
+  keyboardSoloLayoutGroupGlobal = 0;
   activeContext = std::make_shared<CompiledMapContext>();
 }
 
@@ -71,6 +74,15 @@ int InputProcessor::getEffectiveSoloLayoutGroupForLayer(int layerIdx) const {
   if (layerIdx < 0 || layerIdx >= 9)
     return 0;
   return touchpadSoloLayoutGroupPerLayer[(size_t)layerIdx];
+}
+
+int InputProcessor::getEffectiveKeyboardSoloGroupForLayer(int layerIdx) const {
+  juce::ScopedLock sl(stateLock);
+  if (keyboardSoloLayoutGroupGlobal > 0)
+    return keyboardSoloLayoutGroupGlobal;
+  if (layerIdx < 0 || layerIdx >= 9)
+    return 0;
+  return keyboardSoloLayoutGroupPerLayer[(size_t)layerIdx];
 }
 
 // Shared helpers for touchpad mapping region logic. These centralize the
@@ -128,6 +140,11 @@ void InputProcessor::clearForgetScopeSolosForInactiveLayers() {
         touchpadSoloLayoutGroupPerLayer[(size_t)i] > 0) {
       touchpadSoloLayoutGroupPerLayer[(size_t)i] = 0;
       touchpadSoloScopeForgetPerLayer[(size_t)i] = false;
+    }
+    if (!isLayerActive(i) && keyboardSoloScopeForgetPerLayer[(size_t)i] &&
+        keyboardSoloLayoutGroupPerLayer[(size_t)i] > 0) {
+      keyboardSoloLayoutGroupPerLayer[(size_t)i] = 0;
+      keyboardSoloScopeForgetPerLayer[(size_t)i] = false;
     }
   }
 }
@@ -250,8 +267,11 @@ void InputProcessor::rebuildGrid() {
         layerLatchedState[(size_t)i] = (i == 0);
       touchpadSoloLayoutGroupPerLayer[(size_t)i] = 0;
       touchpadSoloScopeForgetPerLayer[(size_t)i] = false;
+      keyboardSoloLayoutGroupPerLayer[(size_t)i] = 0;
+      keyboardSoloScopeForgetPerLayer[(size_t)i] = false;
     }
     touchpadSoloLayoutGroupGlobal = 0;
+    keyboardSoloLayoutGroupGlobal = 0;
   }
   sendChangeMessage();
 }
@@ -300,12 +320,22 @@ InputProcessor::lookupActionInGrid(InputID input) const {
       continue;
 
     const auto &slot = (*grid)[(size_t)keyCode];
-    if (slot.isActive)
+    if (slot.isActive) {
+      int keyboardSolo = getEffectiveKeyboardSoloGroupForLayer(i);
+      if ((keyboardSolo == 0 && slot.keyboardGroupId != 0) ||
+          (keyboardSolo > 0 && slot.keyboardGroupId != keyboardSolo))
+        continue;
       return slot.action;
+    }
     if (genericKey != 0) {
       const auto &genSlot = (*grid)[(size_t)genericKey];
-      if (genSlot.isActive)
+      if (genSlot.isActive) {
+        int keyboardSolo = getEffectiveKeyboardSoloGroupForLayer(i);
+        if ((keyboardSolo == 0 && genSlot.keyboardGroupId != 0) ||
+            (keyboardSolo > 0 && genSlot.keyboardGroupId != keyboardSolo))
+          continue;
         return genSlot.action;
+      }
     }
   }
   return std::nullopt;
@@ -467,7 +497,10 @@ void InputProcessor::valueTreePropertyChanged(
       property == juce::Identifier("releaseValue") ||
       property == juce::Identifier("releaseLatchedOnToggleOff") ||
       property == juce::Identifier("touchpadLayoutGroupId") ||
-      property == juce::Identifier("touchpadSoloScope")) {
+      property == juce::Identifier("touchpadSoloScope") ||
+      property == juce::Identifier("keyboardGroupId") ||
+      property == juce::Identifier("keyboardLayoutGroupId") ||
+      property == juce::Identifier("keyboardSoloScope")) {
     if (isLayerMapping || parent.isEquivalentTo(mappingsNode) ||
         treeWhosePropertyHasChanged.isEquivalentTo(mappingsNode)) {
       // SAFER: Rebuild everything.
@@ -598,6 +631,11 @@ void InputProcessor::processEvent(InputID input, bool isDown) {
       if (!slot.isActive)
         continue;
 
+      int keyboardSolo = getEffectiveKeyboardSoloGroupForLayer(layerIdx);
+      if ((keyboardSolo == 0 && slot.keyboardGroupId != 0) ||
+          (keyboardSolo > 0 && slot.keyboardGroupId != keyboardSolo))
+        continue;
+
       // Hit! Process this action
       const auto &midiAction = slot.action;
 
@@ -651,6 +689,21 @@ void InputProcessor::processEvent(InputID input, bool isDown) {
               if (currentLayer >= 0 && currentLayer < 9) {
                 touchpadSoloLayoutGroupPerLayer[(size_t)currentLayer] = 0;
                 touchpadSoloScopeForgetPerLayer[(size_t)currentLayer] = false;
+              }
+            }
+            sendChangeMessage();
+          } else if (cmd == static_cast<int>(
+                                 MIDIQy::CommandID::
+                                     KeyboardLayoutGroupSoloMomentary)) {
+            int scope = midiAction.keyboardSoloScope;
+            int currentLayer = getHighestActiveLayerIndex();
+            juce::ScopedLock sl(stateLock);
+            if (scope == 0) {
+              keyboardSoloLayoutGroupGlobal = 0;
+            } else if (scope == 1 || scope == 2) {
+              if (currentLayer >= 0 && currentLayer < 9) {
+                keyboardSoloLayoutGroupPerLayer[(size_t)currentLayer] = 0;
+                keyboardSoloScopeForgetPerLayer[(size_t)currentLayer] = false;
               }
             }
             sendChangeMessage();
@@ -842,6 +895,78 @@ void InputProcessor::processEvent(InputID input, bool isDown) {
               if (currentLayer >= 0 && currentLayer < 9) {
                 touchpadSoloLayoutGroupPerLayer[(size_t)currentLayer] = 0;
                 touchpadSoloScopeForgetPerLayer[(size_t)currentLayer] = false;
+              }
+            }
+            sendChangeMessage();
+          }
+        } else if (cmd ==
+                   static_cast<int>(MIDIQy::CommandID::KeyboardLayoutGroupSoloMomentary)) {
+          if (isDown) {
+            int groupId = midiAction.keyboardLayoutGroupId;
+            int scope = midiAction.keyboardSoloScope;
+            int currentLayer = getHighestActiveLayerIndex();
+            juce::ScopedLock sl(stateLock);
+            if (scope == 0) {
+              keyboardSoloLayoutGroupGlobal = groupId;
+            } else if (scope == 1 || scope == 2) {
+              if (currentLayer >= 0 && currentLayer < 9) {
+                keyboardSoloLayoutGroupPerLayer[(size_t)currentLayer] = groupId;
+                keyboardSoloScopeForgetPerLayer[(size_t)currentLayer] = (scope == 1);
+              }
+            }
+            sendChangeMessage();
+          }
+        } else if (cmd ==
+                   static_cast<int>(MIDIQy::CommandID::KeyboardLayoutGroupSoloToggle)) {
+          if (isDown) {
+            int groupId = midiAction.keyboardLayoutGroupId;
+            int scope = midiAction.keyboardSoloScope;
+            int currentLayer = getHighestActiveLayerIndex();
+            juce::ScopedLock sl(stateLock);
+            if (scope == 0) {
+              keyboardSoloLayoutGroupGlobal =
+                  (keyboardSoloLayoutGroupGlobal == groupId) ? 0 : groupId;
+            } else if (scope == 1 || scope == 2) {
+              if (currentLayer >= 0 && currentLayer < 9) {
+                int &slotRef =
+                    keyboardSoloLayoutGroupPerLayer[(size_t)currentLayer];
+                bool wasActive = (slotRef == groupId);
+                slotRef = (slotRef == groupId) ? 0 : groupId;
+                keyboardSoloScopeForgetPerLayer[(size_t)currentLayer] =
+                    (!wasActive && scope == 1);
+              }
+            }
+            sendChangeMessage();
+          }
+        } else if (cmd ==
+                   static_cast<int>(MIDIQy::CommandID::KeyboardLayoutGroupSoloSet)) {
+          if (isDown) {
+            int groupId = midiAction.keyboardLayoutGroupId;
+            int scope = midiAction.keyboardSoloScope;
+            int currentLayer = getHighestActiveLayerIndex();
+            juce::ScopedLock sl(stateLock);
+            if (scope == 0) {
+              keyboardSoloLayoutGroupGlobal = groupId;
+            } else if (scope == 1 || scope == 2) {
+              if (currentLayer >= 0 && currentLayer < 9) {
+                keyboardSoloLayoutGroupPerLayer[(size_t)currentLayer] = groupId;
+                keyboardSoloScopeForgetPerLayer[(size_t)currentLayer] = (scope == 1);
+              }
+            }
+            sendChangeMessage();
+          }
+        } else if (cmd ==
+                   static_cast<int>(MIDIQy::CommandID::KeyboardLayoutGroupSoloClear)) {
+          if (isDown) {
+            int scope = midiAction.keyboardSoloScope;
+            int currentLayer = getHighestActiveLayerIndex();
+            juce::ScopedLock sl(stateLock);
+            if (scope == 0) {
+              keyboardSoloLayoutGroupGlobal = 0;
+            } else if (scope == 1 || scope == 2) {
+              if (currentLayer >= 0 && currentLayer < 9) {
+                keyboardSoloLayoutGroupPerLayer[(size_t)currentLayer] = 0;
+                keyboardSoloScopeForgetPerLayer[(size_t)currentLayer] = false;
               }
             }
             sendChangeMessage();

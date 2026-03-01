@@ -31,6 +31,7 @@ struct ZoneControl {
     CustomChipList,
     CustomColor,
     CustomLayer,
+    CustomKeyboardGroup,
     CustomName,
   };
   Type controlType = Type::Slider;

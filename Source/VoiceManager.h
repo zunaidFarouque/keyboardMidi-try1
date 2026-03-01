@@ -13,7 +13,8 @@
 
 class VoiceManager : public juce::HighResolutionTimer,
                      public juce::Timer,
-                     public juce::ChangeListener {
+                     public juce::ChangeListener,
+                     public juce::ChangeBroadcaster {
 public:
   VoiceManager(MidiEngine &engine, SettingsManager &settingsMgr);
   ~VoiceManager() override;

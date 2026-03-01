@@ -1,10 +1,16 @@
 #pragma once
 #include <JuceHeader.h>
 #include <atomic>
+#include <map>
 #include <vector>
 
 class PresetManager : public juce::ChangeBroadcaster {
 public:
+  struct KeyboardGroup {
+    int id = 0;
+    juce::String name;
+  };
+
   PresetManager();
   ~PresetManager();
 
@@ -30,6 +36,13 @@ public:
 
   // Legacy: Returns Layer 0's mappings for backward compatibility
   juce::ValueTree getMappingsNode();
+
+  // Keyboard groups (for keyboard mappings and zones; 0 = no group).
+  std::vector<KeyboardGroup> getKeyboardGroups() const;
+  std::map<int, juce::String> getKeyboardGroupNames() const;
+  void addKeyboardGroup(int id, const juce::String &name);
+  void removeKeyboardGroup(int id); // Also clears keyboardGroupId on all mappings that had this group
+  void renameKeyboardGroup(int id, const juce::String &name);
 
   // Returns the root for listeners
   juce::ValueTree &getRootNode() { return rootNode; }

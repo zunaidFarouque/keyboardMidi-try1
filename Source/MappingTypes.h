@@ -74,7 +74,13 @@ enum class CommandID : int {
   TouchpadLayoutGroupSoloMomentary = 18, // Hold: solo while held
   TouchpadLayoutGroupSoloToggle = 19,    // Toggle solo on/off
   TouchpadLayoutGroupSoloSet = 20,       // Set solo on (idempotent)
-  TouchpadLayoutGroupSoloClear = 21      // Clear solo state
+  TouchpadLayoutGroupSoloClear = 21,     // Clear solo state
+
+  // Keyboard layout group solo (visibility override for keyboard mappings/zones)
+  KeyboardLayoutGroupSoloMomentary = 22,
+  KeyboardLayoutGroupSoloToggle = 23,
+  KeyboardLayoutGroupSoloSet = 24,
+  KeyboardLayoutGroupSoloClear = 25
 };
 }
 
@@ -185,6 +191,10 @@ struct MidiAction {
   // soloScope: 0 = Global, 1 = Layer (forget on layer change),
   //            2 = Layer (remember until cleared)
   int touchpadSoloScope = 0;
+
+  // Keyboard layout group solo parameters (for CommandID::KeyboardLayoutGroupSolo*)
+  int keyboardLayoutGroupId = 0;
+  int keyboardSoloScope = 0;
 };
 
 // Represents a unique input source (device + key)
@@ -268,6 +278,9 @@ struct KeyAudioSlot {
   // For Chords or complex sequences, we index into a pool in CompiledContext.
   // -1 means use 'action' directly. >= 0 means look up chordPool[chordIndex].
   int chordIndex = -1;
+
+  // 0 = no group, >0 = PresetManager keyboard group id (for solo filtering)
+  int keyboardGroupId = 0;
 };
 
 // Rich data for the UI / Visualizer thread.
@@ -277,6 +290,7 @@ struct KeyVisualSlot {
   juce::String label;      // Pre-calculated text (e.g., "C# Maj7")
   juce::String sourceName; // e.g., "Zone: Main", "Mapping: Base"
   bool isGhost = false;    // Phase 54.1: Ghost note (quieter, dimmed in UI)
+  int keyboardGroupId = 0; // 0 = no group, >0 = PresetManager keyboard group id (for solo filtering)
 };
 
 // 256 slots covering all Virtual Key Codes (0x00 - 0xFF)

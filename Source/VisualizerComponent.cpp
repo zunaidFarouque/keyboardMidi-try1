@@ -393,12 +393,17 @@ void VisualizerComponent::refreshCache() {
 
       if (targetGrid && keyCode >= 0 && keyCode < (int)targetGrid->size()) {
         const auto &slot = (*targetGrid)[(size_t)keyCode];
-        state = slot.state;
-        isGhost = slot.isGhost;
-        if (!slot.displayColor.isTransparent())
-          underlayColor = slot.displayColor;
-        if (slot.label.isNotEmpty())
-          labelText = slot.label;
+        int keyboardSolo = inputProcessor ? inputProcessor->getEffectiveKeyboardSoloGroupForLayer(currentVisualizedLayer) : 0;
+        bool slotFilteredBySolo = (keyboardSolo == 0 && slot.keyboardGroupId != 0) ||
+                                 (keyboardSolo > 0 && slot.keyboardGroupId != keyboardSolo);
+        if (!slotFilteredBySolo) {
+          state = slot.state;
+          isGhost = slot.isGhost;
+          if (!slot.displayColor.isTransparent())
+            underlayColor = slot.displayColor;
+          if (slot.label.isNotEmpty())
+            labelText = slot.label;
+        }
       }
 
       // Phase 52.2 / 54.1: Drawing rules from pre-compiled VisualGrid
@@ -502,9 +507,13 @@ void VisualizerComponent::paint(juce::Graphics &g) {
   g.drawImageAt(backgroundCache, 0, 0);
 
   // Update Sustain Indicator (dynamic - always redraw since it changes
-  // frequently)
+  // frequently). Must use content area width so it's not hidden under the
+  // global panel on the right.
+  int contentW = getWidth() - static_cast<int>(getEffectiveRightPanelWidth());
+  if (contentW < 0)
+    contentW = 0;
+  auto headerRect = juce::Rectangle<int>(0, 0, contentW, 30);
   bool sustainActive = voiceManager.isSustainActive();
-  auto headerRect = juce::Rectangle<int>(0, 0, getWidth(), 30);
   juce::Colour sustainColor =
       sustainActive ? juce::Colours::lime : juce::Colours::grey;
   int indicatorSize = 12;
@@ -539,9 +548,7 @@ void VisualizerComponent::paint(juce::Graphics &g) {
       settingsManager && !settingsManager->isMidiModeActive();
 
   // --- Calculate Dynamic Scale (Same as refreshCache) ---
-  int contentW = getWidth() - static_cast<int>(getEffectiveRightPanelWidth());
-  if (contentW < 0)
-    contentW = 0;
+  // contentW already computed above for sustain indicator
   float unitsWide = 23.0f;
   float unitsTall = 7.3f;
   float headerHeight = 30.0f;
@@ -845,6 +852,13 @@ void VisualizerComponent::changeListenerCallback(
   if (source == inputProcessor) {
     // Phase 48: layer state changed -> update HUD next frame
     needsRepaint = true;
+    return;
+  }
+  if (source == &voiceManager) {
+    // Sustain state changed -> update indicator immediately
+    lastSustainState = voiceManager.isSustainActive();
+    needsRepaint.store(true, std::memory_order_release);
+    repaint();
     return;
   }
   if (source == zoneManager || source == settingsManager) {

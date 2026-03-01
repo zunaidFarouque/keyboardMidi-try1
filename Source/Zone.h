@@ -34,6 +34,7 @@ public:
   // Properties
   juce::String name;
   int layerID = 0;           // Phase 49: layer assignment (0=Base)
+  int keyboardGroupId = 0;   // 0 = no group, >0 = PresetManager keyboard group id
   uintptr_t targetAliasHash; // The Alias this zone listens to (0 = Global / All
                              // Devices)
   std::vector<int> inputKeyCodes; // The physical keys, ordered

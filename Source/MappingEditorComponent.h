@@ -12,6 +12,7 @@
 class InputCaptureOverlay;
 
 class TouchpadMixerManager;
+class ZoneManager;
 
 class MappingEditorComponent : public juce::Component,
                                public juce::TableListBoxModel,
@@ -22,7 +23,8 @@ public:
   MappingEditorComponent(PresetManager &pm, RawInputManager &rawInputMgr,
                          DeviceManager &deviceMgr,
                          SettingsManager &settingsMgr,
-                         TouchpadMixerManager *touchpadMixerMgr = nullptr);
+                         TouchpadMixerManager *touchpadMixerMgr = nullptr,
+                         ZoneManager *zoneMgr = nullptr);
   ~MappingEditorComponent() override;
 
   // Get undo manager for command handling
@@ -79,6 +81,7 @@ private:
   RawInputManager &rawInputManager;
   DeviceManager &deviceManager;
   SettingsManager &settingsManager;
+  ZoneManager *zoneManager = nullptr; // Optional: clear zone keyboardGroupId when group removed
   int selectedLayerId = 0; // Phase 41: Currently selected layer
   // Phase 45: Remember selection per layer (layerId -> row index)
   std::map<int, int> layerSelectionHistory;
@@ -87,6 +90,7 @@ private:
   LayerListPanel layerListPanel; // Phase 41: Layer sidebar
   juce::TableListBox table;
   juce::TextButton addButton;
+  juce::TextButton groupsButton;
   juce::TextButton duplicateButton;
   juce::TextButton moveToLayerButton;
   juce::TextButton deleteButton;

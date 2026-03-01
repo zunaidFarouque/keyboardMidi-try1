@@ -2,6 +2,7 @@
 #include "KeyNameUtilities.h"
 #include "MappingDefinition.h"
 #include "TouchpadMixerManager.h"
+#include "ZoneManager.h"
 #include <algorithm>
 #include <functional>
 
@@ -63,9 +64,10 @@ MappingEditorComponent::MappingEditorComponent(PresetManager &pm,
                                                RawInputManager &rawInputMgr,
                                                DeviceManager &deviceMgr,
                                                SettingsManager &settingsMgr,
-                                               TouchpadMixerManager *touchpadMixerMgr)
+                                               TouchpadMixerManager *touchpadMixerMgr,
+                                               ZoneManager *zoneMgr)
     : presetManager(pm), rawInputManager(rawInputMgr), deviceManager(deviceMgr),
-      settingsManager(settingsMgr), layerListPanel(pm),
+      settingsManager(settingsMgr), zoneManager(zoneMgr), layerListPanel(pm),
       inspector(undoManager, deviceManager, settingsManager, &presetManager, touchpadMixerMgr),
       resizerBar(&horizontalLayout, 1, true) { // Item index 1, vertical bar
 
@@ -133,6 +135,133 @@ MappingEditorComponent::MappingEditorComponent(PresetManager &pm,
   addButton.setButtonText("+");
   addButton.onClick = [this] { startInputCapture(); };
   addAndMakeVisible(addButton);
+
+  // Keyboard groups dialog (mirror Touchpad layout groups)
+  groupsButton.setButtonText("Groups...");
+  groupsButton.onClick = [this] {
+    class KeyboardGroupsDialog : public juce::Component, public juce::ListBoxModel {
+    public:
+      KeyboardGroupsDialog(PresetManager *pm, ZoneManager *zm)
+          : presetManager(pm), zoneManager(zm) {
+        addAndMakeVisible(listBox);
+        listBox.setModel(this);
+        listBox.setRowHeight(24);
+        addButton.setButtonText("Add");
+        removeButton.setButtonText("Remove");
+        renameLabel.setText("Name:", juce::dontSendNotification);
+        addAndMakeVisible(addButton);
+        addAndMakeVisible(removeButton);
+        addAndMakeVisible(renameLabel);
+        addAndMakeVisible(renameEditor);
+        addButton.onClick = [this] { addGroup(); };
+        removeButton.onClick = [this] { removeSelectedGroup(); };
+        renameEditor.onTextChange = [this] { confirmRename(); };
+        renameEditor.onReturnKey = [this] { confirmRename(); };
+        renameEditor.onFocusLost = [this] { confirmRename(); };
+        refreshFromManager();
+      }
+      int getNumRows() override { return (int)groups.size(); }
+      void paintListBoxItem(int row, juce::Graphics &g, int width, int height,
+                            bool rowIsSelected) override {
+        if (row < 0 || row >= (int)groups.size()) return;
+        if (rowIsSelected) g.fillAll(juce::Colour(0xff4a4a4a));
+        else g.fillAll(juce::Colour(0xff2a2a2a));
+        g.setColour(juce::Colours::white);
+        g.setFont(14.0f);
+        g.drawText(groups[(size_t)row].second, 8, 0, width - 16, height,
+                   juce::Justification::centredLeft);
+      }
+      void selectedRowsChanged(int lastRowSelected) override {
+        if (lastRowSelected >= 0 && lastRowSelected < (int)groups.size()) {
+          renameEditor.setText(groups[(size_t)lastRowSelected].second,
+                               juce::dontSendNotification);
+        } else {
+          renameEditor.setText({}, juce::dontSendNotification);
+        }
+      }
+      void resized() override {
+        auto area = getLocalBounds().reduced(8);
+        auto bottom = area.removeFromBottom(30);
+        removeButton.setBounds(bottom.removeFromRight(80));
+        bottom.removeFromRight(4);
+        addButton.setBounds(bottom.removeFromRight(80));
+        auto nameArea = area.removeFromBottom(24);
+        renameLabel.setBounds(nameArea.removeFromLeft(60));
+        renameEditor.setBounds(nameArea);
+        listBox.setBounds(area.reduced(0, 4));
+      }
+    private:
+      PresetManager *presetManager = nullptr;
+      ZoneManager *zoneManager = nullptr;
+      juce::ListBox listBox{"KeyboardGroups", this};
+      juce::TextButton addButton, removeButton;
+      juce::Label renameLabel;
+      juce::TextEditor renameEditor;
+      std::vector<std::pair<int, juce::String>> groups;
+      void refreshFromManager() {
+        groups.clear();
+        if (!presetManager) return;
+        for (const auto &g : presetManager->getKeyboardGroups())
+          groups.emplace_back(g.id, g.name);
+        listBox.updateContent();
+      }
+      void addGroup() {
+        if (!presetManager) return;
+        int nextId = 1;
+        for (const auto &g : presetManager->getKeyboardGroups())
+          nextId = juce::jmax(nextId, g.id + 1);
+        presetManager->addKeyboardGroup(nextId, "Group " + juce::String(nextId));
+        refreshFromManager();
+        int newRow = -1;
+        for (int i = 0; i < (int)groups.size(); ++i) {
+          if (groups[(size_t)i].first == nextId) { newRow = i; break; }
+        }
+        if (newRow >= 0) {
+          listBox.selectRow(newRow);
+          renameEditor.setText(groups[(size_t)newRow].second,
+                               juce::dontSendNotification);
+          renameEditor.grabKeyboardFocus();
+          renameEditor.setHighlightedRegion(
+              juce::Range<int>(0, renameEditor.getText().length()));
+        }
+      }
+      void removeSelectedGroup() {
+        if (!presetManager) return;
+        int row = listBox.getSelectedRow();
+        if (row < 0 || row >= (int)groups.size()) return;
+        int id = groups[(size_t)row].first;
+        presetManager->removeKeyboardGroup(id);
+        if (zoneManager)
+          zoneManager->clearKeyboardGroupFromAllZones(id);
+        refreshFromManager();
+      }
+      void confirmRename() {
+        if (!presetManager) return;
+        int row = listBox.getSelectedRow();
+        if (row < 0 || row >= (int)groups.size()) return;
+        int id = groups[(size_t)row].first;
+        auto text = renameEditor.getText().trim();
+        if (text.isEmpty()) return;
+        if (text == groups[(size_t)row].second) return;
+        presetManager->renameKeyboardGroup(id, text);
+        refreshFromManager();
+        if (row >= 0 && row < (int)groups.size()) {
+          listBox.selectRow(row);
+          listBox.repaint();
+        }
+      }
+    };
+    juce::DialogWindow::LaunchOptions opts;
+    opts.dialogTitle = "Keyboard Groups";
+    opts.dialogBackgroundColour = juce::Colour(0xff222222);
+    opts.escapeKeyTriggersCloseButton = true;
+    opts.useNativeTitleBar = true;
+    opts.resizable = true;
+    opts.content.setOwned(new KeyboardGroupsDialog(&presetManager, zoneManager));
+    opts.content->setSize(300, 260);
+    opts.launchAsync();
+  };
+  addAndMakeVisible(groupsButton);
 
   // Setup Duplicate Button
   duplicateButton.setButtonText("Duplicate");
@@ -375,6 +504,8 @@ void MappingEditorComponent::resized() {
     captureOverlay->setBounds(area);
   auto header = area.removeFromTop(24);
   addButton.setBounds(header.removeFromRight(30));
+  header.removeFromRight(4);
+  groupsButton.setBounds(header.removeFromRight(70));
   header.removeFromRight(4);
   duplicateButton.setBounds(header.removeFromRight(80));
   header.removeFromRight(4);

@@ -110,6 +110,9 @@ public:
   // group is active, that always wins; otherwise the per-layer solo is used.
   int getEffectiveSoloLayoutGroupForLayer(int layerIdx) const;
 
+  // Effective keyboard layout group solo for a given layer (same semantics as touchpad).
+  int getEffectiveKeyboardSoloGroupForLayer(int layerIdx) const;
+
   // Clear touchpad solo states for layers that have scope=1 (forget) and are now inactive.
   // Call this whenever layer state changes.
   void clearForgetScopeSolosForInactiveLayers();
@@ -230,6 +233,11 @@ private:
   std::array<int, 9> touchpadSoloLayoutGroupPerLayer{{0, 0, 0, 0, 0, 0, 0, 0, 0}};
   // Track which per-layer solos have scope=1 (forget on layer change)
   std::array<bool, 9> touchpadSoloScopeForgetPerLayer{{false, false, false, false, false, false, false, false, false}};
+
+  // Keyboard layout group solo state (same semantics as touchpad).
+  int keyboardSoloLayoutGroupGlobal = 0;
+  std::array<int, 9> keyboardSoloLayoutGroupPerLayer{{0, 0, 0, 0, 0, 0, 0, 0, 0}};
+  std::array<bool, 9> keyboardSoloScopeForgetPerLayer{{false, false, false, false, false, false, false, false, false}};
 
   // Momentary layer chain: track which keys hold which layer (for Phantom Key)
   std::unordered_map<InputID, int>

@@ -144,8 +144,10 @@ protected:
     m.setProperty("type", "Expression", nullptr);
     m.setProperty("adsrTarget", "PitchBend", nullptr);
     m.setProperty("channel", 1, nullptr);
+    m.setProperty("data2", juce::jmax(std::abs(outputMin), std::abs(outputMax)), nullptr);  // Bend semitones (current architecture)
     m.setProperty("touchpadInputMin", 0.0, nullptr);
     m.setProperty("touchpadInputMax", 1.0, nullptr);
+    m.setProperty("pitchPadUseCustomRange", true, nullptr);
     m.setProperty("touchpadOutputMin", outputMin, nullptr);
     m.setProperty("touchpadOutputMax", outputMax, nullptr);
     m.setProperty("pitchPadMode", mode, nullptr);
@@ -165,6 +167,7 @@ protected:
     m.setProperty("type", "Expression", nullptr);
     m.setProperty("adsrTarget", "PitchBend", nullptr);
     m.setProperty("channel", 1, nullptr);
+    m.setProperty("data2", 2, nullptr);  // Bend ±2 semitones (current architecture)
     m.setProperty("touchpadInputMin", 0.0, nullptr);
     m.setProperty("touchpadInputMax", 1.0, nullptr);
     m.setProperty("touchpadOutputMin", -2, nullptr);
@@ -2985,6 +2988,7 @@ TEST_F(InputProcessorTest, PitchBendRangeAffectsSentPitchBend) {
   m.setProperty("type", "Expression", nullptr);
   m.setProperty("adsrTarget", "PitchBend", nullptr);
   m.setProperty("layerID", 0, nullptr);
+  m.setProperty("data2", 2, nullptr);  // Bend ±2 semitones (current architecture)
   m.setProperty("touchpadInputMin", 0.0, nullptr);
   m.setProperty("touchpadInputMax", 1.0, nullptr);
   m.setProperty("touchpadOutputMin", -2, nullptr);
@@ -6242,6 +6246,108 @@ TEST_F(InputProcessorTest, RecompileWhenTouchpadSoloScopeChanges) {
   EXPECT_EQ(opt2->touchpadSoloScope, 1);
 }
 
+// --- Keyboard group filtering tests ---
+
+// Test: Key mapping with no group (keyboardGroupId == 0) is visible when no solo
+TEST_F(InputProcessorTest, KeyboardMappingNoGroupVisibleWhenNoSolo) {
+  presetMgr.addKeyboardGroup(1, "Group 1");
+
+  auto mappings = presetMgr.getMappingsListForLayer(0);
+  juce::ValueTree mNoGroup("Mapping");
+  mNoGroup.setProperty("inputKey", 60, nullptr);
+  mNoGroup.setProperty("deviceHash",
+                       juce::String::toHexString((juce::int64)0).toUpperCase(),
+                       nullptr);
+  mNoGroup.setProperty("type", "Note", nullptr);
+  mNoGroup.setProperty("data1", 60, nullptr);
+  mNoGroup.setProperty("data2", 100, nullptr);
+  mNoGroup.setProperty("keyboardGroupId", 0, nullptr);
+  mappings.appendChild(mNoGroup, nullptr);
+
+  juce::ValueTree mInGroup("Mapping");
+  mInGroup.setProperty("inputKey", 61, nullptr);
+  mInGroup.setProperty("deviceHash",
+                       juce::String::toHexString((juce::int64)0).toUpperCase(),
+                       nullptr);
+  mInGroup.setProperty("type", "Note", nullptr);
+  mInGroup.setProperty("data1", 61, nullptr);
+  mInGroup.setProperty("data2", 100, nullptr);
+  mInGroup.setProperty("keyboardGroupId", 1, nullptr);
+  mappings.appendChild(mInGroup, nullptr);
+
+  proc.forceRebuildMappings();
+  EXPECT_EQ(proc.getEffectiveKeyboardSoloGroupForLayer(0), 0);
+
+  auto opt60 = proc.getMappingForInput(InputID{0, 60});
+  EXPECT_TRUE(opt60.has_value()) << "No-group mapping should be visible when no solo";
+  auto opt61 = proc.getMappingForInput(InputID{0, 61});
+  EXPECT_FALSE(opt61.has_value())
+      << "Grouped mapping should be hidden when no solo is active";
+}
+
+// Test: Key mapping with group 1 is visible when solo group 1 is active
+TEST_F(InputProcessorTest, KeyboardMappingGroupVisibleWhenSoloActive) {
+  presetMgr.addKeyboardGroup(1, "Group 1");
+
+  auto mappings = presetMgr.getMappingsListForLayer(0);
+  juce::ValueTree soloMapping("Mapping");
+  soloMapping.setProperty("inputKey", 59, nullptr);
+  soloMapping.setProperty("deviceHash",
+                          juce::String::toHexString((juce::int64)0).toUpperCase(),
+                          nullptr);
+  soloMapping.setProperty("type", "Command", nullptr);
+  soloMapping.setProperty(
+      "data1",
+      static_cast<int>(MIDIQy::CommandID::KeyboardLayoutGroupSoloSet),
+      nullptr);
+  soloMapping.setProperty("keyboardLayoutGroupId", 1, nullptr);
+  soloMapping.setProperty("keyboardSoloScope", 0, nullptr);
+  mappings.appendChild(soloMapping, nullptr);
+
+  juce::ValueTree mInGroup("Mapping");
+  mInGroup.setProperty("inputKey", 60, nullptr);
+  mInGroup.setProperty("deviceHash",
+                       juce::String::toHexString((juce::int64)0).toUpperCase(),
+                       nullptr);
+  mInGroup.setProperty("type", "Note", nullptr);
+  mInGroup.setProperty("data1", 60, nullptr);
+  mInGroup.setProperty("data2", 100, nullptr);
+  mInGroup.setProperty("keyboardGroupId", 1, nullptr);
+  mappings.appendChild(mInGroup, nullptr);
+
+  proc.forceRebuildMappings();
+  proc.processEvent(InputID{0, 59}, true);
+
+  EXPECT_EQ(proc.getEffectiveKeyboardSoloGroupForLayer(0), 1);
+  auto opt = proc.getMappingForInput(InputID{0, 60});
+  EXPECT_TRUE(opt.has_value())
+      << "Group 1 mapping should be visible when solo group 1 is active";
+}
+
+// Test: Recompile when keyboardGroupId changes
+TEST_F(InputProcessorTest, RecompileWhenKeyboardGroupIdChanges) {
+  presetMgr.addKeyboardGroup(1, "G1");
+  presetMgr.addKeyboardGroup(2, "G2");
+
+  auto mappings = presetMgr.getMappingsListForLayer(0);
+  juce::ValueTree m("Mapping");
+  m.setProperty("inputKey", 60, nullptr);
+  m.setProperty("deviceHash",
+                juce::String::toHexString((juce::int64)0).toUpperCase(),
+                nullptr);
+  m.setProperty("type", "Note", nullptr);
+  m.setProperty("data1", 60, nullptr);
+  m.setProperty("data2", 100, nullptr);
+  m.setProperty("keyboardGroupId", 1, nullptr);
+  mappings.appendChild(m, nullptr);
+  proc.forceRebuildMappings();
+
+  int countAfterSetup = proc.getRebuildCountForTest();
+  m.setProperty("keyboardGroupId", 2, nullptr);
+  EXPECT_GT(proc.getRebuildCountForTest(), countAfterSetup)
+      << "Changing keyboardGroupId must trigger grid rebuild";
+}
+
 // --- Touchpad Tab touchpad mapping runtime tests ---
 TEST_F(InputProcessorTest, TouchpadTab_Finger1DownSendsNoteOnThenNoteOff) {
   MockMidiEngine mockEng;
@@ -6531,6 +6637,7 @@ protected:
     m.setProperty("type", "Expression", nullptr);
     m.setProperty("adsrTarget", "PitchBend", nullptr);
     m.setProperty("channel", 1, nullptr);
+    m.setProperty("data2", 2, nullptr);  // Bend ±2 semitones (current architecture)
     m.setProperty("touchpadInputMin", 0.0, nullptr);
     m.setProperty("touchpadInputMax", 1.0, nullptr);
     m.setProperty("touchpadOutputMin", -2, nullptr);
@@ -6553,8 +6660,10 @@ protected:
     m.setProperty("type", "Expression", nullptr);
     m.setProperty("adsrTarget", "PitchBend", nullptr);
     m.setProperty("channel", 1, nullptr);
+    m.setProperty("data2", juce::jmax(std::abs(outputMin), std::abs(outputMax)), nullptr);  // Bend semitones (current architecture)
     m.setProperty("touchpadInputMin", 0.0, nullptr);
     m.setProperty("touchpadInputMax", 1.0, nullptr);
+    m.setProperty("pitchPadUseCustomRange", true, nullptr);
     m.setProperty("touchpadOutputMin", outputMin, nullptr);
     m.setProperty("touchpadOutputMax", outputMax, nullptr);
     m.setProperty("pitchPadMode", mode, nullptr);
@@ -6671,6 +6780,7 @@ TEST_F(InputProcessorTest, TouchpadTab_PitchBendRangeAffectsSentPitchBend) {
   m.setProperty("type", "Expression", nullptr);
   m.setProperty("adsrTarget", "PitchBend", nullptr);
   m.setProperty("channel", 1, nullptr);
+  m.setProperty("data2", 2, nullptr);  // Bend ±2 semitones (current architecture)
   m.setProperty("touchpadInputMin", 0.0, nullptr);
   m.setProperty("touchpadInputMax", 1.0, nullptr);
   m.setProperty("touchpadOutputMin", -2, nullptr);
@@ -6846,6 +6956,7 @@ TEST_F(InputProcessorTest, TouchpadTab_PitchPadStartLeft_ZeroAtLeftEdge) {
   m.setProperty("type", "Expression", nullptr);
   m.setProperty("adsrTarget", "PitchBend", nullptr);
   m.setProperty("channel", 1, nullptr);
+  m.setProperty("data2", 2, nullptr);  // Bend ±2 semitones (current architecture)
   m.setProperty("touchpadInputMin", 0.0, nullptr);
   m.setProperty("touchpadInputMax", 1.0, nullptr);
   m.setProperty("touchpadOutputMin", -2, nullptr);

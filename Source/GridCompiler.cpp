@@ -262,7 +262,8 @@ juce::String makeLabelForAction(const MidiAction &action) {
 
 // Write a MidiAction into an AudioGrid slot and handle generic modifier
 // replication for that grid.
-void writeAudioSlot(AudioGrid &grid, int keyCode, const MidiAction &action) {
+void writeAudioSlot(AudioGrid &grid, int keyCode, const MidiAction &action,
+                    int keyboardGroupId) {
   if (keyCode < 0 || keyCode >= (int)grid.size())
     return;
 
@@ -270,6 +271,7 @@ void writeAudioSlot(AudioGrid &grid, int keyCode, const MidiAction &action) {
   slot.isActive = true;
   slot.action = action;
   slot.chordIndex = -1;
+  slot.keyboardGroupId = keyboardGroupId;
 
   // Generic -> specific replication
   if (isGenericShift(keyCode)) {
@@ -302,11 +304,13 @@ void writeAudioSlot(AudioGrid &grid, int keyCode, const MidiAction &action) {
 void applyVisualSlot(VisualGrid &grid, int keyCode, const juce::Colour &color,
                      const juce::String &label, const juce::String &sourceName,
                      std::vector<bool> *touchedKeys = nullptr,
-                     VisualState targetState = VisualState::Active) {
+                     VisualState targetState = VisualState::Active,
+                     int keyboardGroupId = 0) {
   if (keyCode < 0 || keyCode >= (int)grid.size())
     return;
 
   auto &slot = grid[(size_t)keyCode];
+  slot.keyboardGroupId = keyboardGroupId;
   const bool hadContent = (slot.state != VisualState::Empty);
 
   bool isConflict = false;
@@ -343,9 +347,10 @@ void applyVisualWithModifiers(VisualGrid &grid, int keyCode,
                               const juce::String &label,
                               const juce::String &sourceName,
                               std::vector<bool> *touchedKeys = nullptr,
-                              VisualState targetState = VisualState::Active) {
+                              VisualState targetState = VisualState::Active,
+                              int keyboardGroupId = 0) {
   applyVisualSlot(grid, keyCode, color, label, sourceName, touchedKeys,
-                  targetState);
+                  targetState, keyboardGroupId);
 
   auto shouldExpandTo = [&](int sideKey) -> bool {
     if (!touchedKeys || sideKey < 0 || sideKey >= (int)touchedKeys->size())
@@ -356,24 +361,24 @@ void applyVisualWithModifiers(VisualGrid &grid, int keyCode,
   if (isGenericShift(keyCode)) {
     if (shouldExpandTo(InputTypes::Key_LShift))
       applyVisualSlot(grid, InputTypes::Key_LShift, color, label, sourceName,
-                      touchedKeys, targetState);
+                      touchedKeys, targetState, keyboardGroupId);
     if (shouldExpandTo(InputTypes::Key_RShift))
       applyVisualSlot(grid, InputTypes::Key_RShift, color, label, sourceName,
-                      touchedKeys, targetState);
+                      touchedKeys, targetState, keyboardGroupId);
   } else if (isGenericControl(keyCode)) {
     if (shouldExpandTo(InputTypes::Key_LControl))
       applyVisualSlot(grid, InputTypes::Key_LControl, color, label, sourceName,
-                      touchedKeys, targetState);
+                      touchedKeys, targetState, keyboardGroupId);
     if (shouldExpandTo(InputTypes::Key_RControl))
       applyVisualSlot(grid, InputTypes::Key_RControl, color, label, sourceName,
-                      touchedKeys, targetState);
+                      touchedKeys, targetState, keyboardGroupId);
   } else if (isGenericAlt(keyCode)) {
     if (shouldExpandTo(InputTypes::Key_LAlt))
       applyVisualSlot(grid, InputTypes::Key_LAlt, color, label, sourceName,
-                      touchedKeys, targetState);
+                      touchedKeys, targetState, keyboardGroupId);
     if (shouldExpandTo(InputTypes::Key_RAlt))
       applyVisualSlot(grid, InputTypes::Key_RAlt, color, label, sourceName,
-                      touchedKeys, targetState);
+                      touchedKeys, targetState, keyboardGroupId);
   }
 }
 
@@ -486,7 +491,7 @@ void compileZonesForLayer(VisualGrid &vGrid, AudioGrid &aGrid,
       juce::String sourceName = "Zone: " + zone->name;
 
       applyVisualWithModifiers(vGrid, keyCode, color, label, sourceName,
-                               &touchedKeys, targetState);
+                               &touchedKeys, targetState, zone->keyboardGroupId);
 
       if (!chordNotes.empty() && chordNotes.front().isGhost)
         vGrid[(size_t)keyCode].isGhost = true;
@@ -514,7 +519,7 @@ void compileZonesForLayer(VisualGrid &vGrid, AudioGrid &aGrid,
         chordIndex = static_cast<int>(chordPool.size()) - 1;
       }
 
-      writeAudioSlot(aGrid, keyCode, rootAction);
+      writeAudioSlot(aGrid, keyCode, rootAction, zone->keyboardGroupId);
       aGrid[(size_t)keyCode].chordIndex = chordIndex;
       markKeyWritten(keyCode, keysWrittenOut);
     }
@@ -552,6 +557,7 @@ struct ForcedMapping {
   juce::Colour color;
   juce::String label;
   juce::String sourceName;
+  int keyboardGroupId = 0;
 };
 
 static void collectForcedMappings(
@@ -683,6 +689,20 @@ static void collectForcedMappings(
         action.touchpadSoloScope =
             juce::jlimit(0, 2, (int)mapping.getProperty("touchpadSoloScope", MappingDefaults::TouchpadSoloScope));
       }
+      if (action.data1 ==
+              static_cast<int>(
+                  MIDIQy::CommandID::KeyboardLayoutGroupSoloMomentary) ||
+          action.data1 ==
+              static_cast<int>(MIDIQy::CommandID::KeyboardLayoutGroupSoloToggle) ||
+          action.data1 ==
+              static_cast<int>(MIDIQy::CommandID::KeyboardLayoutGroupSoloSet) ||
+          action.data1 ==
+              static_cast<int>(MIDIQy::CommandID::KeyboardLayoutGroupSoloClear)) {
+        action.keyboardLayoutGroupId =
+            (int)mapping.getProperty("keyboardLayoutGroupId", MappingDefaults::KeyboardLayoutGroupId);
+        action.keyboardSoloScope =
+            juce::jlimit(0, 2, (int)mapping.getProperty("keyboardSoloScope", MappingDefaults::KeyboardSoloScope));
+      }
     }
 
     if (action.type == ActionType::Command &&
@@ -728,9 +748,10 @@ static void collectForcedMappings(
     juce::String label = makeLabelForAction(action);
     juce::String sourceName =
         aliasName.isNotEmpty() ? ("Mapping: " + aliasName) : "Mapping";
+    int kbGroupId = (int)mapping.getProperty("keyboardGroupId", MappingDefaults::KeyboardGroupId);
 
     forcedByAlias[mappingAliasHash].push_back(
-        ForcedMapping{inputKey, action, color, label, sourceName});
+        ForcedMapping{inputKey, action, color, label, sourceName, kbGroupId});
   }
 }
 
@@ -1368,18 +1389,29 @@ void compileMappingsForLayer(
         action.touchpadSoloScope =
             juce::jlimit(0, 2, (int)mapping.getProperty("touchpadSoloScope", MappingDefaults::TouchpadSoloScope));
       }
+      if (cmd == static_cast<int>(
+                    MIDIQy::CommandID::KeyboardLayoutGroupSoloMomentary) ||
+          cmd == static_cast<int>(MIDIQy::CommandID::KeyboardLayoutGroupSoloToggle) ||
+          cmd == static_cast<int>(MIDIQy::CommandID::KeyboardLayoutGroupSoloSet) ||
+          cmd == static_cast<int>(MIDIQy::CommandID::KeyboardLayoutGroupSoloClear)) {
+        action.keyboardLayoutGroupId =
+            (int)mapping.getProperty("keyboardLayoutGroupId", MappingDefaults::KeyboardLayoutGroupId);
+        action.keyboardSoloScope =
+            juce::jlimit(0, 2, (int)mapping.getProperty("keyboardSoloScope", MappingDefaults::KeyboardSoloScope));
+      }
     }
 
     juce::Colour color = getColorForType(action.type, settingsMgr);
     juce::String label = makeLabelForAction(action);
     juce::String sourceName =
         aliasName.isNotEmpty() ? ("Mapping: " + aliasName) : "Mapping";
+    const int kbGroupId = (int)mapping.getProperty("keyboardGroupId", MappingDefaults::KeyboardGroupId);
 
     applyVisualWithModifiers(vGrid, inputKey, color, label, sourceName,
-                             &touchedKeys, targetState);
+                             &touchedKeys, targetState, kbGroupId);
 
     if (vGrid[(size_t)inputKey].state != VisualState::Conflict) {
-      writeAudioSlot(aGrid, inputKey, action);
+      writeAudioSlot(aGrid, inputKey, action, kbGroupId);
       markKeyWritten(inputKey, keysWrittenOut);
     }
   }
@@ -1572,9 +1604,9 @@ std::shared_ptr<CompiledMapContext> GridCompiler::compile(
         if (key < 0 || key >= (int)vGrid.size())
           continue;
         applyVisualWithModifiers(vGrid, key, fm.color, fm.label, fm.sourceName,
-                                 &touchedKeys, targetState);
+                                 &touchedKeys, targetState, fm.keyboardGroupId);
         if (vGrid[(size_t)key].state != VisualState::Conflict) {
-          writeAudioSlot(aGrid, key, fm.action);
+          writeAudioSlot(aGrid, key, fm.action, fm.keyboardGroupId);
         }
       }
     }
@@ -1787,6 +1819,7 @@ void GridCompiler::compileZones(CompiledMapContext &context,
       }
 
       // AUDIO TARGETING -----------------------------------------------------
+      const int zoneKbGroupId = zone->keyboardGroupId;
       auto writeZoneAudioSlot = [&](AudioGrid &grid) {
         if (keyCode < 0 || keyCode >= (int)grid.size())
           return;
@@ -1795,6 +1828,7 @@ void GridCompiler::compileZones(CompiledMapContext &context,
         slot.isActive = true;
         slot.action = rootAction;
         slot.chordIndex = chordIndex;
+        slot.keyboardGroupId = zoneKbGroupId;
 
         // Generic modifier replication for zones.
         if (isGenericShift(keyCode)) {
@@ -1861,7 +1895,8 @@ void GridCompiler::compileZones(CompiledMapContext &context,
       juce::String label = zone->getKeyLabel(keyCode);
       juce::String sourceName = "Zone: " + zone->name;
 
-      applyVisualWithModifiers(visualGrid, keyCode, color, label, sourceName);
+      applyVisualWithModifiers(visualGrid, keyCode, color, label, sourceName,
+                              nullptr, VisualState::Active, zone->keyboardGroupId);
     }
   }
 }

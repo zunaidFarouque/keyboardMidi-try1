@@ -852,6 +852,9 @@ void VoiceManager::setSustain(bool active) {
   bool wasActive = globalSustainActive;
   globalSustainActive = active;
 
+  if (wasActive != active)
+    sendChangeMessage();
+
   if (wasActive && !active) {
     // Only send one NoteOff per unique (channel, note) - multiple presses
     // of the same key create multiple Sustained voices, but MIDI needs

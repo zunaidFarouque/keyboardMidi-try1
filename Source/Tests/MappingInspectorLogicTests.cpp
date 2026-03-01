@@ -42,17 +42,27 @@ static InspectorControl makePitchPadModeControl() {
   return c;
 }
 
+// Option IDs must match MappingDefinition / MappingInspectorLogic (virtual category IDs)
+static constexpr int kCmdCategorySustain = 100;
+static constexpr int kCmdCategoryLatch = 101;
+static constexpr int kCmdCategoryPanic = 102;
+static constexpr int kCmdCategoryTranspose = 103;
+static constexpr int kCmdCategoryLayer = 110;
+
 static InspectorControl makeCommandCategoryControl() {
   InspectorControl c;
   c.propertyId = "commandCategory";
   c.controlType = InspectorControl::Type::ComboBox;
-  c.options[100] = "Sustain";
-  c.options[3] = "Latch Toggle";
-  c.options[4] = "Panic";
-  c.options[6] = "Transpose";
-  c.options[8] = "Global Mode Up";
-  c.options[9] = "Global Mode Down";
-  c.options[110] = "Layer";
+  c.options[kCmdCategorySustain] = "Sustain";
+  c.options[kCmdCategoryLatch] = "Latch";
+  c.options[kCmdCategoryPanic] = "Panic";
+  c.options[kCmdCategoryTranspose] = "Transpose";
+  c.options[104] = "Global mode";
+  c.options[105] = "Global Root";
+  c.options[106] = "Global Scale";
+  c.options[kCmdCategoryLayer] = "Layer";
+  c.options[111] = "Keyboard group";
+  c.options[112] = "Touchpad group";
   return c;
 }
 
@@ -106,17 +116,21 @@ static InspectorControl makeTransposeModifyControl() {
   return c;
 }
 
+// data1 command combo uses actual CommandID values (from getCommandOptions())
 static InspectorControl makeData1CommandControl() {
   InspectorControl c;
   c.propertyId = "data1";
   c.controlType = InspectorControl::Type::ComboBox;
-  c.options[100] = "Sustain";
+  c.options[0] = "Hold to sustain";
+  c.options[1] = "Toggle sustain";
+  c.options[2] = "Default is on. Hold to not sustain";
   c.options[3] = "Latch Toggle";
   c.options[4] = "Panic";
   c.options[6] = "Transpose";
   c.options[8] = "Global Mode Up";
   c.options[9] = "Global Mode Down";
-  c.options[110] = "Layer";
+  c.options[10] = "Layer Momentary";
+  c.options[11] = "Layer Toggle";
   return c;
 }
 
@@ -250,7 +264,7 @@ TEST(MappingInspectorLogicTest, ApplyCommandCategory_Sustain) {
   juce::ValueTree mapping("Mapping");
   juce::UndoManager undo;
   auto def = makeCommandCategoryControl();
-  MappingInspectorLogic::applyComboSelectionToMapping(mapping, def, 100, &undo);
+  MappingInspectorLogic::applyComboSelectionToMapping(mapping, def, kCmdCategorySustain, &undo);
   EXPECT_EQ(static_cast<int>(mapping.getProperty("data1")), 0);
 }
 
@@ -258,7 +272,7 @@ TEST(MappingInspectorLogicTest, ApplyCommandCategory_Layer) {
   juce::ValueTree mapping("Mapping");
   juce::UndoManager undo;
   auto def = makeCommandCategoryControl();
-  MappingInspectorLogic::applyComboSelectionToMapping(mapping, def, 110, &undo);
+  MappingInspectorLogic::applyComboSelectionToMapping(mapping, def, kCmdCategoryLayer, &undo);
   EXPECT_EQ(static_cast<int>(mapping.getProperty("data1")), 10);
 }
 
@@ -266,7 +280,7 @@ TEST(MappingInspectorLogicTest, ApplyCommandCategory_Panic) {
   juce::ValueTree mapping("Mapping");
   juce::UndoManager undo;
   auto def = makeCommandCategoryControl();
-  MappingInspectorLogic::applyComboSelectionToMapping(mapping, def, 4, &undo);
+  MappingInspectorLogic::applyComboSelectionToMapping(mapping, def, kCmdCategoryPanic, &undo);
   EXPECT_EQ(static_cast<int>(mapping.getProperty("data1")), 4);
 }
 
@@ -274,7 +288,7 @@ TEST(MappingInspectorLogicTest, ApplyCommandCategory_Transpose) {
   juce::ValueTree mapping("Mapping");
   juce::UndoManager undo;
   auto def = makeCommandCategoryControl();
-  MappingInspectorLogic::applyComboSelectionToMapping(mapping, def, 6, &undo);
+  MappingInspectorLogic::applyComboSelectionToMapping(mapping, def, kCmdCategoryTranspose, &undo);
   EXPECT_EQ(static_cast<int>(mapping.getProperty("data1")), 6);
 }
 
@@ -408,12 +422,12 @@ TEST(MappingInspectorLogicTest, ApplyTransposeModify_SetSpecificSemitones) {
   EXPECT_EQ(static_cast<int>(mapping.getProperty("transposeModify")), 4);
 }
 
-// --- data1 command dropdown (Sustain 100 -> 0, Layer 110 -> 10, else id) ---
+// --- data1 command dropdown (option key = CommandID, stored as-is) ---
 TEST(MappingInspectorLogicTest, ApplyData1Command_Sustain) {
   juce::ValueTree mapping("Mapping");
   juce::UndoManager undo;
   auto def = makeData1CommandControl();
-  MappingInspectorLogic::applyComboSelectionToMapping(mapping, def, 100, &undo);
+  MappingInspectorLogic::applyComboSelectionToMapping(mapping, def, 0, &undo);
   EXPECT_EQ(static_cast<int>(mapping.getProperty("data1")), 0);
 }
 
@@ -421,7 +435,7 @@ TEST(MappingInspectorLogicTest, ApplyData1Command_Layer) {
   juce::ValueTree mapping("Mapping");
   juce::UndoManager undo;
   auto def = makeData1CommandControl();
-  MappingInspectorLogic::applyComboSelectionToMapping(mapping, def, 110, &undo);
+  MappingInspectorLogic::applyComboSelectionToMapping(mapping, def, 10, &undo);
   EXPECT_EQ(static_cast<int>(mapping.getProperty("data1")), 10);
 }
 
@@ -656,6 +670,77 @@ TEST(MappingInspectorLogicTest, DISABLED_ApplyTouchpadLayoutGroupId_Group1Stores
   auto def = makeTouchpadLayoutGroupIdControl();
   MappingInspectorLogic::applyComboSelectionToMapping(mapping, def, 2, &undo);
   EXPECT_EQ(static_cast<int>(mapping.getProperty("touchpadLayoutGroupId")), 1);
+}
+
+// --- keyboard group solo (keyboardSoloType, keyboardLayoutGroupId, keyboardGroupId) ---
+static InspectorControl makeKeyboardSoloTypeControl() {
+  InspectorControl c;
+  c.propertyId = "keyboardSoloType";
+  c.controlType = InspectorControl::Type::ComboBox;
+  c.options[1] = "Hold to solo";
+  c.options[2] = "Toggle solo";
+  c.options[3] = "Set solo";
+  c.options[4] = "Clear solo";
+  return c;
+}
+
+static InspectorControl makeKeyboardLayoutGroupIdControl() {
+  InspectorControl c;
+  c.propertyId = "keyboardLayoutGroupId";
+  c.controlType = InspectorControl::Type::ComboBox;
+  c.options[1] = "None";
+  c.options[2] = "Group 1";
+  return c;
+}
+
+static InspectorControl makeKeyboardGroupIdControl() {
+  InspectorControl c;
+  c.propertyId = "keyboardGroupId";
+  c.controlType = InspectorControl::Type::ComboBox;
+  c.options[1] = "None";
+  c.options[2] = "Group 1";
+  return c;
+}
+
+TEST(MappingInspectorLogicTest, ApplyKeyboardSoloType_Momentary) {
+  juce::ValueTree mapping("Mapping");
+  juce::UndoManager undo;
+  auto def = makeKeyboardSoloTypeControl();
+  MappingInspectorLogic::applyComboSelectionToMapping(mapping, def, 1, &undo);
+  EXPECT_EQ(static_cast<int>(mapping.getProperty("data1")),
+            static_cast<int>(MIDIQy::CommandID::KeyboardLayoutGroupSoloMomentary));
+}
+
+TEST(MappingInspectorLogicTest, ApplyKeyboardLayoutGroupId_NoGroupStoresZero) {
+  juce::ValueTree mapping("Mapping");
+  juce::UndoManager undo;
+  auto def = makeKeyboardLayoutGroupIdControl();
+  MappingInspectorLogic::applyComboSelectionToMapping(mapping, def, 1, &undo);
+  EXPECT_EQ(static_cast<int>(mapping.getProperty("keyboardLayoutGroupId")), 0);
+}
+
+TEST(MappingInspectorLogicTest, ApplyKeyboardLayoutGroupId_Group1StoresOne) {
+  juce::ValueTree mapping("Mapping");
+  juce::UndoManager undo;
+  auto def = makeKeyboardLayoutGroupIdControl();
+  MappingInspectorLogic::applyComboSelectionToMapping(mapping, def, 2, &undo);
+  EXPECT_EQ(static_cast<int>(mapping.getProperty("keyboardLayoutGroupId")), 1);
+}
+
+TEST(MappingInspectorLogicTest, ApplyKeyboardGroupId_NoGroupStoresZero) {
+  juce::ValueTree mapping("Mapping");
+  juce::UndoManager undo;
+  auto def = makeKeyboardGroupIdControl();
+  MappingInspectorLogic::applyComboSelectionToMapping(mapping, def, 1, &undo);
+  EXPECT_EQ(static_cast<int>(mapping.getProperty("keyboardGroupId")), 0);
+}
+
+TEST(MappingInspectorLogicTest, ApplyKeyboardGroupId_Group1StoresOne) {
+  juce::ValueTree mapping("Mapping");
+  juce::UndoManager undo;
+  auto def = makeKeyboardGroupIdControl();
+  MappingInspectorLogic::applyComboSelectionToMapping(mapping, def, 2, &undo);
+  EXPECT_EQ(static_cast<int>(mapping.getProperty("keyboardGroupId")), 1);
 }
 
 // --- invalid mapping is no-op ---

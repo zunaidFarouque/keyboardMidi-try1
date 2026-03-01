@@ -8,11 +8,12 @@
 #include <JuceHeader.h>
 #include <functional>
 
+class PresetManager;
 class SettingsManager;
 
 class ZoneEditorComponent : public juce::Component, public juce::ChangeListener, public juce::Timer {
 public:
-  ZoneEditorComponent(ZoneManager *zoneMgr, DeviceManager *deviceMgr, RawInputManager *rawInputMgr, ScaleLibrary *scaleLib, SettingsManager *settingsMgr = nullptr);
+  ZoneEditorComponent(ZoneManager *zoneMgr, DeviceManager *deviceMgr, RawInputManager *rawInputMgr, ScaleLibrary *scaleLib, SettingsManager *settingsMgr = nullptr, PresetManager *presetMgr = nullptr);
   ~ZoneEditorComponent() override;
 
   void paint(juce::Graphics &) override;

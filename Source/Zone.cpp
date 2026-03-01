@@ -323,6 +323,7 @@ juce::ValueTree Zone::toValueTree() const {
 
   vt.setProperty("name", name, nullptr);
   vt.setProperty("layerID", layerID, nullptr);
+  vt.setProperty("keyboardGroupId", keyboardGroupId, nullptr);
   vt.setProperty("targetAliasHash", static_cast<int64>(targetAliasHash),
                  nullptr);
   vt.setProperty("zoneColor", zoneColor.toString(), nullptr);
@@ -386,6 +387,7 @@ std::shared_ptr<Zone> Zone::fromValueTree(const juce::ValueTree &vt) {
 
   zone->name = vt.getProperty("name", "Untitled Zone").toString();
   zone->layerID = juce::jlimit(0, 8, (int)vt.getProperty("layerID", 0));
+  zone->keyboardGroupId = juce::jmax(0, (int)vt.getProperty("keyboardGroupId", 0));
   zone->targetAliasHash = static_cast<uintptr_t>(
       vt.getProperty("targetAliasHash", 0).operator int64());
   zone->rootNote = vt.getProperty("rootNote", 60);

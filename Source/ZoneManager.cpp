@@ -90,6 +90,15 @@ void ZoneManager::removeZone(std::shared_ptr<Zone> zone) {
   sendChangeMessage();
 }
 
+void ZoneManager::clearKeyboardGroupFromAllZones(int groupId) {
+  juce::ScopedWriteLock lock(zoneLock);
+  for (auto &z : zones) {
+    if (z && z->keyboardGroupId == groupId)
+      z->keyboardGroupId = 0;
+  }
+  sendChangeMessage();
+}
+
 std::shared_ptr<Zone> ZoneManager::createDefaultZone() {
   auto zone = std::make_shared<Zone>();
   zone->name = "New Zone";

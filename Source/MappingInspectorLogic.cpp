@@ -15,13 +15,16 @@ void applyComboSelectionToMapping(juce::ValueTree &mapping,
   static constexpr int kCmdCategoryGlobalRoot  = 105;
   static constexpr int kCmdCategoryGlobalScale = 106;
   static constexpr int kCmdCategoryLayer       = 110;
+  static constexpr int kCmdCategoryKeyboardGroupSolo = 111;
+  static constexpr int kCmdCategoryTouchpadGroupSolo = 112;
 
   if (!mapping.isValid())
     return;
   const juce::Identifier propId(def.propertyId.toStdString());
   juce::Identifier actualProp =
       (def.propertyId == "sustainStyle" || def.propertyId == "panicMode" ||
-       def.propertyId == "layerStyle")
+       def.propertyId == "layerStyle" || def.propertyId == "keyboardSoloType" ||
+       def.propertyId == "touchpadSoloType")
           ? juce::Identifier("data1")
           : propId;
 
@@ -70,11 +73,48 @@ void applyComboSelectionToMapping(juce::ValueTree &mapping,
     case kCmdCategoryLayer:
       mapping.setProperty("data1", (int)Cmd::LayerMomentary, undoManager);
       break;
+    case kCmdCategoryKeyboardGroupSolo:
+      mapping.setProperty("data1", (int)Cmd::KeyboardLayoutGroupSoloMomentary, undoManager);
+      break;
+    case kCmdCategoryTouchpadGroupSolo:
+      mapping.setProperty("data1", (int)Cmd::TouchpadLayoutGroupSoloMomentary, undoManager);
+      break;
     default:
       break;
     }
     // Also store the chosen category id (optional but useful for defaults).
     mapping.setProperty("commandCategory", selectedId, undoManager);
+    return;
+  } else if (def.propertyId == "keyboardSoloType") {
+    using Cmd = MIDIQy::CommandID;
+    int data1 = (int)Cmd::KeyboardLayoutGroupSoloMomentary;
+    if (selectedId == 2) data1 = (int)Cmd::KeyboardLayoutGroupSoloToggle;
+    else if (selectedId == 3) data1 = (int)Cmd::KeyboardLayoutGroupSoloSet;
+    else if (selectedId == 4) data1 = (int)Cmd::KeyboardLayoutGroupSoloClear;
+    mapping.setProperty("data1", data1, undoManager);
+    return;
+  } else if (def.propertyId == "keyboardLayoutGroupId") {
+    mapping.setProperty("keyboardLayoutGroupId", selectedId >= 1 ? selectedId - 1 : 0, undoManager);
+    return;
+  } else if (def.propertyId == "keyboardSoloScope") {
+    mapping.setProperty("keyboardSoloScope", selectedId >= 1 && selectedId <= 3 ? selectedId - 1 : 0, undoManager);
+    return;
+  } else if (def.propertyId == "keyboardGroupId") {
+    mapping.setProperty("keyboardGroupId", selectedId >= 1 ? selectedId - 1 : 0, undoManager);
+    return;
+  } else if (def.propertyId == "touchpadSoloType") {
+    using Cmd = MIDIQy::CommandID;
+    int data1 = (int)Cmd::TouchpadLayoutGroupSoloMomentary;
+    if (selectedId == 2) data1 = (int)Cmd::TouchpadLayoutGroupSoloToggle;
+    else if (selectedId == 3) data1 = (int)Cmd::TouchpadLayoutGroupSoloSet;
+    else if (selectedId == 4) data1 = (int)Cmd::TouchpadLayoutGroupSoloClear;
+    mapping.setProperty("data1", data1, undoManager);
+    return;
+  } else if (def.propertyId == "touchpadLayoutGroupId") {
+    mapping.setProperty("touchpadLayoutGroupId", selectedId >= 1 ? selectedId - 1 : 0, undoManager);
+    return;
+  } else if (def.propertyId == "touchpadSoloScope") {
+    mapping.setProperty("touchpadSoloScope", selectedId >= 1 && selectedId <= 3 ? selectedId - 1 : 0, undoManager);
     return;
   } else if (def.propertyId == "sustainStyle") {
     valueToSet = juce::var((selectedId >= 1 && selectedId <= 3)

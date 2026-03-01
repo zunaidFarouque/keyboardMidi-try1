@@ -1,4 +1,5 @@
 #include "ZonePropertiesPanel.h"
+#include "PresetManager.h"
 #include "ScaleEditorComponent.h"
 #include "ScaleLibrary.h"
 #include "ZoneManager.h"
@@ -160,9 +161,11 @@ void ZonePropertiesPanel::SeparatorComponent::paint(juce::Graphics &g) {
 ZonePropertiesPanel::ZonePropertiesPanel(ZoneManager *zoneMgr,
                                          DeviceManager *deviceMgr,
                                          RawInputManager *rawInputMgr,
-                                         ScaleLibrary *scaleLib)
+                                         ScaleLibrary *scaleLib,
+                                         PresetManager *presetMgr)
     : zoneManager(zoneMgr), deviceManager(deviceMgr),
-      rawInputManager(rawInputMgr), scaleLibrary(scaleLib) {
+      rawInputManager(rawInputMgr), scaleLibrary(scaleLib),
+      presetManager(presetMgr) {
   if (deviceManager)
     deviceManager->addChangeListener(this);
   if (scaleLibrary)
@@ -243,6 +246,10 @@ void ZonePropertiesPanel::rebuildUI() {
     }
     if (def.controlType == ZoneControl::Type::CustomLayer) {
       createLayerRow();
+      continue;
+    }
+    if (def.controlType == ZoneControl::Type::CustomKeyboardGroup) {
+      createKeyboardGroupRow();
       continue;
     }
     if (def.controlType == ZoneControl::Type::CustomName) {
@@ -842,6 +849,42 @@ void ZonePropertiesPanel::createLayerRow() {
   };
 
   rowComp->editor = std::move(layerCombo);
+  rowComp->addAndMakeVisible(*rowComp->label);
+  rowComp->addAndMakeVisible(*rowComp->editor);
+  addAndMakeVisible(*rowComp);
+  row.items.push_back({std::move(rowComp), 1.0f, false});
+  uiRows.push_back(std::move(row));
+}
+
+void ZonePropertiesPanel::createKeyboardGroupRow() {
+  UiRow row;
+  row.isSeparatorRow = false;
+  row.isChipListRow = false;
+  auto rowComp = std::make_unique<LabelEditorRow>();
+  rowComp->label = std::make_unique<juce::Label>();
+  rowComp->label->setText("Keyboard group:", juce::dontSendNotification);
+
+  auto kbGroupCombo = std::make_unique<juce::ComboBox>();
+  kbGroupCombo->addItem("None", 1);
+  if (presetManager) {
+    auto names = presetManager->getKeyboardGroupNames();
+    for (const auto &p : names)
+      kbGroupCombo->addItem(p.second, p.first + 1);
+  }
+  if (currentZone)
+    kbGroupCombo->setSelectedId(currentZone->keyboardGroupId + 1,
+                                juce::dontSendNotification);
+
+  juce::ComboBox *cbPtr = kbGroupCombo.get();
+  kbGroupCombo->onChange = [this, cbPtr]() {
+    if (!currentZone || !zoneManager)
+      return;
+    int id = cbPtr->getSelectedId();
+    currentZone->keyboardGroupId = (id >= 1) ? (id - 1) : 0;
+    zoneManager->sendChangeMessage();
+  };
+
+  rowComp->editor = std::move(kbGroupCombo);
   rowComp->addAndMakeVisible(*rowComp->label);
   rowComp->addAndMakeVisible(*rowComp->editor);
   addAndMakeVisible(*rowComp);

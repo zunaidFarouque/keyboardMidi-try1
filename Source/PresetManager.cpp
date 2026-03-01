@@ -227,3 +227,89 @@ juce::ValueTree PresetManager::getMappingsNode() {
   // Legacy: Return Layer 0's mappings for backward compatibility
   return getMappingsListForLayer(0);
 }
+
+static juce::ValueTree getKeyboardGroupsNode(PresetManager &pm) {
+  auto node = pm.getRootNode().getChildWithName("KeyboardGroups");
+  if (!node.isValid()) {
+    node = juce::ValueTree("KeyboardGroups");
+    pm.getRootNode().addChild(node, -1, nullptr);
+  }
+  return node;
+}
+
+std::vector<PresetManager::KeyboardGroup> PresetManager::getKeyboardGroups() const {
+  std::vector<KeyboardGroup> out;
+  auto node = const_cast<PresetManager *>(this)->getRootNode().getChildWithName("KeyboardGroups");
+  if (!node.isValid())
+    return out;
+  for (int i = 0; i < node.getNumChildren(); ++i) {
+    auto child = node.getChild(i);
+    if (child.hasType("KeyboardGroup")) {
+      KeyboardGroup g;
+      g.id = child.getProperty("id", 0);
+      g.name = child.getProperty("name", juce::String()).toString();
+      out.push_back(g);
+    }
+  }
+  return out;
+}
+
+std::map<int, juce::String> PresetManager::getKeyboardGroupNames() const {
+  std::map<int, juce::String> out;
+  for (const auto &g : getKeyboardGroups())
+    out[g.id] = g.name;
+  return out;
+}
+
+void PresetManager::addKeyboardGroup(int id, const juce::String &name) {
+  auto node = getKeyboardGroupsNode(*this);
+  for (int i = 0; i < node.getNumChildren(); ++i) {
+    if (static_cast<int>(node.getChild(i).getProperty("id", -1)) == id)
+      return; // already exists
+  }
+  juce::ValueTree child("KeyboardGroup");
+  child.setProperty("id", id, nullptr);
+  child.setProperty("name", name, nullptr);
+  node.addChild(child, -1, nullptr);
+  sendChangeMessage();
+}
+
+void PresetManager::removeKeyboardGroup(int id) {
+  auto node = getRootNode().getChildWithName("KeyboardGroups");
+  if (!node.isValid())
+    return;
+  for (int i = node.getNumChildren(); --i >= 0;) {
+    if (static_cast<int>(node.getChild(i).getProperty("id", -1)) == id) {
+      node.removeChild(i, nullptr);
+      break;
+    }
+  }
+  // Clear keyboardGroupId on all mappings that had this group
+  auto layersList = getLayersList();
+  for (int l = 0; l < layersList.getNumChildren(); ++l) {
+    auto layer = layersList.getChild(l);
+    auto mappings = layer.getChildWithName("Mappings");
+    if (!mappings.isValid())
+      continue;
+    for (int m = 0; m < mappings.getNumChildren(); ++m) {
+      auto mapping = mappings.getChild(m);
+      if (static_cast<int>(mapping.getProperty("keyboardGroupId", 0)) == id)
+        mapping.setProperty("keyboardGroupId", 0, nullptr);
+    }
+  }
+  sendChangeMessage();
+}
+
+void PresetManager::renameKeyboardGroup(int id, const juce::String &name) {
+  auto node = getRootNode().getChildWithName("KeyboardGroups");
+  if (!node.isValid())
+    return;
+  for (int i = 0; i < node.getNumChildren(); ++i) {
+    auto child = node.getChild(i);
+    if (static_cast<int>(child.getProperty("id", -1)) == id) {
+      child.setProperty("name", name, nullptr);
+      sendChangeMessage();
+      return;
+    }
+  }
+}
