@@ -2,7 +2,7 @@
 #include <JuceHeader.h>
 
 // Single source of truth for mapping property defaults. Used by the compiler,
-// schema (InspectorControl.defaultValue), Touchpad editor, and MappingInspector.
+// schema (InspectorControl.defaultValue), Touchpad editor, and KeyboardMappingInspector.
 namespace MappingDefaults {
 
 // ADSR (Expression custom envelope)

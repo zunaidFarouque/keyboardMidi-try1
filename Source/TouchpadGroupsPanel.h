@@ -1,5 +1,5 @@
 #pragma once
-#include "TouchpadMixerManager.h"
+#include "TouchpadLayoutManager.h"
 #include <JuceHeader.h>
 #include <functional>
 
@@ -7,7 +7,7 @@ class TouchpadGroupsPanel : public juce::Component,
                             public juce::ListBoxModel,
                             public juce::ChangeListener {
 public:
-  explicit TouchpadGroupsPanel(TouchpadMixerManager *mgr);
+  explicit TouchpadGroupsPanel(TouchpadLayoutManager *mgr);
   ~TouchpadGroupsPanel() override;
 
   void paint(juce::Graphics &) override;
@@ -29,7 +29,7 @@ public:
   void setSelectedFilter(int filterGroupId);
 
 private:
-  TouchpadMixerManager *manager;
+  TouchpadLayoutManager *manager;
   juce::ListBox listBox;
   juce::TextButton groupsButton;
   int selectedFilterGroupId = -1;

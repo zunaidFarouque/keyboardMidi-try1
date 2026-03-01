@@ -8,17 +8,17 @@
 class DeviceManager;
 class PresetManager;
 class SettingsManager;
-class TouchpadMixerManager;
+class TouchpadLayoutManager;
 
-class MappingInspector : public juce::Component,
+class KeyboardMappingInspector : public juce::Component,
                          public juce::ValueTree::Listener,
                          public juce::ChangeListener {
 public:
-  MappingInspector(juce::UndoManager &undoMgr, DeviceManager &deviceMgr,
+  KeyboardMappingInspector(juce::UndoManager &undoMgr, DeviceManager &deviceMgr,
                    SettingsManager &settingsMgr,
                    PresetManager *presetMgr = nullptr,
-                   TouchpadMixerManager *touchpadMixerMgr = nullptr);
-  ~MappingInspector() override;
+                   TouchpadLayoutManager *touchpadLayoutMgr = nullptr);
+  ~KeyboardMappingInspector() override;
 
   void paint(juce::Graphics &) override;
   void resized() override;
@@ -41,7 +41,7 @@ private:
   SettingsManager &settingsManager;
   PresetManager *presetManager =
       nullptr; // optional: notify to trigger grid rebuild
-  TouchpadMixerManager *touchpadMixerManager =
+  TouchpadLayoutManager *touchpadLayoutManager =
       nullptr; // optional: for layout group registry
   std::vector<juce::ValueTree> selectedTrees;
   bool isUpdatingFromTree = false;
@@ -86,5 +86,5 @@ private:
   bool allTreesHaveSameValue(const juce::Identifier &property);
   juce::var getCommonValue(const juce::Identifier &property);
 
-  JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(MappingInspector)
+  JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(KeyboardMappingInspector)
 };

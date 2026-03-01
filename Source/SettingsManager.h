@@ -135,7 +135,7 @@ public:
   int getZonesSelectedIndex() const;
   void setZonesSelectedIndex(int index);
 
-  // Touchpad tab (row index in TouchpadMixerListPanel; -1 = none)
+  // Touchpad tab (row index in TouchpadListPanel; -1 = none)
   int getTouchpadSelectedRow() const;
   void setTouchpadSelectedRow(int row);
 

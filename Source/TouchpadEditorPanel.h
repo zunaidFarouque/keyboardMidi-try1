@@ -1,7 +1,7 @@
 #pragma once
 #include "MappingDefinition.h"
-#include "TouchpadMixerManager.h"
-#include "TouchpadMixerTypes.h"
+#include "TouchpadLayoutManager.h"
+#include "TouchpadLayoutTypes.h"
 #include "TouchpadRelayoutDialog.h"
 #include <JuceHeader.h>
 #include <functional>
@@ -11,17 +11,17 @@
 class SettingsManager;
 class ScaleLibrary;
 
-class TouchpadMixerEditorComponent : public juce::Component {
+class TouchpadEditorPanel : public juce::Component {
 public:
-  explicit TouchpadMixerEditorComponent(TouchpadMixerManager *mgr,
+  explicit TouchpadEditorPanel(TouchpadLayoutManager *mgr,
                                         SettingsManager *settingsMgr = nullptr,
                                         ScaleLibrary *scaleLib = nullptr);
-  ~TouchpadMixerEditorComponent() override;
+  ~TouchpadEditorPanel() override;
 
   void paint(juce::Graphics &) override;
   void resized() override;
 
-  void setLayout(int index, const TouchpadMixerConfig *config);
+  void setLayout(int index, const TouchpadLayoutConfig *config);
   void setMapping(int index, const TouchpadMappingConfig *config);
 
   /// Height needed to show all schema rows (used by parent for viewport sizing).
@@ -50,14 +50,14 @@ private:
   juce::var getConfigValue(const juce::String &propertyId) const;
   void applyConfigValue(const juce::String &propertyId, const juce::var &value);
 
-  TouchpadMixerManager *manager;
+  TouchpadLayoutManager *manager;
   SettingsManager *settingsManager;
   ScaleLibrary *scaleLibrary = nullptr;
   enum class SelectionKind { None, Layout, Mapping };
   SelectionKind selectionKind = SelectionKind::None;
   int selectedLayoutIndex = -1;
   int selectedMappingIndex = -1;
-  TouchpadMixerConfig currentConfig;
+  TouchpadLayoutConfig currentConfig;
   TouchpadMappingConfig currentMapping;
 
   std::vector<UiRow> uiRows;
@@ -82,5 +82,5 @@ private:
                                    juce::Label &label) override;
   } comboPopupLAF;
 
-  JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(TouchpadMixerEditorComponent)
+  JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(TouchpadEditorPanel)
 };

@@ -1,8 +1,8 @@
-#include "MappingEditorComponent.h"
+#include "KeyboardMappingEditorComponent.h"
 #include "KeyNameUtilities.h"
 #include "MappingDefinition.h"
 #include "MappingListPanel.h"
-#include "TouchpadMixerManager.h"
+#include "TouchpadLayoutManager.h"
 #include "ZoneManager.h"
 #include <algorithm>
 #include <functional>
@@ -13,7 +13,7 @@ public:
   std::function<void(bool skipped)> onDismiss;
 
   InputCaptureOverlay() {
-    label.setText("Press any key to add mapping...",
+    label.setText("Press any key to add keyboard mapping...",
                   juce::dontSendNotification);
     label.setFont(juce::Font(20.0f, juce::Font::bold));
     label.setJustificationType(juce::Justification::centred);
@@ -61,15 +61,15 @@ static uintptr_t parseDeviceHash(const juce::var &var) {
   return (uintptr_t)static_cast<juce::int64>(var);
 }
 
-MappingEditorComponent::MappingEditorComponent(PresetManager &pm,
+KeyboardMappingEditorComponent::KeyboardMappingEditorComponent(PresetManager &pm,
                                                RawInputManager &rawInputMgr,
                                                DeviceManager &deviceMgr,
                                                SettingsManager &settingsMgr,
-                                               TouchpadMixerManager *touchpadMixerMgr,
+                                               TouchpadLayoutManager *touchpadLayoutMgr,
                                                ZoneManager *zoneMgr)
     : presetManager(pm), rawInputManager(rawInputMgr), deviceManager(deviceMgr),
       settingsManager(settingsMgr), zoneManager(zoneMgr), layerListPanel(pm, zoneMgr),
-      inspector(undoManager, deviceManager, settingsManager, &presetManager, touchpadMixerMgr),
+      inspector(undoManager, deviceManager, settingsManager, &presetManager, touchpadLayoutMgr),
       mappingListPanel(table, addButton, deleteButton, moveToLayerButton, duplicateButton),
       layerResizerBar(true), resizerBar(true) {
 
@@ -150,7 +150,7 @@ MappingEditorComponent::MappingEditorComponent(PresetManager &pm,
     if (row < 0 || row >= getNumRows()) {
       juce::AlertWindow::showMessageBoxAsync(
           juce::AlertWindow::InfoIcon, "No Selection",
-          "Please select a mapping to duplicate.", "OK");
+          "Please select a keyboard mapping to duplicate.", "OK");
       return;
     }
 
@@ -176,7 +176,7 @@ MappingEditorComponent::MappingEditorComponent(PresetManager &pm,
     if (numSelected == 0) {
       juce::AlertWindow::showMessageBoxAsync(
           juce::AlertWindow::InfoIcon, "No Selection",
-          "Please select one or more mappings to move.", "OK");
+          "Please select one or more keyboard mappings to move.", "OK");
       return;
     }
 
@@ -207,21 +207,21 @@ MappingEditorComponent::MappingEditorComponent(PresetManager &pm,
     if (numSelected == 0) {
       juce::AlertWindow::showMessageBoxAsync(
           juce::AlertWindow::InfoIcon, "No Selection",
-          "Please select one or more mappings to delete.", "OK");
+          "Please select one or more keyboard mappings to delete.", "OK");
       return;
     }
 
     // Build confirmation message
     juce::String message;
     if (numSelected == 1) {
-      message = "Delete the selected mapping?\n\nThis action cannot be undone.";
+      message = "Delete the selected keyboard mapping?\n\nThis action cannot be undone.";
     } else {
       message = "Delete " + juce::String(numSelected) +
-                " selected mappings?\n\nThis action cannot be undone.";
+                " selected keyboard mappings?\n\nThis action cannot be undone.";
     }
 
     juce::AlertWindow::showOkCancelBox(
-        juce::AlertWindow::WarningIcon, "Delete Mappings", message, "Delete",
+        juce::AlertWindow::WarningIcon, "Delete Keyboard Mappings", message, "Delete",
         "Cancel", this,
         juce::ModalCallbackFunction::create([this, numSelected](int result) {
           if (result == 1) { // OK clicked
@@ -238,7 +238,7 @@ MappingEditorComponent::MappingEditorComponent(PresetManager &pm,
             selectedRows.sort();
             std::reverse(selectedRows.begin(), selectedRows.end());
 
-            undoManager.beginNewTransaction("Delete Mappings");
+            undoManager.beginNewTransaction("Delete Keyboard Mappings");
             for (int row : selectedRows) {
               auto child = getMappingAtRow(row);
               if (child.isValid())
@@ -261,7 +261,7 @@ MappingEditorComponent::MappingEditorComponent(PresetManager &pm,
   // Phase 42: Listeners and initial update moved to initialize()
 }
 
-void MappingEditorComponent::initialize() {
+void KeyboardMappingEditorComponent::initialize() {
   inspector.setLearnButton(&learnButton);
   inspector.setOnLayerChangeRequested([this](int targetLayerId) {
     moveSelectedMappingsToLayer(targetLayerId);
@@ -273,25 +273,25 @@ void MappingEditorComponent::initialize() {
   table.updateContent();
 }
 
-MappingEditorComponent::~MappingEditorComponent() {
+KeyboardMappingEditorComponent::~KeyboardMappingEditorComponent() {
   presetManager.getRootNode().removeListener(this);
   presetManager.removeChangeListener(this);
   rawInputManager.removeListener(this);
 }
 
-void MappingEditorComponent::paint(juce::Graphics &g) {
+void KeyboardMappingEditorComponent::paint(juce::Graphics &g) {
   g.fillAll(juce::Colour(0xff333333));
 
   // If empty, draw a hint
   if (getNumRows() == 0) {
     g.setColour(juce::Colours::grey);
     g.setFont(14.0f);
-    g.drawText("No Mappings. Click '+' to add.", getLocalBounds(),
+    g.drawText("No keyboard mappings. Click '+' to add.", getLocalBounds(),
                juce::Justification::centred, true);
   }
 }
 
-void MappingEditorComponent::startInputCapture() {
+void KeyboardMappingEditorComponent::startInputCapture() {
   wasMidiModeEnabledBeforeCapture = settingsManager.isMidiModeActive();
   if (!wasMidiModeEnabledBeforeCapture)
     settingsManager.setMidiModeActive(true);
@@ -312,7 +312,7 @@ void MappingEditorComponent::startInputCapture() {
   resized();
 }
 
-void MappingEditorComponent::finishInputCapture(uintptr_t deviceHandle,
+void KeyboardMappingEditorComponent::finishInputCapture(uintptr_t deviceHandle,
                                                 int keyCode, bool skipped) {
   // 1. Cleanup: remove overlay, restore MIDI mode
   if (!wasMidiModeEnabledBeforeCapture)
@@ -381,7 +381,7 @@ void MappingEditorComponent::finishInputCapture(uintptr_t deviceHandle,
     table.selectRow(newRow);
 }
 
-void MappingEditorComponent::resized() {
+void KeyboardMappingEditorComponent::resized() {
   auto area = getLocalBounds();
   if (captureOverlay)
     captureOverlay->setBounds(area);
@@ -404,7 +404,7 @@ static bool isTouchpadMapping(const juce::ValueTree &mapping) {
       .equalsIgnoreCase("Touchpad");
 }
 
-int MappingEditorComponent::getNonTouchpadMappingCount() const {
+int KeyboardMappingEditorComponent::getNonTouchpadMappingCount() const {
   auto mappingsNode = presetManager.getMappingsListForLayer(selectedLayerId);
   int n = 0;
   for (int i = 0; i < mappingsNode.getNumChildren(); ++i) {
@@ -414,7 +414,7 @@ int MappingEditorComponent::getNonTouchpadMappingCount() const {
   return n;
 }
 
-juce::ValueTree MappingEditorComponent::getMappingAtRow(int row) const {
+juce::ValueTree KeyboardMappingEditorComponent::getMappingAtRow(int row) const {
   auto mappingsNode = presetManager.getMappingsListForLayer(selectedLayerId);
   int k = 0;
   for (int i = 0; i < mappingsNode.getNumChildren(); ++i) {
@@ -428,7 +428,7 @@ juce::ValueTree MappingEditorComponent::getMappingAtRow(int row) const {
   return juce::ValueTree();
 }
 
-int MappingEditorComponent::rowToChildIndex(int row) const {
+int KeyboardMappingEditorComponent::rowToChildIndex(int row) const {
   auto mappingsNode = presetManager.getMappingsListForLayer(selectedLayerId);
   int k = 0;
   for (int i = 0; i < mappingsNode.getNumChildren(); ++i) {
@@ -441,15 +441,15 @@ int MappingEditorComponent::rowToChildIndex(int row) const {
   return -1;
 }
 
-int MappingEditorComponent::getNumRows() {
+int KeyboardMappingEditorComponent::getNumRows() {
   return getNonTouchpadMappingCount();
 }
 
-juce::ValueTree MappingEditorComponent::getCurrentLayerMappings() {
+juce::ValueTree KeyboardMappingEditorComponent::getCurrentLayerMappings() {
   return presetManager.getMappingsListForLayer(selectedLayerId);
 }
 
-void MappingEditorComponent::moveSelectedMappingsToLayer(int targetLayerId) {
+void KeyboardMappingEditorComponent::moveSelectedMappingsToLayer(int targetLayerId) {
   if (targetLayerId == selectedLayerId)
     return;
   if (targetLayerId < 0 || targetLayerId > 8)
@@ -496,7 +496,7 @@ void MappingEditorComponent::moveSelectedMappingsToLayer(int targetLayerId) {
   inspector.setSelection({});
 }
 
-void MappingEditorComponent::paintRowBackground(juce::Graphics &g,
+void KeyboardMappingEditorComponent::paintRowBackground(juce::Graphics &g,
                                                 int rowNumber, int width,
                                                 int height,
                                                 bool rowIsSelected) {
@@ -521,7 +521,7 @@ void MappingEditorComponent::paintRowBackground(juce::Graphics &g,
   }
 }
 
-void MappingEditorComponent::paintCell(juce::Graphics &g, int rowNumber,
+void KeyboardMappingEditorComponent::paintCell(juce::Graphics &g, int rowNumber,
                                        int columnId, int width, int height,
                                        bool rowIsSelected) {
   auto node = getMappingAtRow(rowNumber);
@@ -576,7 +576,7 @@ void MappingEditorComponent::paintCell(juce::Graphics &g, int rowNumber,
 // --- VALUE TREE LISTENER CALLBACKS (THE FIX) ---
 // These ensure the table refreshes when you Load a Preset
 
-void MappingEditorComponent::valueTreeChildAdded(juce::ValueTree &parent,
+void KeyboardMappingEditorComponent::valueTreeChildAdded(juce::ValueTree &parent,
                                                  juce::ValueTree &child) {
   if (presetManager.getIsLoading())
     return;
@@ -595,7 +595,7 @@ void MappingEditorComponent::valueTreeChildAdded(juce::ValueTree &parent,
   }
 }
 
-void MappingEditorComponent::valueTreeChildRemoved(juce::ValueTree &parent,
+void KeyboardMappingEditorComponent::valueTreeChildRemoved(juce::ValueTree &parent,
                                                    juce::ValueTree &child,
                                                    int) {
   if (presetManager.getIsLoading())
@@ -613,31 +613,31 @@ void MappingEditorComponent::valueTreeChildRemoved(juce::ValueTree &parent,
   }
 }
 
-void MappingEditorComponent::valueTreePropertyChanged(
+void KeyboardMappingEditorComponent::valueTreePropertyChanged(
     juce::ValueTree &, const juce::Identifier &) {
   if (presetManager.getIsLoading())
     return;
   table.repaint();
 }
 
-void MappingEditorComponent::valueTreeParentChanged(juce::ValueTree &child) {
+void KeyboardMappingEditorComponent::valueTreeParentChanged(juce::ValueTree &child) {
   if (presetManager.getIsLoading())
     return;
   if (child.hasType("Mappings"))
     table.updateContent();
 }
 
-void MappingEditorComponent::changeListenerCallback(
+void KeyboardMappingEditorComponent::changeListenerCallback(
     juce::ChangeBroadcaster *source) {
   if (source == &presetManager)
     table.updateContent();
 }
 
-void MappingEditorComponent::selectedRowsChanged(int lastRowSelected) {
+void KeyboardMappingEditorComponent::selectedRowsChanged(int lastRowSelected) {
   updateInspectorFromSelection();
 }
 
-void MappingEditorComponent::updateInspectorFromSelection() {
+void KeyboardMappingEditorComponent::updateInspectorFromSelection() {
   auto selectedRows = table.getSelectedRows();
   std::vector<juce::ValueTree> selectedTrees;
   for (int i = 0; i < selectedRows.size(); ++i) {
@@ -651,14 +651,14 @@ void MappingEditorComponent::updateInspectorFromSelection() {
   inspector.setSelection(selectedTrees);
 }
 
-void MappingEditorComponent::saveUiState(SettingsManager &settings) const {
+void KeyboardMappingEditorComponent::saveUiState(SettingsManager &settings) const {
   if (!settings.getRememberUiState())
     return;
   settings.setMappingsSelectedLayerId(selectedLayerId);
   settings.setMappingsSelectedRow(table.getSelectedRow());
 }
 
-void MappingEditorComponent::loadUiState(SettingsManager &settings) {
+void KeyboardMappingEditorComponent::loadUiState(SettingsManager &settings) {
   if (!settings.getRememberUiState())
     return;
   int layerId = settings.getMappingsSelectedLayerId();
@@ -670,12 +670,12 @@ void MappingEditorComponent::loadUiState(SettingsManager &settings) {
     table.selectRow(row);
 }
 
-void MappingEditorComponent::handleTouchpadContacts(
+void KeyboardMappingEditorComponent::handleTouchpadContacts(
     uintptr_t /*deviceHandle*/, const std::vector<TouchpadContact> &) {
   // Touchpad mappings are managed in the Touchpad tab; no capture in Mappings tab.
 }
 
-void MappingEditorComponent::handleRawKeyEvent(uintptr_t deviceHandle,
+void KeyboardMappingEditorComponent::handleRawKeyEvent(uintptr_t deviceHandle,
                                                int keyCode, bool isDown) {
   // Phase 56.3: Smart Input Capture – capture key when overlay is active
   if (captureOverlay != nullptr) {
@@ -789,7 +789,7 @@ void MappingEditorComponent::handleRawKeyEvent(uintptr_t deviceHandle,
   });
 }
 
-void MappingEditorComponent::handleAxisEvent(uintptr_t deviceHandle,
+void KeyboardMappingEditorComponent::handleAxisEvent(uintptr_t deviceHandle,
                                              int inputCode, float value) {
   // Check if learn mode is active
   if (!learnButton.getToggleState())

@@ -1,8 +1,8 @@
 #pragma once
 #include "PercentageSplitLayout.h"
 #include "TouchpadGroupsPanel.h"
-#include "TouchpadMixerEditorComponent.h"
-#include "TouchpadMixerListPanel.h"
+#include "TouchpadEditorPanel.h"
+#include "TouchpadListPanel.h"
 #include <JuceHeader.h>
 #include <functional>
 
@@ -11,7 +11,7 @@ class ScaleLibrary;
 
 class TouchpadTabComponent : public juce::Component, public juce::ChangeListener, public juce::Timer {
 public:
-  explicit TouchpadTabComponent(TouchpadMixerManager *mgr,
+  explicit TouchpadTabComponent(TouchpadLayoutManager *mgr,
                                 SettingsManager *settingsMgr = nullptr,
                                 ScaleLibrary *scaleLib = nullptr);
   ~TouchpadTabComponent() override;
@@ -39,11 +39,11 @@ public:
   void timerCallback() override;
 
 private:
-  TouchpadMixerManager *manager;
+  TouchpadLayoutManager *manager;
   SettingsManager *settingsManager;
   TouchpadGroupsPanel groupsPanel;
-  TouchpadMixerListPanel listPanel;
-  TouchpadMixerEditorComponent editorPanel;
+  TouchpadListPanel listPanel;
+  TouchpadEditorPanel editorPanel;
   juce::Viewport editorViewport;
   PercentageResizerBar groupsResizerBar;
   PercentageResizerBar resizerBar;

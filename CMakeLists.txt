@@ -34,7 +34,7 @@ add_library(MIDIQy_Core STATIC
     Source/GridCompiler.cpp
     Source/InputProcessor.cpp
     Source/MappingDefinition.cpp
-    Source/MappingInspectorLogic.cpp
+    Source/KeyboardMappingInspectorLogic.cpp
     Source/PitchPadUtilities.cpp
     Source/PresetManager.cpp
     Source/DeviceManager.cpp
@@ -59,8 +59,8 @@ add_library(MIDIQy_Core STATIC
     Source/ColourContrast.cpp
     Source/ZoneDefinition.cpp
     Source/ZonePropertiesLogic.cpp
-    Source/TouchpadMixerManager.cpp
-    Source/TouchpadMixerDefinition.cpp
+    Source/TouchpadLayoutManager.cpp
+    Source/TouchpadLayoutDefinition.cpp
     Source/CrashLogger.cpp
 )
 
@@ -123,7 +123,7 @@ endif()
 target_sources(MIDIQy PRIVATE
     Source/Main.cpp
     Source/MainComponent.cpp
-    Source/MappingEditorComponent.cpp
+    Source/KeyboardMappingEditorComponent.cpp
     Source/MappingListPanel.cpp
     Source/PercentageSplitLayout.cpp
     Source/VisualizerComponent.cpp
@@ -133,14 +133,14 @@ target_sources(MIDIQy PRIVATE
     Source/LayerListPanel.cpp
     Source/ZoneListPanel.cpp
     Source/ZonePropertiesPanel.cpp
-    Source/TouchpadMixerListPanel.cpp
+    Source/TouchpadListPanel.cpp
     Source/TouchpadGroupsPanel.cpp
-    Source/TouchpadMixerEditorComponent.cpp
+    Source/TouchpadEditorPanel.cpp
     Source/TouchpadTabComponent.cpp
     Source/GlobalPerformancePanel.cpp
     Source/LogComponent.cpp
     Source/DeviceSetupComponent.cpp
-    Source/MappingInspector.cpp
+    Source/KeyboardMappingInspector.cpp
     Source/DetachableContainer.cpp
     Source/KeyChipList.cpp
     Source/MiniStatusWindow.cpp

@@ -1109,7 +1109,7 @@ InspectorSchema MappingDefinition::getSchema(const juce::ValueTree &mapping,
     } // showDynamics
   } else if (typeStr.equalsIgnoreCase("Command")) {
     // Command categories – virtual UI ids, mapped to concrete CommandIDs by
-    // MappingInspectorLogic.
+    // KeyboardMappingInspectorLogic.
     static constexpr int kCmdCategorySustain     = 100;
     static constexpr int kCmdCategoryLatch       = 101;
     static constexpr int kCmdCategoryPanic       = 102;

@@ -2,8 +2,8 @@
 #include "../ZoneManager.h"
 #include "../Zone.h"
 #include "../ScaleLibrary.h"
-#include "../TouchpadMixerManager.h"
-#include "../TouchpadMixerTypes.h"
+#include "../TouchpadLayoutManager.h"
+#include "../TouchpadLayoutTypes.h"
 #include <gtest/gtest.h>
 
 namespace {

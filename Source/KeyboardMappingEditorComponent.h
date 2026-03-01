@@ -2,7 +2,7 @@
 #include "DeviceManager.h"
 #include "LayerListPanel.h"
 #include "PercentageSplitLayout.h"
-#include "MappingInspector.h"
+#include "KeyboardMappingInspector.h"
 #include "MappingListPanel.h"
 #include "PresetManager.h"
 #include "RawInputManager.h"
@@ -13,21 +13,21 @@
 
 class InputCaptureOverlay;
 
-class TouchpadMixerManager;
+class TouchpadLayoutManager;
 class ZoneManager;
 
-class MappingEditorComponent : public juce::Component,
+class KeyboardMappingEditorComponent : public juce::Component,
                                public juce::TableListBoxModel,
                                public juce::ValueTree::Listener,
                                public juce::ChangeListener,
                                public RawInputManager::Listener {
 public:
-  MappingEditorComponent(PresetManager &pm, RawInputManager &rawInputMgr,
+  KeyboardMappingEditorComponent(PresetManager &pm, RawInputManager &rawInputMgr,
                          DeviceManager &deviceMgr,
                          SettingsManager &settingsMgr,
-                         TouchpadMixerManager *touchpadMixerMgr = nullptr,
+                         TouchpadLayoutManager *touchpadLayoutMgr = nullptr,
                          ZoneManager *zoneMgr = nullptr);
-  ~MappingEditorComponent() override;
+  ~KeyboardMappingEditorComponent() override;
 
   // Get undo manager for command handling
   juce::UndoManager &getUndoManager() { return undoManager; }
@@ -97,7 +97,7 @@ private:
   juce::TextButton deleteButton;
   juce::ToggleButton learnButton;
   juce::UndoManager undoManager;
-  MappingInspector inspector;
+  KeyboardMappingInspector inspector;
   MappingListPanel mappingListPanel;
 
   // Phase 56.3: Smart Input Capture
@@ -128,5 +128,5 @@ private:
   void updateInspectorFromSelection(); // Phase 45.1: refresh inspector on
                                        // layer/row change
 
-  JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(MappingEditorComponent)
+  JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(KeyboardMappingEditorComponent)
 };

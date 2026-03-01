@@ -2,16 +2,16 @@
 #include "DeviceManager.h"
 #include "ScaleUtilities.h"
 #include "SettingsManager.h"
-#include "TouchpadMixerManager.h"
+#include "TouchpadLayoutManager.h"
 #include "Zone.h"
 #include "CrashLogger.h"
 
 StartupManager::StartupManager(PresetManager *presetMgr,
                                DeviceManager *deviceMgr, ZoneManager *zoneMgr,
-                               TouchpadMixerManager *touchpadMixerMgr,
+                               TouchpadLayoutManager *touchpadMixerMgr,
                                SettingsManager *settingsMgr)
     : presetManager(presetMgr), deviceManager(deviceMgr), zoneManager(zoneMgr),
-      touchpadMixerManager(touchpadMixerMgr), settingsManager(settingsMgr) {
+      touchpadLayoutManager(touchpadMixerMgr), settingsManager(settingsMgr) {
 
   // Setup file paths (use portable data directory next to executable)
   appDataFolder = DeviceManager::getPortableDataDirectory();
@@ -28,8 +28,8 @@ StartupManager::StartupManager(PresetManager *presetMgr,
   if (zoneManager) {
     zoneManager->addChangeListener(this);
   }
-  if (touchpadMixerManager) {
-    touchpadMixerManager->addChangeListener(this);
+  if (touchpadLayoutManager) {
+    touchpadLayoutManager->addChangeListener(this);
   }
   if (settingsManager) {
     settingsManager->addChangeListener(this);
@@ -49,8 +49,8 @@ StartupManager::~StartupManager() {
   if (zoneManager) {
     zoneManager->removeChangeListener(this);
   }
-  if (touchpadMixerManager) {
-    touchpadMixerManager->removeChangeListener(this);
+  if (touchpadLayoutManager) {
+    touchpadLayoutManager->removeChangeListener(this);
   }
   if (settingsManager) {
     settingsManager->removeChangeListener(this);
@@ -109,10 +109,10 @@ void StartupManager::initApp() {
             zoneManager->restoreFromValueTree(zoneMgrNode);
           }
         }
-        if (loadSuccess && touchpadMixerManager) {
-          auto mixersNode = sessionTree.getChildWithName("TouchpadMixers");
+        if (loadSuccess && touchpadLayoutManager) {
+          auto mixersNode = sessionTree.getChildWithName("TouchpadData");
           if (mixersNode.isValid()) {
-            touchpadMixerManager->restoreFromValueTree(mixersNode);
+            touchpadLayoutManager->restoreFromValueTree(mixersNode);
           }
         }
       }
@@ -153,10 +153,10 @@ void StartupManager::createFactoryDefault() {
   }
 
   // Clear all touchpad layouts
-  if (touchpadMixerManager) {
-    auto layouts = touchpadMixerManager->getLayouts();
+  if (touchpadLayoutManager) {
+    auto layouts = touchpadLayoutManager->getLayouts();
     for (int i = static_cast<int>(layouts.size()) - 1; i >= 0; --i) {
-      touchpadMixerManager->removeLayout(i);
+      touchpadLayoutManager->removeLayout(i);
     }
   }
 
@@ -227,8 +227,8 @@ void StartupManager::performSave() {
   }
 
   // Add TouchpadMixers tree
-  if (touchpadMixerManager) {
-    sessionTree.addChild(touchpadMixerManager->toValueTree(), -1, nullptr);
+  if (touchpadLayoutManager) {
+    sessionTree.addChild(touchpadLayoutManager->toValueTree(), -1, nullptr);
   }
 
   // Write to autoload.xml

@@ -1,6 +1,6 @@
 #include "TouchpadGroupsPanel.h"
 
-TouchpadGroupsPanel::TouchpadGroupsPanel(TouchpadMixerManager *mgr)
+TouchpadGroupsPanel::TouchpadGroupsPanel(TouchpadLayoutManager *mgr)
     : manager(mgr) {
   listBox.setModel(this);
   listBox.setRowHeight(24);
@@ -19,7 +19,7 @@ TouchpadGroupsPanel::TouchpadGroupsPanel(TouchpadMixerManager *mgr)
 
     class GroupsDialog : public juce::Component, public juce::ListBoxModel {
     public:
-      explicit GroupsDialog(TouchpadMixerManager *mgr) : manager(mgr) {
+      explicit GroupsDialog(TouchpadLayoutManager *mgr) : manager(mgr) {
         addAndMakeVisible(listBox);
         listBox.setModel(this);
         listBox.setRowHeight(24);
@@ -81,7 +81,7 @@ TouchpadGroupsPanel::TouchpadGroupsPanel(TouchpadMixerManager *mgr)
       }
 
     private:
-      TouchpadMixerManager *manager = nullptr;
+      TouchpadLayoutManager *manager = nullptr;
       juce::ListBox listBox{"Groups", this};
       juce::TextButton addButton;
       juce::TextButton removeButton;

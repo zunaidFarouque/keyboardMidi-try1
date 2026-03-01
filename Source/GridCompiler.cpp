@@ -5,7 +5,7 @@
 #include "PitchPadUtilities.h"
 #include "ScaleUtilities.h"
 #include "SettingsManager.h"
-#include "TouchpadMixerTypes.h"
+#include "TouchpadLayoutTypes.h"
 #include <algorithm>
 #include <cmath>
 #include <numeric>
@@ -756,7 +756,7 @@ static void collectForcedMappings(
 }
 
 // Compile one touchpad mapping ValueTree into a TouchpadMappingEntry and append
-// it to out. Used by the Touchpad tab (TouchpadMixerManager). Channel is taken
+// it to out. Used by the Touchpad tab (TouchpadLayoutManager). Channel is taken
 // from the header (headerChannel), not from the mapping ValueTree.
 // If region is non-null, entry region is set from it; otherwise full pad (0,0,1,1).
 // layoutGroupId / zIndex / regionLock are propagated from the Touchpad tab
@@ -1237,7 +1237,7 @@ void compileMappingsForLayer(
     const bool isTouchpadMapping =
         aliasName.trim().equalsIgnoreCase("Touchpad");
 
-    // Touchpad mappings are only taken from the Touchpad tab (TouchpadMixerManager),
+    // Touchpad mappings are only taken from the Touchpad tab (TouchpadLayoutManager),
     // not from the preset Mappings list, to avoid duplicate or conflicting entries
     // (e.g. Finger1Up from preset + Finger1Down from Touchpad tab causing extra NOTE_ON on release).
     if (isTouchpadMapping)
@@ -1423,7 +1423,7 @@ void compileMappingsForLayer(
 
 std::shared_ptr<CompiledMapContext> GridCompiler::compile(
     PresetManager &presetMgr, DeviceManager &deviceMgr, ZoneManager &zoneMgr,
-    TouchpadMixerManager &touchpadMixerMgr, SettingsManager &settingsMgr) {
+    TouchpadLayoutManager &touchpadMixerMgr, SettingsManager &settingsMgr) {
   // 1. Setup Context
   auto context = std::make_shared<CompiledMapContext>();
 
@@ -1445,7 +1445,7 @@ std::shared_ptr<CompiledMapContext> GridCompiler::compile(
                             &context->touchpadMappings);
   }
 
-  // 2c. Collect touchpad mappings defined in the Touchpad tab (TouchpadMixerManager).
+  // 2c. Collect touchpad mappings defined in the Touchpad tab (TouchpadLayoutManager).
   {
     auto touchpadMappings = touchpadMixerMgr.getTouchpadMappings();
     for (const auto &cfg : touchpadMappings) {
@@ -1466,7 +1466,7 @@ std::shared_ptr<CompiledMapContext> GridCompiler::compile(
   // (higher = on top when regions overlap on same layer).
   auto layouts = touchpadMixerMgr.getLayouts();
   std::sort(layouts.begin(), layouts.end(),
-            [](const TouchpadMixerConfig &a, const TouchpadMixerConfig &b) {
+            [](const TouchpadLayoutConfig &a, const TouchpadLayoutConfig &b) {
               return a.zIndex > b.zIndex;
             });
   for (const auto &cfg : layouts) {

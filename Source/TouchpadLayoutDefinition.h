@@ -1,11 +1,11 @@
 #pragma once
 #include "MappingDefinition.h"
-#include "TouchpadMixerTypes.h"
+#include "TouchpadLayoutTypes.h"
 
 // Schema-driven UI for Touchpad strip (same pattern as MappingDefinition +
-// MappingInspector). Use getSchema(type) and build controls from it; read/write
-// TouchpadMixerConfig by propertyId.
-class TouchpadMixerDefinition {
+// KeyboardMappingInspector). Use getSchema(type) and build controls from it; read/write
+// TouchpadLayoutConfig by propertyId.
+class TouchpadLayoutDefinition {
 public:
   /// Returns schema for the given strip type. Use when building editor UI.
   static InspectorSchema getSchema(TouchpadType type);

@@ -49,7 +49,7 @@ private:
     bool isSeparatorRow = false;
   };
 
-  // Simple separator renderer (matches MappingInspector / ZonePropertiesPanel style)
+  // Simple separator renderer (matches KeyboardMappingInspector / ZonePropertiesPanel style)
   class SeparatorComponent : public juce::Component {
   public:
     SeparatorComponent(const juce::String &label,

@@ -1,4 +1,4 @@
-#include "TouchpadMixerListPanel.h"
+#include "TouchpadListPanel.h"
 #include "MappingTypes.h"
 
 namespace {
@@ -6,13 +6,13 @@ namespace {
 struct TouchpadLayoutPreset {
   juce::String id;
   juce::String label;
-  std::vector<TouchpadMixerConfig> layouts;
+  std::vector<TouchpadLayoutConfig> layouts;
   std::vector<TouchpadMappingConfig> mappings;
 };
 
-TouchpadMixerConfig makeDefaultTouchpadConfig(TouchpadType type,
+TouchpadLayoutConfig makeDefaultTouchpadConfig(TouchpadType type,
                                               const juce::String &name) {
-  TouchpadMixerConfig cfg;
+  TouchpadLayoutConfig cfg;
   cfg.type = type;
   cfg.name = name.toStdString();
   return cfg;
@@ -80,7 +80,7 @@ const std::vector<TouchpadLayoutPreset> &getTouchpadLayoutPresets() {
     // --- Mixers: CC0, Base layer, no group, full region ---
     auto addMixer = [&](const juce::String &label, int numFaders,
                         bool muteButtons) {
-      TouchpadMixerConfig mix =
+      TouchpadLayoutConfig mix =
           makeDefaultTouchpadConfig(TouchpadType::Mixer, label);
       mix.layerId = 0;
       mix.layoutGroupId = 0;
@@ -96,7 +96,7 @@ const std::vector<TouchpadLayoutPreset> &getTouchpadLayoutPresets() {
 
     // --- Drum Pads: Base layer, no group, full region ---
     auto addDrumPad = [&](const juce::String &label, int rows, int cols) {
-      TouchpadMixerConfig drum =
+      TouchpadLayoutConfig drum =
           makeDefaultTouchpadConfig(TouchpadType::DrumPad, label);
       drum.layerId = 0;
       drum.layoutGroupId = 0;
@@ -149,7 +149,7 @@ const std::vector<TouchpadLayoutPreset> &getTouchpadLayoutPresets() {
     // --- Combos: Drum Pad + Mixer strip (various splits) ---
     {
       // Horizontal 50%: 3x3 drum left, 3 faders right
-      TouchpadMixerConfig leftDrum =
+      TouchpadLayoutConfig leftDrum =
           makeDefaultTouchpadConfig(TouchpadType::DrumPad, "Left Drum Pad");
       leftDrum.layerId = 0;
       leftDrum.layoutGroupId = 0;
@@ -157,7 +157,7 @@ const std::vector<TouchpadLayoutPreset> &getTouchpadLayoutPresets() {
       leftDrum.drumPadColumns = 3;
       leftDrum.region = {0.0f, 0.0f, 0.5f, 1.0f};
 
-      TouchpadMixerConfig rightMix = makeDefaultTouchpadConfig(
+      TouchpadLayoutConfig rightMix = makeDefaultTouchpadConfig(
           TouchpadType::Mixer, "Right Mixer Strip");
       rightMix.layerId = 0;
       rightMix.layoutGroupId = 0;
@@ -170,7 +170,7 @@ const std::vector<TouchpadLayoutPreset> &getTouchpadLayoutPresets() {
     }
     {
       // Vertical 50%: 5 faders top, 3x2 drum bottom
-      TouchpadMixerConfig topMix =
+      TouchpadLayoutConfig topMix =
           makeDefaultTouchpadConfig(TouchpadType::Mixer, "Top Mixer Strip");
       topMix.layerId = 0;
       topMix.layoutGroupId = 0;
@@ -178,7 +178,7 @@ const std::vector<TouchpadLayoutPreset> &getTouchpadLayoutPresets() {
       topMix.ccStart = 0;
       topMix.region = {0.0f, 0.0f, 1.0f, 0.5f};
 
-      TouchpadMixerConfig bottomDrum =
+      TouchpadLayoutConfig bottomDrum =
           makeDefaultTouchpadConfig(TouchpadType::DrumPad, "Bottom Drum Pad");
       bottomDrum.layerId = 0;
       bottomDrum.layoutGroupId = 0;
@@ -191,7 +191,7 @@ const std::vector<TouchpadLayoutPreset> &getTouchpadLayoutPresets() {
     }
     {
       // Vertical 75%: 2x5 drum top 25%, 5 faders bottom 75%
-      TouchpadMixerConfig topDrum =
+      TouchpadLayoutConfig topDrum =
           makeDefaultTouchpadConfig(TouchpadType::DrumPad, "Top Drum Pad");
       topDrum.layerId = 0;
       topDrum.layoutGroupId = 0;
@@ -199,7 +199,7 @@ const std::vector<TouchpadLayoutPreset> &getTouchpadLayoutPresets() {
       topDrum.drumPadColumns = 5;
       topDrum.region = {0.0f, 0.0f, 1.0f, 0.25f};
 
-      TouchpadMixerConfig bottomMix = makeDefaultTouchpadConfig(
+      TouchpadLayoutConfig bottomMix = makeDefaultTouchpadConfig(
           TouchpadType::Mixer, "Bottom Mixer Strip");
       bottomMix.layerId = 0;
       bottomMix.layoutGroupId = 0;
@@ -218,7 +218,7 @@ const std::vector<TouchpadLayoutPreset> &getTouchpadLayoutPresets() {
 
 } // namespace
 
-TouchpadMixerListPanel::TouchpadMixerListPanel(TouchpadMixerManager *mgr)
+TouchpadListPanel::TouchpadListPanel(TouchpadLayoutManager *mgr)
     : manager(mgr) {
   addAndMakeVisible(listBox);
   listBox.setModel(this);
@@ -279,8 +279,8 @@ TouchpadMixerListPanel::TouchpadMixerListPanel(TouchpadMixerManager *mgr)
             return;
 
           if (result == emptyLayoutId) {
-            TouchpadMixerConfig def;
-            def.name = "Touchpad Mixer";
+            TouchpadLayoutConfig def;
+            def.name = "Touchpad Layout";
             manager->addLayout(def);
           } else if (result == emptyMappingId) {
             TouchpadMappingConfig cfg;
@@ -340,16 +340,16 @@ TouchpadMixerListPanel::TouchpadMixerListPanel(TouchpadMixerManager *mgr)
     manager->addChangeListener(this);
 }
 
-TouchpadMixerListPanel::~TouchpadMixerListPanel() {
+TouchpadListPanel::~TouchpadListPanel() {
   if (manager)
     manager->removeChangeListener(this);
 }
 
-void TouchpadMixerListPanel::paint(juce::Graphics &g) {
+void TouchpadListPanel::paint(juce::Graphics &g) {
   g.fillAll(juce::Colour(0xff2a2a2a));
 }
 
-void TouchpadMixerListPanel::resized() {
+void TouchpadListPanel::resized() {
   auto area = getLocalBounds().reduced(4);
   auto buttonArea = area.removeFromBottom(30);
   removeButton.setBounds(buttonArea.removeFromRight(80));
@@ -359,14 +359,14 @@ void TouchpadMixerListPanel::resized() {
   listBox.setBounds(area);
 }
 
-int TouchpadMixerListPanel::getNumRows() {
+int TouchpadListPanel::getNumRows() {
   if (!manager)
     return 0;
   rebuildRowKinds();
   return static_cast<int>(rowToSource.size());
 }
 
-void TouchpadMixerListPanel::paintListBoxItem(int rowNumber, juce::Graphics &g,
+void TouchpadListPanel::paintListBoxItem(int rowNumber, juce::Graphics &g,
                                               int width, int height,
                                               bool rowIsSelected) {
   if (!manager)
@@ -407,11 +407,11 @@ void TouchpadMixerListPanel::paintListBoxItem(int rowNumber, juce::Graphics &g,
              juce::Justification::centredLeft);
 }
 
-int TouchpadMixerListPanel::getSelectedRowIndex() const {
+int TouchpadListPanel::getSelectedRowIndex() const {
   return listBox.getSelectedRow();
 }
 
-void TouchpadMixerListPanel::setSelectedRowIndex(int row) {
+void TouchpadListPanel::setSelectedRowIndex(int row) {
   int num = getNumRows();
   if (num <= 0)
     return;
@@ -420,7 +420,7 @@ void TouchpadMixerListPanel::setSelectedRowIndex(int row) {
   listBox.selectRow(row);
 }
 
-void TouchpadMixerListPanel::setFilterGroupId(int filterGroupId) {
+void TouchpadListPanel::setFilterGroupId(int filterGroupId) {
   if (filterGroupId_ == filterGroupId)
     return;
   filterGroupId_ = filterGroupId;
@@ -433,7 +433,7 @@ void TouchpadMixerListPanel::setFilterGroupId(int filterGroupId) {
     listBox.selectRow(0);
 }
 
-void TouchpadMixerListPanel::selectedRowsChanged(int lastRowSelected) {
+void TouchpadListPanel::selectedRowsChanged(int lastRowSelected) {
   if (!onSelectionChanged || !manager) {
     return;
   }
@@ -471,7 +471,7 @@ void TouchpadMixerListPanel::selectedRowsChanged(int lastRowSelected) {
   }
 }
 
-void TouchpadMixerListPanel::changeListenerCallback(juce::ChangeBroadcaster *) {
+void TouchpadListPanel::changeListenerCallback(juce::ChangeBroadcaster *) {
   if (isInitialLoad) {
     // First load: update synchronously for reliable selection restoration
     rebuildRowKinds();
@@ -495,7 +495,7 @@ void TouchpadMixerListPanel::changeListenerCallback(juce::ChangeBroadcaster *) {
   }
 }
 
-void TouchpadMixerListPanel::handleAsyncUpdate() {
+void TouchpadListPanel::handleAsyncUpdate() {
   rebuildRowKinds();
   listBox.updateContent();
   
@@ -512,7 +512,7 @@ void TouchpadMixerListPanel::handleAsyncUpdate() {
   sendChangeMessage();
 }
 
-void TouchpadMixerListPanel::rebuildRowKinds() {
+void TouchpadListPanel::rebuildRowKinds() {
   rowKinds.clear();
   rowToSource.clear();
   if (!manager)
@@ -542,14 +542,14 @@ void TouchpadMixerListPanel::rebuildRowKinds() {
   }
 }
 
-TouchpadMixerListPanel::RowKind
-TouchpadMixerListPanel::getRowKind(int rowIndex) const {
+TouchpadListPanel::RowKind
+TouchpadListPanel::getRowKind(int rowIndex) const {
   if (rowIndex < 0 || rowIndex >= static_cast<int>(rowToSource.size()))
     return RowKind::Layout;
   return rowToSource[(size_t)rowIndex].first;
 }
 
-int TouchpadMixerListPanel::getSelectedLayoutIndex() {
+int TouchpadListPanel::getSelectedLayoutIndex() {
   rebuildRowKinds();
   int row = listBox.getSelectedRow();
   if (row < 0 || row >= static_cast<int>(rowToSource.size()))
@@ -560,7 +560,7 @@ int TouchpadMixerListPanel::getSelectedLayoutIndex() {
   return p.second;
 }
 
-int TouchpadMixerListPanel::getSelectedMappingIndex() {
+int TouchpadListPanel::getSelectedMappingIndex() {
   rebuildRowKinds();
   int row = listBox.getSelectedRow();
   if (row < 0 || row >= static_cast<int>(rowToSource.size()))

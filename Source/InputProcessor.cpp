@@ -7,7 +7,7 @@
 #include "ScaleLibrary.h"
 #include "ScaleUtilities.h"
 #include "SettingsManager.h"
-#include "TouchpadMixerTypes.h"
+#include "TouchpadLayoutTypes.h"
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -37,10 +37,10 @@ InputProcessor::InputProcessor(VoiceManager &voiceMgr, PresetManager &presetMgr,
                                DeviceManager &deviceMgr, ScaleLibrary &scaleLib,
                                MidiEngine &midiEng,
                                SettingsManager &settingsMgr,
-                               TouchpadMixerManager &touchpadMixerMgr)
+                               TouchpadLayoutManager &touchpadLayoutMgr)
     : voiceManager(voiceMgr), presetManager(presetMgr),
       deviceManager(deviceMgr), zoneManager(scaleLib), scaleLibrary(scaleLib),
-      touchpadMixerManager(touchpadMixerMgr), expressionEngine(midiEng),
+      touchpadLayoutManager(touchpadLayoutMgr), expressionEngine(midiEng),
       settingsManager(settingsMgr) {
   // Phase 53.2: 9 layers; momentary = ref count, latched = persistent
   layerLatchedState.resize(9);
@@ -156,7 +156,7 @@ void InputProcessor::initialize() {
   deviceManager.addChangeListener(this);
   settingsManager.addChangeListener(this);
   zoneManager.addChangeListener(this);
-  touchpadMixerManager.addChangeListener(this);
+  touchpadLayoutManager.addChangeListener(this);
   rebuildGrid();
   applySustainDefaultFromPreset();
 }
@@ -175,13 +175,13 @@ InputProcessor::~InputProcessor() {
   deviceManager.removeChangeListener(this);
   settingsManager.removeChangeListener(this);
   zoneManager.removeChangeListener(this);
-  touchpadMixerManager.removeChangeListener(this);
+  touchpadLayoutManager.removeChangeListener(this);
 }
 
 void InputProcessor::changeListenerCallback(juce::ChangeBroadcaster *source) {
   if (source == &presetManager || source == &deviceManager ||
       source == &settingsManager || source == &zoneManager ||
-      source == &touchpadMixerManager) {
+      source == &touchpadLayoutManager) {
     rebuildGrid();
     if (source == &presetManager)
       applySustainDefaultFromPreset(); // Preset load: apply sustain default
@@ -218,7 +218,7 @@ void InputProcessor::rebuildGrid() {
   ++rebuildCount_;
   auto newContext =
       GridCompiler::compile(presetManager, deviceManager, zoneManager,
-                            touchpadMixerManager, settingsManager);
+                            touchpadLayoutManager, settingsManager);
   {
     juce::ScopedWriteLock sl(mapLock);
     activeContext = std::move(newContext);

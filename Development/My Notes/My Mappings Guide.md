@@ -60,14 +60,25 @@ use PRN to send pitch bend range.
 
 ## General Global
 
-`F12` = Global MIDI mode
-
 `F11` = Global performance mode
+
+`F12` = Global MIDI mode
 
 **Laptop keyboard**
 
 `Del` = MIDI panic\
 &emsp; Make this in Layer 0 -> Global (ignores layering system.)
+
+**Layers and Groups**
+
+`Esc` = Go to Base Layer and remove all group solo (For Keyboard)
+
+`F1` = Go to Base Layer and remove all group solo (For Touchpad)
+
+`F2-F6` = Mixer Groups for Touchpad ([See Details](#style-track--melody-track-layers))
+
+`F8` = Open Layer 8 (Set, instead of hold/toggle. Clear using `Esc`)\
+Used for setting up the Giglad session e.g. choosing styles.
 
 ## 1-keyboard, Piano Style
 
@@ -187,6 +198,8 @@ Shift + `H J K` = Melody tracks octave up (ignore RH3)\
 Shift + `L ; '` = Melody tracks octave down (ignore RH3)\
 (Bound to Layer 7) -->
 
+`F1` = Remove Mixer groups/Everything from Touchpad (Show default)
+
 `F2` = Melody Tracks (LH, RH1, RH2, RH3)\
 It will also have associated buttons for Octave Up/Down on the top 25%.\
 Created using 2x5 drumpad. There is already a preset in the combo group for this.
@@ -208,6 +221,8 @@ Created using 2x5 drumpad. There is already a preset in the combo group for this
 `\` = Show/Hide Lyrics
 
 ### Layer 8 (Giglad 3)
+
+`F9` => Enter Layer 8 (Latch)
 
 `1` = Styles
 

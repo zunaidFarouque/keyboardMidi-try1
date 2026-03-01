@@ -9,7 +9,7 @@
 #include "../PresetManager.h"
 #include "../ScaleLibrary.h"
 #include "../SettingsManager.h"
-#include "../TouchpadMixerManager.h"
+#include "../TouchpadLayoutManager.h"
 #include "../VoiceManager.h"
 #include "../Zone.h"
 #include <benchmark/benchmark.h>
@@ -44,10 +44,10 @@ public:
   ScaleLibrary scaleLib;
   SettingsManager settingsMgr;
   MockMidiEngine mockMidi;
-  TouchpadMixerManager touchpadMixerMgr;
+  TouchpadLayoutManager touchpadLayoutMgr;
   VoiceManager voiceMgr{mockMidi, settingsMgr};
   InputProcessor proc{voiceMgr, presetMgr,   deviceMgr,       scaleLib,
-                      mockMidi, settingsMgr, touchpadMixerMgr};
+                      mockMidi, settingsMgr, touchpadLayoutMgr};
 
   void SetUp(benchmark::State &state) override {
     presetMgr.getLayersList().removeAllChildren(nullptr);

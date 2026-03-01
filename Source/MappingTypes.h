@@ -1,5 +1,5 @@
 #pragma once
-#include "TouchpadMixerTypes.h"
+#include "TouchpadLayoutTypes.h"
 #include <JuceHeader.h>
 #include <array>
 #include <cstdint>
@@ -476,7 +476,7 @@ struct CompiledContext {
   // 7. Drum+FX Split layouts (legacy; no longer used at runtime)
   std::vector<TouchpadDrumFxSplitEntry> touchpadDrumFxSplits;
 
-  // Maps layout index (from TouchpadMixerManager.getLayouts) to (type, index in
+  // Maps layout index (from TouchpadLayoutManager.getLayouts) to (type, index in
   // that type's vector). Used by visualizer for overlay selection.
   struct TouchpadLayoutRef {
     TouchpadType type = TouchpadType::Mixer;

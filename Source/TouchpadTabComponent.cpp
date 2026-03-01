@@ -1,7 +1,7 @@
 #include "TouchpadTabComponent.h"
 #include "SettingsManager.h"
 
-TouchpadTabComponent::TouchpadTabComponent(TouchpadMixerManager *mgr,
+TouchpadTabComponent::TouchpadTabComponent(TouchpadLayoutManager *mgr,
                                            SettingsManager *settingsMgr,
                                            ScaleLibrary *scaleLib)
     : manager(mgr), settingsManager(settingsMgr), groupsPanel(mgr),
@@ -30,10 +30,10 @@ TouchpadTabComponent::TouchpadTabComponent(TouchpadMixerManager *mgr,
   };
 
   listPanel.onSelectionChanged =
-      [this](TouchpadMixerListPanel::RowKind kind, int index,
-             const TouchpadMixerConfig *layoutCfg,
+      [this](TouchpadListPanel::RowKind kind, int index,
+             const TouchpadLayoutConfig *layoutCfg,
              const TouchpadMappingConfig *mappingCfg, int combinedRowIndex) {
-        if (kind == TouchpadMixerListPanel::RowKind::Layout) {
+        if (kind == TouchpadListPanel::RowKind::Layout) {
           editorPanel.setLayout(index, layoutCfg);
           if (onSelectionChangedForVisualizer)
             onSelectionChangedForVisualizer(

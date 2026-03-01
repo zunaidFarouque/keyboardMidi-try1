@@ -248,7 +248,7 @@ int SettingsManager::getMainTabIndex() const {
   if (!ui.isValid())
     return 0;
   int idx = static_cast<int>(ui.getProperty("mainTabIndex", 0));
-  // Clamp to valid range of main tabs (Mappings=0, Zones=1, Touchpad=2, Settings=3).
+  // Clamp to valid range of main tabs (Keyboard Mappings=0, Zones=1, Touchpad=2, Settings=3).
   if (idx < 0 || idx > 8)
     idx = 0;
   return idx;

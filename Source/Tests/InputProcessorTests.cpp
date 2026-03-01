@@ -6,8 +6,8 @@
 #include "../PresetManager.h"
 #include "../ScaleLibrary.h"
 #include "../SettingsManager.h"
-#include "../TouchpadMixerManager.h"
-#include "../TouchpadMixerTypes.h"
+#include "../TouchpadLayoutManager.h"
+#include "../TouchpadLayoutTypes.h"
 #include "../TouchpadTypes.h"
 #include "../VoiceManager.h"
 #include "../Zone.h"
@@ -97,7 +97,7 @@ protected:
   DeviceManager deviceMgr;
   ScaleLibrary scaleLib;
   SettingsManager settingsMgr;
-  TouchpadMixerManager touchpadMixerMgr;
+  TouchpadLayoutManager touchpadMixerMgr;
   MidiEngine midiEng;
   VoiceManager voiceMgr{midiEng, settingsMgr};
   InputProcessor proc{voiceMgr, presetMgr,   deviceMgr,       scaleLib,
@@ -118,7 +118,7 @@ protected:
   DeviceManager deviceMgr;
   ScaleLibrary scaleLib;
   SettingsManager settingsMgr;
-  TouchpadMixerManager touchpadMixerMgr;
+  TouchpadLayoutManager touchpadMixerMgr;
   MidiEngine midiEng;
   VoiceManager voiceMgr{midiEng, settingsMgr};
   InputProcessor proc{voiceMgr, presetMgr,   deviceMgr,       scaleLib,
@@ -838,7 +838,7 @@ protected:
   DeviceManager deviceMgr;
   ScaleLibrary scaleLib;
   SettingsManager settingsMgr;
-  TouchpadMixerManager touchpadMixerMgr;
+  TouchpadLayoutManager touchpadMixerMgr;
   MockMidiEngine mockMidi;
   VoiceManager voiceMgr{mockMidi, settingsMgr};
   InputProcessor proc{voiceMgr, presetMgr,   deviceMgr,       scaleLib,
@@ -959,7 +959,7 @@ protected:
   DeviceManager deviceMgr;
   ScaleLibrary scaleLib;
   SettingsManager settingsMgr;
-  TouchpadMixerManager touchpadMixerMgr;
+  TouchpadLayoutManager touchpadMixerMgr;
   MockMidiEngine mockMidi;
   VoiceManager voiceMgr{mockMidi, settingsMgr};
   InputProcessor proc{voiceMgr, presetMgr,   deviceMgr,       scaleLib,
@@ -1672,7 +1672,7 @@ TEST_F(NoteTypeTest, LegacyGlobalPitchDown_DecreasesChromaticByOne) {
 // Off ---
 TEST_F(InputProcessorTest, TouchpadFinger1DownSendsNoteOnThenNoteOff) {
   MockMidiEngine mockEng;
-  TouchpadMixerManager touchpadMixerMgr;
+  TouchpadLayoutManager touchpadMixerMgr;
   VoiceManager voiceMgr(mockEng, settingsMgr);
   InputProcessor proc(voiceMgr, presetMgr, deviceMgr, scaleLib, midiEng,
                       settingsMgr, touchpadMixerMgr);
@@ -1711,7 +1711,7 @@ TEST_F(InputProcessorTest, TouchpadFinger1DownSendsNoteOnThenNoteOff) {
 // immediately while still holding.
 TEST_F(InputProcessorTest, TouchpadFinger1Down_OrderChangeDoesNotReleaseHeldNote) {
   MockMidiEngine mockEng;
-  TouchpadMixerManager touchpadMixerMgr;
+  TouchpadLayoutManager touchpadMixerMgr;
   VoiceManager voiceMgr(mockEng, settingsMgr);
   InputProcessor proc(voiceMgr, presetMgr, deviceMgr, scaleLib, midiEng,
                       settingsMgr, touchpadMixerMgr);
@@ -1750,7 +1750,7 @@ TEST_F(InputProcessorTest, TouchpadFinger1Down_OrderChangeDoesNotReleaseHeldNote
 TEST_F(InputProcessorTest,
        TouchpadFinger1DownSustainUntilRetrigger_NoNoteOffOnRelease) {
   MockMidiEngine mockEng;
-  TouchpadMixerManager touchpadMixerMgr;
+  TouchpadLayoutManager touchpadMixerMgr;
   VoiceManager voiceMgr(mockEng, settingsMgr);
   InputProcessor proc(voiceMgr, presetMgr, deviceMgr, scaleLib, midiEng,
                       settingsMgr, touchpadMixerMgr);
@@ -1778,7 +1778,7 @@ TEST_F(InputProcessorTest,
 // Hold behavior: "Hold to not send note off immediately" - note stays on while holding
 TEST_F(InputProcessorTest, TouchpadHoldBehavior_HoldToNotSendNoteOffImmediately) {
   MockMidiEngine mockEng;
-  TouchpadMixerManager touchpadMixerMgr;
+  TouchpadLayoutManager touchpadMixerMgr;
   VoiceManager voiceMgr(mockEng, settingsMgr);
   InputProcessor proc(voiceMgr, presetMgr, deviceMgr, scaleLib, midiEng,
                       settingsMgr, touchpadMixerMgr);
@@ -1821,7 +1821,7 @@ TEST_F(InputProcessorTest, TouchpadHoldBehavior_HoldToNotSendNoteOffImmediately)
 // Hold behavior: "Ignore, send note off immediately" - note off sent immediately after note on
 TEST_F(InputProcessorTest, TouchpadHoldBehavior_IgnoreSendNoteOffImmediately) {
   MockMidiEngine mockEng;
-  TouchpadMixerManager touchpadMixerMgr;
+  TouchpadLayoutManager touchpadMixerMgr;
   VoiceManager voiceMgr(mockEng, settingsMgr);
   InputProcessor proc(voiceMgr, presetMgr, deviceMgr, scaleLib, midiEng,
                       settingsMgr, touchpadMixerMgr);
@@ -1861,7 +1861,7 @@ TEST_F(InputProcessorTest, TouchpadHoldBehavior_IgnoreSendNoteOffImmediately) {
 // Hold + Sustain until retrigger: note stays on while holding, no note off on release
 TEST_F(InputProcessorTest, TouchpadNote_HoldBehavior_Hold_ReleaseBehavior_SustainUntilRetrigger) {
   MockMidiEngine mockEng;
-  TouchpadMixerManager touchpadMixerMgr;
+  TouchpadLayoutManager touchpadMixerMgr;
   VoiceManager voiceMgr(mockEng, settingsMgr);
   InputProcessor proc(voiceMgr, presetMgr, deviceMgr, scaleLib, midiEng,
                       settingsMgr, touchpadMixerMgr);
@@ -1894,7 +1894,7 @@ TEST_F(InputProcessorTest, TouchpadNote_HoldBehavior_Hold_ReleaseBehavior_Sustai
 // Hold + Always Latch: note stays on while holding, latch on release
 TEST_F(InputProcessorTest, TouchpadNote_HoldBehavior_Hold_ReleaseBehavior_AlwaysLatch) {
   MockMidiEngine mockEng;
-  TouchpadMixerManager touchpadMixerMgr;
+  TouchpadLayoutManager touchpadMixerMgr;
   VoiceManager voiceMgr(mockEng, settingsMgr);
   InputProcessor proc(voiceMgr, presetMgr, deviceMgr, scaleLib, midiEng,
                       settingsMgr, touchpadMixerMgr);
@@ -1933,7 +1933,7 @@ TEST_F(InputProcessorTest, TouchpadNote_HoldBehavior_Hold_ReleaseBehavior_Always
 // Ignore + Sustain until retrigger: note off immediately, no note off on release
 TEST_F(InputProcessorTest, TouchpadNote_HoldBehavior_Ignore_ReleaseBehavior_SustainUntilRetrigger) {
   MockMidiEngine mockEng;
-  TouchpadMixerManager touchpadMixerMgr;
+  TouchpadLayoutManager touchpadMixerMgr;
   VoiceManager voiceMgr(mockEng, settingsMgr);
   InputProcessor proc(voiceMgr, presetMgr, deviceMgr, scaleLib, midiEng,
                       settingsMgr, touchpadMixerMgr);
@@ -1967,7 +1967,7 @@ TEST_F(InputProcessorTest, TouchpadNote_HoldBehavior_Ignore_ReleaseBehavior_Sust
 // Ignore + Always Latch: note off immediately, latch on release (but note already off)
 TEST_F(InputProcessorTest, TouchpadNote_HoldBehavior_Ignore_ReleaseBehavior_AlwaysLatch) {
   MockMidiEngine mockEng;
-  TouchpadMixerManager touchpadMixerMgr;
+  TouchpadLayoutManager touchpadMixerMgr;
   VoiceManager voiceMgr(mockEng, settingsMgr);
   InputProcessor proc(voiceMgr, presetMgr, deviceMgr, scaleLib, midiEng,
                       settingsMgr, touchpadMixerMgr);
@@ -2002,7 +2002,7 @@ TEST_F(InputProcessorTest, TouchpadNote_HoldBehavior_Ignore_ReleaseBehavior_Alwa
 // Regression test: Finger1Down mapping should only send Note Off when finger lifts, not Note On
 TEST_F(InputProcessorTest, TouchpadNote_Finger1Down_LiftFinger_SendsOnlyNoteOff) {
   MockMidiEngine mockEng;
-  TouchpadMixerManager touchpadMixerMgr;
+  TouchpadLayoutManager touchpadMixerMgr;
   VoiceManager voiceMgr(mockEng, settingsMgr);
   InputProcessor proc(voiceMgr, presetMgr, deviceMgr, scaleLib, midiEng,
                       settingsMgr, touchpadMixerMgr);
@@ -2047,7 +2047,7 @@ TEST_F(InputProcessorTest, TouchpadNote_Finger1Down_LiftFinger_SendsOnlyNoteOff)
 TEST_F(InputProcessorTest,
        TouchpadSustainUntilRetrigger_ReTrigger_NoNoteOffBeforeSecondNoteOn) {
   MockMidiEngine mockEng;
-  TouchpadMixerManager touchpadMixerMgr;
+  TouchpadLayoutManager touchpadMixerMgr;
   VoiceManager voiceMgr(mockEng, settingsMgr);
   InputProcessor proc(voiceMgr, presetMgr, deviceMgr, scaleLib, midiEng,
                       settingsMgr, touchpadMixerMgr);
@@ -2082,7 +2082,7 @@ TEST_F(InputProcessorTest,
 // Finger 1 Up -> Note: trigger note when finger lifts (one-shot), no note off
 TEST_F(InputProcessorTest, TouchpadFinger1UpTriggersNoteOnOnly) {
   MockMidiEngine mockEng;
-  TouchpadMixerManager touchpadMixerMgr;
+  TouchpadLayoutManager touchpadMixerMgr;
   VoiceManager voiceMgr(mockEng, settingsMgr);
   InputProcessor proc(voiceMgr, presetMgr, deviceMgr, scaleLib, midiEng,
                       settingsMgr, touchpadMixerMgr);
@@ -2115,7 +2115,7 @@ TEST_F(InputProcessorTest, TouchpadFinger1UpTriggersNoteOnOnly) {
 // Finger 2 Down -> Note: sends Note On on finger down, Note Off on release
 TEST_F(InputProcessorTest, TouchpadNote_Finger2DownSendsNoteOnThenNoteOff) {
   MockMidiEngine mockEng;
-  TouchpadMixerManager touchpadMixerMgr;
+  TouchpadLayoutManager touchpadMixerMgr;
   VoiceManager voiceMgr(mockEng, settingsMgr);
   InputProcessor proc(voiceMgr, presetMgr, deviceMgr, scaleLib, midiEng,
                       settingsMgr, touchpadMixerMgr);
@@ -2162,7 +2162,7 @@ TEST_F(InputProcessorTest, TouchpadNote_Finger2DownSendsNoteOnThenNoteOff) {
 // Per-mapping finger counting: need two contacts then lift the second.
 TEST_F(InputProcessorTest, TouchpadNote_Finger2UpTriggersNoteOnOnly) {
   MockMidiEngine mockEng;
-  TouchpadMixerManager touchpadMixerMgr;
+  TouchpadLayoutManager touchpadMixerMgr;
   VoiceManager voiceMgr(mockEng, settingsMgr);
   InputProcessor proc(voiceMgr, presetMgr, deviceMgr, scaleLib, midiEng,
                       settingsMgr, touchpadMixerMgr);
@@ -2208,7 +2208,7 @@ TEST_F(InputProcessorTest, DisabledMappingNotExecuted) {
 
   proc.initialize();
   MockMidiEngine mockEng;
-  TouchpadMixerManager touchpadMixerMgr;
+  TouchpadLayoutManager touchpadMixerMgr;
   VoiceManager voiceMgr(mockEng, settingsMgr);
   InputProcessor proc2(voiceMgr, presetMgr, deviceMgr, scaleLib, mockEng,
                        settingsMgr, touchpadMixerMgr);
@@ -2225,7 +2225,7 @@ TEST_F(InputProcessorTest, DisabledMappingNotExecuted) {
 TEST_F(InputProcessorTest,
        TouchpadContinuousToGate_ThresholdAndTriggerAbove_AffectsNoteOnOff) {
   MockMidiEngine mockEng;
-  TouchpadMixerManager touchpadMixerMgr;
+  TouchpadLayoutManager touchpadMixerMgr;
   VoiceManager voiceMgr(mockEng, settingsMgr);
   InputProcessor proc(voiceMgr, presetMgr, deviceMgr, scaleLib, midiEng,
                       settingsMgr, touchpadMixerMgr);
@@ -2266,7 +2266,7 @@ TEST_F(InputProcessorTest,
 // Finger1Y -> Note with threshold: trigger Above threshold
 TEST_F(InputProcessorTest, TouchpadNote_Finger1Y_ThresholdAbove_TriggersNoteOnOff) {
   MockMidiEngine mockEng;
-  TouchpadMixerManager touchpadMixerMgr;
+  TouchpadLayoutManager touchpadMixerMgr;
   VoiceManager voiceMgr(mockEng, settingsMgr);
   InputProcessor proc(voiceMgr, presetMgr, deviceMgr, scaleLib, midiEng,
                       settingsMgr, touchpadMixerMgr);
@@ -2301,7 +2301,7 @@ TEST_F(InputProcessorTest, TouchpadNote_Finger1Y_ThresholdAbove_TriggersNoteOnOf
 // Finger1X -> Note with threshold: trigger Below threshold
 TEST_F(InputProcessorTest, TouchpadNote_Finger1X_ThresholdBelow_TriggersNoteOnOff) {
   MockMidiEngine mockEng;
-  TouchpadMixerManager touchpadMixerMgr;
+  TouchpadLayoutManager touchpadMixerMgr;
   VoiceManager voiceMgr(mockEng, settingsMgr);
   InputProcessor proc(voiceMgr, presetMgr, deviceMgr, scaleLib, midiEng,
                       settingsMgr, touchpadMixerMgr);
@@ -2337,7 +2337,7 @@ TEST_F(InputProcessorTest, TouchpadNote_Finger1X_ThresholdBelow_TriggersNoteOnOf
 // Channel tests: verify different MIDI channels work correctly
 TEST_F(InputProcessorTest, TouchpadNote_Channel1_SendsOnChannel1) {
   MockMidiEngine mockEng;
-  TouchpadMixerManager touchpadMixerMgr;
+  TouchpadLayoutManager touchpadMixerMgr;
   VoiceManager voiceMgr(mockEng, settingsMgr);
   InputProcessor proc(voiceMgr, presetMgr, deviceMgr, scaleLib, midiEng,
                       settingsMgr, touchpadMixerMgr);
@@ -2359,7 +2359,7 @@ TEST_F(InputProcessorTest, TouchpadNote_Channel1_SendsOnChannel1) {
 
 TEST_F(InputProcessorTest, TouchpadNote_Channel16_SendsOnChannel16) {
   MockMidiEngine mockEng;
-  TouchpadMixerManager touchpadMixerMgr;
+  TouchpadLayoutManager touchpadMixerMgr;
   VoiceManager voiceMgr(mockEng, settingsMgr);
   InputProcessor proc(voiceMgr, presetMgr, deviceMgr, scaleLib, midiEng,
                       settingsMgr, touchpadMixerMgr);
@@ -2381,7 +2381,7 @@ TEST_F(InputProcessorTest, TouchpadNote_Channel16_SendsOnChannel16) {
 
 TEST_F(InputProcessorTest, TouchpadNote_Channel8_SendsOnChannel8) {
   MockMidiEngine mockEng;
-  TouchpadMixerManager touchpadMixerMgr;
+  TouchpadLayoutManager touchpadMixerMgr;
   VoiceManager voiceMgr(mockEng, settingsMgr);
   InputProcessor proc(voiceMgr, presetMgr, deviceMgr, scaleLib, midiEng,
                       settingsMgr, touchpadMixerMgr);
@@ -2404,7 +2404,7 @@ TEST_F(InputProcessorTest, TouchpadNote_Channel8_SendsOnChannel8) {
 // Note boundary tests (plan §6)
 TEST_F(InputProcessorTest, TouchpadNote_Note0_SendsNote0) {
   MockMidiEngine mockEng;
-  TouchpadMixerManager touchpadMixerMgr;
+  TouchpadLayoutManager touchpadMixerMgr;
   VoiceManager voiceMgr(mockEng, settingsMgr);
   InputProcessor proc(voiceMgr, presetMgr, deviceMgr, scaleLib, midiEng,
                       settingsMgr, touchpadMixerMgr);
@@ -2427,7 +2427,7 @@ TEST_F(InputProcessorTest, TouchpadNote_Note0_SendsNote0) {
 
 TEST_F(InputProcessorTest, TouchpadNote_Note127_SendsNote127) {
   MockMidiEngine mockEng;
-  TouchpadMixerManager touchpadMixerMgr;
+  TouchpadLayoutManager touchpadMixerMgr;
   VoiceManager voiceMgr(mockEng, settingsMgr);
   InputProcessor proc(voiceMgr, presetMgr, deviceMgr, scaleLib, midiEng,
                       settingsMgr, touchpadMixerMgr);
@@ -2451,7 +2451,7 @@ TEST_F(InputProcessorTest, TouchpadNote_Note127_SendsNote127) {
 // Velocity tests: verify different velocity values work correctly
 TEST_F(InputProcessorTest, TouchpadNote_Velocity0_SendsVelocity0) {
   MockMidiEngine mockEng;
-  TouchpadMixerManager touchpadMixerMgr;
+  TouchpadLayoutManager touchpadMixerMgr;
   VoiceManager voiceMgr(mockEng, settingsMgr);
   InputProcessor proc(voiceMgr, presetMgr, deviceMgr, scaleLib, midiEng,
                       settingsMgr, touchpadMixerMgr);
@@ -2479,7 +2479,7 @@ TEST_F(InputProcessorTest, TouchpadNote_Velocity0_SendsVelocity0) {
 
 TEST_F(InputProcessorTest, TouchpadNote_Velocity127_SendsVelocity127) {
   MockMidiEngine mockEng;
-  TouchpadMixerManager touchpadMixerMgr;
+  TouchpadLayoutManager touchpadMixerMgr;
   VoiceManager voiceMgr(mockEng, settingsMgr);
   InputProcessor proc(voiceMgr, presetMgr, deviceMgr, scaleLib, midiEng,
                       settingsMgr, touchpadMixerMgr);
@@ -2507,7 +2507,7 @@ TEST_F(InputProcessorTest, TouchpadNote_Velocity127_SendsVelocity127) {
 
 TEST_F(InputProcessorTest, TouchpadNote_Velocity64_SendsVelocity64) {
   MockMidiEngine mockEng;
-  TouchpadMixerManager touchpadMixerMgr;
+  TouchpadLayoutManager touchpadMixerMgr;
   VoiceManager voiceMgr(mockEng, settingsMgr);
   InputProcessor proc(voiceMgr, presetMgr, deviceMgr, scaleLib, midiEng,
                       settingsMgr, touchpadMixerMgr);
@@ -2535,7 +2535,7 @@ TEST_F(InputProcessorTest, TouchpadNote_Velocity64_SendsVelocity64) {
 
 TEST_F(InputProcessorTest, TouchpadNote_Velocity100_SendsVelocity100) {
   MockMidiEngine mockEng;
-  TouchpadMixerManager touchpadMixerMgr;
+  TouchpadLayoutManager touchpadMixerMgr;
   VoiceManager voiceMgr(mockEng, settingsMgr);
   InputProcessor proc(voiceMgr, presetMgr, deviceMgr, scaleLib, midiEng,
                       settingsMgr, touchpadMixerMgr);
@@ -2562,7 +2562,7 @@ TEST_F(InputProcessorTest, TouchpadNote_Velocity100_SendsVelocity100) {
 
 TEST_F(InputProcessorTest, TouchpadNote_VelocityRandomization_PropertySet) {
   MockMidiEngine mockEng;
-  TouchpadMixerManager touchpadMixerMgr;
+  TouchpadLayoutManager touchpadMixerMgr;
   VoiceManager voiceMgr(mockEng, settingsMgr);
   InputProcessor proc(voiceMgr, presetMgr, deviceMgr, scaleLib, midiEng,
                       settingsMgr, touchpadMixerMgr);
@@ -2597,7 +2597,7 @@ TEST_F(InputProcessorTest, TouchpadNote_VelocityRandomization_PropertySet) {
 // Multi-finger tests: verify multiple fingers work independently
 TEST_F(InputProcessorTest, TouchpadNote_TwoFingersDownSimultaneously_BothTrigger) {
   MockMidiEngine mockEng;
-  TouchpadMixerManager touchpadMixerMgr;
+  TouchpadLayoutManager touchpadMixerMgr;
   VoiceManager voiceMgr(mockEng, settingsMgr);
   InputProcessor proc(voiceMgr, presetMgr, deviceMgr, scaleLib, midiEng,
                       settingsMgr, touchpadMixerMgr);
@@ -2629,7 +2629,7 @@ TEST_F(InputProcessorTest, TouchpadNote_TwoFingersDownSimultaneously_BothTrigger
 
 TEST_F(InputProcessorTest, TouchpadNote_Finger1DownThenFinger2DownWhileFinger1Held_BothActive) {
   MockMidiEngine mockEng;
-  TouchpadMixerManager touchpadMixerMgr;
+  TouchpadLayoutManager touchpadMixerMgr;
   VoiceManager voiceMgr(mockEng, settingsMgr);
   InputProcessor proc(voiceMgr, presetMgr, deviceMgr, scaleLib, midiEng,
                       settingsMgr, touchpadMixerMgr);
@@ -2673,7 +2673,7 @@ TEST_F(InputProcessorTest, TouchpadNote_Finger1DownThenFinger2DownWhileFinger1He
 
 TEST_F(InputProcessorTest, TouchpadNote_Finger1ReleasesWhileFinger2Held_Finger1NoteOffOnly) {
   MockMidiEngine mockEng;
-  TouchpadMixerManager touchpadMixerMgr;
+  TouchpadLayoutManager touchpadMixerMgr;
   VoiceManager voiceMgr(mockEng, settingsMgr);
   InputProcessor proc(voiceMgr, presetMgr, deviceMgr, scaleLib, midiEng,
                       settingsMgr, touchpadMixerMgr);
@@ -2707,7 +2707,7 @@ TEST_F(InputProcessorTest, TouchpadNote_Finger1ReleasesWhileFinger2Held_Finger1N
 // Edge case tests
 TEST_F(InputProcessorTest, TouchpadNote_DisabledMapping_NotExecuted) {
   MockMidiEngine mockEng;
-  TouchpadMixerManager touchpadMixerMgr;
+  TouchpadLayoutManager touchpadMixerMgr;
   VoiceManager voiceMgr(mockEng, settingsMgr);
   InputProcessor proc(voiceMgr, presetMgr, deviceMgr, scaleLib, midiEng,
                       settingsMgr, touchpadMixerMgr);
@@ -2729,7 +2729,7 @@ TEST_F(InputProcessorTest, TouchpadNote_DisabledMapping_NotExecuted) {
 
 TEST_F(InputProcessorTest, TouchpadNote_LayoutConsumesFinger1Down_MappingSkipped) {
   MockMidiEngine mockEng;
-  TouchpadMixerManager touchpadMixerMgr;
+  TouchpadLayoutManager touchpadMixerMgr;
   VoiceManager voiceMgr(mockEng, settingsMgr);
   InputProcessor proc(voiceMgr, presetMgr, deviceMgr, scaleLib, midiEng,
                       settingsMgr, touchpadMixerMgr);
@@ -2738,7 +2738,7 @@ TEST_F(InputProcessorTest, TouchpadNote_LayoutConsumesFinger1Down_MappingSkipped
   settingsMgr.setMidiModeActive(true);
 
   // Add a mixer layout that consumes Finger1Down
-  TouchpadMixerConfig layout;
+  TouchpadLayoutConfig layout;
   layout.type = TouchpadType::Mixer;
   layout.layerId = 0;
   layout.numFaders = 4;
@@ -2773,7 +2773,7 @@ TEST_F(InputProcessorTest, TouchpadNote_LayoutConsumesFinger1Down_MappingSkipped
 
 TEST_F(InputProcessorTest, TouchpadNote_MultipleMappingsSameLayer_BothTrigger) {
   MockMidiEngine mockEng;
-  TouchpadMixerManager touchpadMixerMgr;
+  TouchpadLayoutManager touchpadMixerMgr;
   VoiceManager voiceMgr(mockEng, settingsMgr);
   InputProcessor proc(voiceMgr, presetMgr, deviceMgr, scaleLib, midiEng,
                       settingsMgr, touchpadMixerMgr);
@@ -2808,7 +2808,7 @@ TEST_F(InputProcessorTest, TouchpadNote_MultipleMappingsSameLayer_BothTrigger) {
 
 TEST_F(InputProcessorTest, TouchpadNote_MultipleMappingsDifferentLayers_OnlyActiveLayerTriggers) {
   MockMidiEngine mockEng;
-  TouchpadMixerManager touchpadMixerMgr;
+  TouchpadLayoutManager touchpadMixerMgr;
   VoiceManager voiceMgr(mockEng, settingsMgr);
   InputProcessor proc(voiceMgr, presetMgr, deviceMgr, scaleLib, midiEng,
                       settingsMgr, touchpadMixerMgr);
@@ -2835,7 +2835,7 @@ TEST_F(InputProcessorTest, TouchpadNote_MultipleMappingsDifferentLayers_OnlyActi
 // Finger2X -> Note with threshold: trigger Above threshold (plan §1 continuous events)
 TEST_F(InputProcessorTest, TouchpadNote_Finger2X_ThresholdAbove_TriggersNoteOnOff) {
   MockMidiEngine mockEng;
-  TouchpadMixerManager touchpadMixerMgr;
+  TouchpadLayoutManager touchpadMixerMgr;
   VoiceManager voiceMgr(mockEng, settingsMgr);
   InputProcessor proc(voiceMgr, presetMgr, deviceMgr, scaleLib, midiEng,
                       settingsMgr, touchpadMixerMgr);
@@ -2870,7 +2870,7 @@ TEST_F(InputProcessorTest, TouchpadNote_Finger2X_ThresholdAbove_TriggersNoteOnOf
 // Finger2Y -> Note with threshold: trigger Below threshold (plan §1 continuous events)
 TEST_F(InputProcessorTest, TouchpadNote_Finger2Y_ThresholdBelow_TriggersNoteOnOff) {
   MockMidiEngine mockEng;
-  TouchpadMixerManager touchpadMixerMgr;
+  TouchpadLayoutManager touchpadMixerMgr;
   VoiceManager voiceMgr(mockEng, settingsMgr);
   InputProcessor proc(voiceMgr, presetMgr, deviceMgr, scaleLib, midiEng,
                       settingsMgr, touchpadMixerMgr);
@@ -2969,7 +2969,7 @@ TEST_F(InputProcessorTest, StudioModeOn_UsesDeviceSpecificMapping) {
 // --- Pitch bend range: sent PB value respects configured range ---
 TEST_F(InputProcessorTest, PitchBendRangeAffectsSentPitchBend) {
   MockMidiEngine mockEng;
-  TouchpadMixerManager touchpadMixerMgr;
+  TouchpadLayoutManager touchpadMixerMgr;
   VoiceManager voiceMgr(mockEng, settingsMgr);
   InputProcessor proc(voiceMgr, presetMgr, deviceMgr, scaleLib, mockEng,
                       settingsMgr, touchpadMixerMgr);
@@ -2978,7 +2978,7 @@ TEST_F(InputProcessorTest, PitchBendRangeAffectsSentPitchBend) {
   settingsMgr.setMidiModeActive(true);
   settingsMgr.setPitchBendRange(2); // ±2 semitones
 
-  // Touchpad mappings are compiled from TouchpadMixerManager only
+  // Touchpad mappings are compiled from TouchpadLayoutManager only
   TouchpadMappingConfig cfg;
   cfg.layerId = 0;
   cfg.midiChannel = 1;
@@ -3030,7 +3030,7 @@ TEST_F(InputProcessorTest, MidiModeOff_KeyEventsProduceNoMidi) {
   mappings.addChild(m, -1, nullptr);
 
   MockMidiEngine mockEng;
-  TouchpadMixerManager touchpadMixerMgr;
+  TouchpadLayoutManager touchpadMixerMgr;
   VoiceManager voiceMgr(mockEng, settingsMgr);
   InputProcessor proc2(voiceMgr, presetMgr, deviceMgr, scaleLib, mockEng,
                        settingsMgr, touchpadMixerMgr);
@@ -3045,7 +3045,7 @@ TEST_F(InputProcessorTest, MidiModeOff_KeyEventsProduceNoMidi) {
 // --- Touchpad mixer layout: finger down sends CC ---
 TEST_F(InputProcessorTest, TouchpadMixerFingerDownSendsCC) {
   MockMidiEngine mockEng;
-  TouchpadMixerManager touchpadMixerMgr;
+  TouchpadLayoutManager touchpadMixerMgr;
   VoiceManager voiceMgr(mockEng, settingsMgr);
   InputProcessor proc(voiceMgr, presetMgr, deviceMgr, scaleLib, mockEng,
                       settingsMgr, touchpadMixerMgr);
@@ -3054,7 +3054,7 @@ TEST_F(InputProcessorTest, TouchpadMixerFingerDownSendsCC) {
   presetMgr.ensureStaticLayers();
   settingsMgr.setMidiModeActive(true);
 
-  TouchpadMixerConfig cfg;
+  TouchpadLayoutConfig cfg;
   cfg.type = TouchpadType::Mixer;
   cfg.quickPrecision = TouchpadMixerQuickPrecision::Quick;
   cfg.absRel = TouchpadMixerAbsRel::Absolute;
@@ -3089,7 +3089,7 @@ TEST_F(InputProcessorTest, TouchpadMixerFingerDownSendsCC) {
 // SlideToCC (Expression CC mode Slide): one-finger Y position maps to CC value
 TEST_F(InputProcessorTest, TouchpadSlideToCC_AbsoluteSendsCC) {
   MockMidiEngine mockEng;
-  TouchpadMixerManager touchpadMixerMgr;
+  TouchpadLayoutManager touchpadMixerMgr;
   VoiceManager voiceMgr(mockEng, settingsMgr);
   InputProcessor proc(voiceMgr, presetMgr, deviceMgr, scaleLib, mockEng,
                       settingsMgr, touchpadMixerMgr);
@@ -3138,7 +3138,7 @@ TEST_F(InputProcessorTest, TouchpadSlideToCC_AbsoluteSendsCC) {
 TEST_F(InputProcessorTest,
        TouchpadCCPosition_Instant_SendsReleaseOnFingerUp) {
   MockMidiEngine mockEng;
-  TouchpadMixerManager touchpadMixerMgr;
+  TouchpadLayoutManager touchpadMixerMgr;
   VoiceManager voiceMgr(mockEng, settingsMgr);
   InputProcessor proc(voiceMgr, presetMgr, deviceMgr, scaleLib, mockEng,
                       settingsMgr, touchpadMixerMgr);
@@ -3188,7 +3188,7 @@ TEST_F(InputProcessorTest,
 // releases do nothing.
 TEST_F(InputProcessorTest, TouchpadCCPosition_Latch_TogglesOnPresses) {
   MockMidiEngine mockEng;
-  TouchpadMixerManager touchpadMixerMgr;
+  TouchpadLayoutManager touchpadMixerMgr;
   VoiceManager voiceMgr(mockEng, settingsMgr);
   InputProcessor proc(voiceMgr, presetMgr, deviceMgr, scaleLib, mockEng,
                       settingsMgr, touchpadMixerMgr);
@@ -3243,7 +3243,7 @@ TEST_F(InputProcessorTest, TouchpadCCPosition_Latch_TogglesOnPresses) {
 // rest value immediately.
 TEST_F(InputProcessorTest, TouchpadSlideToCC_RestImmediateOnRelease) {
   MockMidiEngine mockEng;
-  TouchpadMixerManager touchpadMixerMgr;
+  TouchpadLayoutManager touchpadMixerMgr;
   VoiceManager voiceMgr(mockEng, settingsMgr);
   InputProcessor proc(voiceMgr, presetMgr, deviceMgr, scaleLib, mockEng,
                       settingsMgr, touchpadMixerMgr);
@@ -3298,7 +3298,7 @@ TEST_F(InputProcessorTest, TouchpadSlideToCC_RestImmediateOnRelease) {
 // SlideToCC XY pad: Both axis mode sends CC for X and Y using shared ranges.
 TEST_F(InputProcessorTest, TouchpadSlideToCC_XYPad_SharedRanges_SendsTwoCC) {
   MockMidiEngine mockEng;
-  TouchpadMixerManager touchpadMixerMgr;
+  TouchpadLayoutManager touchpadMixerMgr;
   VoiceManager voiceMgr(mockEng, settingsMgr);
   InputProcessor proc(voiceMgr, presetMgr, deviceMgr, scaleLib, mockEng,
                       settingsMgr, touchpadMixerMgr);
@@ -3357,7 +3357,7 @@ TEST_F(InputProcessorTest, TouchpadSlideToCC_XYPad_SharedRanges_SendsTwoCC) {
 // EncoderCC Absolute: swipe up (Y decreases) increases CC value.
 TEST_F(InputProcessorTest, TouchpadEncoderCC_AbsoluteMode_SendsCC) {
   MockMidiEngine mockEng;
-  TouchpadMixerManager touchpadMixerMgr;
+  TouchpadLayoutManager touchpadMixerMgr;
   VoiceManager voiceMgr(mockEng, settingsMgr);
   InputProcessor proc(voiceMgr, presetMgr, deviceMgr, scaleLib, mockEng,
                      settingsMgr, touchpadMixerMgr);
@@ -3404,7 +3404,7 @@ TEST_F(InputProcessorTest, TouchpadEncoderCC_AbsoluteMode_SendsCC) {
 // EncoderCC: single frame (anchor only) sends no rotation CC.
 TEST_F(InputProcessorTest, TouchpadEncoderCC_FirstFrameOnly_NoRotationSent) {
   MockMidiEngine mockEng;
-  TouchpadMixerManager touchpadMixerMgr;
+  TouchpadLayoutManager touchpadMixerMgr;
   VoiceManager voiceMgr(mockEng, settingsMgr);
   InputProcessor proc(voiceMgr, presetMgr, deviceMgr, scaleLib, mockEng,
                      settingsMgr, touchpadMixerMgr);
@@ -3444,7 +3444,7 @@ TEST_F(InputProcessorTest, TouchpadEncoderCC_FirstFrameOnly_NoRotationSent) {
 // EncoderCC: re-anchor on 2->1 finger; releasing second finger must not send spurious rotation CC.
 TEST_F(InputProcessorTest, TouchpadEncoderCC_ReAnchorOnTwoFingerRelease_NoSpuriousCC) {
   MockMidiEngine mockEng;
-  TouchpadMixerManager touchpadMixerMgr;
+  TouchpadLayoutManager touchpadMixerMgr;
   VoiceManager voiceMgr(mockEng, settingsMgr);
   InputProcessor proc(voiceMgr, presetMgr, deviceMgr, scaleLib, mockEng,
                      settingsMgr, touchpadMixerMgr);
@@ -3490,7 +3490,7 @@ TEST_F(InputProcessorTest, TouchpadEncoderCC_ReAnchorOnTwoFingerRelease_NoSpurio
 // EncoderCC: dead zone — small movement from anchor sends no rotation CC.
 TEST_F(InputProcessorTest, TouchpadEncoderCC_DeadZone_SmallMovementSendsNoCC) {
   MockMidiEngine mockEng;
-  TouchpadMixerManager touchpadMixerMgr;
+  TouchpadLayoutManager touchpadMixerMgr;
   VoiceManager voiceMgr(mockEng, settingsMgr);
   InputProcessor proc(voiceMgr, presetMgr, deviceMgr, scaleLib, mockEng,
                      settingsMgr, touchpadMixerMgr);
@@ -3537,7 +3537,7 @@ TEST_F(InputProcessorTest, TouchpadEncoderCC_DeadZone_SmallMovementSendsNoCC) {
 // EncoderCC push: uses encoderPushCCNumber (31), not rotation CC (20).
 TEST_F(InputProcessorTest, TouchpadEncoderCC_PushUsesEncoderPushCCNumber) {
   MockMidiEngine mockEng;
-  TouchpadMixerManager touchpadMixerMgr;
+  TouchpadLayoutManager touchpadMixerMgr;
   VoiceManager voiceMgr(mockEng, settingsMgr);
   InputProcessor proc(voiceMgr, presetMgr, deviceMgr, scaleLib, mockEng,
                      settingsMgr, touchpadMixerMgr);
@@ -3588,7 +3588,7 @@ TEST_F(InputProcessorTest, TouchpadEncoderCC_PushUsesEncoderPushCCNumber) {
 // EncoderCC push Momentary: two fingers down -> CC value; two fingers up -> CC 0.
 TEST_F(InputProcessorTest, TouchpadEncoderCC_PushMomentary_SendOnRelease) {
   MockMidiEngine mockEng;
-  TouchpadMixerManager touchpadMixerMgr;
+  TouchpadLayoutManager touchpadMixerMgr;
   VoiceManager voiceMgr(mockEng, settingsMgr);
   InputProcessor proc(voiceMgr, presetMgr, deviceMgr, scaleLib, mockEng,
                      settingsMgr, touchpadMixerMgr);
@@ -3635,7 +3635,7 @@ TEST_F(InputProcessorTest, TouchpadEncoderCC_PushMomentary_SendOnRelease) {
 // EncoderCC push Toggle: first two-finger tap -> 127, second two-finger tap -> 0.
 TEST_F(InputProcessorTest, TouchpadEncoderCC_PushToggle_TwoPushesFlipValue) {
   MockMidiEngine mockEng;
-  TouchpadMixerManager touchpadMixerMgr;
+  TouchpadLayoutManager touchpadMixerMgr;
   VoiceManager voiceMgr(mockEng, settingsMgr);
   InputProcessor proc(voiceMgr, presetMgr, deviceMgr, scaleLib, mockEng,
                      settingsMgr, touchpadMixerMgr);
@@ -3687,7 +3687,7 @@ TEST_F(InputProcessorTest, TouchpadEncoderCC_Sensitivity_HigherSensitivityFewerS
   uintptr_t deviceHandle = 0x1234;
   auto runWithSensitivity = [this, deviceHandle](float sensitivity) {
     MockMidiEngine mockEng;
-    TouchpadMixerManager touchpadMixerMgr;
+    TouchpadLayoutManager touchpadMixerMgr;
     VoiceManager voiceMgr(mockEng, settingsMgr);
     InputProcessor proc(voiceMgr, presetMgr, deviceMgr, scaleLib, mockEng,
                        settingsMgr, touchpadMixerMgr);
@@ -3731,7 +3731,7 @@ TEST_F(InputProcessorTest, TouchpadEncoderCC_AnchorBased_SameDistanceSameSteps) 
   uintptr_t deviceHandle = 0x1234;
   auto runScenario = [this, deviceHandle](bool twoFrames) {
     MockMidiEngine mockEng;
-    TouchpadMixerManager touchpadMixerMgr;
+    TouchpadLayoutManager touchpadMixerMgr;
     VoiceManager voiceMgr(mockEng, settingsMgr);
     InputProcessor proc(voiceMgr, presetMgr, deviceMgr, scaleLib, mockEng,
                        settingsMgr, touchpadMixerMgr);
@@ -3780,7 +3780,7 @@ TEST_F(InputProcessorTest, TouchpadEncoderCC_AnchorBased_SameDistanceSameSteps) 
 // EncoderCC: gesture end clears state; second swipe sends CC again.
 TEST_F(InputProcessorTest, TouchpadEncoderCC_GestureEndClearsState_SecondSwipeSendsAgain) {
   MockMidiEngine mockEng;
-  TouchpadMixerManager touchpadMixerMgr;
+  TouchpadLayoutManager touchpadMixerMgr;
   VoiceManager voiceMgr(mockEng, settingsMgr);
   InputProcessor proc(voiceMgr, presetMgr, deviceMgr, scaleLib, mockEng,
                      settingsMgr, touchpadMixerMgr);
@@ -3827,7 +3827,7 @@ TEST_F(InputProcessorTest, TouchpadEncoderCC_GestureEndClearsState_SecondSwipeSe
 // SlideToCC deadzone: values outside [inputMin,inputMax] do not emit CC.
 TEST_F(InputProcessorTest, TouchpadSlideToCC_InputMinMaxCreatesDeadzone) {
   MockMidiEngine mockEng;
-  TouchpadMixerManager touchpadMixerMgr;
+  TouchpadLayoutManager touchpadMixerMgr;
   VoiceManager voiceMgr(mockEng, settingsMgr);
   InputProcessor proc(voiceMgr, presetMgr, deviceMgr, scaleLib, mockEng,
                       settingsMgr, touchpadMixerMgr);
@@ -3878,7 +3878,7 @@ TEST_F(InputProcessorTest, TouchpadSlideToCC_InputMinMaxCreatesDeadzone) {
 // SlideToCC Relative: second finger down establishes anchor, movement changes CC by delta
 TEST_F(InputProcessorTest, TouchpadSlideToCC_RelativeSendsDeltaCC) {
   MockMidiEngine mockEng;
-  TouchpadMixerManager touchpadMixerMgr;
+  TouchpadLayoutManager touchpadMixerMgr;
   VoiceManager voiceMgr(mockEng, settingsMgr);
   InputProcessor proc(voiceMgr, presetMgr, deviceMgr, scaleLib, mockEng,
                       settingsMgr, touchpadMixerMgr);
@@ -3932,7 +3932,7 @@ TEST_F(InputProcessorTest, TouchpadSlideToCC_RelativeSendsDeltaCC) {
 }
 
 TEST_F(InputProcessorTest, HasTouchpadLayoutsReturnsTrueWhenLayoutsExist) {
-  TouchpadMixerConfig cfg;
+  TouchpadLayoutConfig cfg;
   cfg.type = TouchpadType::Mixer;
   touchpadMixerMgr.addLayout(cfg);
 
@@ -3945,7 +3945,7 @@ TEST_F(InputProcessorTest, HasTouchpadLayoutsReturnsTrueWhenLayoutsExist) {
 }
 
 TEST_F(InputProcessorTest, HasTouchpadLayoutsReturnsTrueWhenDrumPadOnly) {
-  TouchpadMixerConfig cfg;
+  TouchpadLayoutConfig cfg;
   cfg.type = TouchpadType::DrumPad;
   cfg.drumPadRows = 2;
   cfg.drumPadColumns = 4;
@@ -3956,7 +3956,7 @@ TEST_F(InputProcessorTest, HasTouchpadLayoutsReturnsTrueWhenDrumPadOnly) {
 }
 
 TEST_F(InputProcessorTest, HasTouchpadLayoutsReturnsTrueWhenHarmonicDrumPadOnly) {
-  TouchpadMixerConfig cfg;
+  TouchpadLayoutConfig cfg;
   cfg.type = TouchpadType::DrumPad;
   cfg.drumPadRows = 4;
   cfg.drumPadColumns = 8;
@@ -3970,7 +3970,7 @@ TEST_F(InputProcessorTest, HasTouchpadLayoutsReturnsTrueWhenHarmonicDrumPadOnly)
 // --- Touchpad drum pad: finger down sends Note On ---
 TEST_F(InputProcessorTest, TouchpadDrumPadFingerDownSendsNoteOn) {
   MockMidiEngine mockEng;
-  TouchpadMixerManager touchpadMixerMgr;
+  TouchpadLayoutManager touchpadMixerMgr;
   VoiceManager voiceMgr(mockEng, settingsMgr);
   InputProcessor proc(voiceMgr, presetMgr, deviceMgr, scaleLib, mockEng,
                       settingsMgr, touchpadMixerMgr);
@@ -3979,7 +3979,7 @@ TEST_F(InputProcessorTest, TouchpadDrumPadFingerDownSendsNoteOn) {
   presetMgr.ensureStaticLayers();
   settingsMgr.setMidiModeActive(true);
 
-  TouchpadMixerConfig cfg;
+  TouchpadLayoutConfig cfg;
   cfg.type = TouchpadType::DrumPad;
   cfg.layerId = 0;
   cfg.drumPadRows = 2;
@@ -4010,7 +4010,7 @@ TEST_F(InputProcessorTest, TouchpadDrumPadFingerDownSendsNoteOn) {
 
 TEST_F(InputProcessorTest, HarmonicDrumPadFingerDownSendsNoteOn) {
   MockMidiEngine mockEng;
-  TouchpadMixerManager touchpadMixerMgr;
+  TouchpadLayoutManager touchpadMixerMgr;
   VoiceManager voiceMgr(mockEng, settingsMgr);
   InputProcessor proc(voiceMgr, presetMgr, deviceMgr, scaleLib, mockEng,
                       settingsMgr, touchpadMixerMgr);
@@ -4019,7 +4019,7 @@ TEST_F(InputProcessorTest, HarmonicDrumPadFingerDownSendsNoteOn) {
   presetMgr.ensureStaticLayers();
   settingsMgr.setMidiModeActive(true);
 
-  TouchpadMixerConfig cfg;
+  TouchpadLayoutConfig cfg;
   cfg.type = TouchpadType::DrumPad;
   cfg.layerId = 0;
   cfg.drumPadRows = 2;
@@ -4052,7 +4052,7 @@ TEST_F(InputProcessorTest, HarmonicDrumPadFingerDownSendsNoteOn) {
 
 TEST_F(InputProcessorTest, ChordPadMomentaryPlaysChordAndStopsOnLift) {
   MockMidiEngine mockEng;
-  TouchpadMixerManager touchpadMixerMgr;
+  TouchpadLayoutManager touchpadMixerMgr;
   VoiceManager voiceMgr(mockEng, settingsMgr);
   InputProcessor proc(voiceMgr, presetMgr, deviceMgr, scaleLib, mockEng,
                       settingsMgr, touchpadMixerMgr);
@@ -4061,7 +4061,7 @@ TEST_F(InputProcessorTest, ChordPadMomentaryPlaysChordAndStopsOnLift) {
   presetMgr.ensureStaticLayers();
   settingsMgr.setMidiModeActive(true);
 
-  TouchpadMixerConfig cfg;
+  TouchpadLayoutConfig cfg;
   cfg.type = TouchpadType::ChordPad;
   cfg.layerId = 0;
   cfg.drumPadRows = 1;
@@ -4096,7 +4096,7 @@ TEST_F(InputProcessorTest, ChordPadMomentaryPlaysChordAndStopsOnLift) {
 
 TEST_F(InputProcessorTest, ChordPadLatchToggleKeepsChordAfterLift) {
   MockMidiEngine mockEng;
-  TouchpadMixerManager touchpadMixerMgr;
+  TouchpadLayoutManager touchpadMixerMgr;
   VoiceManager voiceMgr(mockEng, settingsMgr);
   InputProcessor proc(voiceMgr, presetMgr, deviceMgr, scaleLib, mockEng,
                       settingsMgr, touchpadMixerMgr);
@@ -4105,7 +4105,7 @@ TEST_F(InputProcessorTest, ChordPadLatchToggleKeepsChordAfterLift) {
   presetMgr.ensureStaticLayers();
   settingsMgr.setMidiModeActive(true);
 
-  TouchpadMixerConfig cfg;
+  TouchpadLayoutConfig cfg;
   cfg.type = TouchpadType::ChordPad;
   cfg.layerId = 0;
   cfg.drumPadRows = 1;
@@ -4141,7 +4141,7 @@ TEST_F(InputProcessorTest, ChordPadLatchToggleKeepsChordAfterLift) {
 
 TEST_F(InputProcessorTest, TouchpadDrumPadFingerUpSendsNoteOff) {
   MockMidiEngine mockEng;
-  TouchpadMixerManager touchpadMixerMgr;
+  TouchpadLayoutManager touchpadMixerMgr;
   VoiceManager voiceMgr(mockEng, settingsMgr);
   InputProcessor proc(voiceMgr, presetMgr, deviceMgr, scaleLib, mockEng,
                       settingsMgr, touchpadMixerMgr);
@@ -4150,7 +4150,7 @@ TEST_F(InputProcessorTest, TouchpadDrumPadFingerUpSendsNoteOff) {
   presetMgr.ensureStaticLayers();
   settingsMgr.setMidiModeActive(true);
 
-  TouchpadMixerConfig cfg;
+  TouchpadLayoutConfig cfg;
   cfg.type = TouchpadType::DrumPad;
   cfg.layerId = 0;
   cfg.drumPadRows = 2;
@@ -4180,7 +4180,7 @@ TEST_F(InputProcessorTest, TouchpadDrumPadFingerUpSendsNoteOff) {
 
 TEST_F(InputProcessorTest, TouchpadDrumPadGridMappingCorrectNote) {
   MockMidiEngine mockEng;
-  TouchpadMixerManager touchpadMixerMgr;
+  TouchpadLayoutManager touchpadMixerMgr;
   VoiceManager voiceMgr(mockEng, settingsMgr);
   InputProcessor proc(voiceMgr, presetMgr, deviceMgr, scaleLib, mockEng,
                       settingsMgr, touchpadMixerMgr);
@@ -4189,7 +4189,7 @@ TEST_F(InputProcessorTest, TouchpadDrumPadGridMappingCorrectNote) {
   presetMgr.ensureStaticLayers();
   settingsMgr.setMidiModeActive(true);
 
-  TouchpadMixerConfig cfg;
+  TouchpadLayoutConfig cfg;
   cfg.type = TouchpadType::DrumPad;
   cfg.layerId = 0;
   cfg.drumPadRows = 2;
@@ -4218,7 +4218,7 @@ TEST_F(InputProcessorTest, TouchpadDrumPadGridMappingCorrectNote) {
 // --- Drum pad: note holds while finger stays down (no spurious note off) ---
 TEST_F(InputProcessorTest, TouchpadDrumPadNoteHoldsWhileFingerDown) {
   MockMidiEngine mockEng;
-  TouchpadMixerManager touchpadMixerMgr;
+  TouchpadLayoutManager touchpadMixerMgr;
   VoiceManager voiceMgr(mockEng, settingsMgr);
   InputProcessor proc(voiceMgr, presetMgr, deviceMgr, scaleLib, mockEng,
                       settingsMgr, touchpadMixerMgr);
@@ -4227,7 +4227,7 @@ TEST_F(InputProcessorTest, TouchpadDrumPadNoteHoldsWhileFingerDown) {
   presetMgr.ensureStaticLayers();
   settingsMgr.setMidiModeActive(true);
 
-  TouchpadMixerConfig cfg;
+  TouchpadLayoutConfig cfg;
   cfg.type = TouchpadType::DrumPad;
   cfg.layerId = 0;
   cfg.drumPadRows = 2;
@@ -4269,7 +4269,7 @@ TEST_F(InputProcessorTest, TouchpadDrumPadNoteHoldsWhileFingerDown) {
 // --- Drum pad: note off when finger moves outside pad area ---
 TEST_F(InputProcessorTest, TouchpadDrumPadNoteOffWhenFingerMovesOutside) {
   MockMidiEngine mockEng;
-  TouchpadMixerManager touchpadMixerMgr;
+  TouchpadLayoutManager touchpadMixerMgr;
   VoiceManager voiceMgr(mockEng, settingsMgr);
   InputProcessor proc(voiceMgr, presetMgr, deviceMgr, scaleLib, mockEng,
                       settingsMgr, touchpadMixerMgr);
@@ -4278,7 +4278,7 @@ TEST_F(InputProcessorTest, TouchpadDrumPadNoteOffWhenFingerMovesOutside) {
   presetMgr.ensureStaticLayers();
   settingsMgr.setMidiModeActive(true);
 
-  TouchpadMixerConfig cfg;
+  TouchpadLayoutConfig cfg;
   cfg.type = TouchpadType::DrumPad;
   cfg.layerId = 0;
   cfg.drumPadRows = 2;
@@ -4314,7 +4314,7 @@ TEST_F(InputProcessorTest, TouchpadDrumPadNoteOffWhenFingerMovesOutside) {
 // --- Drum pad: different pads send different notes ---
 TEST_F(InputProcessorTest, TouchpadDrumPadDifferentPadsDifferentNotes) {
   MockMidiEngine mockEng;
-  TouchpadMixerManager touchpadMixerMgr;
+  TouchpadLayoutManager touchpadMixerMgr;
   VoiceManager voiceMgr(mockEng, settingsMgr);
   InputProcessor proc(voiceMgr, presetMgr, deviceMgr, scaleLib, mockEng,
                       settingsMgr, touchpadMixerMgr);
@@ -4323,7 +4323,7 @@ TEST_F(InputProcessorTest, TouchpadDrumPadDifferentPadsDifferentNotes) {
   presetMgr.ensureStaticLayers();
   settingsMgr.setMidiModeActive(true);
 
-  TouchpadMixerConfig cfg;
+  TouchpadLayoutConfig cfg;
   cfg.type = TouchpadType::DrumPad;
   cfg.layerId = 0;
   cfg.drumPadRows = 2;
@@ -4363,7 +4363,7 @@ TEST_F(InputProcessorTest, TouchpadDrumPadDifferentPadsDifferentNotes) {
 // --- Drum pad: velocity uses baseVelocity when velocityRandom=0 ---
 TEST_F(InputProcessorTest, TouchpadDrumPadVelocityUsesBaseVelocity) {
   MockMidiEngine mockEng;
-  TouchpadMixerManager touchpadMixerMgr;
+  TouchpadLayoutManager touchpadMixerMgr;
   VoiceManager voiceMgr(mockEng, settingsMgr);
   InputProcessor proc(voiceMgr, presetMgr, deviceMgr, scaleLib, mockEng,
                       settingsMgr, touchpadMixerMgr);
@@ -4372,7 +4372,7 @@ TEST_F(InputProcessorTest, TouchpadDrumPadVelocityUsesBaseVelocity) {
   presetMgr.ensureStaticLayers();
   settingsMgr.setMidiModeActive(true);
 
-  TouchpadMixerConfig cfg;
+  TouchpadLayoutConfig cfg;
   cfg.type = TouchpadType::DrumPad;
   cfg.layerId = 0;
   cfg.drumPadRows = 2;
@@ -4398,7 +4398,7 @@ TEST_F(InputProcessorTest, TouchpadDrumPadVelocityUsesBaseVelocity) {
 // --- Drum pad: velocity random produces variation ---
 TEST_F(InputProcessorTest, TouchpadDrumPadVelocityRandomProducesVariation) {
   MockMidiEngine mockEng;
-  TouchpadMixerManager touchpadMixerMgr;
+  TouchpadLayoutManager touchpadMixerMgr;
   VoiceManager voiceMgr(mockEng, settingsMgr);
   InputProcessor proc(voiceMgr, presetMgr, deviceMgr, scaleLib, mockEng,
                       settingsMgr, touchpadMixerMgr);
@@ -4407,7 +4407,7 @@ TEST_F(InputProcessorTest, TouchpadDrumPadVelocityRandomProducesVariation) {
   presetMgr.ensureStaticLayers();
   settingsMgr.setMidiModeActive(true);
 
-  TouchpadMixerConfig cfg;
+  TouchpadLayoutConfig cfg;
   cfg.type = TouchpadType::DrumPad;
   cfg.layerId = 0;
   cfg.drumPadRows = 2;
@@ -4438,7 +4438,7 @@ TEST_F(InputProcessorTest, TouchpadDrumPadVelocityRandomProducesVariation) {
 // ---
 TEST_F(InputProcessorTest, TouchpadDrumPadFingerMovesToDifferentPad) {
   MockMidiEngine mockEng;
-  TouchpadMixerManager touchpadMixerMgr;
+  TouchpadLayoutManager touchpadMixerMgr;
   VoiceManager voiceMgr(mockEng, settingsMgr);
   InputProcessor proc(voiceMgr, presetMgr, deviceMgr, scaleLib, mockEng,
                       settingsMgr, touchpadMixerMgr);
@@ -4447,7 +4447,7 @@ TEST_F(InputProcessorTest, TouchpadDrumPadFingerMovesToDifferentPad) {
   presetMgr.ensureStaticLayers();
   settingsMgr.setMidiModeActive(true);
 
-  TouchpadMixerConfig cfg;
+  TouchpadLayoutConfig cfg;
   cfg.type = TouchpadType::DrumPad;
   cfg.layerId = 0;
   cfg.drumPadRows = 2;
@@ -4490,7 +4490,7 @@ TEST_F(InputProcessorTest, TouchpadDrumPadFingerMovesToDifferentPad) {
 // --- Drum pad takes priority over Finger1Down Note mapping on first touch ---
 TEST_F(InputProcessorTest, TouchpadDrumPadFirstTouchUsesPositionNotFixedNote) {
   MockMidiEngine mockEng;
-  TouchpadMixerManager touchpadMixerMgr;
+  TouchpadLayoutManager touchpadMixerMgr;
   VoiceManager voiceMgr(mockEng, settingsMgr);
   InputProcessor proc(voiceMgr, presetMgr, deviceMgr, scaleLib, mockEng,
                       settingsMgr, touchpadMixerMgr);
@@ -4500,7 +4500,7 @@ TEST_F(InputProcessorTest, TouchpadDrumPadFirstTouchUsesPositionNotFixedNote) {
   settingsMgr.setMidiModeActive(true);
 
   // Add Drum Pad layout (position-based notes)
-  TouchpadMixerConfig cfg;
+  TouchpadLayoutConfig cfg;
   cfg.type = TouchpadType::DrumPad;
   cfg.layerId = 0;
   cfg.drumPadRows = 2;
@@ -4540,7 +4540,7 @@ TEST_F(InputProcessorTest, TouchpadDrumPadFirstTouchUsesPositionNotFixedNote) {
 // --- Drum pad: Finger2Down Note mapping also skipped when drum pad active ---
 TEST_F(InputProcessorTest, TouchpadDrumPadFinger2DownMappingSkipped) {
   MockMidiEngine mockEng;
-  TouchpadMixerManager touchpadMixerMgr;
+  TouchpadLayoutManager touchpadMixerMgr;
   VoiceManager voiceMgr(mockEng, settingsMgr);
   InputProcessor proc(voiceMgr, presetMgr, deviceMgr, scaleLib, mockEng,
                       settingsMgr, touchpadMixerMgr);
@@ -4549,7 +4549,7 @@ TEST_F(InputProcessorTest, TouchpadDrumPadFinger2DownMappingSkipped) {
   presetMgr.ensureStaticLayers();
   settingsMgr.setMidiModeActive(true);
 
-  TouchpadMixerConfig cfg;
+  TouchpadLayoutConfig cfg;
   cfg.type = TouchpadType::DrumPad;
   cfg.layerId = 0;
   cfg.drumPadRows = 2;
@@ -4593,7 +4593,7 @@ TEST_F(InputProcessorTest, TouchpadDrumPadFinger2DownMappingSkipped) {
 // --- Drum pad: multiple simultaneous contacts, independent release ---
 TEST_F(InputProcessorTest, TouchpadDrumPadMultipleContactsIndependentRelease) {
   MockMidiEngine mockEng;
-  TouchpadMixerManager touchpadMixerMgr;
+  TouchpadLayoutManager touchpadMixerMgr;
   VoiceManager voiceMgr(mockEng, settingsMgr);
   InputProcessor proc(voiceMgr, presetMgr, deviceMgr, scaleLib, mockEng,
                       settingsMgr, touchpadMixerMgr);
@@ -4602,7 +4602,7 @@ TEST_F(InputProcessorTest, TouchpadDrumPadMultipleContactsIndependentRelease) {
   presetMgr.ensureStaticLayers();
   settingsMgr.setMidiModeActive(true);
 
-  TouchpadMixerConfig cfg;
+  TouchpadLayoutConfig cfg;
   cfg.type = TouchpadType::DrumPad;
   cfg.layerId = 0;
   cfg.drumPadRows = 2;
@@ -4640,7 +4640,7 @@ TEST_F(InputProcessorTest, TouchpadDrumPadMultipleContactsIndependentRelease) {
 // --- Drum pad: layout on inactive layer produces no notes ---
 TEST_F(InputProcessorTest, TouchpadDrumPadLayerFiltering) {
   MockMidiEngine mockEng;
-  TouchpadMixerManager touchpadMixerMgr;
+  TouchpadLayoutManager touchpadMixerMgr;
   VoiceManager voiceMgr(mockEng, settingsMgr);
   InputProcessor proc(voiceMgr, presetMgr, deviceMgr, scaleLib, mockEng,
                       settingsMgr, touchpadMixerMgr);
@@ -4649,7 +4649,7 @@ TEST_F(InputProcessorTest, TouchpadDrumPadLayerFiltering) {
   presetMgr.ensureStaticLayers();
   settingsMgr.setMidiModeActive(true);
 
-  TouchpadMixerConfig cfg;
+  TouchpadLayoutConfig cfg;
   cfg.type = TouchpadType::DrumPad;
   cfg.layerId = 1; // On layer 1
   cfg.drumPadRows = 2;
@@ -4682,7 +4682,7 @@ TEST_F(InputProcessorTest, TouchpadDrumPadLayerFiltering) {
 // ---
 TEST_F(InputProcessorTest, TouchpadDrumPadDeadZones) {
   MockMidiEngine mockEng;
-  TouchpadMixerManager touchpadMixerMgr;
+  TouchpadLayoutManager touchpadMixerMgr;
   VoiceManager voiceMgr(mockEng, settingsMgr);
   InputProcessor proc(voiceMgr, presetMgr, deviceMgr, scaleLib, mockEng,
                       settingsMgr, touchpadMixerMgr);
@@ -4691,7 +4691,7 @@ TEST_F(InputProcessorTest, TouchpadDrumPadDeadZones) {
   presetMgr.ensureStaticLayers();
   settingsMgr.setMidiModeActive(true);
 
-  TouchpadMixerConfig cfg;
+  TouchpadLayoutConfig cfg;
   cfg.type = TouchpadType::DrumPad;
   cfg.layerId = 0;
   cfg.drumPadRows = 2;
@@ -4731,7 +4731,7 @@ TEST_F(InputProcessorTest, TouchpadDrumPadDeadZones) {
 // --- Drum pad: boundary positions map to correct edge pads ---
 TEST_F(InputProcessorTest, TouchpadDrumPadBoundaryMapping) {
   MockMidiEngine mockEng;
-  TouchpadMixerManager touchpadMixerMgr;
+  TouchpadLayoutManager touchpadMixerMgr;
   VoiceManager voiceMgr(mockEng, settingsMgr);
   InputProcessor proc(voiceMgr, presetMgr, deviceMgr, scaleLib, mockEng,
                       settingsMgr, touchpadMixerMgr);
@@ -4740,7 +4740,7 @@ TEST_F(InputProcessorTest, TouchpadDrumPadBoundaryMapping) {
   presetMgr.ensureStaticLayers();
   settingsMgr.setMidiModeActive(true);
 
-  TouchpadMixerConfig cfg;
+  TouchpadLayoutConfig cfg;
   cfg.type = TouchpadType::DrumPad;
   cfg.layerId = 0;
   cfg.drumPadRows = 2;
@@ -4772,7 +4772,7 @@ TEST_F(InputProcessorTest, TouchpadDrumPadBoundaryMapping) {
 // --- Drum pad: velocity clamped to 1-127 ---
 TEST_F(InputProcessorTest, TouchpadDrumPadVelocityClamped) {
   MockMidiEngine mockEng;
-  TouchpadMixerManager touchpadMixerMgr;
+  TouchpadLayoutManager touchpadMixerMgr;
   VoiceManager voiceMgr(mockEng, settingsMgr);
   InputProcessor proc(voiceMgr, presetMgr, deviceMgr, scaleLib, mockEng,
                       settingsMgr, touchpadMixerMgr);
@@ -4781,7 +4781,7 @@ TEST_F(InputProcessorTest, TouchpadDrumPadVelocityClamped) {
   presetMgr.ensureStaticLayers();
   settingsMgr.setMidiModeActive(true);
 
-  TouchpadMixerConfig cfg;
+  TouchpadLayoutConfig cfg;
   cfg.type = TouchpadType::DrumPad;
   cfg.layerId = 0;
   cfg.drumPadRows = 2;
@@ -4829,7 +4829,7 @@ TEST_F(InputProcessorTest, TouchpadDrumPadVelocityClamped) {
 // --- Drum pad + Finger1Up mapping: Finger1Up still fires (different event) ---
 TEST_F(InputProcessorTest, TouchpadDrumPadFinger1UpMappingCoexists) {
   MockMidiEngine mockEng;
-  TouchpadMixerManager touchpadMixerMgr;
+  TouchpadLayoutManager touchpadMixerMgr;
   VoiceManager voiceMgr(mockEng, settingsMgr);
   InputProcessor proc(voiceMgr, presetMgr, deviceMgr, scaleLib, mockEng,
                       settingsMgr, touchpadMixerMgr);
@@ -4838,7 +4838,7 @@ TEST_F(InputProcessorTest, TouchpadDrumPadFinger1UpMappingCoexists) {
   presetMgr.ensureStaticLayers();
   settingsMgr.setMidiModeActive(true);
 
-  TouchpadMixerConfig cfg;
+  TouchpadLayoutConfig cfg;
   cfg.type = TouchpadType::DrumPad;
   cfg.layerId = 0;
   cfg.drumPadRows = 2;
@@ -4879,7 +4879,7 @@ TEST_F(InputProcessorTest, TouchpadDrumPadFinger1UpMappingCoexists) {
 // --- Region-based dispatch: touch only active inside region ---
 TEST_F(InputProcessorTest, TouchpadMixerRegionOnlyActiveInRegion) {
   MockMidiEngine mockEng;
-  TouchpadMixerManager touchpadMixerMgr;
+  TouchpadLayoutManager touchpadMixerMgr;
   VoiceManager voiceMgr(mockEng, settingsMgr);
   InputProcessor proc(voiceMgr, presetMgr, deviceMgr, scaleLib, mockEng,
                       settingsMgr, touchpadMixerMgr);
@@ -4888,7 +4888,7 @@ TEST_F(InputProcessorTest, TouchpadMixerRegionOnlyActiveInRegion) {
   presetMgr.ensureStaticLayers();
   settingsMgr.setMidiModeActive(true);
 
-  TouchpadMixerConfig cfg;
+  TouchpadLayoutConfig cfg;
   cfg.type = TouchpadType::Mixer;
   cfg.quickPrecision = TouchpadMixerQuickPrecision::Quick;
   cfg.absRel = TouchpadMixerAbsRel::Absolute;
@@ -4924,7 +4924,7 @@ TEST_F(InputProcessorTest, TouchpadMixerRegionOnlyActiveInRegion) {
 
 TEST_F(InputProcessorTest, TouchpadDrumPadRegionOnlyActiveInRegion) {
   MockMidiEngine mockEng;
-  TouchpadMixerManager touchpadMixerMgr;
+  TouchpadLayoutManager touchpadMixerMgr;
   VoiceManager voiceMgr(mockEng, settingsMgr);
   InputProcessor proc(voiceMgr, presetMgr, deviceMgr, scaleLib, mockEng,
                       settingsMgr, touchpadMixerMgr);
@@ -4934,7 +4934,7 @@ TEST_F(InputProcessorTest, TouchpadDrumPadRegionOnlyActiveInRegion) {
   presetMgr.getMappingsListForLayer(0).removeAllChildren(nullptr);
   settingsMgr.setMidiModeActive(true);
 
-  TouchpadMixerConfig cfg;
+  TouchpadLayoutConfig cfg;
   cfg.type = TouchpadType::DrumPad;
   cfg.layerId = 0;
   cfg.drumPadRows = 2;
@@ -4965,7 +4965,7 @@ TEST_F(InputProcessorTest, TouchpadDrumPadRegionOnlyActiveInRegion) {
 // --- Z-index: when regions overlap, higher z-index wins ---
 TEST_F(InputProcessorTest, TouchpadZIndexOverlapHigherWins) {
   MockMidiEngine mockEng;
-  TouchpadMixerManager touchpadMixerMgr;
+  TouchpadLayoutManager touchpadMixerMgr;
   VoiceManager voiceMgr(mockEng, settingsMgr);
   InputProcessor proc(voiceMgr, presetMgr, deviceMgr, scaleLib, mockEng,
                       settingsMgr, touchpadMixerMgr);
@@ -4974,7 +4974,7 @@ TEST_F(InputProcessorTest, TouchpadZIndexOverlapHigherWins) {
   presetMgr.ensureStaticLayers();
   settingsMgr.setMidiModeActive(true);
 
-  TouchpadMixerConfig mixerCfg;
+  TouchpadLayoutConfig mixerCfg;
   mixerCfg.type = TouchpadType::Mixer;
   mixerCfg.quickPrecision = TouchpadMixerQuickPrecision::Quick;
   mixerCfg.absRel = TouchpadMixerAbsRel::Absolute;
@@ -4985,7 +4985,7 @@ TEST_F(InputProcessorTest, TouchpadZIndexOverlapHigherWins) {
   mixerCfg.zIndex = 0;
   touchpadMixerMgr.addLayout(mixerCfg);
 
-  TouchpadMixerConfig drumCfg;
+  TouchpadLayoutConfig drumCfg;
   drumCfg.type = TouchpadType::DrumPad;
   drumCfg.layerId = 0;
   drumCfg.drumPadRows = 2;
@@ -5013,7 +5013,7 @@ TEST_F(InputProcessorTest, TouchpadZIndexOverlapHigherWins) {
 // local) ---
 TEST_F(InputProcessorTest, TouchpadMixerSubRegionCoordinateRemapping) {
   MockMidiEngine mockEng;
-  TouchpadMixerManager touchpadMixerMgr;
+  TouchpadLayoutManager touchpadMixerMgr;
   VoiceManager voiceMgr(mockEng, settingsMgr);
   InputProcessor proc(voiceMgr, presetMgr, deviceMgr, scaleLib, mockEng,
                       settingsMgr, touchpadMixerMgr);
@@ -5022,7 +5022,7 @@ TEST_F(InputProcessorTest, TouchpadMixerSubRegionCoordinateRemapping) {
   presetMgr.ensureStaticLayers();
   settingsMgr.setMidiModeActive(true);
 
-  TouchpadMixerConfig cfg;
+  TouchpadLayoutConfig cfg;
   cfg.type = TouchpadType::Mixer;
   cfg.quickPrecision = TouchpadMixerQuickPrecision::Quick;
   cfg.absRel = TouchpadMixerAbsRel::Absolute;
@@ -5050,7 +5050,7 @@ TEST_F(InputProcessorTest, TouchpadMixerSubRegionCoordinateRemapping) {
 
 TEST_F(InputProcessorTest, TouchpadDrumPadSubRegionCoordinateRemapping) {
   MockMidiEngine mockEng;
-  TouchpadMixerManager touchpadMixerMgr;
+  TouchpadLayoutManager touchpadMixerMgr;
   VoiceManager voiceMgr(mockEng, settingsMgr);
   InputProcessor proc(voiceMgr, presetMgr, deviceMgr, scaleLib, mockEng,
                       settingsMgr, touchpadMixerMgr);
@@ -5059,7 +5059,7 @@ TEST_F(InputProcessorTest, TouchpadDrumPadSubRegionCoordinateRemapping) {
   presetMgr.ensureStaticLayers();
   settingsMgr.setMidiModeActive(true);
 
-  TouchpadMixerConfig cfg;
+  TouchpadLayoutConfig cfg;
   cfg.type = TouchpadType::DrumPad;
   cfg.layerId = 0;
   cfg.drumPadRows = 2;
@@ -5088,7 +5088,7 @@ TEST_F(InputProcessorTest, TouchpadDrumPadSubRegionCoordinateRemapping) {
 // --- Per-layout finger counting: mixer counts only fingers in its region ---
 TEST_F(InputProcessorTest, PerLayoutMixerF1MixerF2Drum_QuickMode) {
   MockMidiEngine mockEng;
-  TouchpadMixerManager touchpadMixerMgr;
+  TouchpadLayoutManager touchpadMixerMgr;
   VoiceManager voiceMgr(mockEng, settingsMgr);
   InputProcessor proc(voiceMgr, presetMgr, deviceMgr, scaleLib, mockEng,
                       settingsMgr, touchpadMixerMgr);
@@ -5097,7 +5097,7 @@ TEST_F(InputProcessorTest, PerLayoutMixerF1MixerF2Drum_QuickMode) {
   presetMgr.ensureStaticLayers();
   settingsMgr.setMidiModeActive(true);
 
-  TouchpadMixerConfig mixerCfg;
+  TouchpadLayoutConfig mixerCfg;
   mixerCfg.type = TouchpadType::Mixer;
   mixerCfg.quickPrecision = TouchpadMixerQuickPrecision::Quick;
   mixerCfg.ccStart = 50;
@@ -5109,7 +5109,7 @@ TEST_F(InputProcessorTest, PerLayoutMixerF1MixerF2Drum_QuickMode) {
   mixerCfg.region.bottom = 1.0f;
   touchpadMixerMgr.addLayout(mixerCfg);
 
-  TouchpadMixerConfig drumCfg;
+  TouchpadLayoutConfig drumCfg;
   drumCfg.type = TouchpadType::DrumPad;
   drumCfg.layerId = 0;
   drumCfg.drumPadRows = 2;
@@ -5141,7 +5141,7 @@ TEST_F(InputProcessorTest, PerLayoutMixerF1MixerF2Drum_QuickMode) {
 // ---
 TEST_F(InputProcessorTest, RegionLockMixerSwipeToDrum_GhostAtEdge) {
   MockMidiEngine mockEng;
-  TouchpadMixerManager touchpadMixerMgr;
+  TouchpadLayoutManager touchpadMixerMgr;
   VoiceManager voiceMgr(mockEng, settingsMgr);
   InputProcessor proc(voiceMgr, presetMgr, deviceMgr, scaleLib, mockEng,
                       settingsMgr, touchpadMixerMgr);
@@ -5150,7 +5150,7 @@ TEST_F(InputProcessorTest, RegionLockMixerSwipeToDrum_GhostAtEdge) {
   presetMgr.ensureStaticLayers();
   settingsMgr.setMidiModeActive(true);
 
-  TouchpadMixerConfig mixerCfg;
+  TouchpadLayoutConfig mixerCfg;
   mixerCfg.type = TouchpadType::Mixer;
   mixerCfg.quickPrecision = TouchpadMixerQuickPrecision::Quick;
   mixerCfg.ccStart = 50;
@@ -5163,7 +5163,7 @@ TEST_F(InputProcessorTest, RegionLockMixerSwipeToDrum_GhostAtEdge) {
   mixerCfg.regionLock = true;
   touchpadMixerMgr.addLayout(mixerCfg);
 
-  TouchpadMixerConfig drumCfg;
+  TouchpadLayoutConfig drumCfg;
   drumCfg.type = TouchpadType::DrumPad;
   drumCfg.layerId = 0;
   drumCfg.drumPadRows = 2;
@@ -5205,7 +5205,7 @@ TEST_F(InputProcessorTest, RegionLockMixerSwipeToDrum_GhostAtEdge) {
 TEST_F(InputProcessorTest,
        TouchpadMixerMuteAbsoluteMode_FaderValueMatchesFingerPosition) {
   MockMidiEngine mockEng;
-  TouchpadMixerManager touchpadMixerMgr;
+  TouchpadLayoutManager touchpadMixerMgr;
   VoiceManager voiceMgr(mockEng, settingsMgr);
   InputProcessor proc(voiceMgr, presetMgr, deviceMgr, scaleLib, mockEng,
                       settingsMgr, touchpadMixerMgr);
@@ -5214,7 +5214,7 @@ TEST_F(InputProcessorTest,
   presetMgr.ensureStaticLayers();
   settingsMgr.setMidiModeActive(true);
 
-  TouchpadMixerConfig cfg;
+  TouchpadLayoutConfig cfg;
   cfg.type = TouchpadType::Mixer;
   cfg.quickPrecision = TouchpadMixerQuickPrecision::Quick;
   cfg.absRel = TouchpadMixerAbsRel::Absolute;
@@ -5258,7 +5258,7 @@ TEST_F(InputProcessorTest,
 // ---
 TEST_F(InputProcessorTest, TouchpadMixerPrecisionRelative_AnchorOnFinger2Down) {
   MockMidiEngine mockEng;
-  TouchpadMixerManager touchpadMixerMgr;
+  TouchpadLayoutManager touchpadMixerMgr;
   VoiceManager voiceMgr(mockEng, settingsMgr);
   InputProcessor proc(voiceMgr, presetMgr, deviceMgr, scaleLib, mockEng,
                       settingsMgr, touchpadMixerMgr);
@@ -5267,7 +5267,7 @@ TEST_F(InputProcessorTest, TouchpadMixerPrecisionRelative_AnchorOnFinger2Down) {
   presetMgr.ensureStaticLayers();
   settingsMgr.setMidiModeActive(true);
 
-  TouchpadMixerConfig cfg;
+  TouchpadLayoutConfig cfg;
   cfg.type = TouchpadType::Mixer;
   cfg.quickPrecision = TouchpadMixerQuickPrecision::Precision;
   cfg.absRel = TouchpadMixerAbsRel::Relative;
@@ -5316,7 +5316,7 @@ TEST_F(InputProcessorTest, TouchpadMixerPrecisionRelative_AnchorOnFinger2Down) {
 TEST_F(InputProcessorTest,
        TouchpadMixerPrecisionRelativeFree_SwitchFaderAppliesThenEntryAnchor) {
   MockMidiEngine mockEng;
-  TouchpadMixerManager touchpadMixerMgr;
+  TouchpadLayoutManager touchpadMixerMgr;
   VoiceManager voiceMgr(mockEng, settingsMgr);
   InputProcessor proc(voiceMgr, presetMgr, deviceMgr, scaleLib, mockEng,
                       settingsMgr, touchpadMixerMgr);
@@ -5325,7 +5325,7 @@ TEST_F(InputProcessorTest,
   presetMgr.ensureStaticLayers();
   settingsMgr.setMidiModeActive(true);
 
-  TouchpadMixerConfig cfg;
+  TouchpadLayoutConfig cfg;
   cfg.type = TouchpadType::Mixer;
   cfg.quickPrecision = TouchpadMixerQuickPrecision::Precision;
   cfg.absRel = TouchpadMixerAbsRel::Relative;
@@ -5384,7 +5384,7 @@ TEST_F(InputProcessorTest,
 // --- Precision + Relative: finger2-down must not emit CC; first CC only after movement ---
 TEST_F(InputProcessorTest, TouchpadMixerPrecisionRelative_Finger2DownSendsNoCC) {
   MockMidiEngine mockEng;
-  TouchpadMixerManager touchpadMixerMgr;
+  TouchpadLayoutManager touchpadMixerMgr;
   VoiceManager voiceMgr(mockEng, settingsMgr);
   InputProcessor proc(voiceMgr, presetMgr, deviceMgr, scaleLib, mockEng,
                       settingsMgr, touchpadMixerMgr);
@@ -5393,7 +5393,7 @@ TEST_F(InputProcessorTest, TouchpadMixerPrecisionRelative_Finger2DownSendsNoCC) 
   presetMgr.ensureStaticLayers();
   settingsMgr.setMidiModeActive(true);
 
-  TouchpadMixerConfig cfg;
+  TouchpadLayoutConfig cfg;
   cfg.type = TouchpadType::Mixer;
   cfg.quickPrecision = TouchpadMixerQuickPrecision::Precision;
   cfg.absRel = TouchpadMixerAbsRel::Relative;
@@ -5441,9 +5441,9 @@ TEST_F(InputProcessorTest, TouchpadMixerPrecisionRelative_Finger2DownSendsNoCC) 
 // ============================================================================
 
 // Helper: Create a mixer layout with specified group ID
-static TouchpadMixerConfig makeMixerLayout(int groupId, float left, float top,
+static TouchpadLayoutConfig makeMixerLayout(int groupId, float left, float top,
                                            float right, float bottom) {
-  TouchpadMixerConfig cfg;
+  TouchpadLayoutConfig cfg;
   cfg.type = TouchpadType::Mixer;
   cfg.layoutGroupId = groupId;
   cfg.numFaders = 4;
@@ -5459,14 +5459,14 @@ static TouchpadMixerConfig makeMixerLayout(int groupId, float left, float top,
 // Test: Layouts with no group (layoutGroupId == 0) are visible when no solo group is active
 TEST_F(InputProcessorTest, TouchpadLayoutNoGroupVisibleWhenNoSolo) {
   MockMidiEngine mockEng;
-  TouchpadMixerManager touchpadMixerMgr;
+  TouchpadLayoutManager touchpadMixerMgr;
   VoiceManager voiceMgr(mockEng, settingsMgr);
   InputProcessor proc(voiceMgr, presetMgr, deviceMgr, scaleLib, mockEng,
                       settingsMgr, touchpadMixerMgr);
   proc.initialize();
 
   // Create a layout with no group (layoutGroupId == 0)
-  TouchpadMixerConfig layoutNoGroup = makeMixerLayout(0, 0.0f, 0.0f, 0.5f, 1.0f);
+  TouchpadLayoutConfig layoutNoGroup = makeMixerLayout(0, 0.0f, 0.0f, 0.5f, 1.0f);
   layoutNoGroup.name = "No Group Layout";
   touchpadMixerMgr.addLayout(layoutNoGroup);
 
@@ -5475,7 +5475,7 @@ TEST_F(InputProcessorTest, TouchpadLayoutNoGroupVisibleWhenNoSolo) {
   group.id = 1;
   group.name = "Group 1";
   touchpadMixerMgr.addGroup(group);
-  TouchpadMixerConfig layoutInGroup = makeMixerLayout(1, 0.5f, 0.0f, 1.0f, 1.0f);
+  TouchpadLayoutConfig layoutInGroup = makeMixerLayout(1, 0.5f, 0.0f, 1.0f, 1.0f);
   layoutInGroup.name = "Group 1 Layout";
   touchpadMixerMgr.addLayout(layoutInGroup);
 
@@ -5505,14 +5505,14 @@ TEST_F(InputProcessorTest, TouchpadLayoutNoGroupVisibleWhenNoSolo) {
 // Test: Layouts with no group are hidden when a solo group is active
 TEST_F(InputProcessorTest, TouchpadLayoutNoGroupHiddenWhenSoloActive) {
   MockMidiEngine mockEng;
-  TouchpadMixerManager touchpadMixerMgr;
+  TouchpadLayoutManager touchpadMixerMgr;
   VoiceManager voiceMgr(mockEng, settingsMgr);
   InputProcessor proc(voiceMgr, presetMgr, deviceMgr, scaleLib, mockEng,
                       settingsMgr, touchpadMixerMgr);
   proc.initialize();
 
   // Create a layout with no group
-  TouchpadMixerConfig layoutNoGroup = makeMixerLayout(0, 0.0f, 0.0f, 0.5f, 1.0f);
+  TouchpadLayoutConfig layoutNoGroup = makeMixerLayout(0, 0.0f, 0.0f, 0.5f, 1.0f);
   layoutNoGroup.name = "No Group Layout";
   touchpadMixerMgr.addLayout(layoutNoGroup);
 
@@ -5521,7 +5521,7 @@ TEST_F(InputProcessorTest, TouchpadLayoutNoGroupHiddenWhenSoloActive) {
   group.id = 1;
   group.name = "Group 1";
   touchpadMixerMgr.addGroup(group);
-  TouchpadMixerConfig layoutInGroup = makeMixerLayout(1, 0.5f, 0.0f, 1.0f, 1.0f);
+  TouchpadLayoutConfig layoutInGroup = makeMixerLayout(1, 0.5f, 0.0f, 1.0f, 1.0f);
   layoutInGroup.name = "Group 1 Layout";
   touchpadMixerMgr.addLayout(layoutInGroup);
 
@@ -5573,14 +5573,14 @@ TEST_F(InputProcessorTest, TouchpadLayoutNoGroupHiddenWhenSoloActive) {
 // Test: Layouts in a solo group are visible when that group is soloed
 TEST_F(InputProcessorTest, TouchpadLayoutInSoloGroupVisible) {
   MockMidiEngine mockEng;
-  TouchpadMixerManager touchpadMixerMgr;
+  TouchpadLayoutManager touchpadMixerMgr;
   VoiceManager voiceMgr(mockEng, settingsMgr);
   InputProcessor proc(voiceMgr, presetMgr, deviceMgr, scaleLib, mockEng,
                       settingsMgr, touchpadMixerMgr);
   proc.initialize();
 
   // Create a layout with no group
-  TouchpadMixerConfig layoutNoGroup = makeMixerLayout(0, 0.0f, 0.0f, 0.33f, 1.0f);
+  TouchpadLayoutConfig layoutNoGroup = makeMixerLayout(0, 0.0f, 0.0f, 0.33f, 1.0f);
   layoutNoGroup.name = "No Group Layout";
   touchpadMixerMgr.addLayout(layoutNoGroup);
 
@@ -5589,7 +5589,7 @@ TEST_F(InputProcessorTest, TouchpadLayoutInSoloGroupVisible) {
   group1.id = 1;
   group1.name = "Group 1";
   touchpadMixerMgr.addGroup(group1);
-  TouchpadMixerConfig layoutGroup1 = makeMixerLayout(1, 0.33f, 0.0f, 0.66f, 1.0f);
+  TouchpadLayoutConfig layoutGroup1 = makeMixerLayout(1, 0.33f, 0.0f, 0.66f, 1.0f);
   layoutGroup1.name = "Group 1 Layout";
   touchpadMixerMgr.addLayout(layoutGroup1);
 
@@ -5598,7 +5598,7 @@ TEST_F(InputProcessorTest, TouchpadLayoutInSoloGroupVisible) {
   group2.id = 2;
   group2.name = "Group 2";
   touchpadMixerMgr.addGroup(group2);
-  TouchpadMixerConfig layoutGroup2 = makeMixerLayout(2, 0.66f, 0.0f, 1.0f, 1.0f);
+  TouchpadLayoutConfig layoutGroup2 = makeMixerLayout(2, 0.66f, 0.0f, 1.0f, 1.0f);
   layoutGroup2.name = "Group 2 Layout";
   touchpadMixerMgr.addLayout(layoutGroup2);
 
@@ -5651,14 +5651,14 @@ TEST_F(InputProcessorTest, TouchpadLayoutInSoloGroupVisible) {
 // Test: When solo group is cleared, only no-group layouts become visible again
 TEST_F(InputProcessorTest, TouchpadLayoutAllVisibleWhenSoloCleared) {
   MockMidiEngine mockEng;
-  TouchpadMixerManager touchpadMixerMgr;
+  TouchpadLayoutManager touchpadMixerMgr;
   VoiceManager voiceMgr(mockEng, settingsMgr);
   InputProcessor proc(voiceMgr, presetMgr, deviceMgr, scaleLib, mockEng,
                       settingsMgr, touchpadMixerMgr);
   proc.initialize();
 
   // Create layout with no group
-  TouchpadMixerConfig layoutNoGroup = makeMixerLayout(0, 0.0f, 0.0f, 0.33f, 1.0f);
+  TouchpadLayoutConfig layoutNoGroup = makeMixerLayout(0, 0.0f, 0.0f, 0.33f, 1.0f);
   layoutNoGroup.name = "No Group Layout";
   touchpadMixerMgr.addLayout(layoutNoGroup);
 
@@ -5667,7 +5667,7 @@ TEST_F(InputProcessorTest, TouchpadLayoutAllVisibleWhenSoloCleared) {
   group1.id = 1;
   group1.name = "Group 1";
   touchpadMixerMgr.addGroup(group1);
-  TouchpadMixerConfig layoutGroup1 = makeMixerLayout(1, 0.33f, 0.0f, 0.66f, 1.0f);
+  TouchpadLayoutConfig layoutGroup1 = makeMixerLayout(1, 0.33f, 0.0f, 0.66f, 1.0f);
   layoutGroup1.name = "Group 1 Layout";
   touchpadMixerMgr.addLayout(layoutGroup1);
 
@@ -5676,7 +5676,7 @@ TEST_F(InputProcessorTest, TouchpadLayoutAllVisibleWhenSoloCleared) {
   group2.id = 2;
   group2.name = "Group 2";
   touchpadMixerMgr.addGroup(group2);
-  TouchpadMixerConfig layoutGroup2 = makeMixerLayout(2, 0.66f, 0.0f, 1.0f, 1.0f);
+  TouchpadLayoutConfig layoutGroup2 = makeMixerLayout(2, 0.66f, 0.0f, 1.0f, 1.0f);
   layoutGroup2.name = "Group 2 Layout";
   touchpadMixerMgr.addLayout(layoutGroup2);
 
@@ -5758,7 +5758,7 @@ TEST_F(InputProcessorTest, TouchpadLayoutAllVisibleWhenSoloCleared) {
 // Simplified: Test that per-layer solo state persists and works correctly
 TEST_F(InputProcessorTest, TouchpadLayoutPerLayerSoloIndependent) {
   MockMidiEngine mockEng;
-  TouchpadMixerManager touchpadMixerMgr;
+  TouchpadLayoutManager touchpadMixerMgr;
   VoiceManager voiceMgr(mockEng, settingsMgr);
   InputProcessor proc(voiceMgr, presetMgr, deviceMgr, scaleLib, mockEng,
                       settingsMgr, touchpadMixerMgr);
@@ -5775,12 +5775,12 @@ TEST_F(InputProcessorTest, TouchpadLayoutPerLayerSoloIndependent) {
   touchpadMixerMgr.addGroup(group2);
 
   // Create layouts: group 1 on layer 0, group 2 on layer 1
-  TouchpadMixerConfig layoutGroup1Layer0 = makeMixerLayout(1, 0.0f, 0.0f, 0.5f, 1.0f);
+  TouchpadLayoutConfig layoutGroup1Layer0 = makeMixerLayout(1, 0.0f, 0.0f, 0.5f, 1.0f);
   layoutGroup1Layer0.name = "Group 1 Layer 0";
   layoutGroup1Layer0.layerId = 0;
   touchpadMixerMgr.addLayout(layoutGroup1Layer0);
 
-  TouchpadMixerConfig layoutGroup2Layer1 = makeMixerLayout(2, 0.5f, 0.0f, 1.0f, 1.0f);
+  TouchpadLayoutConfig layoutGroup2Layer1 = makeMixerLayout(2, 0.5f, 0.0f, 1.0f, 1.0f);
   layoutGroup2Layer1.name = "Group 2 Layer 1";
   layoutGroup2Layer1.layerId = 1;
   touchpadMixerMgr.addLayout(layoutGroup2Layer1);
@@ -5845,14 +5845,14 @@ TEST_F(InputProcessorTest, TouchpadLayoutPerLayerSoloIndependent) {
 // Test: Grouped layouts are hidden when no solo is active
 TEST_F(InputProcessorTest, TouchpadLayoutGroupedHiddenWhenNoSolo) {
   MockMidiEngine mockEng;
-  TouchpadMixerManager touchpadMixerMgr;
+  TouchpadLayoutManager touchpadMixerMgr;
   VoiceManager voiceMgr(mockEng, settingsMgr);
   InputProcessor proc(voiceMgr, presetMgr, deviceMgr, scaleLib, mockEng,
                       settingsMgr, touchpadMixerMgr);
   proc.initialize();
 
   // Create a layout with no group (layoutGroupId == 0)
-  TouchpadMixerConfig layoutNoGroup = makeMixerLayout(0, 0.0f, 0.0f, 0.5f, 1.0f);
+  TouchpadLayoutConfig layoutNoGroup = makeMixerLayout(0, 0.0f, 0.0f, 0.5f, 1.0f);
   layoutNoGroup.name = "No Group Layout";
   touchpadMixerMgr.addLayout(layoutNoGroup);
 
@@ -5861,7 +5861,7 @@ TEST_F(InputProcessorTest, TouchpadLayoutGroupedHiddenWhenNoSolo) {
   group.id = 1;
   group.name = "Group 1";
   touchpadMixerMgr.addGroup(group);
-  TouchpadMixerConfig layoutInGroup = makeMixerLayout(1, 0.5f, 0.0f, 1.0f, 1.0f);
+  TouchpadLayoutConfig layoutInGroup = makeMixerLayout(1, 0.5f, 0.0f, 1.0f, 1.0f);
   layoutInGroup.name = "Group 1 Layout";
   touchpadMixerMgr.addLayout(layoutInGroup);
 
@@ -5890,14 +5890,14 @@ TEST_F(InputProcessorTest, TouchpadLayoutGroupedHiddenWhenNoSolo) {
 // Test: Multiple grouped layouts behavior with different solo states
 TEST_F(InputProcessorTest, TouchpadLayoutMultipleGroupsSoloBehavior) {
   MockMidiEngine mockEng;
-  TouchpadMixerManager touchpadMixerMgr;
+  TouchpadLayoutManager touchpadMixerMgr;
   VoiceManager voiceMgr(mockEng, settingsMgr);
   InputProcessor proc(voiceMgr, presetMgr, deviceMgr, scaleLib, mockEng,
                       settingsMgr, touchpadMixerMgr);
   proc.initialize();
 
   // Create layouts: layoutGroupId == 0, 1, 2
-  TouchpadMixerConfig layoutNoGroup = makeMixerLayout(0, 0.0f, 0.0f, 0.33f, 1.0f);
+  TouchpadLayoutConfig layoutNoGroup = makeMixerLayout(0, 0.0f, 0.0f, 0.33f, 1.0f);
   layoutNoGroup.name = "No Group Layout";
   touchpadMixerMgr.addLayout(layoutNoGroup);
 
@@ -5905,7 +5905,7 @@ TEST_F(InputProcessorTest, TouchpadLayoutMultipleGroupsSoloBehavior) {
   group1.id = 1;
   group1.name = "Group 1";
   touchpadMixerMgr.addGroup(group1);
-  TouchpadMixerConfig layoutGroup1 = makeMixerLayout(1, 0.33f, 0.0f, 0.66f, 1.0f);
+  TouchpadLayoutConfig layoutGroup1 = makeMixerLayout(1, 0.33f, 0.0f, 0.66f, 1.0f);
   layoutGroup1.name = "Group 1 Layout";
   touchpadMixerMgr.addLayout(layoutGroup1);
 
@@ -5913,7 +5913,7 @@ TEST_F(InputProcessorTest, TouchpadLayoutMultipleGroupsSoloBehavior) {
   group2.id = 2;
   group2.name = "Group 2";
   touchpadMixerMgr.addGroup(group2);
-  TouchpadMixerConfig layoutGroup2 = makeMixerLayout(2, 0.66f, 0.0f, 1.0f, 1.0f);
+  TouchpadLayoutConfig layoutGroup2 = makeMixerLayout(2, 0.66f, 0.0f, 1.0f, 1.0f);
   layoutGroup2.name = "Group 2 Layout";
   touchpadMixerMgr.addLayout(layoutGroup2);
 
@@ -6034,7 +6034,7 @@ TEST_F(InputProcessorTest, TouchpadLayoutMultipleGroupsSoloBehavior) {
 // Test: Mixed layouts on different layers with solo behavior
 TEST_F(InputProcessorTest, TouchpadLayoutMixedLayersSoloBehavior) {
   MockMidiEngine mockEng;
-  TouchpadMixerManager touchpadMixerMgr;
+  TouchpadLayoutManager touchpadMixerMgr;
   VoiceManager voiceMgr(mockEng, settingsMgr);
   InputProcessor proc(voiceMgr, presetMgr, deviceMgr, scaleLib, mockEng,
                       settingsMgr, touchpadMixerMgr);
@@ -6047,23 +6047,23 @@ TEST_F(InputProcessorTest, TouchpadLayoutMixedLayersSoloBehavior) {
   touchpadMixerMgr.addGroup(group1);
 
   // Create layouts on layer 0: one with group, one without group
-  TouchpadMixerConfig layoutNoGroupLayer0 = makeMixerLayout(0, 0.0f, 0.0f, 0.5f, 1.0f);
+  TouchpadLayoutConfig layoutNoGroupLayer0 = makeMixerLayout(0, 0.0f, 0.0f, 0.5f, 1.0f);
   layoutNoGroupLayer0.name = "No Group Layer 0";
   layoutNoGroupLayer0.layerId = 0;
   touchpadMixerMgr.addLayout(layoutNoGroupLayer0);
 
-  TouchpadMixerConfig layoutGroup1Layer0 = makeMixerLayout(1, 0.5f, 0.0f, 1.0f, 1.0f);
+  TouchpadLayoutConfig layoutGroup1Layer0 = makeMixerLayout(1, 0.5f, 0.0f, 1.0f, 1.0f);
   layoutGroup1Layer0.name = "Group 1 Layer 0";
   layoutGroup1Layer0.layerId = 0;
   touchpadMixerMgr.addLayout(layoutGroup1Layer0);
 
   // Create layouts on layer 1: one with group, one without group
-  TouchpadMixerConfig layoutNoGroupLayer1 = makeMixerLayout(0, 0.0f, 0.0f, 0.5f, 1.0f);
+  TouchpadLayoutConfig layoutNoGroupLayer1 = makeMixerLayout(0, 0.0f, 0.0f, 0.5f, 1.0f);
   layoutNoGroupLayer1.name = "No Group Layer 1";
   layoutNoGroupLayer1.layerId = 1;
   touchpadMixerMgr.addLayout(layoutNoGroupLayer1);
 
-  TouchpadMixerConfig layoutGroup1Layer1 = makeMixerLayout(1, 0.5f, 0.0f, 1.0f, 1.0f);
+  TouchpadLayoutConfig layoutGroup1Layer1 = makeMixerLayout(1, 0.5f, 0.0f, 1.0f, 1.0f);
   layoutGroup1Layer1.name = "Group 1 Layer 1";
   layoutGroup1Layer1.layerId = 1;
   touchpadMixerMgr.addLayout(layoutGroup1Layer1);
@@ -6351,7 +6351,7 @@ TEST_F(InputProcessorTest, RecompileWhenKeyboardGroupIdChanges) {
 // --- Touchpad Tab touchpad mapping runtime tests ---
 TEST_F(InputProcessorTest, TouchpadTab_Finger1DownSendsNoteOnThenNoteOff) {
   MockMidiEngine mockEng;
-  TouchpadMixerManager touchpadMixerMgr;
+  TouchpadLayoutManager touchpadMixerMgr;
   VoiceManager voiceMgr(mockEng, settingsMgr);
   InputProcessor proc(voiceMgr, presetMgr, deviceMgr, scaleLib, midiEng,
                       settingsMgr, touchpadMixerMgr);
@@ -6397,7 +6397,7 @@ TEST_F(InputProcessorTest, TouchpadTab_Finger1DownSendsNoteOnThenNoteOff) {
 TEST_F(InputProcessorTest,
        TouchpadTab_Finger1DownSustainUntilRetrigger_NoNoteOffOnRelease) {
   MockMidiEngine mockEng;
-  TouchpadMixerManager touchpadMixerMgr;
+  TouchpadLayoutManager touchpadMixerMgr;
   VoiceManager voiceMgr(mockEng, settingsMgr);
   InputProcessor proc(voiceMgr, presetMgr, deviceMgr, scaleLib, midiEng,
                       settingsMgr, touchpadMixerMgr);
@@ -6436,7 +6436,7 @@ TEST_F(InputProcessorTest,
 TEST_F(InputProcessorTest,
        TouchpadTab_SustainUntilRetrigger_ReTrigger_NoNoteOffBeforeSecondNoteOn) {
   MockMidiEngine mockEng;
-  TouchpadMixerManager touchpadMixerMgr;
+  TouchpadLayoutManager touchpadMixerMgr;
   VoiceManager voiceMgr(mockEng, settingsMgr);
   InputProcessor proc(voiceMgr, presetMgr, deviceMgr, scaleLib, midiEng,
                       settingsMgr, touchpadMixerMgr);
@@ -6481,7 +6481,7 @@ TEST_F(InputProcessorTest,
 
 TEST_F(InputProcessorTest, TouchpadTab_Finger1UpTriggersNoteOnOnly) {
   MockMidiEngine mockEng;
-  TouchpadMixerManager touchpadMixerMgr;
+  TouchpadLayoutManager touchpadMixerMgr;
   VoiceManager voiceMgr(mockEng, settingsMgr);
   InputProcessor proc(voiceMgr, presetMgr, deviceMgr, scaleLib, midiEng,
                       settingsMgr, touchpadMixerMgr);
@@ -6521,7 +6521,7 @@ TEST_F(InputProcessorTest, TouchpadTab_Finger1UpTriggersNoteOnOnly) {
 TEST_F(InputProcessorTest,
        TouchpadTab_ContinuousToGate_ThresholdAndTriggerAbove_AffectsNoteOnOff) {
   MockMidiEngine mockEng;
-  TouchpadMixerManager touchpadMixerMgr;
+  TouchpadLayoutManager touchpadMixerMgr;
   VoiceManager voiceMgr(mockEng, settingsMgr);
   InputProcessor proc(voiceMgr, presetMgr, deviceMgr, scaleLib, midiEng,
                       settingsMgr, touchpadMixerMgr);
@@ -6568,7 +6568,7 @@ TEST_F(InputProcessorTest,
 
 TEST_F(InputProcessorTest, TouchpadTab_ExpressionFinger1XSendsCC) {
   MockMidiEngine mockEng;
-  TouchpadMixerManager touchpadMixerMgr;
+  TouchpadLayoutManager touchpadMixerMgr;
   VoiceManager voiceMgr(mockEng, settingsMgr);
   InputProcessor proc(voiceMgr, presetMgr, deviceMgr, scaleLib, midiEng,
                       settingsMgr, touchpadMixerMgr);
@@ -6614,7 +6614,7 @@ protected:
   DeviceManager deviceMgr;
   ScaleLibrary scaleLib;
   SettingsManager settingsMgr;
-  TouchpadMixerManager touchpadMixerMgr;
+  TouchpadLayoutManager touchpadMixerMgr;
   VoiceManager voiceMgr{mockEng, settingsMgr};
   MidiEngine midiEng;
   InputProcessor proc{voiceMgr, presetMgr, deviceMgr, scaleLib, midiEng,
@@ -6762,7 +6762,7 @@ TEST_F(TouchpadTabPitchPadTest, TouchpadTab_PitchPadRelativeModeExtrapolatesBeyo
 
 TEST_F(InputProcessorTest, TouchpadTab_PitchBendRangeAffectsSentPitchBend) {
   MockMidiEngine mockEng;
-  TouchpadMixerManager touchpadMixerMgr;
+  TouchpadLayoutManager touchpadMixerMgr;
   VoiceManager voiceMgr(mockEng, settingsMgr);
   InputProcessor proc(voiceMgr, presetMgr, deviceMgr, scaleLib, mockEng,
                       settingsMgr, touchpadMixerMgr);
@@ -6807,7 +6807,7 @@ TEST_F(InputProcessorTest, TouchpadTab_PitchBendRangeAffectsSentPitchBend) {
 // --- Touch glide: when disabled (touchGlideMs 0), behavior unchanged ---
 TEST_F(InputProcessorTest, TouchpadTouchGlide_Disabled_ImmediateSendToFingerAndRelease) {
   MockMidiEngine mockEng;
-  TouchpadMixerManager touchpadMixerMgr;
+  TouchpadLayoutManager touchpadMixerMgr;
   VoiceManager voiceMgr(mockEng, settingsMgr);
   InputProcessor proc(voiceMgr, presetMgr, deviceMgr, scaleLib, mockEng,
                       settingsMgr, touchpadMixerMgr);
@@ -6855,7 +6855,7 @@ TEST_F(InputProcessorTest, TouchpadTouchGlide_Disabled_ImmediateSendToFingerAndR
 // --- Touch glide: finger down at center -> no transition, stay at 8192 ---
 TEST_F(InputProcessorTest, TouchpadTouchGlide_Enabled_FingerDownAtCenter_StaysAt8192) {
   MockMidiEngine mockEng;
-  TouchpadMixerManager touchpadMixerMgr;
+  TouchpadLayoutManager touchpadMixerMgr;
   VoiceManager voiceMgr(mockEng, settingsMgr);
   InputProcessor proc(voiceMgr, presetMgr, deviceMgr, scaleLib, mockEng,
                       settingsMgr, touchpadMixerMgr);
@@ -6897,7 +6897,7 @@ TEST_F(InputProcessorTest, TouchpadTouchGlide_Enabled_FingerDownAtCenter_StaysAt
 // --- Touch glide: finger down at max -> first sent value is 8192 (glide start) ---
 TEST_F(InputProcessorTest, TouchpadTouchGlide_Enabled_FingerDownAtMax_StartsFromCenter) {
   MockMidiEngine mockEng;
-  TouchpadMixerManager touchpadMixerMgr;
+  TouchpadLayoutManager touchpadMixerMgr;
   VoiceManager voiceMgr(mockEng, settingsMgr);
   InputProcessor proc(voiceMgr, presetMgr, deviceMgr, scaleLib, mockEng,
                       settingsMgr, touchpadMixerMgr);
@@ -6938,7 +6938,7 @@ TEST_F(InputProcessorTest, TouchpadTouchGlide_Enabled_FingerDownAtMax_StartsFrom
 
 TEST_F(InputProcessorTest, TouchpadTab_PitchPadStartLeft_ZeroAtLeftEdge) {
   MockMidiEngine mockEng;
-  TouchpadMixerManager touchpadMixerMgr;
+  TouchpadLayoutManager touchpadMixerMgr;
   VoiceManager voiceMgr(mockEng, settingsMgr);
   InputProcessor proc(voiceMgr, presetMgr, deviceMgr, scaleLib, mockEng,
                       settingsMgr, touchpadMixerMgr);
@@ -6985,7 +6985,7 @@ TEST_F(InputProcessorTest, TouchpadTab_PitchPadStartLeft_ZeroAtLeftEdge) {
 }
 
 // Layout group list changes: InputProcessor::changeListenerCallback already
-// calls rebuildGrid() when source == &touchpadMixerManager. TouchpadMixerManager
+// calls rebuildGrid() when source == &touchpadMixerManager. TouchpadLayoutManager
 // sends change messages on addGroup/removeGroup/renameGroup. No separate test
 // here because sendChangeMessage() is async and test would be flaky; the two
 // tests above (RecompileWhenTouchpadLayoutGroupIdChanges, RecompileWhenTouchpadSoloScopeChanges)

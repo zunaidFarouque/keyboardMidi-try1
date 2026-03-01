@@ -5,7 +5,7 @@
 #include "MappingTypes.h"
 #include "PresetManager.h"
 #include "RhythmAnalyzer.h"
-#include "TouchpadMixerManager.h"
+#include "TouchpadLayoutManager.h"
 #include "TouchpadTypes.h"
 #include "VoiceManager.h"
 #include "ZoneManager.h"
@@ -56,7 +56,7 @@ public:
   InputProcessor(VoiceManager &voiceMgr, PresetManager &presetMgr,
                  DeviceManager &deviceMgr, ScaleLibrary &scaleLib,
                  MidiEngine &midiEng, SettingsManager &settingsMgr,
-                 TouchpadMixerManager &touchpadMixerMgr);
+                 TouchpadLayoutManager &touchpadLayoutMgr);
   ~InputProcessor() override;
 
   // The main entry point for key events
@@ -206,7 +206,7 @@ private:
   DeviceManager &deviceManager;
   ScaleLibrary &scaleLibrary;
   ZoneManager zoneManager;
-  TouchpadMixerManager &touchpadMixerManager;
+  TouchpadLayoutManager &touchpadLayoutManager;
   ExpressionEngine expressionEngine;
   SettingsManager &settingsManager;
 

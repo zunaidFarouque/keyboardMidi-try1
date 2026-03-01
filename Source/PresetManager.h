@@ -15,14 +15,14 @@ public:
   ~PresetManager();
 
   void saveToFile(juce::File file);
-  /// Save preset and include optional TouchpadMixers tree (from
-  /// TouchpadMixerManager::toValueTree()).
-  void saveToFile(juce::File file, const juce::ValueTree &touchpadMixersTree);
+  /// Save preset and include optional TouchpadData tree (from
+  /// TouchpadLayoutManager::toValueTree()).
+  void saveToFile(juce::File file, const juce::ValueTree &touchpadDataTree);
   void loadFromFile(juce::File file);
 
-  /// After load, returns the TouchpadMixers child if present (for
-  /// TouchpadMixerManager::restoreFromValueTree).
-  juce::ValueTree getTouchpadMixersNode() const;
+  /// After load, returns the TouchpadData child if present (for
+  /// TouchpadLayoutManager::restoreFromValueTree).
+  juce::ValueTree getTouchpadDataNode() const;
 
   // Phase 41: Static 9-layer system (0=Base, 1-8=Overlays). No add/remove.
   juce::ValueTree getLayersList(); // Returns "Layers" parent node

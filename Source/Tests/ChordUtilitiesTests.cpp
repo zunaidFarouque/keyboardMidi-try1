@@ -5,7 +5,7 @@
 #include "../ScaleLibrary.h"
 #include "../ScaleUtilities.h"
 #include "../SettingsManager.h"
-#include "../TouchpadMixerManager.h"
+#include "../TouchpadLayoutManager.h"
 #include "../Zone.h"
 #include "../ZoneManager.h"
 #include <algorithm>
@@ -271,7 +271,7 @@ TEST(ChordUtilitiesZoneIntegration, PianoClose_Triad_CompilesToChordPool) {
   PresetManager presetMgr;
   DeviceManager deviceMgr;
   SettingsManager settingsMgr;
-  TouchpadMixerManager touchpadMixerMgr;
+  TouchpadLayoutManager touchpadMixerMgr;
   presetMgr.ensureStaticLayers();
 
   auto zone = std::make_shared<Zone>();
@@ -303,7 +303,7 @@ TEST(ChordUtilitiesZoneIntegration, PianoOpen_Seventh_CompilesToChordPool) {
   PresetManager presetMgr;
   DeviceManager deviceMgr;
   SettingsManager settingsMgr;
-  TouchpadMixerManager touchpadMixerMgr;
+  TouchpadLayoutManager touchpadMixerMgr;
   presetMgr.ensureStaticLayers();
 
   auto zone = std::make_shared<Zone>();
@@ -334,7 +334,7 @@ TEST(ChordUtilitiesZoneIntegration, GuitarCampfire_Triad_CompilesToChordPool) {
   PresetManager presetMgr;
   DeviceManager deviceMgr;
   SettingsManager settingsMgr;
-  TouchpadMixerManager touchpadMixerMgr;
+  TouchpadLayoutManager touchpadMixerMgr;
   presetMgr.ensureStaticLayers();
 
   auto zone = std::make_shared<Zone>();
@@ -367,7 +367,7 @@ TEST(ChordUtilitiesZoneIntegration,
   PresetManager presetMgr;
   DeviceManager deviceMgr;
   SettingsManager settingsMgr;
-  TouchpadMixerManager touchpadMixerMgr;
+  TouchpadLayoutManager touchpadMixerMgr;
   presetMgr.ensureStaticLayers();
 
   auto zone = std::make_shared<Zone>();

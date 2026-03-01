@@ -1,19 +1,19 @@
 // Tests for Touchpad tab: Add/Remove entry behavior (manager + list contract),
-// schema/types (TouchpadMixerDefinition), and combined list row ordering.
+// schema/types (TouchpadLayoutDefinition), and combined list row ordering.
 #include "../MappingDefinition.h"
 #include "../MappingTypes.h"
-#include "../TouchpadMixerDefinition.h"
-#include "../TouchpadMixerManager.h"
-#include "../TouchpadMixerTypes.h"
+#include "../TouchpadLayoutDefinition.h"
+#include "../TouchpadLayoutManager.h"
+#include "../TouchpadLayoutTypes.h"
 #include <algorithm>
 #include <gtest/gtest.h>
 
 namespace {
 
 // Helper: default config for "Empty layout" (Add button first menu item).
-TouchpadMixerConfig makeEmptyLayout() {
-  TouchpadMixerConfig def;
-  def.name = "Touchpad Mixer";
+TouchpadLayoutConfig makeEmptyLayout() {
+  TouchpadLayoutConfig def;
+  def.name = "Touchpad Layout";
   return def;
 }
 
@@ -45,7 +45,7 @@ bool schemaHasPropertyId(const InspectorSchema &schema,
 // --- Add entry (UI behavior: what Add button does) ---
 
 TEST(TouchpadTabTest, AddEmptyLayoutIncreasesLayoutCount) {
-  TouchpadMixerManager mgr;
+  TouchpadLayoutManager mgr;
   EXPECT_EQ(mgr.getLayouts().size(), 0u);
   mgr.addLayout(makeEmptyLayout());
   EXPECT_EQ(mgr.getLayouts().size(), 1u);
@@ -54,15 +54,15 @@ TEST(TouchpadTabTest, AddEmptyLayoutIncreasesLayoutCount) {
 }
 
 TEST(TouchpadTabTest, AddEmptyLayoutUsesDefaultName) {
-  TouchpadMixerManager mgr;
+  TouchpadLayoutManager mgr;
   mgr.addLayout(makeEmptyLayout());
   ASSERT_EQ(mgr.getLayouts().size(), 1u);
-  EXPECT_EQ(mgr.getLayouts()[0].name, "Touchpad Mixer");
+  EXPECT_EQ(mgr.getLayouts()[0].name, "Touchpad Layout");
   EXPECT_EQ(mgr.getLayouts()[0].type, TouchpadType::Mixer);
 }
 
 TEST(TouchpadTabTest, AddEmptyTouchpadMappingIncreasesMappingCount) {
-  TouchpadMixerManager mgr;
+  TouchpadLayoutManager mgr;
   EXPECT_EQ(mgr.getTouchpadMappings().size(), 0u);
   mgr.addTouchpadMapping(makeEmptyTouchpadMapping());
   EXPECT_EQ(mgr.getTouchpadMappings().size(), 1u);
@@ -71,7 +71,7 @@ TEST(TouchpadTabTest, AddEmptyTouchpadMappingIncreasesMappingCount) {
 }
 
 TEST(TouchpadTabTest, AddEmptyTouchpadMappingHasValidDefaultMappingTree) {
-  TouchpadMixerManager mgr;
+  TouchpadLayoutManager mgr;
   mgr.addTouchpadMapping(makeEmptyTouchpadMapping());
   auto mappings = mgr.getTouchpadMappings();
   ASSERT_EQ(mappings.size(), 1u);
@@ -87,23 +87,23 @@ TEST(TouchpadTabTest, AddEmptyTouchpadMappingHasValidDefaultMappingTree) {
 }
 
 TEST(TouchpadTabTest, CombinedListLayoutsThenMappings) {
-  TouchpadMixerManager mgr;
+  TouchpadLayoutManager mgr;
   mgr.addLayout(makeEmptyLayout());
   mgr.addTouchpadMapping(makeEmptyTouchpadMapping());
   auto layouts = mgr.getLayouts();
   auto mappings = mgr.getTouchpadMappings();
   size_t total = layouts.size() + mappings.size();
   EXPECT_EQ(total, 2u);
-  // Row 0 = layout, row 1 = mapping (same contract as TouchpadMixerListPanel).
+  // Row 0 = layout, row 1 = mapping (same contract as TouchpadListPanel).
   EXPECT_EQ(layouts.size(), 1u);
   EXPECT_EQ(mappings.size(), 1u);
 }
 
 TEST(TouchpadTabTest, RemoveLayoutDecreasesCountAndRemovesCorrectEntry) {
-  TouchpadMixerManager mgr;
-  TouchpadMixerConfig a;
+  TouchpadLayoutManager mgr;
+  TouchpadLayoutConfig a;
   a.name = "First";
-  TouchpadMixerConfig b;
+  TouchpadLayoutConfig b;
   b.name = "Second";
   mgr.addLayout(a);
   mgr.addLayout(b);
@@ -114,7 +114,7 @@ TEST(TouchpadTabTest, RemoveLayoutDecreasesCountAndRemovesCorrectEntry) {
 }
 
 TEST(TouchpadTabTest, RemoveTouchpadMappingDecreasesCountAndRemovesCorrect) {
-  TouchpadMixerManager mgr;
+  TouchpadLayoutManager mgr;
   TouchpadMappingConfig c1 = makeEmptyTouchpadMapping();
   c1.name = "Map A";
   TouchpadMappingConfig c2 = makeEmptyTouchpadMapping();
@@ -128,7 +128,7 @@ TEST(TouchpadTabTest, RemoveTouchpadMappingDecreasesCountAndRemovesCorrect) {
 }
 
 TEST(TouchpadTabTest, CombinedListRowCountIsLayoutsPlusMappings) {
-  TouchpadMixerManager mgr;
+  TouchpadLayoutManager mgr;
   EXPECT_EQ(mgr.getLayouts().size() + mgr.getTouchpadMappings().size(), 0u);
   mgr.addLayout(makeEmptyLayout());
   EXPECT_EQ(mgr.getLayouts().size() + mgr.getTouchpadMappings().size(), 1u);
@@ -138,10 +138,10 @@ TEST(TouchpadTabTest, CombinedListRowCountIsLayoutsPlusMappings) {
   EXPECT_EQ(mgr.getLayouts().size() + mgr.getTouchpadMappings().size(), 3u);
 }
 
-// --- Row index contract (same as TouchpadMixerListPanel::rebuildRowKinds) ---
+// --- Row index contract (same as TouchpadListPanel::rebuildRowKinds) ---
 
 TEST(TouchpadTabTest, RowIndexZeroToLayoutsSizeMinusOneAreLayouts) {
-  TouchpadMixerManager mgr;
+  TouchpadLayoutManager mgr;
   mgr.addLayout(makeEmptyLayout());
   mgr.addLayout(makeEmptyLayout());
   mgr.addTouchpadMapping(makeEmptyTouchpadMapping());
@@ -156,7 +156,7 @@ TEST(TouchpadTabTest, RowIndexZeroToLayoutsSizeMinusOneAreLayouts) {
 }
 
 TEST(TouchpadTabTest, MappingRowIndexEqualsRowMinusLayoutCount) {
-  TouchpadMixerManager mgr;
+  TouchpadLayoutManager mgr;
   mgr.addLayout(makeEmptyLayout());
   mgr.addTouchpadMapping(makeEmptyTouchpadMapping());
   mgr.addTouchpadMapping(makeEmptyTouchpadMapping());
@@ -169,7 +169,7 @@ TEST(TouchpadTabTest, MappingRowIndexEqualsRowMinusLayoutCount) {
 // --- Schema: getCommonLayoutHeader ---
 
 TEST(TouchpadTabTest, CommonLayoutHeaderHasNameTypeLayerChannelZIndex) {
-  InspectorSchema schema = TouchpadMixerDefinition::getCommonLayoutHeader();
+  InspectorSchema schema = TouchpadLayoutDefinition::getCommonLayoutHeader();
   EXPECT_TRUE(schemaHasPropertyId(schema, "name"));
   EXPECT_TRUE(schemaHasPropertyId(schema, "type"));
   EXPECT_TRUE(schemaHasPropertyId(schema, "layerId"));
@@ -182,7 +182,7 @@ TEST(TouchpadTabTest, CommonLayoutHeaderHasNameTypeLayerChannelZIndex) {
 // --- Schema: getCommonLayoutControls (region + relayout) ---
 
 TEST(TouchpadTabTest, CommonLayoutControlsHasRegionAndRelayout) {
-  InspectorSchema schema = TouchpadMixerDefinition::getCommonLayoutControls();
+  InspectorSchema schema = TouchpadLayoutDefinition::getCommonLayoutControls();
   EXPECT_TRUE(schemaHasPropertyId(schema, "regionLeft"));
   EXPECT_TRUE(schemaHasPropertyId(schema, "regionRight"));
   EXPECT_TRUE(schemaHasPropertyId(schema, "regionTop"));
@@ -195,7 +195,7 @@ TEST(TouchpadTabTest, CommonLayoutControlsHasRegionAndRelayout) {
 
 TEST(TouchpadTabTest, MixerSchemaHasHeaderAndMixerSpecificControls) {
   InspectorSchema schema =
-      TouchpadMixerDefinition::getSchema(TouchpadType::Mixer);
+      TouchpadLayoutDefinition::getSchema(TouchpadType::Mixer);
   EXPECT_TRUE(schemaHasPropertyId(schema, "name"));
   EXPECT_TRUE(schemaHasPropertyId(schema, "type"));
   EXPECT_TRUE(schemaHasPropertyId(schema, "layerId"));
@@ -218,7 +218,7 @@ TEST(TouchpadTabTest, MixerSchemaHasHeaderAndMixerSpecificControls) {
 
 TEST(TouchpadTabTest, DrumPadSchemaHasDrumPadAndHarmonicControls) {
   InspectorSchema schema =
-      TouchpadMixerDefinition::getSchema(TouchpadType::DrumPad);
+      TouchpadLayoutDefinition::getSchema(TouchpadType::DrumPad);
   EXPECT_TRUE(schemaHasPropertyId(schema, "name"));
   EXPECT_TRUE(schemaHasPropertyId(schema, "type"));
   EXPECT_TRUE(schemaHasPropertyId(schema, "drumPadRows"));
@@ -237,7 +237,7 @@ TEST(TouchpadTabTest, DrumPadSchemaHasDrumPadAndHarmonicControls) {
 
 TEST(TouchpadTabTest, ChordPadSchemaHasChordPadSpecificControls) {
   InspectorSchema schema =
-      TouchpadMixerDefinition::getSchema(TouchpadType::ChordPad);
+      TouchpadLayoutDefinition::getSchema(TouchpadType::ChordPad);
   EXPECT_TRUE(schemaHasPropertyId(schema, "name"));
   EXPECT_TRUE(schemaHasPropertyId(schema, "type"));
   EXPECT_TRUE(schemaHasPropertyId(schema, "drumPadRows"));
@@ -252,8 +252,8 @@ TEST(TouchpadTabTest, ChordPadSchemaHasChordPadSpecificControls) {
 // --- Schema: type-specific content differs ---
 
 TEST(TouchpadTabTest, MixerSchemaHasNumFadersButNotDrumPadLayoutMode) {
-  InspectorSchema mixer = TouchpadMixerDefinition::getSchema(TouchpadType::Mixer);
-  InspectorSchema drum = TouchpadMixerDefinition::getSchema(TouchpadType::DrumPad);
+  InspectorSchema mixer = TouchpadLayoutDefinition::getSchema(TouchpadType::Mixer);
+  InspectorSchema drum = TouchpadLayoutDefinition::getSchema(TouchpadType::DrumPad);
   EXPECT_TRUE(schemaHasPropertyId(mixer, "numFaders"));
   EXPECT_FALSE(schemaHasPropertyId(mixer, "drumPadLayoutMode"));
   EXPECT_TRUE(schemaHasPropertyId(drum, "drumPadLayoutMode"));
@@ -262,8 +262,8 @@ TEST(TouchpadTabTest, MixerSchemaHasNumFadersButNotDrumPadLayoutMode) {
 
 TEST(TouchpadTabTest, ChordPadSchemaHasChordPadPresetNotHarmonicRowInterval) {
   InspectorSchema chord =
-      TouchpadMixerDefinition::getSchema(TouchpadType::ChordPad);
-  InspectorSchema drum = TouchpadMixerDefinition::getSchema(TouchpadType::DrumPad);
+      TouchpadLayoutDefinition::getSchema(TouchpadType::ChordPad);
+  InspectorSchema drum = TouchpadLayoutDefinition::getSchema(TouchpadType::DrumPad);
   EXPECT_TRUE(schemaHasPropertyId(chord, "chordPadPreset"));
   EXPECT_TRUE(schemaHasPropertyId(drum, "harmonicRowInterval"));
   EXPECT_FALSE(schemaHasPropertyId(chord, "harmonicRowInterval"));
@@ -283,9 +283,9 @@ TEST(TouchpadTabTest, TouchpadTypeMixerDrumPadChordPadDistinct) {
 // --- Update layout / update mapping ---
 
 TEST(TouchpadTabTest, UpdateLayoutModifiesEntryAtIndex) {
-  TouchpadMixerManager mgr;
+  TouchpadLayoutManager mgr;
   mgr.addLayout(makeEmptyLayout());
-  TouchpadMixerConfig updated;
+  TouchpadLayoutConfig updated;
   updated.name = "Updated Name";
   updated.type = TouchpadType::DrumPad;
   mgr.updateLayout(0, updated);
@@ -295,7 +295,7 @@ TEST(TouchpadTabTest, UpdateLayoutModifiesEntryAtIndex) {
 }
 
 TEST(TouchpadTabTest, UpdateTouchpadMappingModifiesEntryAtIndex) {
-  TouchpadMixerManager mgr;
+  TouchpadLayoutManager mgr;
   mgr.addTouchpadMapping(makeEmptyTouchpadMapping());
   TouchpadMappingConfig updated = makeEmptyTouchpadMapping();
   updated.name = "Updated Mapping";
@@ -309,10 +309,10 @@ TEST(TouchpadTabTest, UpdateTouchpadMappingModifiesEntryAtIndex) {
 // --- Add then remove mapping round-trip ---
 
 TEST(TouchpadTabTest, AddEmptyMappingRoundTripsViaValueTree) {
-  TouchpadMixerManager mgr;
+  TouchpadLayoutManager mgr;
   mgr.addTouchpadMapping(makeEmptyTouchpadMapping());
   juce::ValueTree vt = mgr.toValueTree();
-  TouchpadMixerManager restored;
+  TouchpadLayoutManager restored;
   restored.restoreFromValueTree(vt);
   auto mappings = restored.getTouchpadMappings();
   ASSERT_EQ(mappings.size(), 1u);
@@ -328,9 +328,9 @@ TEST(TouchpadTabTest, AddEmptyMappingRoundTripsViaValueTree) {
 TEST(TouchpadTabTest, TouchpadTab_MappingSchemaIncludesCommonHeaderAndMappingBody) {
   TouchpadMappingConfig cfg = makeEmptyTouchpadMapping();
   
-  // Build schema as TouchpadMixerEditorComponent does
+  // Build schema as TouchpadEditorPanel does
   InspectorSchema schema;
-  InspectorSchema commonHeader = TouchpadMixerDefinition::getCommonLayoutHeader();
+  InspectorSchema commonHeader = TouchpadLayoutDefinition::getCommonLayoutHeader();
   commonHeader.erase(
       std::remove_if(commonHeader.begin(), commonHeader.end(),
                      [](const InspectorControl &c) { return c.propertyId == "type"; }),
@@ -347,7 +347,7 @@ TEST(TouchpadTabTest, TouchpadTab_MappingSchemaIncludesCommonHeaderAndMappingBod
       schema.push_back(c);
   }
 
-  for (const auto &c : TouchpadMixerDefinition::getCommonLayoutControls())
+  for (const auto &c : TouchpadLayoutDefinition::getCommonLayoutControls())
     schema.push_back(c);
 
   // Verify common header properties (without "type")

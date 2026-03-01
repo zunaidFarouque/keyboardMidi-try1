@@ -4,7 +4,7 @@
 #include "MappingTypes.h"
 #include "PresetManager.h"
 #include "SettingsManager.h"
-#include "TouchpadMixerManager.h"
+#include "TouchpadLayoutManager.h"
 #include "ZoneManager.h"
 #include <memory>
 
@@ -16,7 +16,7 @@ public:
   // Build a new compiled context snapshot from the current engine state.
   static std::shared_ptr<CompiledMapContext>
   compile(PresetManager &presetMgr, DeviceManager &deviceMgr,
-          ZoneManager &zoneMgr, TouchpadMixerManager &touchpadMixerMgr,
+          ZoneManager &zoneMgr, TouchpadLayoutManager &touchpadMixerMgr,
           SettingsManager &settingsMgr);
 
 private:

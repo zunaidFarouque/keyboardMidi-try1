@@ -1,8 +1,8 @@
-#include "TouchpadMixerEditorComponent.h"
+#include "TouchpadEditorPanel.h"
 #include "MappingDefinition.h"
-#include "MappingInspectorLogic.h"
+#include "KeyboardMappingInspectorLogic.h"
 #include "MappingTypes.h"
-#include "TouchpadMixerDefinition.h"
+#include "TouchpadLayoutDefinition.h"
 #include "SettingsManager.h"
 #include "ScaleEditorComponent.h"
 #include "ScaleLibrary.h"
@@ -56,7 +56,7 @@ private:
 } // namespace
 
 juce::PopupMenu::Options
-TouchpadMixerEditorComponent::ComboPopupLAF::getOptionsForComboBoxPopupMenu(
+TouchpadEditorPanel::ComboPopupLAF::getOptionsForComboBoxPopupMenu(
     juce::ComboBox &box, juce::Label &label) {
   auto opts = LookAndFeel_V4::getOptionsForComboBoxPopupMenu(box, label);
   if (juce::Component *top = box.getTopLevelComponent())
@@ -64,11 +64,11 @@ TouchpadMixerEditorComponent::ComboPopupLAF::getOptionsForComboBoxPopupMenu(
   return opts;
 }
 
-TouchpadMixerEditorComponent::SeparatorComponent::SeparatorComponent(
+TouchpadEditorPanel::SeparatorComponent::SeparatorComponent(
     const juce::String &label, juce::Justification justification)
     : labelText(label), textAlign(justification) {}
 
-void TouchpadMixerEditorComponent::SeparatorComponent::paint(
+void TouchpadEditorPanel::SeparatorComponent::paint(
     juce::Graphics &g) {
   auto bounds = getLocalBounds();
   const float centreY = bounds.getCentreY();
@@ -96,14 +96,14 @@ void TouchpadMixerEditorComponent::SeparatorComponent::paint(
                lineHeight);
 }
 
-TouchpadMixerEditorComponent::TouchpadMixerEditorComponent(
-    TouchpadMixerManager *mgr, SettingsManager *settingsMgr,
+TouchpadEditorPanel::TouchpadEditorPanel(
+    TouchpadLayoutManager *mgr, SettingsManager *settingsMgr,
     ScaleLibrary *scaleLib)
     : manager(mgr), settingsManager(settingsMgr), scaleLibrary(scaleLib) {
   setLookAndFeel(&comboPopupLAF);
 }
 
-TouchpadMixerEditorComponent::~TouchpadMixerEditorComponent() {
+TouchpadEditorPanel::~TouchpadEditorPanel() {
   setLookAndFeel(nullptr);
   for (auto &row : uiRows) {
     for (auto &item : row.items) {
@@ -114,8 +114,8 @@ TouchpadMixerEditorComponent::~TouchpadMixerEditorComponent() {
   uiRows.clear();
 }
 
-void TouchpadMixerEditorComponent::setLayout(int index,
-                                            const TouchpadMixerConfig *config) {
+void TouchpadEditorPanel::setLayout(int index,
+                                            const TouchpadLayoutConfig *config) {
   selectionKind = (config != nullptr && index >= 0) ? SelectionKind::Layout
                                                    : SelectionKind::None;
   selectedLayoutIndex = index;
@@ -123,12 +123,12 @@ void TouchpadMixerEditorComponent::setLayout(int index,
   if (config)
     currentConfig = *config;
   else
-    currentConfig = TouchpadMixerConfig();
+    currentConfig = TouchpadLayoutConfig();
   rebuildUI();
   setEnabled(config != nullptr);
 }
 
-void TouchpadMixerEditorComponent::setMapping(
+void TouchpadEditorPanel::setMapping(
     int index, const TouchpadMappingConfig *config) {
   selectionKind = (config != nullptr && index >= 0) ? SelectionKind::Mapping
                                                    : SelectionKind::None;
@@ -142,7 +142,7 @@ void TouchpadMixerEditorComponent::setMapping(
   setEnabled(config != nullptr);
 }
 
-juce::var TouchpadMixerEditorComponent::getConfigValue(
+juce::var TouchpadEditorPanel::getConfigValue(
     const juce::String &propertyId) const {
   const bool isLayout = (selectionKind == SelectionKind::Layout);
   const bool isMapping = (selectionKind == SelectionKind::Mapping);
@@ -570,7 +570,7 @@ juce::var TouchpadMixerEditorComponent::getConfigValue(
   return juce::var();
 }
 
-void TouchpadMixerEditorComponent::applyConfigValue(
+void TouchpadEditorPanel::applyConfigValue(
     const juce::String &propertyId, const juce::var &value) {
   if (!manager)
     return;
@@ -889,7 +889,7 @@ void TouchpadMixerEditorComponent::applyConfigValue(
     manager->updateTouchpadMapping(selectedMappingIndex, currentMapping);
 }
 
-void TouchpadMixerEditorComponent::onRelayoutRegionChosen(float x1, float y1,
+void TouchpadEditorPanel::onRelayoutRegionChosen(float x1, float y1,
                                                          float x2, float y2) {
   if (!manager)
     return;
@@ -910,13 +910,13 @@ void TouchpadMixerEditorComponent::onRelayoutRegionChosen(float x1, float y1,
   rebuildUI();
 }
 
-void TouchpadMixerEditorComponent::launchRelayoutDialog() {
+void TouchpadEditorPanel::launchRelayoutDialog() {
   if (!manager ||
       (selectionKind == SelectionKind::Layout && selectedLayoutIndex < 0) ||
       (selectionKind == SelectionKind::Mapping && selectedMappingIndex < 0))
     return;
   using Cb = TouchpadRelayoutDialog::RegionChosenCallback;
-  Cb onChosen(std::bind(&TouchpadMixerEditorComponent::onRelayoutRegionChosen,
+  Cb onChosen(std::bind(&TouchpadEditorPanel::onRelayoutRegionChosen,
                         this, std::placeholders::_1, std::placeholders::_2,
                         std::placeholders::_3, std::placeholders::_4));
   auto *dialog = new TouchpadRelayoutDialog(std::move(onChosen));
@@ -934,7 +934,7 @@ void TouchpadMixerEditorComponent::launchRelayoutDialog() {
 #endif
 }
 
-void TouchpadMixerEditorComponent::createControl(
+void TouchpadEditorPanel::createControl(
     const InspectorControl &def, std::vector<UiItem> &currentRow) {
   const juce::String propId = def.propertyId;
   juce::var currentVal = getConfigValue(propId);
@@ -1074,13 +1074,13 @@ void TouchpadMixerEditorComponent::createControl(
       cb->setTooltip("Layer this layout belongs to. Only active when this layer "
                      "is selected.");
     juce::ComboBox *cbPtr = cb.get();
-    const bool useMappingInspectorLogic =
+    const bool useKeyboardMappingInspectorLogic =
         (propId == "commandCategory" || propId == "sustainStyle" ||
          propId == "panicMode" || propId == "layerStyle" ||
          propId == "transposeMode" || propId == "transposeModify" ||
          propId == "globalModeDirection" || propId == "globalRootMode" ||
          propId == "globalScaleMode");
-    cb->onChange = [this, propId, cbPtr, useMappingInspectorLogic, def]() {
+    cb->onChange = [this, propId, cbPtr, useKeyboardMappingInspectorLogic, def]() {
       if (propId == "smartScaleName") {
         applyConfigValue(propId, juce::var(cbPtr->getText()));
         return;
@@ -1090,9 +1090,9 @@ void TouchpadMixerEditorComponent::createControl(
         applyConfigValue(propId, juce::var(sel - 1)); // map back to groupId
         return;
       }
-      if (useMappingInspectorLogic && selectionKind == SelectionKind::Mapping &&
+      if (useKeyboardMappingInspectorLogic && selectionKind == SelectionKind::Mapping &&
           currentMapping.mapping.isValid() && manager) {
-        MappingInspectorLogic::applyComboSelectionToMapping(
+        KeyboardMappingInspectorLogic::applyComboSelectionToMapping(
             currentMapping.mapping, def, sel, nullptr);
         manager->updateTouchpadMapping(selectedMappingIndex, currentMapping);
         rebuildUI();
@@ -1173,7 +1173,7 @@ void TouchpadMixerEditorComponent::createControl(
   }
 }
 
-void TouchpadMixerEditorComponent::rebuildUI() {
+void TouchpadEditorPanel::rebuildUI() {
   for (auto &row : uiRows) {
     for (auto &item : row.items) {
       if (item.component)
@@ -1189,12 +1189,12 @@ void TouchpadMixerEditorComponent::rebuildUI() {
 
   InspectorSchema schema;
   if (selectionKind == SelectionKind::Layout) {
-    schema = TouchpadMixerDefinition::getSchema(currentConfig.type);
+    schema = TouchpadLayoutDefinition::getSchema(currentConfig.type);
   } else {
     // For mappings: common header (name, layerId, layoutGroupId, midiChannel, zIndex)
     // + mapping body schema (type Note/Expression/Command, touchpad event, etc.)
     // + common region controls.
-    InspectorSchema commonHeader = TouchpadMixerDefinition::getCommonLayoutHeader();
+    InspectorSchema commonHeader = TouchpadLayoutDefinition::getCommonLayoutHeader();
     // Remove "type" from common header (layout types) - we'll use mapping type instead.
     commonHeader.erase(
         std::remove_if(commonHeader.begin(), commonHeader.end(),
@@ -1218,13 +1218,13 @@ void TouchpadMixerEditorComponent::rebuildUI() {
           currentMapping.mapping, pbRange, true /* forTouchpadEditor */);
       // Add separator before mapping body.
       schema.push_back(MappingDefinition::createSeparator(
-          "Mapping", juce::Justification::centredLeft));
+          "Touchpad Mapping", juce::Justification::centredLeft));
       for (const auto &c : mappingSchema)
         schema.push_back(c);
     }
 
     // Add common region controls at the end.
-    for (const auto &c : TouchpadMixerDefinition::getCommonLayoutControls())
+    for (const auto &c : TouchpadLayoutDefinition::getCommonLayoutControls())
       schema.push_back(c);
   }
   for (const auto &def : schema) {
@@ -1250,7 +1250,7 @@ void TouchpadMixerEditorComponent::rebuildUI() {
     onContentHeightMaybeChanged();
 }
 
-void TouchpadMixerEditorComponent::paint(juce::Graphics &g) {
+void TouchpadEditorPanel::paint(juce::Graphics &g) {
   g.fillAll(juce::Colour(0xff222222));
   if (selectedLayoutIndex < 0 && selectedMappingIndex < 0) {
     g.setColour(juce::Colours::grey);
@@ -1260,7 +1260,7 @@ void TouchpadMixerEditorComponent::paint(juce::Graphics &g) {
   }
 }
 
-int TouchpadMixerEditorComponent::getPreferredContentHeight() const {
+int TouchpadEditorPanel::getPreferredContentHeight() const {
   const int rowHeight = 25;
   const int separatorRowHeight = 15;
   const int spacing = 4;
@@ -1278,7 +1278,7 @@ int TouchpadMixerEditorComponent::getPreferredContentHeight() const {
   return y + boundsReduction;
 }
 
-void TouchpadMixerEditorComponent::resized() {
+void TouchpadEditorPanel::resized() {
   const int rowHeight = 25;
   const int separatorRowHeight = 15;
   const int spacing = 4;

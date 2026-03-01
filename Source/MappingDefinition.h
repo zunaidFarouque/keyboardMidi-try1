@@ -79,12 +79,12 @@ using InspectorSchema = std::vector<InspectorControl>;
 // - Keyboard mappings should never see touchpad‑only controls. If a new
 //   control is only relevant for a specific UI (for example, a Touchpad‑tab‑
 //   only layout/header widget), it should be defined in that editor
-//   (TouchpadMixerDefinition, TouchpadMixerEditorComponent, MappingInspector)
+//   (TouchpadLayoutDefinition, TouchpadEditorPanel, KeyboardMappingInspector)
 //   instead of being added here without alias/forTouchpadEditor guards.
 //
 // Any changes to this schema should be validated in both contexts:
-// - MappingInspector::rebuildUI (Mappings tab)
-// - TouchpadMixerEditorComponent::rebuildUI (Touchpad tab)
+// - KeyboardMappingInspector::rebuildUI (Mappings tab)
+// - TouchpadEditorPanel::rebuildUI (Touchpad tab)
 class MappingDefinition {
 public:
   // Factory: Inspects the mapping state and returns the UI schema.

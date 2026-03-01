@@ -1,19 +1,19 @@
 #pragma once
-#include "TouchpadMixerTypes.h"
+#include "TouchpadLayoutTypes.h"
 #include <JuceHeader.h>
 #include <map>
 #include <vector>
 
-class TouchpadMixerManager : public juce::ChangeBroadcaster {
+class TouchpadLayoutManager : public juce::ChangeBroadcaster {
 public:
-  TouchpadMixerManager() = default;
-  ~TouchpadMixerManager() override = default;
+  TouchpadLayoutManager() = default;
+  ~TouchpadLayoutManager() override = default;
 
-  void addLayout(const TouchpadMixerConfig &config);
+  void addLayout(const TouchpadLayoutConfig &config);
   void removeLayout(int index);
-  void updateLayout(int index, const TouchpadMixerConfig &config);
+  void updateLayout(int index, const TouchpadLayoutConfig &config);
 
-  std::vector<TouchpadMixerConfig> getLayouts() const {
+  std::vector<TouchpadLayoutConfig> getLayouts() const {
     juce::ScopedReadLock lock(lock_);
     return layouts_;
   }
@@ -46,9 +46,9 @@ public:
 
 private:
   mutable juce::ReadWriteLock lock_;
-  std::vector<TouchpadMixerConfig> layouts_;
+  std::vector<TouchpadLayoutConfig> layouts_;
   std::vector<TouchpadLayoutGroup> groups_;
   std::vector<TouchpadMappingConfig> touchpadMappings_;
 
-  JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(TouchpadMixerManager)
+  JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(TouchpadLayoutManager)
 };

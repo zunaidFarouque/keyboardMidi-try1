@@ -1,4 +1,4 @@
-#include "TouchpadMixerDefinition.h"
+#include "TouchpadLayoutDefinition.h"
 
 namespace {
 constexpr int kTypeMixerId = 1;
@@ -6,7 +6,7 @@ constexpr int kTypeDrumPadId = 2;
 constexpr int kTypeChordPadId = 3;
 } // namespace
 
-InspectorSchema TouchpadMixerDefinition::getCommonLayoutHeader() {
+InspectorSchema TouchpadLayoutDefinition::getCommonLayoutHeader() {
   InspectorSchema schema;
   InspectorControl nameCtrl;
   nameCtrl.propertyId = "name";
@@ -58,7 +58,7 @@ InspectorSchema TouchpadMixerDefinition::getCommonLayoutHeader() {
   return schema;
 }
 
-InspectorSchema TouchpadMixerDefinition::getCommonLayoutControls() {
+InspectorSchema TouchpadLayoutDefinition::getCommonLayoutControls() {
   InspectorSchema schema;
   schema.push_back(
       MappingDefinition::createSeparator("Region", juce::Justification::centredLeft));
@@ -110,7 +110,7 @@ InspectorSchema TouchpadMixerDefinition::getCommonLayoutControls() {
   regionLockCtrl.controlType = InspectorControl::Type::Toggle;
   schema.push_back(regionLockCtrl);
 
-  // Pseudo-control used by TouchpadMixerEditorComponent to show a relayout
+  // Pseudo-control used by TouchpadEditorPanel to show a relayout
   // button. It is not bound directly to a config property.
   InspectorControl relayoutCtrl;
   relayoutCtrl.propertyId = "relayoutRegion";
@@ -120,7 +120,7 @@ InspectorSchema TouchpadMixerDefinition::getCommonLayoutControls() {
   return schema;
 }
 
-InspectorSchema TouchpadMixerDefinition::getSchema(TouchpadType type) {
+InspectorSchema TouchpadLayoutDefinition::getSchema(TouchpadType type) {
   InspectorSchema schema;
   for (const auto &c : getCommonLayoutHeader())
     schema.push_back(c);

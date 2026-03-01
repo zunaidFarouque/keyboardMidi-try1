@@ -1,6 +1,6 @@
-#include "MappingInspectorLogic.h"
+#include "KeyboardMappingInspectorLogic.h"
 
-namespace MappingInspectorLogic {
+namespace KeyboardMappingInspectorLogic {
 
 void applyComboSelectionToMapping(juce::ValueTree &mapping,
                                   const InspectorControl &def, int selectedId,
@@ -162,4 +162,4 @@ void applyComboSelectionToMapping(juce::ValueTree &mapping,
   mapping.setProperty(actualProp, valueToSet, undoManager);
 }
 
-} // namespace MappingInspectorLogic
+} // namespace KeyboardMappingInspectorLogic

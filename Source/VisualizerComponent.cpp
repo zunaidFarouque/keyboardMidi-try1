@@ -9,7 +9,7 @@
 #include "RawInputManager.h"
 #include "ScaleLibrary.h"
 #include "SettingsManager.h"
-#include "TouchpadMixerTypes.h"
+#include "TouchpadLayoutTypes.h"
 #include "VoiceManager.h"
 #include "juce_graphics/juce_graphics.h"
 #include <JuceHeader.h>

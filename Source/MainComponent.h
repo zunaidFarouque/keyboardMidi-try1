@@ -3,7 +3,7 @@
 #include "DeviceManager.h"
 #include "InputProcessor.h"
 #include "LogComponent.h" // <--- NEW
-#include "MappingEditorComponent.h"
+#include "KeyboardMappingEditorComponent.h"
 #include "MidiEngine.h"
 #include "MiniStatusWindow.h"
 #include "PresetManager.h"
@@ -13,7 +13,7 @@
 #include "SettingsManager.h"
 #include "SettingsPanel.h"
 #include "StartupManager.h"
-#include "TouchpadMixerManager.h"
+#include "TouchpadLayoutManager.h"
 #include "TouchpadTabComponent.h"
 #include "VisualizerComponent.h"
 #include "ZoneEditorComponent.h"
@@ -69,7 +69,7 @@ private:
   // 2. Logic Managers
   VoiceManager voiceManager; // Depends on MidiEngine, SettingsManager
   PresetManager presetManager;
-  TouchpadMixerManager touchpadMixerManager;
+  TouchpadLayoutManager touchpadLayoutManager;
 
   // 3. Processors
   InputProcessor inputProcessor; // Listens to Preset/Device/Zone
@@ -80,7 +80,7 @@ private:
   // 5. Content Components (unique_ptr to isolate corruptor – create in ctor
   // body when enabled)
   std::unique_ptr<VisualizerComponent> visualizer;
-  std::unique_ptr<MappingEditorComponent> mappingEditor;
+  std::unique_ptr<KeyboardMappingEditorComponent> mappingEditor;
   std::unique_ptr<ZoneEditorComponent> zoneEditor;
   std::unique_ptr<TouchpadTabComponent> touchpadTab;
   std::unique_ptr<SettingsPanel> settingsPanel;

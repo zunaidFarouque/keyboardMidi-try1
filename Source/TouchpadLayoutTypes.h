@@ -53,7 +53,7 @@ enum class DrumPadLayoutMode {
   HarmonicGrid = 1  // Isomorphic harmonic grid (rowInterval + scale filter)
 };
 
-// Named layout group for touchpad layouts. Groups live in TouchpadMixerManager
+// Named layout group for touchpad layouts. Groups live in TouchpadLayoutManager
 // and layouts refer to them by ID.
 struct TouchpadLayoutGroup {
   int id = 0;
@@ -66,7 +66,7 @@ struct TouchpadLayoutGroup {
 // InputProcessor, MappingDefinition, etc.) without re-implementing every
 // property by hand.
 struct TouchpadMappingConfig {
-  // Shared header fields (same semantics as TouchpadMixerConfig)
+  // Shared header fields (same semantics as TouchpadLayoutConfig)
   std::string name = "Touchpad Mapping";
   int layerId = 0;
   int layoutGroupId = 0; // 0 = none, >0 = TouchpadLayoutGroup::id
@@ -77,17 +77,17 @@ struct TouchpadMappingConfig {
 
   // Underlying mapping ValueTree (type "Mapping").
   // Must use the same schema/property IDs as the main mapping engine
-  // (see MappingTypes / MappingDefinition / MappingInspector).
+  // (see MappingTypes / MappingDefinition / KeyboardMappingInspector).
   juce::ValueTree mapping;
 };
 
-// Config for one touchpad strip (serialized in preset / session).
+// Config for one touchpad layout (serialized in preset / session).
 // type determines which controls apply:
 // - Mixer       = vertical CC faders
 // - DrumPad*    = finger drumming / note / performance grid family
-struct TouchpadMixerConfig {
+struct TouchpadLayoutConfig {
   TouchpadType type = TouchpadType::Mixer;
-  std::string name = "Touchpad Mixer";
+  std::string name = "Touchpad Layout";
   int layerId = 0;
   // Optional layout group: 0 = none (follows layer only), >0 = group ID
   // Layout groups are used for conditional visibility / soloing.

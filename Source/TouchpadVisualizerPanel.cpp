@@ -2,7 +2,7 @@
 #include "MappingTypes.h"
 #include "MidiNoteUtilities.h"
 #include "PitchPadUtilities.h"
-#include "TouchpadMixerTypes.h"
+#include "TouchpadLayoutTypes.h"
 #include <algorithm>
 #include <array>
 #include <mutex>

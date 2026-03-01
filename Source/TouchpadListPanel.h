@@ -1,18 +1,18 @@
 #pragma once
-#include "TouchpadMixerManager.h"
-#include "TouchpadMixerTypes.h"
+#include "TouchpadLayoutManager.h"
+#include "TouchpadLayoutTypes.h"
 #include <JuceHeader.h>
 #include <utility>
 #include <functional>
 
-class TouchpadMixerListPanel : public juce::Component,
+class TouchpadListPanel : public juce::Component,
                                public juce::ListBoxModel,
                                public juce::ChangeListener,
                                public juce::AsyncUpdater,
                                public juce::ChangeBroadcaster {
 public:
-  explicit TouchpadMixerListPanel(TouchpadMixerManager *mgr);
-  ~TouchpadMixerListPanel() override;
+  explicit TouchpadListPanel(TouchpadLayoutManager *mgr);
+  ~TouchpadListPanel() override;
 
   enum class RowKind { Layout, Mapping };
 
@@ -52,13 +52,13 @@ public:
   int getSelectedMappingIndex();
 
   std::function<void(RowKind kind, int index,
-                     const TouchpadMixerConfig *layoutCfg,
+                     const TouchpadLayoutConfig *layoutCfg,
                      const TouchpadMappingConfig *mappingCfg,
                      int combinedRowIndex)>
       onSelectionChanged;
 
 private:
-  TouchpadMixerManager *manager;
+  TouchpadLayoutManager *manager;
   juce::ListBox listBox;
   juce::TextButton addButton;
   juce::TextButton removeButton;
@@ -73,5 +73,5 @@ private:
 
   void rebuildRowKinds();
 
-  JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(TouchpadMixerListPanel)
+  JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(TouchpadListPanel)
 };

@@ -58,14 +58,14 @@ juce::Rectangle<int> clampBoundsToDisplay(const juce::Rectangle<int> &bounds) {
 MainComponent::MainComponent()
     : voiceManager(midiEngine, settingsManager),
       inputProcessor(voiceManager, presetManager, deviceManager, scaleLibrary,
-                     midiEngine, settingsManager, touchpadMixerManager),
+                     midiEngine, settingsManager, touchpadLayoutManager),
       startupManager(&presetManager, &deviceManager,
-                     &inputProcessor.getZoneManager(), &touchpadMixerManager,
+                     &inputProcessor.getZoneManager(), &touchpadLayoutManager,
                      &settingsManager),
       rawInputManager(std::make_unique<RawInputManager>()),
       mainTabs(juce::TabbedButtonBar::TabsAtTop),
       visualizerContainer("Visualizer", layoutPlaceholder),
-      editorContainer("Mapping / Zones", mainTabs),
+      editorContainer("Keyboard & Zones", mainTabs),
       logContainer("Log", layoutPlaceholder),
       verticalBar(
           &verticalLayout, 1,
@@ -80,13 +80,13 @@ MainComponent::MainComponent()
   visualizer = std::make_unique<VisualizerComponent>(
       &inputProcessor.getZoneManager(), &deviceManager, voiceManager,
       &settingsManager, &presetManager, &inputProcessor, &scaleLibrary);
-  mappingEditor = std::make_unique<MappingEditorComponent>(
-      presetManager, *rawInputManager, deviceManager, settingsManager, &touchpadMixerManager,
+  mappingEditor = std::make_unique<KeyboardMappingEditorComponent>(
+      presetManager, *rawInputManager, deviceManager, settingsManager, &touchpadLayoutManager,
       &inputProcessor.getZoneManager());
   zoneEditor = std::make_unique<ZoneEditorComponent>(
       &inputProcessor.getZoneManager(), &deviceManager, rawInputManager.get(),
       &scaleLibrary, &settingsManager, &presetManager);
-  touchpadTab = std::make_unique<TouchpadTabComponent>(&touchpadMixerManager,
+  touchpadTab = std::make_unique<TouchpadTabComponent>(&touchpadLayoutManager,
                                                         &settingsManager,
                                                         &scaleLibrary);
   touchpadTab->onSelectionChangedForVisualizer = [this](int layoutIndex,
@@ -202,7 +202,7 @@ MainComponent::MainComponent()
           // If the user didn't cancel (file is valid)
           if (result != juce::File()) {
             presetManager.saveToFile(result,
-                                     touchpadMixerManager.toValueTree());
+                                     touchpadLayoutManager.toValueTree());
             if (logComponent)
               logComponent->addEntry("Saved: " + result.getFileName());
           }
@@ -223,8 +223,8 @@ MainComponent::MainComponent()
           auto result = chooser.getResult();
           if (result.exists()) {
             presetManager.loadFromFile(result);
-            touchpadMixerManager.restoreFromValueTree(
-                presetManager.getTouchpadMixersNode());
+            touchpadLayoutManager.restoreFromValueTree(
+                presetManager.getTouchpadDataNode());
             if (logComponent)
               logComponent->addEntry("Loaded: " + result.getFileName());
 
@@ -280,7 +280,7 @@ MainComponent::MainComponent()
   };
 
   // --- Setup Main Tabs ---
-  mainTabs.addTab("Mappings", juce::Colour(0xff2a2a2a), mappingEditor.get(),
+  mainTabs.addTab("Keyboard Mappings", juce::Colour(0xff2a2a2a), mappingEditor.get(),
                   false);
   mainTabs.addTab("Zones", juce::Colour(0xff2a2a2a), zoneEditor.get(), false);
   mainTabs.addTab("Touchpad", juce::Colour(0xff2a2a2a), touchpadTab.get(),
@@ -290,7 +290,7 @@ MainComponent::MainComponent()
   mainTabs.addTab("Settings", juce::Colour(0xff2a2a2a), &settingsViewport,
                   false);
 
-  static constexpr int kTouchpadTabIndex = 2; // Mappings=0, Zones=1, Touchpad=2, Settings=3
+  static constexpr int kTouchpadTabIndex = 2; // Keyboard Mappings=0, Zones=1, Touchpad=2, Settings=3
   mainTabs.getTabbedButtonBar().addChangeListener(this);
   if (visualizer)
     visualizer->setTouchpadTabActive(false); // Default: Mappings tab
@@ -672,7 +672,7 @@ void MainComponent::updatePerformanceModeButtonText() {
 }
 
 void MainComponent::refreshVisualizerLayerFromCurrentTab() {
-  static constexpr int kTouchpadTabIndex = 2; // Mappings=0, Zones=1, Touchpad=2, Settings=3
+  static constexpr int kTouchpadTabIndex = 2; // Keyboard Mappings=0, Zones=1, Touchpad=2, Settings=3
   int idx = mainTabs.getCurrentTabIndex();
   if (idx == kTouchpadTabIndex && touchpadTab) {
     touchpadTab->refreshVisualizerSelection();
@@ -701,7 +701,7 @@ void MainComponent::refreshVisualizerLayerFromCurrentTab() {
 }
 
 void MainComponent::changeListenerCallback(juce::ChangeBroadcaster *source) {
-  static constexpr int kTouchpadTabIndex = 2; // Mappings=0, Zones=1, Touchpad=2, Settings=3
+  static constexpr int kTouchpadTabIndex = 2; // Keyboard Mappings=0, Zones=1, Touchpad=2, Settings=3
   if (source == &mainTabs.getTabbedButtonBar()) {
     int idx = mainTabs.getCurrentTabIndex();
     if (settingsManager.getRememberUiState())
@@ -1124,7 +1124,7 @@ juce::PopupMenu MainComponent::getMenuForIndex(int topLevelMenuIndex,
     // Menu item shows tick when container is visible
     result.addItem(WindowShowVisualizer, "Visualizer", true,
                    !visualizerContainer.isHidden());
-    result.addItem(WindowShowEditors, "Mapping / Zones", true,
+    result.addItem(WindowShowEditors, "Keyboard & Zones", true,
                    !editorContainer.isHidden());
     result.addItem(WindowShowLog, "Event Log", true, !logContainer.isHidden());
   } else if (topLevelMenuIndex == 3) {

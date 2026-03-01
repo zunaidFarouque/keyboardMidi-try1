@@ -1,8 +1,8 @@
-#include "TouchpadMixerManager.h"
+#include "TouchpadLayoutManager.h"
 
 namespace {
-const juce::Identifier kTouchpadMixers("TouchpadMixers");
-const juce::Identifier kTouchpadMixer("TouchpadMixer");
+const juce::Identifier kTouchpadData("TouchpadData");
+const juce::Identifier kTouchpadLayout("TouchpadLayout");
 const juce::Identifier kLayoutGroupsNode("TouchpadLayoutGroups");
 const juce::Identifier kLayoutGroupNode("TouchpadLayoutGroup");
 const juce::Identifier kTouchpadMappingsNode("TouchpadMappings");
@@ -50,7 +50,7 @@ const juce::Identifier kFxOutputMax("fxOutputMax");
 const juce::Identifier kFxToggleMode("fxToggleMode");
 } // namespace
 
-void TouchpadMixerManager::addLayout(const TouchpadMixerConfig &config) {
+void TouchpadLayoutManager::addLayout(const TouchpadLayoutConfig &config) {
   {
     juce::ScopedWriteLock lock(lock_);
     layouts_.push_back(config);
@@ -58,7 +58,7 @@ void TouchpadMixerManager::addLayout(const TouchpadMixerConfig &config) {
   sendChangeMessage();
 }
 
-void TouchpadMixerManager::removeLayout(int index) {
+void TouchpadLayoutManager::removeLayout(int index) {
   {
     juce::ScopedWriteLock lock(lock_);
     if (index >= 0 && index < static_cast<int>(layouts_.size())) {
@@ -68,8 +68,8 @@ void TouchpadMixerManager::removeLayout(int index) {
   sendChangeMessage();
 }
 
-void TouchpadMixerManager::updateLayout(int index,
-                                        const TouchpadMixerConfig &config) {
+void TouchpadLayoutManager::updateLayout(int index,
+                                        const TouchpadLayoutConfig &config) {
   {
     juce::ScopedWriteLock lock(lock_);
     if (index >= 0 && index < static_cast<int>(layouts_.size())) {
@@ -79,7 +79,7 @@ void TouchpadMixerManager::updateLayout(int index,
   sendChangeMessage();
 }
 
-void TouchpadMixerManager::addTouchpadMapping(
+void TouchpadLayoutManager::addTouchpadMapping(
     const TouchpadMappingConfig &config) {
   {
     juce::ScopedWriteLock lock(lock_);
@@ -88,7 +88,7 @@ void TouchpadMixerManager::addTouchpadMapping(
   sendChangeMessage();
 }
 
-void TouchpadMixerManager::removeTouchpadMapping(int index) {
+void TouchpadLayoutManager::removeTouchpadMapping(int index) {
   {
     juce::ScopedWriteLock lock(lock_);
     if (index >= 0 && index < static_cast<int>(touchpadMappings_.size())) {
@@ -98,7 +98,7 @@ void TouchpadMixerManager::removeTouchpadMapping(int index) {
   sendChangeMessage();
 }
 
-void TouchpadMixerManager::updateTouchpadMapping(
+void TouchpadLayoutManager::updateTouchpadMapping(
     int index, const TouchpadMappingConfig &config) {
   {
     juce::ScopedWriteLock lock(lock_);
@@ -128,11 +128,11 @@ static juce::String typeToString(TouchpadType t) {
   }
 }
 
-juce::ValueTree TouchpadMixerManager::toValueTree() const {
+juce::ValueTree TouchpadLayoutManager::toValueTree() const {
   juce::ScopedReadLock lock(lock_);
-  juce::ValueTree vt(kTouchpadMixers);
+  juce::ValueTree vt(kTouchpadData);
   for (const auto &s : layouts_) {
-    juce::ValueTree child(kTouchpadMixer);
+    juce::ValueTree child(kTouchpadLayout);
     child.setProperty(kType, typeToString(s.type), nullptr);
     child.setProperty(kName, juce::String(s.name), nullptr);
     child.setProperty(kLayerId, s.layerId, nullptr);
@@ -230,8 +230,8 @@ static TouchpadType parseType(const juce::var &v) {
   return TouchpadType::Mixer;
 }
 
-void TouchpadMixerManager::restoreFromValueTree(const juce::ValueTree &vt) {
-  if (!vt.isValid() || !vt.hasType(kTouchpadMixers))
+void TouchpadLayoutManager::restoreFromValueTree(const juce::ValueTree &vt) {
+  if (!vt.isValid() || !vt.hasType(kTouchpadData))
     return;
   juce::ScopedWriteLock lock(lock_);
   layouts_.clear();
@@ -239,14 +239,14 @@ void TouchpadMixerManager::restoreFromValueTree(const juce::ValueTree &vt) {
   touchpadMappings_.clear();
   for (int i = 0; i < vt.getNumChildren(); ++i) {
     auto child = vt.getChild(i);
-    if (child.hasType(kTouchpadMixer)) {
-      TouchpadMixerConfig s;
+    if (child.hasType(kTouchpadLayout)) {
+      TouchpadLayoutConfig s;
       auto rawTypeVar = child.getProperty(kType, "mixer");
       juce::String rawTypeStr = rawTypeVar.toString().trim();
       bool typeWasHarmonic = rawTypeStr.equalsIgnoreCase("harmonicGrid");
       s.type = parseType(rawTypeVar);
       s.name =
-          child.getProperty(kName, "Touchpad Mixer").toString().toStdString();
+          child.getProperty(kName, "Touchpad Layout").toString().toStdString();
       s.layerId = juce::jlimit(0, 8, (int)child.getProperty(kLayerId, 0));
       s.layoutGroupId =
           juce::jlimit(0, 128, (int)child.getProperty(kLayoutGroupId, 0));
@@ -431,12 +431,12 @@ void TouchpadMixerManager::restoreFromValueTree(const juce::ValueTree &vt) {
   sendChangeMessage();
 }
 
-std::vector<TouchpadLayoutGroup> TouchpadMixerManager::getGroups() const {
+std::vector<TouchpadLayoutGroup> TouchpadLayoutManager::getGroups() const {
   juce::ScopedReadLock lock(lock_);
   return groups_;
 }
 
-void TouchpadMixerManager::addGroup(const TouchpadLayoutGroup &group) {
+void TouchpadLayoutManager::addGroup(const TouchpadLayoutGroup &group) {
   juce::ScopedWriteLock lock(lock_);
   if (group.id <= 0)
     return;
@@ -449,7 +449,7 @@ void TouchpadMixerManager::addGroup(const TouchpadLayoutGroup &group) {
   sendChangeMessage();
 }
 
-void TouchpadMixerManager::removeGroup(int groupId) {
+void TouchpadLayoutManager::removeGroup(int groupId) {
   if (groupId <= 0)
     return;
   juce::ScopedWriteLock lock(lock_);
@@ -470,7 +470,7 @@ void TouchpadMixerManager::removeGroup(int groupId) {
   sendChangeMessage();
 }
 
-void TouchpadMixerManager::renameGroup(int groupId,
+void TouchpadLayoutManager::renameGroup(int groupId,
                                        const juce::String &newName) {
   if (groupId <= 0)
     return;
@@ -484,7 +484,7 @@ void TouchpadMixerManager::renameGroup(int groupId,
   sendChangeMessage();
 }
 
-std::map<int, juce::String> TouchpadMixerManager::getLayoutGroups() const {
+std::map<int, juce::String> TouchpadLayoutManager::getLayoutGroups() const {
   juce::ScopedReadLock lock(lock_);
   std::map<int, juce::String> out;
   for (const auto &g : groups_) {

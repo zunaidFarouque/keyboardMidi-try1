@@ -1,5 +1,5 @@
-#include "MappingInspector.h"
-#include "MappingInspectorLogic.h"
+#include "KeyboardMappingInspector.h"
+#include "KeyboardMappingInspectorLogic.h"
 #include "DeviceManager.h"
 #include "KeyNameUtilities.h"
 #include "MappingTypes.h"
@@ -7,7 +7,7 @@
 #include "PresetManager.h"
 #include "SettingsManager.h"
 #include "MappingDefinition.h"
-#include "TouchpadMixerManager.h"
+#include "TouchpadLayoutManager.h"
 
 namespace {
 // Phase 55.6: Invisible container for Label + Editor as one layout unit
@@ -57,32 +57,32 @@ private:
 };
 } // namespace
 
-MappingInspector::MappingInspector(juce::UndoManager &undoMgr,
+KeyboardMappingInspector::KeyboardMappingInspector(juce::UndoManager &undoMgr,
                                    DeviceManager &deviceMgr,
                                    SettingsManager &settingsMgr,
                                    PresetManager *presetMgr,
-                                   TouchpadMixerManager *touchpadMixerMgr)
+                                   TouchpadLayoutManager *touchpadLayoutMgr)
     : undoManager(undoMgr), deviceManager(deviceMgr),
       settingsManager(settingsMgr), presetManager(presetMgr),
-      touchpadMixerManager(touchpadMixerMgr) {
+      touchpadLayoutManager(touchpadLayoutMgr) {
   deviceManager.addChangeListener(this);
   settingsManager.addChangeListener(this);
-  if (touchpadMixerManager)
-    touchpadMixerManager->addChangeListener(this);
+  if (touchpadLayoutManager)
+    touchpadLayoutManager->addChangeListener(this);
 }
 
-MappingInspector::~MappingInspector() {
+KeyboardMappingInspector::~KeyboardMappingInspector() {
   deviceManager.removeChangeListener(this);
   settingsManager.removeChangeListener(this);
-  if (touchpadMixerManager)
-    touchpadMixerManager->removeChangeListener(this);
+  if (touchpadLayoutManager)
+    touchpadLayoutManager->removeChangeListener(this);
   for (auto &tree : selectedTrees) {
     if (tree.isValid())
       tree.removeListener(this);
   }
 }
 
-void MappingInspector::paint(juce::Graphics &g) {
+void KeyboardMappingInspector::paint(juce::Graphics &g) {
   g.fillAll(juce::Colour(0xff2a2a2a));
   if (selectedTrees.empty()) {
     g.setColour(juce::Colours::grey);
@@ -92,7 +92,7 @@ void MappingInspector::paint(juce::Graphics &g) {
   }
 }
 
-void MappingInspector::setSelection(
+void KeyboardMappingInspector::setSelection(
     const std::vector<juce::ValueTree> &selection) {
   isUpdatingFromTree = true;
   for (auto &tree : selectedTrees) {
@@ -109,8 +109,8 @@ void MappingInspector::setSelection(
 }
 
 // Keyboard mapping "header" (Device, Layer, Group, Key, Type, Enabled) is built
-// explicitly here, not from schema. Touchpad uses TouchpadMixerDefinition::getCommonLayoutHeader().
-void MappingInspector::rebuildUI() {
+// explicitly here, not from schema. Touchpad uses TouchpadLayoutDefinition::getCommonLayoutHeader().
+void KeyboardMappingInspector::rebuildUI() {
   for (auto &row : uiRows) {
     for (auto &item : row.items) {
       if (item.component)
@@ -264,11 +264,11 @@ void MappingInspector::rebuildUI() {
   resized();
 }
 
-MappingInspector::SeparatorComponent::SeparatorComponent(
+KeyboardMappingInspector::SeparatorComponent::SeparatorComponent(
     const juce::String &label, juce::Justification justification)
     : labelText(label), textAlign(justification) {}
 
-void MappingInspector::SeparatorComponent::paint(juce::Graphics &g) {
+void KeyboardMappingInspector::SeparatorComponent::paint(juce::Graphics &g) {
   auto bounds = getLocalBounds();
   const float centreY = bounds.getCentreY();
   const int lineY = static_cast<int>(centreY - 0.5f);
@@ -315,7 +315,7 @@ void MappingInspector::SeparatorComponent::paint(juce::Graphics &g) {
   }
 }
 
-void MappingInspector::createControl(const InspectorControl &def,
+void KeyboardMappingInspector::createControl(const InspectorControl &def,
                                      UiRow &currentRow) {
   const juce::Identifier propId(def.propertyId.toStdString());
   const bool sameVal = allTreesHaveSameValue(propId);
@@ -422,11 +422,11 @@ void MappingInspector::createControl(const InspectorControl &def,
   }
   case InspectorControl::Type::ComboBox: {
     auto cb = std::make_unique<juce::ComboBox>();
-    // Populate touchpadLayoutGroupId dynamically from TouchpadMixerManager
-    if (def.propertyId == "touchpadLayoutGroupId" && touchpadMixerManager) {
+    // Populate touchpadLayoutGroupId dynamically from TouchpadLayoutManager
+    if (def.propertyId == "touchpadLayoutGroupId" && touchpadLayoutManager) {
       // JUCE ComboBox uses id=0 for "no selection", so encode groupId+1.
       cb->addItem("- No Group -", 1);
-      auto groups = touchpadMixerManager->getLayoutGroups();
+      auto groups = touchpadLayoutManager->getLayoutGroups();
       for (const auto &group : groups) {
         cb->addItem(group.second, group.first + 1);
       }
@@ -652,7 +652,7 @@ void MappingInspector::createControl(const InspectorControl &def,
       int id = cbPtr->getSelectedId();
       for (auto &tree : selectedTrees) {
         if (tree.isValid())
-          MappingInspectorLogic::applyComboSelectionToMapping(tree, def, id,
+          KeyboardMappingInspectorLogic::applyComboSelectionToMapping(tree, def, id,
                                                               &undoManager);
       }
       if (def.propertyId == "type" || def.propertyId == "data1" ||
@@ -746,7 +746,7 @@ void MappingInspector::createControl(const InspectorControl &def,
   }
 }
 
-void MappingInspector::createAliasRow() {
+void KeyboardMappingInspector::createAliasRow() {
   UiRow row;
   row.isSeparatorRow = false;
 
@@ -817,7 +817,7 @@ void MappingInspector::createAliasRow() {
   uiRows.push_back(std::move(row));
 }
 
-void MappingInspector::createLayerRow() {
+void KeyboardMappingInspector::createLayerRow() {
   if (!presetManager || selectedTrees.empty() || !selectedTrees[0].isValid() ||
       !selectedTrees[0].hasType("Mapping") || !onLayerChangeRequested)
     return;
@@ -862,7 +862,7 @@ void MappingInspector::createLayerRow() {
   uiRows.push_back(std::move(row));
 }
 
-void MappingInspector::createKeyboardGroupRow() {
+void KeyboardMappingInspector::createKeyboardGroupRow() {
   if (!presetManager || selectedTrees.empty() || !selectedTrees[0].isValid() ||
       !selectedTrees[0].hasType("Mapping"))
     return;
@@ -953,7 +953,7 @@ static int itemIdToKeyCode(int itemId) {
   return 0;
 }
 
-void MappingInspector::createKeyRow() {
+void KeyboardMappingInspector::createKeyRow() {
   UiRow row;
   row.isSeparatorRow = false;
   row.isKeyRow = (externalLearnButton != nullptr);
@@ -999,7 +999,7 @@ void MappingInspector::createKeyRow() {
   uiRows.push_back(std::move(row));
 }
 
-void MappingInspector::resized() {
+void KeyboardMappingInspector::resized() {
   const int rowHeight = 25;
   const int separatorRowHeight = 15; // Phase 55.9: smaller for separator rows
   const int spacing = 4;             // Phase 55.10: tighter layout
@@ -1071,7 +1071,7 @@ void MappingInspector::resized() {
   setSize(getWidth(), y + 4);
 }
 
-int MappingInspector::getRequiredHeight() const {
+int KeyboardMappingInspector::getRequiredHeight() const {
   const int controlHeight = 25;
   const int separatorHeight = 15; // Phase 55.9
   const int separatorTopMargin =
@@ -1088,7 +1088,7 @@ int MappingInspector::getRequiredHeight() const {
   return total;
 }
 
-bool MappingInspector::allTreesHaveSameValue(const juce::Identifier &property) {
+bool KeyboardMappingInspector::allTreesHaveSameValue(const juce::Identifier &property) {
   if (selectedTrees.empty())
     return false;
   juce::var firstValue = selectedTrees[0].getProperty(property);
@@ -1099,7 +1099,7 @@ bool MappingInspector::allTreesHaveSameValue(const juce::Identifier &property) {
   return true;
 }
 
-juce::var MappingInspector::getCommonValue(const juce::Identifier &property) {
+juce::var KeyboardMappingInspector::getCommonValue(const juce::Identifier &property) {
   if (selectedTrees.empty())
     return juce::var();
   juce::var v = selectedTrees[0].getProperty(property);
@@ -1108,7 +1108,7 @@ juce::var MappingInspector::getCommonValue(const juce::Identifier &property) {
   return v;
 }
 
-void MappingInspector::setLearnButton(juce::ToggleButton *learnBtn) {
+void KeyboardMappingInspector::setLearnButton(juce::ToggleButton *learnBtn) {
   if (externalLearnButton && externalLearnButton->getParentComponent() == this)
     removeChildComponent(externalLearnButton);
   externalLearnButton = learnBtn;
@@ -1119,11 +1119,11 @@ void MappingInspector::setLearnButton(juce::ToggleButton *learnBtn) {
   }
 }
 
-void MappingInspector::setOnLayerChangeRequested(std::function<void(int)> cb) {
+void KeyboardMappingInspector::setOnLayerChangeRequested(std::function<void(int)> cb) {
   onLayerChangeRequested = std::move(cb);
 }
 
-bool MappingInspector::isTouchpadMapping() const {
+bool KeyboardMappingInspector::isTouchpadMapping() const {
   if (selectedTrees.empty() || !selectedTrees[0].isValid())
     return false;
   juce::String alias =
@@ -1131,13 +1131,13 @@ bool MappingInspector::isTouchpadMapping() const {
   return alias.equalsIgnoreCase("Touchpad");
 }
 
-void MappingInspector::changeListenerCallback(juce::ChangeBroadcaster *source) {
+void KeyboardMappingInspector::changeListenerCallback(juce::ChangeBroadcaster *source) {
   if (source == &deviceManager || source == &settingsManager ||
-      source == touchpadMixerManager)
+      source == touchpadLayoutManager)
     rebuildUI();
 }
 
-void MappingInspector::valueTreePropertyChanged(
+void KeyboardMappingInspector::valueTreePropertyChanged(
     juce::ValueTree &tree, const juce::Identifier &property) {
   if (isUpdatingFromTree)
     return;

@@ -5,14 +5,14 @@
 #include <JuceHeader.h>
 
 class SettingsManager;
-class TouchpadMixerManager;
+class TouchpadLayoutManager;
 
 class StartupManager : public juce::Timer,
                        public juce::ValueTree::Listener,
                        public juce::ChangeListener {
 public:
   StartupManager(PresetManager *presetMgr, DeviceManager *deviceMgr,
-                 ZoneManager *zoneMgr, TouchpadMixerManager *touchpadMixerMgr,
+                 ZoneManager *zoneMgr, TouchpadLayoutManager *touchpadMixerMgr,
                  SettingsManager *settingsMgr);
   ~StartupManager() override;
 
@@ -50,7 +50,7 @@ private:
   PresetManager *presetManager;
   DeviceManager *deviceManager;
   ZoneManager *zoneManager;
-  TouchpadMixerManager *touchpadMixerManager;
+  TouchpadLayoutManager *touchpadLayoutManager;
   SettingsManager *settingsManager;
 
   juce::File appDataFolder;

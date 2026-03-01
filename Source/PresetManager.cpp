@@ -49,18 +49,18 @@ void PresetManager::saveToFile(juce::File file) {
 }
 
 void PresetManager::saveToFile(juce::File file,
-                               const juce::ValueTree &touchpadMixersTree) {
+                               const juce::ValueTree &touchpadDataTree) {
   juce::ValueTree copy = rootNode.createCopy();
-  if (touchpadMixersTree.isValid()) {
-    copy.addChild(touchpadMixersTree.createCopy(), -1, nullptr);
+  if (touchpadDataTree.isValid()) {
+    copy.addChild(touchpadDataTree.createCopy(), -1, nullptr);
   }
   if (auto xml = copy.createXml()) {
     xml->writeTo(file);
   }
 }
 
-juce::ValueTree PresetManager::getTouchpadMixersNode() const {
-  return rootNode.getChildWithName("TouchpadMixers");
+juce::ValueTree PresetManager::getTouchpadDataNode() const {
+  return rootNode.getChildWithName("TouchpadData");
 }
 
 namespace {
