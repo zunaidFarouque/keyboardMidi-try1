@@ -146,26 +146,69 @@ const std::vector<TouchpadLayoutPreset> &getTouchpadLayoutPresets() {
                    {makePitchBendMapping("Pitch Bend ±2", "Relative")}});
     }
 
-    // --- Combo: Drum Pad + Mixer strip ---
+    // --- Combos: Drum Pad + Mixer strip (various splits) ---
     {
+      // Horizontal 50%: 3x3 drum left, 3 faders right
       TouchpadMixerConfig leftDrum =
           makeDefaultTouchpadConfig(TouchpadType::DrumPad, "Left Drum Pad");
       leftDrum.layerId = 0;
       leftDrum.layoutGroupId = 0;
-      leftDrum.drumPadRows = 4;
-      leftDrum.drumPadColumns = 4;
+      leftDrum.drumPadRows = 3;
+      leftDrum.drumPadColumns = 3;
       leftDrum.region = {0.0f, 0.0f, 0.5f, 1.0f};
 
       TouchpadMixerConfig rightMix = makeDefaultTouchpadConfig(
           TouchpadType::Mixer, "Right Mixer Strip");
       rightMix.layerId = 0;
       rightMix.layoutGroupId = 0;
-      rightMix.numFaders = 8;
+      rightMix.numFaders = 3;
       rightMix.ccStart = 0;
       rightMix.region = {0.5f, 0.0f, 1.0f, 1.0f};
 
-      v.push_back({"combo-drum-mixer", "Drum Pad + Mixer strip",
+      v.push_back({"combo-horizontal-50", "Drum Pad + Mixer strip (horizontal 50%)",
                    {leftDrum, rightMix}, {}});
+    }
+    {
+      // Vertical 50%: 5 faders top, 3x2 drum bottom
+      TouchpadMixerConfig topMix =
+          makeDefaultTouchpadConfig(TouchpadType::Mixer, "Top Mixer Strip");
+      topMix.layerId = 0;
+      topMix.layoutGroupId = 0;
+      topMix.numFaders = 5;
+      topMix.ccStart = 0;
+      topMix.region = {0.0f, 0.0f, 1.0f, 0.5f};
+
+      TouchpadMixerConfig bottomDrum =
+          makeDefaultTouchpadConfig(TouchpadType::DrumPad, "Bottom Drum Pad");
+      bottomDrum.layerId = 0;
+      bottomDrum.layoutGroupId = 0;
+      bottomDrum.drumPadRows = 3;
+      bottomDrum.drumPadColumns = 2;
+      bottomDrum.region = {0.0f, 0.5f, 1.0f, 1.0f};
+
+      v.push_back({"combo-vertical-50", "Drum Pad + Mixer strip (vertical 50%)",
+                   {topMix, bottomDrum}, {}});
+    }
+    {
+      // Vertical 75%: 2x5 drum top 25%, 5 faders bottom 75%
+      TouchpadMixerConfig topDrum =
+          makeDefaultTouchpadConfig(TouchpadType::DrumPad, "Top Drum Pad");
+      topDrum.layerId = 0;
+      topDrum.layoutGroupId = 0;
+      topDrum.drumPadRows = 2;
+      topDrum.drumPadColumns = 5;
+      topDrum.region = {0.0f, 0.0f, 1.0f, 0.25f};
+
+      TouchpadMixerConfig bottomMix = makeDefaultTouchpadConfig(
+          TouchpadType::Mixer, "Bottom Mixer Strip");
+      bottomMix.layerId = 0;
+      bottomMix.layoutGroupId = 0;
+      bottomMix.numFaders = 5;
+      bottomMix.ccStart = 0;
+      bottomMix.region = {0.0f, 0.25f, 1.0f, 1.0f};
+
+      v.push_back({"combo-vertical-75", "Drum Pad + Mixer strip (vertical 75%)",
+                   {topDrum, bottomMix}, {}});
     }
 
     return v;
@@ -224,7 +267,9 @@ TouchpadMixerListPanel::TouchpadMixerListPanel(TouchpadMixerManager *mgr)
     menu.addSubMenu("Pitch Bend", pbMenu);
 
     juce::PopupMenu comboMenu;
-    comboMenu.addItem(nextId++, "Drum Pad + Mixer strip");
+    comboMenu.addItem(nextId++, "Drum Pad + Mixer strip (horizontal 50%)");
+    comboMenu.addItem(nextId++, "Drum Pad + Mixer strip (vertical 50%)");
+    comboMenu.addItem(nextId++, "Drum Pad + Mixer strip (vertical 75%)");
     menu.addSubMenu("Combos", comboMenu);
 
     menu.showMenuAsync(
@@ -329,12 +374,16 @@ void TouchpadMixerListPanel::paintListBoxItem(int rowNumber, juce::Graphics &g,
   rebuildRowKinds();
   if (rowNumber < 0 || rowNumber >= static_cast<int>(rowToSource.size()))
     return;
+  const int pad = 2;
+  auto area = juce::Rectangle<int>(0, 0, width, height).reduced(pad, 0);
   if (rowIsSelected) {
-    g.fillAll(juce::Colour(0xff3d5a80));
+    g.setColour(juce::Colour(0xff3d5a80));
+    g.fillRoundedRectangle(area.toFloat(), 4.0f);
     g.setColour(juce::Colours::lightblue.withAlpha(0.5f));
-    g.fillRect(0, 0, 3, height);
+    g.fillRect(area.getX(), area.getY(), 3, area.getHeight());
   } else {
-    g.fillAll(juce::Colour(0xff2a2a2a));
+    g.setColour(juce::Colour(0xff2a2a2a));
+    g.fillRect(area);
   }
   g.setColour(juce::Colours::white);
   g.setFont(14.0f);
@@ -354,7 +403,7 @@ void TouchpadMixerListPanel::paintListBoxItem(int rowNumber, juce::Graphics &g,
   }
   if (label.isEmpty())
     label = "<invalid>";
-  g.drawText(label, 8, 0, width - 16, height,
+  g.drawText(label, 10, 0, width - 10, height,
              juce::Justification::centredLeft);
 }
 

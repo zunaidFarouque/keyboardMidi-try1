@@ -1,6 +1,7 @@
 #include "MappingEditorComponent.h"
 #include "KeyNameUtilities.h"
 #include "MappingDefinition.h"
+#include "MappingListPanel.h"
 #include "TouchpadMixerManager.h"
 #include "ZoneManager.h"
 #include <algorithm>
@@ -67,9 +68,10 @@ MappingEditorComponent::MappingEditorComponent(PresetManager &pm,
                                                TouchpadMixerManager *touchpadMixerMgr,
                                                ZoneManager *zoneMgr)
     : presetManager(pm), rawInputManager(rawInputMgr), deviceManager(deviceMgr),
-      settingsManager(settingsMgr), zoneManager(zoneMgr), layerListPanel(pm),
+      settingsManager(settingsMgr), zoneManager(zoneMgr), layerListPanel(pm, zoneMgr),
       inspector(undoManager, deviceManager, settingsManager, &presetManager, touchpadMixerMgr),
-      resizerBar(&horizontalLayout, 1, true) { // Item index 1, vertical bar
+      mappingListPanel(table, addButton, deleteButton, moveToLayerButton, duplicateButton),
+      layerResizerBar(true), resizerBar(true) {
 
   // Phase 41/45: Setup layer list panel callback with per-layer selection
   // memory
@@ -103,6 +105,7 @@ MappingEditorComponent::MappingEditorComponent(PresetManager &pm,
       onLayerChanged(selectedLayerId);
   };
   addAndMakeVisible(layerListPanel);
+  addAndMakeVisible(layerResizerBar);
   // Setup Headers
   table.getHeader().addColumn("Key", 1, 50);
   table.getHeader().addColumn("Device", 2, 70);
@@ -113,157 +116,32 @@ MappingEditorComponent::MappingEditorComponent(PresetManager &pm,
 
   table.setModel(this);
   table.setMultipleSelectionEnabled(true);
-  addAndMakeVisible(table);
+
+  addAndMakeVisible(mappingListPanel);
+  mappingListPanel.addAndMakeVisible(table);
 
   // Setup viewport for inspector
   addAndMakeVisible(inspectorViewport);
   inspectorViewport.setViewedComponent(&inspector, false);
   inspectorViewport.setScrollBarsShown(true, false); // Vertical only
 
-  // Add resizer bar
   addAndMakeVisible(resizerBar);
 
-  // Setup horizontal layout: Table | Bar | Inspector
-  horizontalLayout.setItemLayout(
-      0, -0.3, -0.7, -0.5); // Item 0 (Table): Min 30%, Max 70%, Preferred 50%
-  horizontalLayout.setItemLayout(1, 5, 5, 5); // Item 1 (Bar): Fixed 5px width
-  horizontalLayout.setItemLayout(
-      2, -0.3, -0.7,
-      -0.5); // Item 2 (Inspector): Min 30%, Max 70%, Preferred 50%
+  layerResizerBar.onPositionChange = [this](float f) {
+    divider1Fraction = f;
+    resized();
+  };
+  resizerBar.onPositionChange = [this](float f) {
+    divider2Fraction = f;
+    resized();
+  };
 
   // Setup Add Button – Phase 56.3: Smart Input Capture
   addButton.setButtonText("+");
   addButton.onClick = [this] { startInputCapture(); };
-  addAndMakeVisible(addButton);
+  mappingListPanel.addAndMakeVisible(addButton);
 
-  // Keyboard groups dialog (mirror Touchpad layout groups)
-  groupsButton.setButtonText("Groups...");
-  groupsButton.onClick = [this] {
-    class KeyboardGroupsDialog : public juce::Component, public juce::ListBoxModel {
-    public:
-      KeyboardGroupsDialog(PresetManager *pm, ZoneManager *zm)
-          : presetManager(pm), zoneManager(zm) {
-        addAndMakeVisible(listBox);
-        listBox.setModel(this);
-        listBox.setRowHeight(24);
-        addButton.setButtonText("Add");
-        removeButton.setButtonText("Remove");
-        renameLabel.setText("Name:", juce::dontSendNotification);
-        addAndMakeVisible(addButton);
-        addAndMakeVisible(removeButton);
-        addAndMakeVisible(renameLabel);
-        addAndMakeVisible(renameEditor);
-        addButton.onClick = [this] { addGroup(); };
-        removeButton.onClick = [this] { removeSelectedGroup(); };
-        renameEditor.onTextChange = [this] { confirmRename(); };
-        renameEditor.onReturnKey = [this] { confirmRename(); };
-        renameEditor.onFocusLost = [this] { confirmRename(); };
-        refreshFromManager();
-      }
-      int getNumRows() override { return (int)groups.size(); }
-      void paintListBoxItem(int row, juce::Graphics &g, int width, int height,
-                            bool rowIsSelected) override {
-        if (row < 0 || row >= (int)groups.size()) return;
-        if (rowIsSelected) g.fillAll(juce::Colour(0xff4a4a4a));
-        else g.fillAll(juce::Colour(0xff2a2a2a));
-        g.setColour(juce::Colours::white);
-        g.setFont(14.0f);
-        g.drawText(groups[(size_t)row].second, 8, 0, width - 16, height,
-                   juce::Justification::centredLeft);
-      }
-      void selectedRowsChanged(int lastRowSelected) override {
-        if (lastRowSelected >= 0 && lastRowSelected < (int)groups.size()) {
-          renameEditor.setText(groups[(size_t)lastRowSelected].second,
-                               juce::dontSendNotification);
-        } else {
-          renameEditor.setText({}, juce::dontSendNotification);
-        }
-      }
-      void resized() override {
-        auto area = getLocalBounds().reduced(8);
-        auto bottom = area.removeFromBottom(30);
-        removeButton.setBounds(bottom.removeFromRight(80));
-        bottom.removeFromRight(4);
-        addButton.setBounds(bottom.removeFromRight(80));
-        auto nameArea = area.removeFromBottom(24);
-        renameLabel.setBounds(nameArea.removeFromLeft(60));
-        renameEditor.setBounds(nameArea);
-        listBox.setBounds(area.reduced(0, 4));
-      }
-    private:
-      PresetManager *presetManager = nullptr;
-      ZoneManager *zoneManager = nullptr;
-      juce::ListBox listBox{"KeyboardGroups", this};
-      juce::TextButton addButton, removeButton;
-      juce::Label renameLabel;
-      juce::TextEditor renameEditor;
-      std::vector<std::pair<int, juce::String>> groups;
-      void refreshFromManager() {
-        groups.clear();
-        if (!presetManager) return;
-        for (const auto &g : presetManager->getKeyboardGroups())
-          groups.emplace_back(g.id, g.name);
-        listBox.updateContent();
-      }
-      void addGroup() {
-        if (!presetManager) return;
-        int nextId = 1;
-        for (const auto &g : presetManager->getKeyboardGroups())
-          nextId = juce::jmax(nextId, g.id + 1);
-        presetManager->addKeyboardGroup(nextId, "Group " + juce::String(nextId));
-        refreshFromManager();
-        int newRow = -1;
-        for (int i = 0; i < (int)groups.size(); ++i) {
-          if (groups[(size_t)i].first == nextId) { newRow = i; break; }
-        }
-        if (newRow >= 0) {
-          listBox.selectRow(newRow);
-          renameEditor.setText(groups[(size_t)newRow].second,
-                               juce::dontSendNotification);
-          renameEditor.grabKeyboardFocus();
-          renameEditor.setHighlightedRegion(
-              juce::Range<int>(0, renameEditor.getText().length()));
-        }
-      }
-      void removeSelectedGroup() {
-        if (!presetManager) return;
-        int row = listBox.getSelectedRow();
-        if (row < 0 || row >= (int)groups.size()) return;
-        int id = groups[(size_t)row].first;
-        presetManager->removeKeyboardGroup(id);
-        if (zoneManager)
-          zoneManager->clearKeyboardGroupFromAllZones(id);
-        refreshFromManager();
-      }
-      void confirmRename() {
-        if (!presetManager) return;
-        int row = listBox.getSelectedRow();
-        if (row < 0 || row >= (int)groups.size()) return;
-        int id = groups[(size_t)row].first;
-        auto text = renameEditor.getText().trim();
-        if (text.isEmpty()) return;
-        if (text == groups[(size_t)row].second) return;
-        presetManager->renameKeyboardGroup(id, text);
-        refreshFromManager();
-        if (row >= 0 && row < (int)groups.size()) {
-          listBox.selectRow(row);
-          listBox.repaint();
-        }
-      }
-    };
-    juce::DialogWindow::LaunchOptions opts;
-    opts.dialogTitle = "Keyboard Groups";
-    opts.dialogBackgroundColour = juce::Colour(0xff222222);
-    opts.escapeKeyTriggersCloseButton = true;
-    opts.useNativeTitleBar = true;
-    opts.resizable = true;
-    opts.content.setOwned(new KeyboardGroupsDialog(&presetManager, zoneManager));
-    opts.content->setSize(300, 260);
-    opts.launchAsync();
-  };
-  addAndMakeVisible(groupsButton);
-
-  // Setup Duplicate Button
+  // Setup Duplicate Button (parented to mappingListPanel)
   duplicateButton.setButtonText("Duplicate");
   duplicateButton.onClick = [this] {
     int row = table.getSelectedRow();
@@ -289,7 +167,7 @@ MappingEditorComponent::MappingEditorComponent(PresetManager &pm,
     table.updateContent();
     table.repaint();
   };
-  addAndMakeVisible(duplicateButton);
+  mappingListPanel.addAndMakeVisible(duplicateButton);
 
   // Setup Move to Layer Button
   moveToLayerButton.setButtonText("Move to layer...");
@@ -320,7 +198,7 @@ MappingEditorComponent::MappingEditorComponent(PresetManager &pm,
           }
         });
   };
-  addAndMakeVisible(moveToLayerButton);
+  mappingListPanel.addAndMakeVisible(moveToLayerButton);
 
   // Setup Delete Button
   deleteButton.setButtonText("-");
@@ -373,7 +251,7 @@ MappingEditorComponent::MappingEditorComponent(PresetManager &pm,
           }
         }));
   };
-  addAndMakeVisible(deleteButton);
+  mappingListPanel.addAndMakeVisible(deleteButton);
 
   // Setup Learn Button
   learnButton.setButtonText("Learn");
@@ -384,6 +262,11 @@ MappingEditorComponent::MappingEditorComponent(PresetManager &pm,
 }
 
 void MappingEditorComponent::initialize() {
+  inspector.setLearnButton(&learnButton);
+  inspector.setOnLayerChangeRequested([this](int targetLayerId) {
+    moveSelectedMappingsToLayer(targetLayerId);
+  });
+
   presetManager.getRootNode().addListener(this);
   presetManager.addChangeListener(this);
   rawInputManager.addListener(this);
@@ -502,34 +385,13 @@ void MappingEditorComponent::resized() {
   auto area = getLocalBounds();
   if (captureOverlay)
     captureOverlay->setBounds(area);
-  auto header = area.removeFromTop(24);
-  addButton.setBounds(header.removeFromRight(30));
-  header.removeFromRight(4);
-  groupsButton.setBounds(header.removeFromRight(70));
-  header.removeFromRight(4);
-  duplicateButton.setBounds(header.removeFromRight(80));
-  header.removeFromRight(4);
-  moveToLayerButton.setBounds(header.removeFromRight(110));
-  header.removeFromRight(4);
-  deleteButton.setBounds(header.removeFromRight(30));
-  header.removeFromRight(4);
-  learnButton.setBounds(header.removeFromRight(60));
 
-  // Phase 41: juce::Grid (1 row, 2 cols): layerListPanel 20%, table area 80%
-  juce::Grid grid;
-  grid.templateRows = {juce::Grid::TrackInfo(juce::Grid::Fr(1))};
-  grid.templateColumns = {juce::Grid::TrackInfo(juce::Grid::Fr(2)),
-                          juce::Grid::TrackInfo(juce::Grid::Fr(8))};
-  grid.items = {juce::GridItem(layerListPanel), juce::GridItem(table)};
-  grid.performLayout(area);
+  PercentageSplitLayout::apply(
+      area.getX(), area.getY(), area.getWidth(), area.getHeight(), true,
+      divider1Fraction, divider2Fraction,
+      layerListPanel, layerResizerBar, mappingListPanel, resizerBar,
+      inspectorViewport, 5, 80, 150, 250);
 
-  // Right 80%: split Table | Bar | Inspector
-  auto rightArea = table.getBounds();
-  juce::Component *horizontalComps[] = {&table, &resizerBar,
-                                        &inspectorViewport};
-  horizontalLayout.layOutComponents(horizontalComps, 3, rightArea.getX(),
-                                    rightArea.getY(), rightArea.getWidth(),
-                                    rightArea.getHeight(), false, true);
   int contentWidth = inspectorViewport.getWidth() - 15;
   int contentHeight = inspector.getRequiredHeight();
   inspector.setBounds(0, 0, contentWidth, contentHeight);
@@ -641,12 +503,22 @@ void MappingEditorComponent::paintRowBackground(juce::Graphics &g,
   auto node = getMappingAtRow(rowNumber);
   const bool disabled =
       node.isValid() && !MappingDefinition::isMappingEnabled(node);
-  if (rowIsSelected)
-    g.fillAll(juce::Colours::lightblue.withAlpha(0.3f));
-  else if (disabled)
-    g.fillAll(juce::Colours::grey.withAlpha(0.35f));
-  else if (rowNumber % 2)
-    g.fillAll(juce::Colours::white.withAlpha(0.05f));
+  const int pad = 2;
+  auto area = juce::Rectangle<int>(0, 0, width, height).reduced(pad, 0);
+  if (rowIsSelected) {
+    g.setColour(juce::Colour(0xff3d5a80));
+    g.fillRoundedRectangle(area.toFloat(), 4.0f);
+    g.setColour(juce::Colours::lightblue.withAlpha(0.5f));
+    g.fillRect(area.getX(), area.getY(), 3, area.getHeight());
+  } else if (disabled) {
+    g.setColour(juce::Colour(0xff2a2a2a));
+    g.fillRect(area);
+    g.setColour(juce::Colours::grey.withAlpha(0.4f));
+    g.fillRect(area.getX(), area.getY(), 3, area.getHeight());
+  } else {
+    g.setColour(rowNumber % 2 ? juce::Colour(0xff2a2a2a) : juce::Colour(0xff252525));
+    g.fillRect(0, 0, width, height);
+  }
 }
 
 void MappingEditorComponent::paintCell(juce::Graphics &g, int rowNumber,
@@ -693,10 +565,12 @@ void MappingEditorComponent::paintCell(juce::Graphics &g, int rowNumber,
   }
 
   const bool disabled = !MappingDefinition::isMappingEnabled(node);
-  g.setColour(disabled ? juce::Colours::grey : juce::Colours::white);
+  g.setColour(disabled ? juce::Colours::grey : (rowIsSelected ? juce::Colours::white : juce::Colours::lightgrey));
   g.setFont(14.0f);
-  g.drawText(text, 2, 0, width - 4, height, juce::Justification::centredLeft,
-             true);
+  // Column 1 (Key) is leftmost: add padding to clear the selection accent bar (pad 2 + bar 3 + gap 3)
+  const int textLeft = (columnId == 1) ? 10 : 4;
+  g.drawText(text, textLeft, 0, width - textLeft - 4, height,
+             juce::Justification::centredLeft, true);
 }
 
 // --- VALUE TREE LISTENER CALLBACKS (THE FIX) ---

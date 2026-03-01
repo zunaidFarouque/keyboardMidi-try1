@@ -3,11 +3,13 @@
 #include <JuceHeader.h>
 #include <functional>
 
+class ZoneManager;
+
 class LayerListPanel : public juce::Component,
                        public juce::ListBoxModel,
                        public juce::ValueTree::Listener {
 public:
-  LayerListPanel(PresetManager &pm);
+  LayerListPanel(PresetManager &pm, ZoneManager *zoneMgr = nullptr);
   ~LayerListPanel() override;
 
   void paint(juce::Graphics &) override;
@@ -37,7 +39,9 @@ public:
 
 private:
   PresetManager &presetManager;
+  ZoneManager *zoneManager = nullptr;
   juce::ListBox listBox;
+  juce::TextButton groupsButton;
   int selectedLayerId = 0;
 
   // Layer inheritance toggles (for selected layer)

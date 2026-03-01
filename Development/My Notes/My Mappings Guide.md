@@ -169,7 +169,11 @@ Shift + `5 6 7 8` = Pad Synchro 1-4\
 &emsp; _Master volume will be controlled with touchpad 4 finger gesture._\
 &emsp; <small> OR, _Major mixer pads will have the right most column for Master Volume_ (Messy). </small>
 
-Shift + `Z X C ... ,` = T1-8 Mute\
+We will use Mute buttons from MIDIQy.\
+<small>It basically sends the a value of -infinity (CC value of 0). Upon Unmute, it sends the previously stored value again. So, it mimics the way mute works.\
+But I think we should not use Mute at all. just turn the fader down. That way, you can gradually introduce the tracks whenever needed without that "Jump" that happens when unmuting.</small>
+
+<!-- Shift + `Z X C ... ,` = T1-8 Mute\
 (Bound to Layer 7)
 
 > TODO: Volume control using touchpad
@@ -181,7 +185,7 @@ Shift + `H J K` = Melody tracks octave up (ignore RH3)\
 (Bound to Layer 7)
 
 Shift + `L ; '` = Melody tracks octave down (ignore RH3)\
-(Bound to Layer 7)
+(Bound to Layer 7) -->
 
 #### Lyrics
 

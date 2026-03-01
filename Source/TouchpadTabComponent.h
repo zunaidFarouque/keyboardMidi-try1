@@ -1,4 +1,5 @@
 #pragma once
+#include "PercentageSplitLayout.h"
 #include "TouchpadGroupsPanel.h"
 #include "TouchpadMixerEditorComponent.h"
 #include "TouchpadMixerListPanel.h"
@@ -44,9 +45,10 @@ private:
   TouchpadMixerListPanel listPanel;
   TouchpadMixerEditorComponent editorPanel;
   juce::Viewport editorViewport;
-  juce::StretchableLayoutManager layout;
-  juce::StretchableLayoutResizerBar groupsResizerBar;
-  juce::StretchableLayoutResizerBar resizerBar;
+  PercentageResizerBar groupsResizerBar;
+  PercentageResizerBar resizerBar;
+  float divider1Fraction = 0.15f;  // Groups | list
+  float divider2Fraction = 0.55f;  // List | editor
 
   // Flag to prevent persist-on-change during loadUiState()
   bool isLoadingUiState = false;

@@ -108,6 +108,8 @@ void MappingInspector::setSelection(
   isUpdatingFromTree = false;
 }
 
+// Keyboard mapping "header" (Device, Layer, Group, Key, Type, Enabled) is built
+// explicitly here, not from schema. Touchpad uses TouchpadMixerDefinition::getCommonLayoutHeader().
 void MappingInspector::rebuildUI() {
   for (auto &row : uiRows) {
     for (auto &item : row.items) {
@@ -117,12 +119,27 @@ void MappingInspector::rebuildUI() {
   }
   uiRows.clear();
 
-  if (selectedTrees.empty())
+  if (selectedTrees.empty()) {
+    if (externalLearnButton)
+      externalLearnButton->setVisible(false);
     return;
+  }
+  if (externalLearnButton)
+    externalLearnButton->setVisible(true);
 
-  createAliasRow();
-  createKeyboardGroupRow();
-  createKeyRow();
+  const bool touchpad = isTouchpadMapping();
+
+  if (touchpad) {
+    createAliasRow();
+    createKeyboardGroupRow();
+    createKeyRow();
+  } else {
+    // Keyboard mapping header: Device, Layer, Group, Key|Learn, Type, Enabled, separator
+    createAliasRow();
+    createLayerRow();
+    createKeyboardGroupRow();
+    createKeyRow();
+  }
 
   // Determine whether to show Base-layer-only \"Apply on all layers\" toggle.
   bool showForceAllLayers = false;
@@ -147,34 +164,101 @@ void MappingInspector::rebuildUI() {
   InspectorSchema schema =
       MappingDefinition::getSchema(selectedTrees[0], pbRange);
 
-  if (showForceAllLayers) {
-    schema.push_back(MappingDefinition::createSeparator(
-        "Global behavior", juce::Justification::centredLeft));
-    InspectorControl force;
-    force.propertyId = "forceAllLayers";
-    force.label = "Apply on all layers";
-    force.controlType = InspectorControl::Type::Toggle;
-    force.widthWeight = 1.0f;
-    schema.push_back(force);
-  }
-  for (const auto &def : schema) {
-    // Phase 55.9: Handle explicit Separator items
-    if (def.controlType == InspectorControl::Type::Separator) {
-      UiRow row;
-      row.isSeparatorRow = true;
-      auto sepComp =
-          std::make_unique<SeparatorComponent>(def.label, def.separatorAlign);
-      addAndMakeVisible(*sepComp);
-      row.items.push_back({std::move(sepComp), 1.0f, false});
-      uiRows.push_back(std::move(row));
-      continue;
+  if (touchpad) {
+    if (showForceAllLayers) {
+      schema.push_back(MappingDefinition::createSeparator(
+          "Global behavior", juce::Justification::centredLeft));
+      InspectorControl force;
+      force.propertyId = "forceAllLayers";
+      force.label = "Apply on all layers";
+      force.controlType = InspectorControl::Type::Toggle;
+      force.widthWeight = 1.0f;
+      schema.push_back(force);
     }
-    if (!def.sameLine || uiRows.empty()) {
+    for (const auto &def : schema) {
+      if (def.controlType == InspectorControl::Type::Separator) {
+        UiRow row;
+        row.isSeparatorRow = true;
+        auto sepComp =
+            std::make_unique<SeparatorComponent>(def.label, def.separatorAlign);
+        addAndMakeVisible(*sepComp);
+        row.items.push_back({std::move(sepComp), 1.0f, false});
+        uiRows.push_back(std::move(row));
+        continue;
+      }
+      if (!def.sameLine || uiRows.empty()) {
+        UiRow row;
+        row.isSeparatorRow = false;
+        uiRows.push_back(std::move(row));
+      }
+      createControl(def, uiRows.back());
+    }
+  } else {
+    // Keyboard: output Type and Enabled (in that order), then separator, then rest skipping type/enabled
+    const juce::Identifier typeId("type");
+    const juce::Identifier enabledId("enabled");
+    InspectorControl typeDef, enabledDef;
+    bool haveType = false, haveEnabled = false;
+    for (const auto &def : schema) {
+      if (def.propertyId == "type") { typeDef = def; haveType = true; }
+      if (def.propertyId == "enabled") { enabledDef = def; haveEnabled = true; }
+    }
+    if (haveType) {
       UiRow row;
       row.isSeparatorRow = false;
       uiRows.push_back(std::move(row));
+      createControl(typeDef, uiRows.back());
     }
-    createControl(def, uiRows.back());
+    if (haveEnabled) {
+      UiRow row;
+      row.isSeparatorRow = false;
+      uiRows.push_back(std::move(row));
+      createControl(enabledDef, uiRows.back());
+    }
+    UiRow sepRow;
+    sepRow.isSeparatorRow = true;
+    auto sepComp = std::make_unique<SeparatorComponent>("", juce::Justification::centred);
+    addAndMakeVisible(*sepComp);
+    sepRow.items.push_back({std::move(sepComp), 1.0f, false});
+    uiRows.push_back(std::move(sepRow));
+
+    if (showForceAllLayers) {
+      schema.push_back(MappingDefinition::createSeparator(
+          "Global behavior", juce::Justification::centredLeft));
+      InspectorControl force;
+      force.propertyId = "forceAllLayers";
+      force.label = "Apply on all layers";
+      force.controlType = InspectorControl::Type::Toggle;
+      force.widthWeight = 1.0f;
+      schema.push_back(force);
+    }
+    // Skip first 2 schema separators (after Enabled and after Type) since we
+    // already added our header separator above.
+    int separatorsSkipped = 0;
+    for (const auto &def : schema) {
+      if (def.controlType == InspectorControl::Type::Separator) {
+        if (separatorsSkipped < 2) {
+          ++separatorsSkipped;
+          continue;
+        }
+        UiRow row;
+        row.isSeparatorRow = true;
+        auto sep =
+            std::make_unique<SeparatorComponent>(def.label, def.separatorAlign);
+        addAndMakeVisible(*sep);
+        row.items.push_back({std::move(sep), 1.0f, false});
+        uiRows.push_back(std::move(row));
+        continue;
+      }
+      if (def.propertyId == "type" || def.propertyId == "enabled")
+        continue;
+      if (!def.sameLine || uiRows.empty()) {
+        UiRow row;
+        row.isSeparatorRow = false;
+        uiRows.push_back(std::move(row));
+      }
+      createControl(def, uiRows.back());
+    }
   }
 
   resized();
@@ -733,6 +817,51 @@ void MappingInspector::createAliasRow() {
   uiRows.push_back(std::move(row));
 }
 
+void MappingInspector::createLayerRow() {
+  if (!presetManager || selectedTrees.empty() || !selectedTrees[0].isValid() ||
+      !selectedTrees[0].hasType("Mapping") || !onLayerChangeRequested)
+    return;
+
+  int currentLayerId = 0;
+  juce::ValueTree node = selectedTrees[0];
+  while (node.isValid()) {
+    if (node.hasType("Layer")) {
+      currentLayerId = static_cast<int>(node.getProperty("id", 0));
+      break;
+    }
+    node = node.getParent();
+  }
+  if (currentLayerId < 0 && selectedTrees[0].hasProperty("layerID"))
+    currentLayerId = static_cast<int>(selectedTrees[0].getProperty("layerID", 0));
+
+  UiRow row;
+  row.isSeparatorRow = false;
+  auto rowComp = std::make_unique<LabelEditorRow>();
+  rowComp->label = std::make_unique<juce::Label>();
+  rowComp->label->setText("Layer:", juce::dontSendNotification);
+
+  auto layerCombo = std::make_unique<juce::ComboBox>();
+  auto layerOptions = MappingDefinition::getLayerOptions();
+  for (const auto &p : layerOptions)
+    layerCombo->addItem(p.second, p.first + 1);
+
+  layerCombo->setSelectedId(currentLayerId + 1, juce::dontSendNotification);
+
+  juce::ComboBox *layerComboPtr = layerCombo.get();
+  layerCombo->onChange = [this, layerComboPtr]() {
+    int sel = layerComboPtr->getSelectedId();
+    if (sel > 0 && onLayerChangeRequested)
+      onLayerChangeRequested(sel - 1);
+  };
+
+  rowComp->editor = std::move(layerCombo);
+  rowComp->addAndMakeVisible(*rowComp->label);
+  rowComp->addAndMakeVisible(*rowComp->editor);
+  addAndMakeVisible(*rowComp);
+  row.items.push_back({std::move(rowComp), 1.0f, false});
+  uiRows.push_back(std::move(row));
+}
+
 void MappingInspector::createKeyboardGroupRow() {
   if (!presetManager || selectedTrees.empty() || !selectedTrees[0].isValid() ||
       !selectedTrees[0].hasType("Mapping"))
@@ -758,7 +887,7 @@ void MappingInspector::createKeyboardGroupRow() {
   row.isSeparatorRow = false;
   auto rowComp = std::make_unique<LabelEditorRow>();
   rowComp->label = std::make_unique<juce::Label>();
-  rowComp->label->setText("Keyboard group:", juce::dontSendNotification);
+  rowComp->label->setText("Group:", juce::dontSendNotification);
 
   auto groupCombo = std::make_unique<juce::ComboBox>();
   groupCombo->addItem("None", 1);
@@ -827,6 +956,7 @@ static int itemIdToKeyCode(int itemId) {
 void MappingInspector::createKeyRow() {
   UiRow row;
   row.isSeparatorRow = false;
+  row.isKeyRow = (externalLearnButton != nullptr);
 
   auto rowComp = std::make_unique<LabelEditorRow>();
   rowComp->label = std::make_unique<juce::Label>();
@@ -886,7 +1016,12 @@ void MappingInspector::resized() {
       y += 12;
 
     const int h = row.isSeparatorRow ? separatorRowHeight : rowHeight;
-    const int totalAvailable = bounds.getWidth();
+    int totalAvailable = bounds.getWidth();
+    // Reserve space for Learn button in Key row
+    const int learnButtonWidth = 60;
+    if (row.isKeyRow && externalLearnButton) {
+      totalAvailable = std::max(0, totalAvailable - learnButtonWidth - 4);
+    }
     int usedWidth = 0;
     float totalWeight = 0.0f;
 
@@ -925,6 +1060,10 @@ void MappingInspector::resized() {
       if (item.component)
         item.component->setBounds(x, y, w, h);
       x += w;
+    }
+
+    if (row.isKeyRow && externalLearnButton) {
+      externalLearnButton->setBounds(x + 4, y, learnButtonWidth - 4, h);
     }
 
     y += h + spacing;
@@ -967,6 +1106,29 @@ juce::var MappingInspector::getCommonValue(const juce::Identifier &property) {
   if (v.isVoid())
     return MappingDefinition::getDefaultValue(property.toString());
   return v;
+}
+
+void MappingInspector::setLearnButton(juce::ToggleButton *learnBtn) {
+  if (externalLearnButton && externalLearnButton->getParentComponent() == this)
+    removeChildComponent(externalLearnButton);
+  externalLearnButton = learnBtn;
+  if (externalLearnButton) {
+    if (auto *parent = externalLearnButton->getParentComponent())
+      parent->removeChildComponent(externalLearnButton);
+    addAndMakeVisible(externalLearnButton);
+  }
+}
+
+void MappingInspector::setOnLayerChangeRequested(std::function<void(int)> cb) {
+  onLayerChangeRequested = std::move(cb);
+}
+
+bool MappingInspector::isTouchpadMapping() const {
+  if (selectedTrees.empty() || !selectedTrees[0].isValid())
+    return false;
+  juce::String alias =
+      selectedTrees[0].getProperty("inputAlias", "").toString().trim();
+  return alias.equalsIgnoreCase("Touchpad");
 }
 
 void MappingInspector::changeListenerCallback(juce::ChangeBroadcaster *source) {

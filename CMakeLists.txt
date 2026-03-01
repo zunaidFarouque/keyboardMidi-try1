@@ -124,6 +124,8 @@ target_sources(MIDIQy PRIVATE
     Source/Main.cpp
     Source/MainComponent.cpp
     Source/MappingEditorComponent.cpp
+    Source/MappingListPanel.cpp
+    Source/PercentageSplitLayout.cpp
     Source/VisualizerComponent.cpp
     Source/ZoneEditorComponent.cpp
     Source/SettingsPanel.cpp

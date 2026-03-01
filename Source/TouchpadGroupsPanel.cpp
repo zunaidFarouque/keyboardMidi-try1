@@ -248,7 +248,7 @@ void TouchpadGroupsPanel::paintListBoxItem(int rowNumber, juce::Graphics &g,
     g.setColour(juce::Colour(0xff3d5a80));
     g.fillRoundedRectangle(area.toFloat(), 4.0f);
     g.setColour(juce::Colours::lightblue.withAlpha(0.5f));
-    g.drawRoundedRectangle(area.toFloat(), 4.0f, 1.0f);
+    g.fillRect(area.getX(), area.getY(), 3, area.getHeight());
   }
 
   g.setColour(rowIsSelected ? juce::Colours::white : juce::Colours::grey);

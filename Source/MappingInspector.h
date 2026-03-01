@@ -1,6 +1,7 @@
 #pragma once
 #include "MappingDefinition.h"
 #include <JuceHeader.h>
+#include <functional>
 #include <memory>
 #include <vector>
 
@@ -25,6 +26,11 @@ public:
   void setSelection(const std::vector<juce::ValueTree> &selection);
   int getRequiredHeight() const;
 
+  /// Set external Learn button to show in Key row (keyboard mappings header).
+  void setLearnButton(juce::ToggleButton *learnBtn);
+  /// Callback when user changes Layer in header (move mapping to that layer).
+  void setOnLayerChangeRequested(std::function<void(int)> cb);
+
   void valueTreePropertyChanged(juce::ValueTree &tree,
                                 const juce::Identifier &property) override;
   void changeListenerCallback(juce::ChangeBroadcaster *source) override;
@@ -40,6 +46,9 @@ private:
   std::vector<juce::ValueTree> selectedTrees;
   bool isUpdatingFromTree = false;
 
+  juce::ToggleButton *externalLearnButton = nullptr;
+  std::function<void(int)> onLayerChangeRequested;
+
   // Phase 55.6: Multiple items per row (side-by-side toggles)
   struct UiItem {
     std::unique_ptr<juce::Component> component;
@@ -50,6 +59,7 @@ private:
     std::vector<UiItem> items;
     bool isSeparatorRow =
         false; // Phase 55.9: reduced height for separator rows
+    bool isKeyRow = false; // When true, resized() positions externalLearnButton in this row
   };
   std::vector<UiRow> uiRows;
 
@@ -68,8 +78,10 @@ private:
   void rebuildUI();
   void createControl(const InspectorControl &def, UiRow &currentRow);
   void createAliasRow();
+  void createLayerRow();
   void createKeyboardGroupRow();
   void createKeyRow();
+  bool isTouchpadMapping() const;
 
   bool allTreesHaveSameValue(const juce::Identifier &property);
   juce::var getCommonValue(const juce::Identifier &property);

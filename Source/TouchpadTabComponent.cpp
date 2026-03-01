@@ -6,7 +6,7 @@ TouchpadTabComponent::TouchpadTabComponent(TouchpadMixerManager *mgr,
                                            ScaleLibrary *scaleLib)
     : manager(mgr), settingsManager(settingsMgr), groupsPanel(mgr),
       listPanel(mgr), editorPanel(mgr, settingsMgr, scaleLib),
-      groupsResizerBar(&layout, 1, true), resizerBar(&layout, 3, true) {
+      groupsResizerBar(true), resizerBar(true) {
   addAndMakeVisible(groupsPanel);
   addAndMakeVisible(groupsResizerBar);
   addAndMakeVisible(listPanel);
@@ -20,12 +20,14 @@ TouchpadTabComponent::TouchpadTabComponent(TouchpadMixerManager *mgr,
     listPanel.setFilterGroupId(filterGroupId);
   };
 
-  // 5 items: groupsPanel | groupsResizerBar | listPanel | resizerBar | editorViewport
-  layout.setItemLayout(0, 80, 350, 120);   // groupsPanel: min 80px, max 350px, preferred 120px
-  layout.setItemLayout(1, 5, 5, 5);       // groupsResizerBar
-  layout.setItemLayout(2, -0.25, -0.4, -0.3);  // listPanel
-  layout.setItemLayout(3, 5, 5, 5);       // resizerBar
-  layout.setItemLayout(4, -0.6, -0.75, -0.7);  // editorViewport
+  groupsResizerBar.onPositionChange = [this](float f) {
+    divider1Fraction = f;
+    resized();
+  };
+  resizerBar.onPositionChange = [this](float f) {
+    divider2Fraction = f;
+    resized();
+  };
 
   listPanel.onSelectionChanged =
       [this](TouchpadMixerListPanel::RowKind kind, int index,
@@ -103,10 +105,11 @@ void TouchpadTabComponent::paint(juce::Graphics &g) {
 
 void TouchpadTabComponent::resized() {
   auto area = getLocalBounds().reduced(4);
-  juce::Component *comps[] = {&groupsPanel, &groupsResizerBar, &listPanel,
-                              &resizerBar, &editorViewport};
-  layout.layOutComponents(comps, 5, area.getX(), area.getY(), area.getWidth(),
-                          area.getHeight(), false, true);
+  PercentageSplitLayout::apply(
+      area.getX(), area.getY(), area.getWidth(), area.getHeight(), true,
+      divider1Fraction, divider2Fraction,
+      groupsPanel, groupsResizerBar, listPanel, resizerBar, editorViewport,
+      5, 60, 80, 180);
   static constexpr int kEditorMinWidth = 400;
   static constexpr int kEditorMinHeight = 120;
   int scrollW = 10;

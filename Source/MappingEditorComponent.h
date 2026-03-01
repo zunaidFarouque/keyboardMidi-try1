@@ -1,7 +1,9 @@
 #pragma once
 #include "DeviceManager.h"
 #include "LayerListPanel.h"
+#include "PercentageSplitLayout.h"
 #include "MappingInspector.h"
+#include "MappingListPanel.h"
 #include "PresetManager.h"
 #include "RawInputManager.h"
 #include "SettingsManager.h"
@@ -90,13 +92,13 @@ private:
   LayerListPanel layerListPanel; // Phase 41: Layer sidebar
   juce::TableListBox table;
   juce::TextButton addButton;
-  juce::TextButton groupsButton;
   juce::TextButton duplicateButton;
   juce::TextButton moveToLayerButton;
   juce::TextButton deleteButton;
   juce::ToggleButton learnButton;
   juce::UndoManager undoManager;
   MappingInspector inspector;
+  MappingListPanel mappingListPanel;
 
   // Phase 56.3: Smart Input Capture
   std::unique_ptr<InputCaptureOverlay> captureOverlay;
@@ -107,9 +109,11 @@ private:
   // 3. Containers (Must die first)
   juce::Viewport inspectorViewport;
 
-  // Resizable layout for table and inspector
-  juce::StretchableLayoutManager horizontalLayout;
-  juce::StretchableLayoutResizerBar resizerBar;
+  // Percentage-based layout: only the dragged divider moves
+  PercentageResizerBar layerResizerBar;
+  PercentageResizerBar resizerBar;
+  float divider1Fraction = 0.15f;  // Layer | table
+  float divider2Fraction = 0.55f;  // Table | inspector
 
   // Phase 41: Helper to get current layer's mappings
   juce::ValueTree getCurrentLayerMappings();
