@@ -1,7 +1,7 @@
 #pragma once
 #include "DeviceManager.h"
 #include "ExpressionEngine.h"
-#include "GridCompiler.h"
+#include "MappingCompiler.h"
 #include "MappingTypes.h"
 #include "PresetManager.h"
 #include "RhythmAnalyzer.h"

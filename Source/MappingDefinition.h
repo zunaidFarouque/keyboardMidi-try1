@@ -20,6 +20,9 @@ struct InspectorControl {
   // is true
   juce::String enabledConditionProperty;
 
+  // When true, changing this control triggers rebuildUI (schema structure changes).
+  bool requiresRebuildOnChange = false;
+
   enum class Type {
     Slider,
     ComboBox,
@@ -81,6 +84,10 @@ using InspectorSchema = std::vector<InspectorControl>;
 //   only layout/header widget), it should be defined in that editor
 //   (TouchpadLayoutDefinition, TouchpadEditorPanel, KeyboardMappingInspector)
 //   instead of being added here without alias/forTouchpadEditor guards.
+//
+// - Set requiresRebuildOnChange for any control whose value change affects which
+//   controls are shown (e.g. type, data1, toggles that are targets of
+//   enabledConditionProperty, combos that switch modes).
 //
 // Any changes to this schema should be validated in both contexts:
 // - KeyboardMappingInspector::rebuildUI (Mappings tab)

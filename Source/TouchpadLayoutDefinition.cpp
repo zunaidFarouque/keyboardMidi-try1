@@ -20,6 +20,7 @@ InspectorSchema TouchpadLayoutDefinition::getCommonLayoutHeader() {
   typeCtrl.options[kTypeMixerId] = "Mixer";
   typeCtrl.options[kTypeDrumPadId] = "Drum Pad / Launcher";
   typeCtrl.options[kTypeChordPadId] = "Chord Pad";
+  typeCtrl.requiresRebuildOnChange = true;
   schema.push_back(typeCtrl);
   InspectorControl layerCtrl;
   layerCtrl.propertyId = "layerId";

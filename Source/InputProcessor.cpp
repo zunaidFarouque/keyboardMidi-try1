@@ -1,6 +1,6 @@
 #include "InputProcessor.h"
 #include "ChordUtilities.h"
-#include "GridCompiler.h"
+#include "MappingCompiler.h"
 #include "MappingTypes.h"
 #include "MidiEngine.h"
 #include "PitchPadUtilities.h"
@@ -217,7 +217,7 @@ void InputProcessor::applySustainDefaultFromPreset() {
 void InputProcessor::rebuildGrid() {
   ++rebuildCount_;
   auto newContext =
-      GridCompiler::compile(presetManager, deviceManager, zoneManager,
+      MappingCompiler::compile(presetManager, deviceManager, zoneManager,
                             touchpadLayoutManager, settingsManager);
   {
     juce::ScopedWriteLock sl(mapLock);

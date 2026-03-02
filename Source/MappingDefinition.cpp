@@ -217,6 +217,7 @@ InspectorSchema MappingDefinition::getSchema(const juce::ValueTree &mapping,
   typeCtrl.options[1] = "Note";
   typeCtrl.options[2] = "Expression";
   typeCtrl.options[3] = "Command";
+  typeCtrl.requiresRebuildOnChange = true;
   setControlDefaultFromMap(typeCtrl);
   schema.push_back(typeCtrl);
 
@@ -350,6 +351,7 @@ InspectorSchema MappingDefinition::getSchema(const juce::ValueTree &mapping,
     target.options[1] = "CC";
     target.options[2] = "PitchBend";
     target.options[3] = "SmartScaleBend";
+    target.requiresRebuildOnChange = true;
     setControlDefaultFromMap(target);
     schema.push_back(target);
 
@@ -394,6 +396,7 @@ InspectorSchema MappingDefinition::getSchema(const juce::ValueTree &mapping,
         ccMode.options[1] = "Position";
         ccMode.options[2] = "Slide";
         ccMode.options[3] = "Encoder";
+        ccMode.requiresRebuildOnChange = true;
         setControlDefaultFromMap(ccMode);
         schema.push_back(ccMode);
       }
@@ -455,6 +458,7 @@ InspectorSchema MappingDefinition::getSchema(const juce::ValueTree &mapping,
       pitchMode.controlType = InspectorControl::Type::ComboBox;
       pitchMode.options[1] = "Absolute";
       pitchMode.options[2] = "Relative";
+      pitchMode.requiresRebuildOnChange = true;
       setControlDefaultFromMap(pitchMode);
       schema.push_back(pitchMode);
       juce::String pitchModeStr = mapping.getProperty("pitchPadMode", "Absolute").toString().trim();
@@ -467,6 +471,7 @@ InspectorSchema MappingDefinition::getSchema(const juce::ValueTree &mapping,
         pitchStart.options[2] = "Center";
         pitchStart.options[3] = "Right";
         pitchStart.options[4] = "Custom";
+        pitchStart.requiresRebuildOnChange = true;
         setControlDefaultFromMap(pitchStart);
         schema.push_back(pitchStart);
         juce::String pitchStartStr = mapping.getProperty("pitchPadStart", "Center").toString().trim();
@@ -488,6 +493,7 @@ InspectorSchema MappingDefinition::getSchema(const juce::ValueTree &mapping,
         customRangeToggle.label = "Custom min/max";
         customRangeToggle.controlType = InspectorControl::Type::Toggle;
         customRangeToggle.widthWeight = 1.0f;
+        customRangeToggle.requiresRebuildOnChange = true;
         setControlDefaultFromMap(customRangeToggle);
         schema.push_back(customRangeToggle);
       }
@@ -685,6 +691,7 @@ InspectorSchema MappingDefinition::getSchema(const juce::ValueTree &mapping,
       slideAxis.options[1] = "Vertical";
       slideAxis.options[2] = "Horizontal";
       slideAxis.options[3] = "Both (XY pad)";
+      slideAxis.requiresRebuildOnChange = true;
       setControlDefaultFromMap(slideAxis);
       schema.push_back(slideAxis);
       InspectorControl returnToggle;
@@ -692,6 +699,7 @@ InspectorSchema MappingDefinition::getSchema(const juce::ValueTree &mapping,
       returnToggle.label = "Return to rest on finger release";
       returnToggle.controlType = InspectorControl::Type::Toggle;
       returnToggle.widthWeight = 1.0f;
+      returnToggle.requiresRebuildOnChange = true;
       setControlDefaultFromMap(returnToggle);
       schema.push_back(returnToggle);
       InspectorControl restVal;
@@ -744,6 +752,7 @@ InspectorSchema MappingDefinition::getSchema(const juce::ValueTree &mapping,
         separateRanges.label = "Separate axis ranges";
         separateRanges.controlType = InspectorControl::Type::Toggle;
         separateRanges.widthWeight = 1.0f;
+        separateRanges.requiresRebuildOnChange = true;
         setControlDefaultFromMap(separateRanges);
         schema.push_back(separateRanges);
 
@@ -844,6 +853,7 @@ InspectorSchema MappingDefinition::getSchema(const juce::ValueTree &mapping,
       encAxis.options[1] = "Vertical";
       encAxis.options[2] = "Horizontal";
       encAxis.options[3] = "Both";
+      encAxis.requiresRebuildOnChange = true;
       setControlDefaultFromMap(encAxis);
       schema.push_back(encAxis);
       InspectorControl encSens;
@@ -894,6 +904,7 @@ InspectorSchema MappingDefinition::getSchema(const juce::ValueTree &mapping,
       outMode.options[1] = "Absolute";
       outMode.options[2] = "Relative";
       outMode.options[3] = "High-Resolution (NRPN)";
+      outMode.requiresRebuildOnChange = true;
       setControlDefaultFromMap(outMode);
       schema.push_back(outMode);
       juce::String encOutModeStr = mapping.getProperty("encoderOutputMode", MappingDefaults::EncoderOutputModeAbsoluteStr).toString().trim();
@@ -973,6 +984,7 @@ InspectorSchema MappingDefinition::getSchema(const juce::ValueTree &mapping,
       pushType.options[1] = "Control Change (CC)";
       pushType.options[2] = "Note";
       pushType.options[3] = "Program Change";
+      pushType.requiresRebuildOnChange = true;
       setControlDefaultFromMap(pushType);
       schema.push_back(pushType);
       InspectorControl pushMode;
@@ -983,6 +995,7 @@ InspectorSchema MappingDefinition::getSchema(const juce::ValueTree &mapping,
       pushMode.options[2] = "Momentary";
       pushMode.options[3] = "Toggle";
       pushMode.options[4] = "Trigger";
+      pushMode.requiresRebuildOnChange = true;
       setControlDefaultFromMap(pushMode);
       schema.push_back(pushMode);
       int encPushMode = (int)mapping.getProperty("encoderPushMode", MappingDefaults::EncoderPushMode);
@@ -1075,6 +1088,7 @@ InspectorSchema MappingDefinition::getSchema(const juce::ValueTree &mapping,
       useEnv.label = "Use Custom ADSR Curve";
       useEnv.controlType = InspectorControl::Type::Toggle;
       useEnv.widthWeight = 1.0f;
+      useEnv.requiresRebuildOnChange = true;
       setControlDefaultFromMap(useEnv);
       schema.push_back(useEnv);
     }
@@ -1169,6 +1183,7 @@ InspectorSchema MappingDefinition::getSchema(const juce::ValueTree &mapping,
     cmdCtrl.options[kCmdCategoryLayer] = "Layer";
     cmdCtrl.options[kCmdCategoryKeyboardGroupSolo] = "Keyboard group";
     cmdCtrl.options[kCmdCategoryTouchpadGroupSolo] = "Touchpad group";
+    cmdCtrl.requiresRebuildOnChange = true;
     setControlDefaultFromMap(cmdCtrl);
     schema.push_back(cmdCtrl);
 
@@ -1180,6 +1195,7 @@ InspectorSchema MappingDefinition::getSchema(const juce::ValueTree &mapping,
       styleCtrl.options[1] = "Hold to sustain";
       styleCtrl.options[2] = "Toggle sustain";
       styleCtrl.options[3] = "Default is on. Hold to not sustain";
+      styleCtrl.requiresRebuildOnChange = true;
       setControlDefaultFromMap(styleCtrl);
       schema.push_back(styleCtrl);
     }
@@ -1191,6 +1207,7 @@ InspectorSchema MappingDefinition::getSchema(const juce::ValueTree &mapping,
       styleCtrl.controlType = InspectorControl::Type::ComboBox;
       styleCtrl.options[1] = "Hold to switch";
       styleCtrl.options[2] = "Toggle layer";
+      styleCtrl.requiresRebuildOnChange = true;
       setControlDefaultFromMap(styleCtrl);
       schema.push_back(styleCtrl);
     }
@@ -1217,6 +1234,7 @@ InspectorSchema MappingDefinition::getSchema(const juce::ValueTree &mapping,
       styleCtrl.options[2] = "Toggle solo";
       styleCtrl.options[3] = "Set solo";
       styleCtrl.options[4] = "Clear solo";
+      styleCtrl.requiresRebuildOnChange = true;
       setControlDefaultFromMap(styleCtrl);
       schema.push_back(styleCtrl);
       InspectorControl groupCtrl;
@@ -1224,6 +1242,7 @@ InspectorSchema MappingDefinition::getSchema(const juce::ValueTree &mapping,
       groupCtrl.label = "Keyboard group";
       groupCtrl.controlType = InspectorControl::Type::ComboBox;
       groupCtrl.options[0] = "None";
+      groupCtrl.requiresRebuildOnChange = true;
       setControlDefaultFromMap(groupCtrl);
       schema.push_back(groupCtrl);
       InspectorControl scopeCtrl;
@@ -1233,6 +1252,7 @@ InspectorSchema MappingDefinition::getSchema(const juce::ValueTree &mapping,
       scopeCtrl.options[1] = "Global";
       scopeCtrl.options[2] = "Layer (forget on change)";
       scopeCtrl.options[3] = "Layer (remember)";
+      scopeCtrl.requiresRebuildOnChange = true;
       setControlDefaultFromMap(scopeCtrl);
       schema.push_back(scopeCtrl);
     }
@@ -1245,6 +1265,7 @@ InspectorSchema MappingDefinition::getSchema(const juce::ValueTree &mapping,
       styleCtrl.options[2] = "Toggle solo";
       styleCtrl.options[3] = "Set solo";
       styleCtrl.options[4] = "Clear solo";
+      styleCtrl.requiresRebuildOnChange = true;
       setControlDefaultFromMap(styleCtrl);
       schema.push_back(styleCtrl);
       InspectorControl groupCtrl;
@@ -1252,6 +1273,7 @@ InspectorSchema MappingDefinition::getSchema(const juce::ValueTree &mapping,
       groupCtrl.label = "Touchpad group";
       groupCtrl.controlType = InspectorControl::Type::ComboBox;
       groupCtrl.options[0] = "None";
+      groupCtrl.requiresRebuildOnChange = true;
       setControlDefaultFromMap(groupCtrl);
       schema.push_back(groupCtrl);
       InspectorControl scopeCtrl;
@@ -1261,6 +1283,7 @@ InspectorSchema MappingDefinition::getSchema(const juce::ValueTree &mapping,
       scopeCtrl.options[1] = "Global";
       scopeCtrl.options[2] = "Layer (forget on change)";
       scopeCtrl.options[3] = "Layer (remember)";
+      scopeCtrl.requiresRebuildOnChange = true;
       setControlDefaultFromMap(scopeCtrl);
       schema.push_back(scopeCtrl);
     }
@@ -1283,6 +1306,7 @@ InspectorSchema MappingDefinition::getSchema(const juce::ValueTree &mapping,
       panicMode.options[1] = "Panic all";
       panicMode.options[2] = "Panic latched only";
       panicMode.options[3] = "Panic chords";
+      panicMode.requiresRebuildOnChange = true;
       setControlDefaultFromMap(panicMode);
       schema.push_back(panicMode);
     }
@@ -1295,6 +1319,7 @@ InspectorSchema MappingDefinition::getSchema(const juce::ValueTree &mapping,
       modeCtrl.controlType = InspectorControl::Type::ComboBox;
       modeCtrl.options[1] = "Global";
       modeCtrl.options[2] = "Local";
+      modeCtrl.requiresRebuildOnChange = true;
       setControlDefaultFromMap(modeCtrl);
       schema.push_back(modeCtrl);
 
@@ -1307,6 +1332,7 @@ InspectorSchema MappingDefinition::getSchema(const juce::ValueTree &mapping,
       modifyCtrl.options[3] = "Up (1 octave)";
       modifyCtrl.options[4] = "Down (1 octave)";
       modifyCtrl.options[5] = "Set (specific semitones)";
+      modifyCtrl.requiresRebuildOnChange = true;
       setControlDefaultFromMap(modifyCtrl);
       schema.push_back(modifyCtrl);
 
@@ -1349,6 +1375,7 @@ InspectorSchema MappingDefinition::getSchema(const juce::ValueTree &mapping,
       dirCtrl.controlType = InspectorControl::Type::ComboBox;
       dirCtrl.options[1] = "Up";
       dirCtrl.options[2] = "Down";
+      dirCtrl.requiresRebuildOnChange = true;
       setControlDefaultFromMap(dirCtrl);
       schema.push_back(dirCtrl);
     }
@@ -1367,6 +1394,7 @@ InspectorSchema MappingDefinition::getSchema(const juce::ValueTree &mapping,
       rootMode.options[1] = "Root +1";
       rootMode.options[2] = "Root -1";
       rootMode.options[3] = "Set root note";
+      rootMode.requiresRebuildOnChange = true;
       setControlDefaultFromMap(rootMode);
       schema.push_back(rootMode);
       if (cmdId == globalRootSet) {
@@ -1392,6 +1420,7 @@ InspectorSchema MappingDefinition::getSchema(const juce::ValueTree &mapping,
       scaleMode.options[1] = "Next scale";
       scaleMode.options[2] = "Previous scale";
       scaleMode.options[3] = "Set scale index";
+      scaleMode.requiresRebuildOnChange = true;
       setControlDefaultFromMap(scaleMode);
       schema.push_back(scaleMode);
       if (cmdId == globalScaleSet) {

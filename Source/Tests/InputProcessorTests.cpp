@@ -509,7 +509,7 @@ TEST_F(InputProcessorTest, DeviceSpecificLayerSwitching) {
   // --- ACT 2: Verify device grid and mappings ---
   auto ctx = proc.getContext();
   ASSERT_TRUE(ctx != nullptr);
-  // deviceGrids keyed by hardware ID (GridCompiler stores under both alias hash
+  // deviceGrids keyed by hardware ID (MappingCompiler stores under both alias hash
   // and hardware IDs)
   ASSERT_TRUE(ctx->deviceGrids.count(devHash) > 0)
       << "Device grids must exist for hardware ID";

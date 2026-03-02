@@ -465,6 +465,7 @@ ZoneSchema ZoneDefinition::getSchema(const Zone *zone) {
     c.options[2] = "Grid";
     c.options[3] = "Piano";
     c.affectsCache = true;
+    c.requiresRebuildOnChange = true;
     schema.push_back(c);
   }
   {

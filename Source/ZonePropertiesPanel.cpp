@@ -660,10 +660,11 @@ void ZonePropertiesPanel::createControl(const ZoneControl &def,
         zone->layoutStrategy = (id == 1)   ? Zone::LayoutStrategy::Linear
                                : (id == 2) ? Zone::LayoutStrategy::Grid
                                            : Zone::LayoutStrategy::Piano;
-        // Rebuild UI so Grid Interval slider enable state updates
-        juce::MessageManager::callAsync([this]() { rebuildUI(); });
       }
       rebuildIfNeeded();
+      if (def.requiresRebuildOnChange) {
+        juce::MessageManager::callAsync([this]() { rebuildUI(); });
+      }
     };
 
     auto rowComp = std::make_unique<LabelEditorRow>();

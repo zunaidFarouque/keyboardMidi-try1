@@ -1,6 +1,6 @@
 #include "../ChordUtilities.h"
 #include "../DeviceManager.h"
-#include "../GridCompiler.h"
+#include "../MappingCompiler.h"
 #include "../PresetManager.h"
 #include "../ScaleLibrary.h"
 #include "../ScaleUtilities.h"
@@ -286,7 +286,7 @@ TEST(ChordUtilitiesZoneIntegration, PianoClose_Triad_CompilesToChordPool) {
   zone->pianoVoicingStyle = Zone::PianoVoicingStyle::Close;
   zoneMgr.addZone(zone);
 
-  auto context = GridCompiler::compile(presetMgr, deviceMgr, zoneMgr,
+  auto context = MappingCompiler::compile(presetMgr, deviceMgr, zoneMgr,
                                        touchpadMixerMgr, settingsMgr);
   const auto &slot = (*context->globalGrids[0])[81];
   ASSERT_TRUE(slot.isActive);
@@ -318,7 +318,7 @@ TEST(ChordUtilitiesZoneIntegration, PianoOpen_Seventh_CompilesToChordPool) {
   zone->pianoVoicingStyle = Zone::PianoVoicingStyle::Open;
   zoneMgr.addZone(zone);
 
-  auto context = GridCompiler::compile(presetMgr, deviceMgr, zoneMgr,
+  auto context = MappingCompiler::compile(presetMgr, deviceMgr, zoneMgr,
                                        touchpadMixerMgr, settingsMgr);
   const auto &slot = (*context->globalGrids[0])[81];
   ASSERT_TRUE(slot.isActive);
@@ -349,7 +349,7 @@ TEST(ChordUtilitiesZoneIntegration, GuitarCampfire_Triad_CompilesToChordPool) {
   zone->guitarPlayerPosition = Zone::GuitarPlayerPosition::Campfire;
   zoneMgr.addZone(zone);
 
-  auto context = GridCompiler::compile(presetMgr, deviceMgr, zoneMgr,
+  auto context = MappingCompiler::compile(presetMgr, deviceMgr, zoneMgr,
                                        touchpadMixerMgr, settingsMgr);
   const auto &slot = (*context->globalGrids[0])[81];
   ASSERT_TRUE(slot.isActive);
@@ -383,7 +383,7 @@ TEST(ChordUtilitiesZoneIntegration,
   zone->guitarFretAnchor = 5;
   zoneMgr.addZone(zone);
 
-  auto context = GridCompiler::compile(presetMgr, deviceMgr, zoneMgr,
+  auto context = MappingCompiler::compile(presetMgr, deviceMgr, zoneMgr,
                                        touchpadMixerMgr, settingsMgr);
   const auto &slot = (*context->globalGrids[0])[81];
   ASSERT_TRUE(slot.isActive);

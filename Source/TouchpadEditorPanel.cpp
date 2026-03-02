@@ -860,24 +860,6 @@ void TouchpadEditorPanel::applyConfigValue(
       }
       currentMapping.mapping.setProperty(propertyId, valueToSet, nullptr);
       manager->updateTouchpadMapping(selectedMappingIndex, currentMapping);
-      // Rebuild UI when schema structure changes (controls show/hide).
-      // pitchPadTouchGlideMs omitted: changing it doesn't show/hide controls, and
-      // rebuilding on every slider tick destroyed the slider and caused crashes.
-      if (propertyId == "type" || propertyId == "useCustomEnvelope" ||
-          propertyId == "adsrTarget" || propertyId == "expressionCCMode" ||
-          propertyId == "encoderAxis" || propertyId == "encoderOutputMode" ||
-          propertyId == "encoderPushMode" ||
-          propertyId == "encoderPushOutputType" ||
-          propertyId == "pitchPadStart" || propertyId == "pitchPadMode" ||
-          propertyId == "pitchPadUseCustomRange" ||
-          propertyId == "smartScaleFollowGlobal" ||
-          propertyId == "data1" || propertyId == "commandCategory" ||
-          propertyId == "sustainStyle" || propertyId == "panicMode" ||
-          propertyId == "layerStyle" || propertyId == "transposeMode" ||
-          propertyId == "transposeModify" || propertyId == "slideAxis" ||
-          propertyId == "slideSeparateAxisRanges") {
-        juce::MessageManager::callAsync([this]() { rebuildUI(); });
-      }
       return;
     }
     return;
@@ -994,6 +976,9 @@ void TouchpadEditorPanel::createControl(
                                  ? juce::var(static_cast<int>(std::round(v)))
                                  : juce::var(v);
       applyConfigValue(propId, valueToSet);
+      if (def.requiresRebuildOnChange) {
+        juce::MessageManager::callAsync([this]() { rebuildUI(); });
+      }
     };
     auto rowComp = std::make_unique<LabelEditorRow>();
     rowComp->label = std::make_unique<juce::Label>();
@@ -1083,11 +1068,17 @@ void TouchpadEditorPanel::createControl(
     cb->onChange = [this, propId, cbPtr, useKeyboardMappingInspectorLogic, def]() {
       if (propId == "smartScaleName") {
         applyConfigValue(propId, juce::var(cbPtr->getText()));
+        if (def.requiresRebuildOnChange) {
+          juce::MessageManager::callAsync([this]() { rebuildUI(); });
+        }
         return;
       }
       int sel = cbPtr->getSelectedId();
       if (propId == "layoutGroupId") {
         applyConfigValue(propId, juce::var(sel - 1)); // map back to groupId
+        if (def.requiresRebuildOnChange) {
+          juce::MessageManager::callAsync([this]() { rebuildUI(); });
+        }
         return;
       }
       if (useKeyboardMappingInspectorLogic && selectionKind == SelectionKind::Mapping &&
@@ -1095,10 +1086,15 @@ void TouchpadEditorPanel::createControl(
         KeyboardMappingInspectorLogic::applyComboSelectionToMapping(
             currentMapping.mapping, def, sel, nullptr);
         manager->updateTouchpadMapping(selectedMappingIndex, currentMapping);
-        rebuildUI();
+        if (def.requiresRebuildOnChange) {
+          juce::MessageManager::callAsync([this]() { rebuildUI(); });
+        }
         return;
       }
       applyConfigValue(propId, juce::var(sel));
+      if (def.requiresRebuildOnChange) {
+        juce::MessageManager::callAsync([this]() { rebuildUI(); });
+      }
     };
     auto rowComp = std::make_unique<LabelEditorRow>();
     rowComp->label = std::make_unique<juce::Label>();
@@ -1114,14 +1110,9 @@ void TouchpadEditorPanel::createControl(
     tb->setToggleState(!currentVal.isVoid() && static_cast<bool>(currentVal),
                        juce::dontSendNotification);
     juce::ToggleButton *tbPtr = tb.get();
-    tb->onClick = [this, propId, tbPtr]() {
+    tb->onClick = [this, propId, tbPtr, def]() {
       applyConfigValue(propId, juce::var(tbPtr->getToggleState()));
-      // Some toggles (e.g. slideReturnOnRelease, pitchPadUseCustomRange)
-      // control visibility of other controls via enabledConditionProperty.
-      // Schedule a UI rebuild asynchronously so the current click handler can
-      // finish before we destroy and recreate controls, avoiding callbacks
-      // into deleted components.
-      if (selectionKind == SelectionKind::Mapping) {
+      if (def.requiresRebuildOnChange) {
         juce::MessageManager::callAsync([this]() { rebuildUI(); });
       }
     };

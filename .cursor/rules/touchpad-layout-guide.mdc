@@ -1,6 +1,6 @@
 ---
 description: Guide for adding new touchpad layout types (Mixer, DrumPad, etc.)
-globs: Source/Touchpad*.cpp,Source/Touchpad*.h,Source/GridCompiler.cpp,Source/InputProcessor.cpp,Source/MappingTypes.h
+globs: Source/Touchpad*.cpp,Source/Touchpad*.h,Source/MappingCompiler.cpp,Source/InputProcessor.cpp,Source/MappingTypes.h
 alwaysApply: false
 ---
 
@@ -31,7 +31,7 @@ Every layout must have:
 | `TouchpadLayoutDefinition.cpp` | Add `getSchema(TouchpadType::NewType)`; add type to combo; append `getCommonLayoutControls()` |
 | `TouchpadEditorPanel.cpp` | `getConfigValue` / `applyConfigValue` for new propertyIds |
 | `TouchpadLayoutManager.cpp` | `typeToString` / `parseType`; `toValueTree` / `fromValueTree` for new fields |
-| `GridCompiler.cpp` | `else if (cfg.type == TouchpadType::NewType)` – compile config → compiled entry; push to `touchpadLayoutOrder` |
+| `MappingCompiler.cpp` | `else if (cfg.type == TouchpadType::NewType)` – compile config → compiled entry; push to `touchpadLayoutOrder` |
 | `InputProcessor.cpp` | `findLayoutForPoint` – handle `TouchpadType::NewType`; touch handling for new layout |
 | `TouchpadVisualizerPanel.cpp` | `else if (ref.type == TouchpadType::NewType)` – draw the layout in its region |
 | `MappingTypes.h` | Add `TouchpadLayoutRef` handling for new type (if needed) |
@@ -69,6 +69,6 @@ Every layout must have:
 
 1. `TouchpadLayoutTypes.h`: `TouchpadType::XYPad = 2`, `TouchpadLayoutConfig` fields, `TouchpadXYPadEntry`
 2. `TouchpadLayoutDefinition.cpp`: `kTypeXYPadId = 3`, combo entry, `getSchema(TouchpadType::XYPad)` with XY-specific controls + `getCommonLayoutControls()`
-3. `GridCompiler.cpp`: `else if (cfg.type == TouchpadType::XYPad)` – fill `TouchpadXYPadEntry`, push to `touchpad XYPadStrips` and `touchpadLayoutOrder`
+3. `MappingCompiler.cpp`: `else if (cfg.type == TouchpadType::XYPad)` – fill `TouchpadXYPadEntry`, push to `touchpad XYPadStrips` and `touchpadLayoutOrder`
 4. `InputProcessor.cpp`: `findLayoutForPoint` returns `{TouchpadType::XYPad, index}`; add XY pad touch handling
 5. `TouchpadVisualizerPanel.cpp`: draw XY pad in `layoutRect` when `ref.type == TouchpadType::XYPad`

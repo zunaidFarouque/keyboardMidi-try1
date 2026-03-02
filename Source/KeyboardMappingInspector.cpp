@@ -655,23 +655,7 @@ void KeyboardMappingInspector::createControl(const InspectorControl &def,
           KeyboardMappingInspectorLogic::applyComboSelectionToMapping(tree, def, id,
                                                               &undoManager);
       }
-      if (def.propertyId == "type" || def.propertyId == "data1" ||
-          def.propertyId == "commandCategory" ||
-          def.propertyId == "sustainStyle" ||
-          def.propertyId == "panicMode" ||
-          def.propertyId == "layerStyle" ||
-          def.propertyId == "transposeMode" ||
-          def.propertyId == "transposeModify" ||
-          def.propertyId == "globalModeDirection" ||
-          def.propertyId == "globalRootMode" ||
-          def.propertyId == "globalScaleMode" ||
-          def.propertyId == "touchpadSoloType" ||
-          def.propertyId == "touchpadLayoutGroupId" ||
-          def.propertyId == "touchpadSoloScope" ||
-          def.propertyId == "keyboardSoloType" ||
-          def.propertyId == "keyboardLayoutGroupId" ||
-          def.propertyId == "keyboardSoloScope" ||
-          def.propertyId == "keyboardGroupId") {
+      if (def.requiresRebuildOnChange) {
         juce::MessageManager::callAsync([this]() { rebuildUI(); });
       }
     };
@@ -717,10 +701,7 @@ void KeyboardMappingInspector::createControl(const InspectorControl &def,
         if (tree.isValid())
           tree.setProperty(propId, v, &undoManager);
       }
-      // When this toggle controls other controls' enabledConditionProperty
-      // (e.g. Slide "Return to rest on finger release"), rebuild the UI so
-      // dependent sliders can appear/disappear immediately.
-      if (def.propertyId == "slideReturnOnRelease") {
+      if (def.requiresRebuildOnChange) {
         juce::MessageManager::callAsync([this]() { rebuildUI(); });
       }
     };

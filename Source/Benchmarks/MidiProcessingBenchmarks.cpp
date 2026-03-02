@@ -1,7 +1,7 @@
 // MIDI Processing Performance Benchmarks
 // Uses Google Benchmark to measure latency and throughput of various MIDI paths
 
-#include "../GridCompiler.h"
+#include "../MappingCompiler.h"
 #include "../TouchpadTypes.h"
 #include "BenchmarkFixtures.h"
 
@@ -723,11 +723,11 @@ BENCHMARK_REGISTER_F(MidiBenchmarkFixture, Stress_ADSREnvelopes_20)
     ->Unit(benchmark::kMicrosecond);
 
 // =============================================================================
-// Category 8: Hot Path - GridCompiler and ZoneManager
+// Category 8: Hot Path - MappingCompiler and ZoneManager
 // =============================================================================
 
 // Full grid compile: 9 layers, 20 mappings, 5 zones (realistic preset)
-BENCHMARK_DEFINE_F(MidiBenchmarkFixture, HotPath_GridCompiler_FullRebuild)
+BENCHMARK_DEFINE_F(MidiBenchmarkFixture, HotPath_MappingCompiler_FullRebuild)
 (benchmark::State &state) {
   for (int layer = 0; layer < 9; ++layer) {
     for (int k = 0; k < 3; ++k) {
@@ -748,14 +748,14 @@ BENCHMARK_DEFINE_F(MidiBenchmarkFixture, HotPath_GridCompiler_FullRebuild)
   mockMidi.clear();
 
   for (auto _ : state) {
-    (void)GridCompiler::compile(presetMgr, deviceMgr, proc.getZoneManager(),
-                                touchpadLayoutMgr, settingsMgr);
+    (void)MappingCompiler::compile(presetMgr, deviceMgr, proc.getZoneManager(),
+                                   touchpadLayoutMgr, settingsMgr);
   }
   for (auto &z : zonesToRemove) {
     proc.getZoneManager().removeZone(z);
   }
 }
-BENCHMARK_REGISTER_F(MidiBenchmarkFixture, HotPath_GridCompiler_FullRebuild)
+BENCHMARK_REGISTER_F(MidiBenchmarkFixture, HotPath_MappingCompiler_FullRebuild)
     ->Unit(benchmark::kMicrosecond);
 
 // ZoneManager: add 5 zones (each triggers rebuildLookupTable)

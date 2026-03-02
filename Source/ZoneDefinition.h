@@ -55,6 +55,10 @@ struct ZoneControl {
 
   // If true, changing this property requires rebuildZoneCache()
   bool affectsCache = false;
+
+  // When true, changing this control triggers rebuildUI (e.g. enable state of
+  // other controls changes).
+  bool requiresRebuildOnChange = false;
 };
 
 using ZoneSchema = std::vector<ZoneControl>;

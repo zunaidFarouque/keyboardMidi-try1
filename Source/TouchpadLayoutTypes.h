@@ -62,7 +62,7 @@ struct TouchpadLayoutGroup {
 
 // Config for one touchpad mapping row in the Touchpad tab.
 // This is independent from the global Mapping list; we keep a full ValueTree
-// for the mapping so we can reuse the existing mapping engine (GridCompiler,
+// for the mapping so we can reuse the existing mapping engine (MappingCompiler,
 // InputProcessor, MappingDefinition, etc.) without re-implementing every
 // property by hand.
 struct TouchpadMappingConfig {

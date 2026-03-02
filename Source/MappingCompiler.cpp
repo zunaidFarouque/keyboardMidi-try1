@@ -1,4 +1,4 @@
-#include "GridCompiler.h"
+#include "MappingCompiler.h"
 #include "MappingDefinition.h"
 #include "MappingDefaults.h"
 #include "MidiNoteUtilities.h"
@@ -1421,18 +1421,20 @@ void compileMappingsForLayer(
 
 } // namespace
 
-std::shared_ptr<CompiledMapContext> GridCompiler::compile(
+std::shared_ptr<CompiledMapContext> MappingCompiler::compile(
     PresetManager &presetMgr, DeviceManager &deviceMgr, ZoneManager &zoneMgr,
-    TouchpadLayoutManager &touchpadMixerMgr, SettingsManager &settingsMgr) {
-  // 1. Setup Context
+    TouchpadLayoutManager &touchpadLayoutMgr, SettingsManager &settingsMgr) {
   auto context = std::make_shared<CompiledMapContext>();
+  compileTouchpadPart(*context, presetMgr, deviceMgr, zoneMgr, touchpadLayoutMgr,
+                     settingsMgr);
+  compileKeyboardPart(*context, presetMgr, deviceMgr, zoneMgr, settingsMgr);
+  return context;
+}
 
-  // Collect Base-layer mappings that should apply on all layers.
-  std::unordered_map<uintptr_t, std::vector<ForcedMapping>> forcedByAlias;
-  collectForcedMappings(presetMgr, deviceMgr, zoneMgr, settingsMgr,
-                        forcedByAlias);
-
-  // 2. Collect touchpad mappings (one pass over all layers)
+void MappingCompiler::compileTouchpadPart(CompiledMapContext &context,
+    PresetManager &presetMgr, DeviceManager &deviceMgr, ZoneManager &zoneMgr,
+    TouchpadLayoutManager &touchpadLayoutMgr, SettingsManager &settingsMgr) {
+  // Collect touchpad mappings (one pass over all layers)
   const uintptr_t touchpadAliasHash = static_cast<uintptr_t>(
       std::hash<juce::String>{}(juce::String("Touchpad").trim()));
   for (int layerId = 0; layerId < 9; ++layerId) {
@@ -1442,12 +1444,12 @@ std::shared_ptr<CompiledMapContext> GridCompiler::compile(
     compileMappingsForLayer(dummyV, dummyA, presetMgr, deviceMgr, zoneMgr,
                             settingsMgr, touchpadAliasHash, layerId,
                             touchedKeys, VisualState::Active,
-                            &context->touchpadMappings);
+                            &context.touchpadMappings);
   }
 
-  // 2c. Collect touchpad mappings defined in the Touchpad tab (TouchpadLayoutManager).
+  // Collect touchpad mappings defined in the Touchpad tab (TouchpadLayoutManager).
   {
-    auto touchpadMappings = touchpadMixerMgr.getTouchpadMappings();
+    auto touchpadMappings = touchpadLayoutMgr.getTouchpadMappings();
     for (const auto &cfg : touchpadMappings) {
       if (!cfg.mapping.isValid())
         continue;
@@ -1458,13 +1460,13 @@ std::shared_ptr<CompiledMapContext> GridCompiler::compile(
                                           cfg.regionLock,
                                           juce::String(cfg.name),
                                           zoneMgr, settingsMgr,
-                                          context->touchpadMappings, &cfg.region);
+                                          context.touchpadMappings, &cfg.region);
     }
   }
 
-  // 2b. Collect touchpad mixer and drum pad strips. Sort by z-index descending
+  // Collect touchpad mixer and drum pad strips. Sort by z-index descending
   // (higher = on top when regions overlap on same layer).
-  auto layouts = touchpadMixerMgr.getLayouts();
+  auto layouts = touchpadLayoutMgr.getLayouts();
   std::sort(layouts.begin(), layouts.end(),
             [](const TouchpadLayoutConfig &a, const TouchpadLayoutConfig &b) {
               return a.zIndex > b.zIndex;
@@ -1510,9 +1512,9 @@ std::shared_ptr<CompiledMapContext> GridCompiler::compile(
       entry.invRegionHeight = (rH > 1e-6f) ? (1.0f / rH) : 1.0f;
       entry.regionLock = cfg.regionLock;
       entry.modeFlags |= (cfg.regionLock ? kMixerModeRegionLock : 0);
-      context->touchpadMixerStrips.push_back(entry);
-      context->touchpadLayoutOrder.push_back(
-          {TouchpadType::Mixer, context->touchpadMixerStrips.size() - 1});
+      context.touchpadMixerStrips.push_back(entry);
+      context.touchpadLayoutOrder.push_back(
+          {TouchpadType::Mixer, context.touchpadMixerStrips.size() - 1});
     } else if (cfg.type == TouchpadType::DrumPad) {
       TouchpadDrumPadEntry dpEntry;
       dpEntry.layerId = juce::jlimit(0, 8, cfg.layerId);
@@ -1556,9 +1558,9 @@ std::shared_ptr<CompiledMapContext> GridCompiler::compile(
       dpEntry.layoutMode = cfg.drumPadLayoutMode;
       dpEntry.harmonicRowInterval = cfg.harmonicRowInterval;
       dpEntry.harmonicUseScaleFilter = cfg.harmonicUseScaleFilter;
-      context->touchpadDrumPadStrips.push_back(dpEntry);
-      context->touchpadLayoutOrder.push_back(
-          {TouchpadType::DrumPad, context->touchpadDrumPadStrips.size() - 1});
+      context.touchpadDrumPadStrips.push_back(dpEntry);
+      context.touchpadLayoutOrder.push_back(
+          {TouchpadType::DrumPad, context.touchpadDrumPadStrips.size() - 1});
     } else if (cfg.type == TouchpadType::ChordPad) {
       TouchpadChordPadEntry cp;
       cp.layerId = juce::jlimit(0, 8, cfg.layerId);
@@ -1584,13 +1586,22 @@ std::shared_ptr<CompiledMapContext> GridCompiler::compile(
       cp.invRegionWidth = (rW > 1e-6f) ? (1.0f / rW) : 1.0f;
       cp.invRegionHeight = (rH > 1e-6f) ? (1.0f / rH) : 1.0f;
       cp.regionLock = cfg.regionLock;
-      context->touchpadChordPads.push_back(cp);
-      context->touchpadLayoutOrder.push_back(
-          {TouchpadType::ChordPad, context->touchpadChordPads.size() - 1});
+      context.touchpadChordPads.push_back(cp);
+      context.touchpadLayoutOrder.push_back(
+          {TouchpadType::ChordPad, context.touchpadChordPads.size() - 1});
     }
   }
+}
 
-  // 3. Define Helper Lambda "applyLayerToGrid"
+void MappingCompiler::compileKeyboardPart(CompiledMapContext &context,
+    PresetManager &presetMgr, DeviceManager &deviceMgr, ZoneManager &zoneMgr,
+    SettingsManager &settingsMgr) {
+  // Collect Base-layer mappings that should apply on all layers.
+  std::unordered_map<uintptr_t, std::vector<ForcedMapping>> forcedByAlias;
+  collectForcedMappings(presetMgr, deviceMgr, zoneMgr, settingsMgr,
+                        forcedByAlias);
+
+  // Define Helper Lambda "applyLayerToGrid"
   // Phase 53.5: targetState = Active for current layer, Inherited for lower
   // layer (device Pass 2). keysWrittenOut: optional, record keys written by
   // this layer for "private to layer" stripping.
@@ -1615,7 +1626,7 @@ std::shared_ptr<CompiledMapContext> GridCompiler::compile(
     }
 
     compileZonesForLayer(vGrid, aGrid, zoneMgr, deviceMgr, aliasHash, layerId,
-                         touchedKeys, context->chordPool, targetState,
+                         touchedKeys, context.chordPool, targetState,
                          keysWrittenOut);
 
     compileMappingsForLayer(vGrid, aGrid, presetMgr, deviceMgr, zoneMgr,
@@ -1623,10 +1634,10 @@ std::shared_ptr<CompiledMapContext> GridCompiler::compile(
                             targetState, nullptr, keysWrittenOut);
   };
 
-  // 3. PASS 1: Compile Global Stack (Vertical) – Hash 0 only
+  // PASS 1: Compile Global Stack (Vertical) – Hash 0 only
   // Layer inheritance: soloLayer, passthruInheritance, privateToLayer.
   const uintptr_t globalHash = 0;
-  context->visualLookup[globalHash].resize(9);
+  context.visualLookup[globalHash].resize(9);
 
   std::array<int, 9> effectiveBaseIndex{};
   std::array<std::vector<bool>, 9> keysWrittenByLayer;
@@ -1657,8 +1668,8 @@ std::shared_ptr<CompiledMapContext> GridCompiler::compile(
       *aGrid = *makeAudioGrid();
     } else {
       const int baseIdx = effectiveBaseIndex[(size_t)(L - 1)];
-      *vGrid = *context->visualLookup[globalHash][(size_t)baseIdx];
-      *aGrid = *context->globalGrids[(size_t)baseIdx];
+      *vGrid = *context.visualLookup[globalHash][(size_t)baseIdx];
+      *aGrid = *context.globalGrids[(size_t)baseIdx];
 
       // If layer L-1 has "private to layer", clear slots it wrote so we don't
       // inherit them.
@@ -1701,8 +1712,8 @@ std::shared_ptr<CompiledMapContext> GridCompiler::compile(
     else
       effectiveBaseIndex[(size_t)L] = L;
 
-    context->visualLookup[globalHash][(size_t)L] = vGrid;
-    context->globalGrids[(size_t)L] = aGrid;
+    context.visualLookup[globalHash][(size_t)L] = vGrid;
+    context.globalGrids[(size_t)L] = aGrid;
   }
 
   // 4. PASS 2: Compile Device Stacks (Horizontal – Device inherits Global,
@@ -1714,15 +1725,15 @@ std::shared_ptr<CompiledMapContext> GridCompiler::compile(
     if (devHash == 0)
       continue;
 
-    context->visualLookup[devHash].resize(9);
+    context.visualLookup[devHash].resize(9);
 
     for (int L = 0; L < 9; ++L) {
       auto vGrid = std::make_shared<VisualGrid>();
       auto aGrid = std::make_shared<AudioGrid>();
 
       // STEP A: INHERIT FROM GLOBAL AT THIS LAYER
-      *vGrid = *context->visualLookup[globalHash][(size_t)L];
-      *aGrid = *context->globalGrids[(size_t)L];
+      *vGrid = *context.visualLookup[globalHash][(size_t)L];
+      *aGrid = *context.globalGrids[(size_t)L];
 
       // VISUAL TRANSITION: Global data is "Inherited" from the device's
       // perspective
@@ -1743,8 +1754,8 @@ std::shared_ptr<CompiledMapContext> GridCompiler::compile(
         applyLayerToGrid(*vGrid, *aGrid, k, devHash, stateForPass);
       }
 
-      context->visualLookup[devHash][(size_t)L] = vGrid;
-      context->deviceGrids[devHash][(size_t)L] = aGrid;
+      context.visualLookup[devHash][(size_t)L] = vGrid;
+      context.deviceGrids[devHash][(size_t)L] = aGrid;
     }
 
     // Phase 53.9: InputProcessor looks up by hardware ID; store grids under
@@ -1753,18 +1764,16 @@ std::shared_ptr<CompiledMapContext> GridCompiler::compile(
     auto hardwareIds = deviceMgr.getHardwareForAlias(aliasName);
     for (auto hwId : hardwareIds) {
       if (hwId != 0)
-        context->deviceGrids[hwId] = context->deviceGrids[devHash];
+        context.deviceGrids[hwId] = context.deviceGrids[devHash];
     }
   }
-
-  return context;
 }
 
 // ---------------------------------------------------------------------------
 // Phase 50.3 – Zone Compilation & Chord Baking
 // ---------------------------------------------------------------------------
 
-void GridCompiler::compileZones(CompiledMapContext &context,
+void MappingCompiler::compileZones(CompiledMapContext &context,
                                 ZoneManager &zoneMgr, DeviceManager &deviceMgr,
                                 int layerId) {
   const int globalChrom = zoneMgr.getGlobalChromaticTranspose();

@@ -558,3 +558,55 @@ TEST(MappingDefinitionTest, ExpressionSchemaAdsrControlsHaveDefaultValue) {
     }
   }
 }
+
+TEST(MappingDefinitionTest, RequiresRebuildOnChangeForSchemaAffectingControls) {
+  auto hasRebuild = [](const InspectorSchema &s, const juce::String &id) {
+    for (const auto &c : s)
+      if (c.propertyId == id)
+        return c.requiresRebuildOnChange;
+    return false;
+  };
+
+  // Type control always has requiresRebuildOnChange
+  {
+    juce::ValueTree mapping("Mapping");
+    mapping.setProperty("type", "Note", nullptr);
+    InspectorSchema schema = MappingDefinition::getSchema(mapping);
+    EXPECT_TRUE(hasRebuild(schema, "type"))
+        << "type control should have requiresRebuildOnChange";
+  }
+
+  // Touchpad Expression Slide: slideReturnOnRelease has requiresRebuildOnChange
+  {
+    juce::ValueTree mapping("Mapping");
+    mapping.setProperty("type", "Expression", nullptr);
+    mapping.setProperty("adsrTarget", "CC", nullptr);
+    mapping.setProperty("expressionCCMode", "Slide", nullptr);
+    mapping.setProperty("inputAlias", "Touchpad", nullptr);
+    InspectorSchema schema = MappingDefinition::getSchema(mapping, 12, true);
+    EXPECT_TRUE(hasRebuild(schema, "slideReturnOnRelease"))
+        << "slideReturnOnRelease should have requiresRebuildOnChange";
+  }
+
+  // Touchpad Expression PitchBend: pitchPadUseCustomRange has requiresRebuildOnChange
+  {
+    juce::ValueTree mapping("Mapping");
+    mapping.setProperty("type", "Expression", nullptr);
+    mapping.setProperty("adsrTarget", "PitchBend", nullptr);
+    mapping.setProperty("inputAlias", "Touchpad", nullptr);
+    InspectorSchema schema = MappingDefinition::getSchema(mapping, 12, true);
+    EXPECT_TRUE(hasRebuild(schema, "pitchPadUseCustomRange"))
+        << "pitchPadUseCustomRange should have requiresRebuildOnChange";
+  }
+
+  // Command: commandCategory has requiresRebuildOnChange
+  {
+    juce::ValueTree mapping("Mapping");
+    mapping.setProperty("type", "Command", nullptr);
+    mapping.setProperty("data1", (int)MIDIQy::CommandID::SustainMomentary,
+                       nullptr);
+    InspectorSchema schema = MappingDefinition::getSchema(mapping);
+    EXPECT_TRUE(hasRebuild(schema, "commandCategory"))
+        << "commandCategory should have requiresRebuildOnChange";
+  }
+}

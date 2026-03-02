@@ -31,7 +31,7 @@ add_subdirectory(JUCE)
 
 # 4. Create the Core Static Library (Business Logic)
 add_library(MIDIQy_Core STATIC
-    Source/GridCompiler.cpp
+    Source/MappingCompiler.cpp
     Source/InputProcessor.cpp
     Source/MappingDefinition.cpp
     Source/KeyboardMappingInspectorLogic.cpp
@@ -191,7 +191,7 @@ add_executable(MIDIQy_Tests
     Source/Tests/ChordUtilitiesTests.cpp
     Source/Tests/MidiPerformanceModeTests.cpp
     Source/Tests/ColourContrastTests.cpp
-    Source/Tests/GridCompilerTests.cpp
+    Source/Tests/MappingCompilerTests.cpp
     Source/Tests/PitchPadUtilitiesTests.cpp
     Source/Tests/InputProcessorTests.cpp
     Source/Tests/MappingDefinitionTests.cpp
