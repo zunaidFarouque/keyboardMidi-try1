@@ -9,6 +9,12 @@ public:
   DeviceManager();
   ~DeviceManager() override;
 
+  // Compute a stable hash for an alias name.
+  // - Returns 0 for \"Any / Master\", \"Global (All Devices)\", \"Global\",
+  //   \"Unassigned\", or empty/whitespace-only strings (represents Global).
+  // - Otherwise returns a non-zero hash derived from the trimmed alias name.
+  static uintptr_t getAliasHash(const juce::String &aliasName);
+
   // Create a new alias
   void createAlias(const juce::String &name);
 

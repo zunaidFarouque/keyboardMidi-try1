@@ -31,6 +31,17 @@ DeviceManager::DeviceManager() {
 
 DeviceManager::~DeviceManager() { saveConfig(); }
 
+uintptr_t DeviceManager::getAliasHash(const juce::String &aliasName) {
+  const juce::String trimmed = aliasName.trim();
+  if (trimmed.isEmpty() || trimmed.equalsIgnoreCase("Any / Master") ||
+      trimmed.equalsIgnoreCase("Global (All Devices)") ||
+      trimmed.equalsIgnoreCase("Global") ||
+      trimmed.equalsIgnoreCase("Unassigned"))
+    return 0; // Hash 0 = Global (All Devices) / unassigned
+
+  return static_cast<uintptr_t>(std::hash<juce::String>{}(trimmed));
+}
+
 void DeviceManager::createAlias(const juce::String &name) {
   if (name.isEmpty() || aliasExists(name))
     return;
@@ -126,15 +137,6 @@ void DeviceManager::deleteAlias(const juce::String &aliasName) {
   }
 }
 
-// Helper to convert alias name to hash (same as in
-// InputProcessor/ZonePropertiesPanel)
-static uintptr_t getAliasHash(const juce::String &aliasName) {
-  if (aliasName.isEmpty() || aliasName == "Any / Master" ||
-      aliasName == "Unassigned")
-    return 0;
-  return static_cast<uintptr_t>(std::hash<juce::String>{}(aliasName));
-}
-
 void DeviceManager::renameAlias(const juce::String &oldNameIn,
                                 const juce::String &newNameIn,
                                 PresetManager *presetManager) {
@@ -166,8 +168,8 @@ void DeviceManager::renameAlias(const juce::String &oldNameIn,
     return;
 
   // Calculate Hashes
-  uintptr_t oldHash = getAliasHash(oldName);
-  uintptr_t newHash = getAliasHash(newName);
+  uintptr_t oldHash = DeviceManager::getAliasHash(oldName);
+  uintptr_t newHash = DeviceManager::getAliasHash(newName);
 
   // 2. Update Mappings (Safely - Collect then Update pattern)
   if (presetManager) {
@@ -267,7 +269,8 @@ DeviceManager::getAliasesForHardware(uintptr_t hardwareId) const {
       continue;
 
     juce::String aliasName = aliasNode.getProperty("name").toString();
-    juce::uint64 aliasHash = static_cast<juce::uint64>(getAliasHash(aliasName));
+    juce::uint64 aliasHash =
+        static_cast<juce::uint64>(DeviceManager::getAliasHash(aliasName));
 
     for (int j = 0; j < aliasNode.getNumChildren(); ++j) {
       auto hardwareNode = aliasNode.getChild(j);
@@ -387,7 +390,7 @@ void DeviceManager::rebuildAliasCache() {
       continue;
 
     juce::String name = aliasNode.getProperty("name").toString();
-    uintptr_t hash = getAliasHash(name);
+    uintptr_t hash = DeviceManager::getAliasHash(name);
     aliasNameCache[hash] = name;
   }
 }
@@ -427,7 +430,7 @@ juce::StringArray DeviceManager::getEmptyAliases(
         continue;
 
       juce::String name = aliasNode.getProperty("name").toString();
-      uintptr_t hash = getAliasHash(name);
+      uintptr_t hash = DeviceManager::getAliasHash(name);
 
       if (hash == requiredHash) {
         aliasName = name;

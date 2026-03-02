@@ -13,19 +13,6 @@
 
 namespace {
 
-// Helper to convert alias name to hash.
-// Must stay in sync with InputProcessor/ZonePropertiesPanel logic.
-uintptr_t aliasNameToHash(const juce::String &aliasName) {
-  const juce::String trimmed = aliasName.trim();
-  if (trimmed.isEmpty() || trimmed.equalsIgnoreCase("Any / Master") ||
-      trimmed.equalsIgnoreCase("Global (All Devices)") ||
-      trimmed.equalsIgnoreCase("Global") ||
-      trimmed.equalsIgnoreCase("Unassigned"))
-    return 0; // Hash 0 = Global (All Devices)
-
-  return static_cast<uintptr_t>(std::hash<juce::String>{}(trimmed));
-}
-
 // Helper to parse legacy deviceHash property (hex string or int).
 uintptr_t parseDeviceHash(const juce::var &var) {
   if (var.isString())
@@ -586,7 +573,7 @@ static void collectForcedMappings(
     if (inputKey < 0 || inputKey > 0xFF)
       continue;
 
-    uintptr_t mappingAliasHash = aliasNameToHash(aliasName);
+    uintptr_t mappingAliasHash = DeviceManager::getAliasHash(aliasName);
 
     juce::var deviceHashVar = mapping.getProperty("deviceHash");
     bool hasDeviceHash =
@@ -597,7 +584,7 @@ static void collectForcedMappings(
     if (mappingAliasHash == 0 && hasDeviceHash && deviceHash != 0) {
       juce::String resolvedAlias = deviceMgr.getAliasForHardware(deviceHash);
       if (resolvedAlias != "Unassigned" && resolvedAlias.isNotEmpty()) {
-        mappingAliasHash = aliasNameToHash(resolvedAlias);
+        mappingAliasHash = DeviceManager::getAliasHash(resolvedAlias);
       }
       // Unresolved deviceHash: treat as device-specific (only apply when
       // compiling that device). Tests use alias hash as deviceHash.
@@ -1247,7 +1234,7 @@ void compileMappingsForLayer(
     if (inputKey < 0 || inputKey > 0xFF)
       continue;
 
-    uintptr_t mappingAliasHash = aliasNameToHash(aliasName);
+    uintptr_t mappingAliasHash = DeviceManager::getAliasHash(aliasName);
 
     juce::var deviceHashVar = mapping.getProperty("deviceHash");
     bool hasDeviceHash =
@@ -1257,7 +1244,7 @@ void compileMappingsForLayer(
     if (mappingAliasHash == 0 && hasDeviceHash && deviceHash != 0) {
       juce::String resolvedAlias = deviceMgr.getAliasForHardware(deviceHash);
       if (resolvedAlias != "Unassigned" && resolvedAlias.isNotEmpty()) {
-        mappingAliasHash = aliasNameToHash(resolvedAlias);
+        mappingAliasHash = DeviceManager::getAliasHash(resolvedAlias);
       }
       // Unresolved deviceHash: treat as device-specific (only apply when
       // compiling that device). Tests use alias hash as deviceHash.

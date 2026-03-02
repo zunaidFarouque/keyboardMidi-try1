@@ -280,11 +280,12 @@ MainComponent::MainComponent()
   };
 
   // --- Setup Main Tabs ---
-  mainTabs.addTab("Keyboard Mappings", juce::Colour(0xff2a2a2a), mappingEditor.get(),
+  mainTabs.addTab("Keyboard Mappings", juce::Colour(0xff2a2a2a),
+                  mappingEditor.get(), false);
+  mainTabs.addTab("Keyboard Zones", juce::Colour(0xff2a2a2a), zoneEditor.get(),
                   false);
-  mainTabs.addTab("Zones", juce::Colour(0xff2a2a2a), zoneEditor.get(), false);
-  mainTabs.addTab("Touchpad", juce::Colour(0xff2a2a2a), touchpadTab.get(),
-                  false);
+  mainTabs.addTab("Touchpad Mappings", juce::Colour(0xff2a2a2a),
+                  touchpadTab.get(), false);
   settingsViewport.setViewedComponent(settingsPanel.get(), false);
   settingsViewport.setScrollBarsShown(true, false); // vertical scrollbar only
   mainTabs.addTab("Settings", juce::Colour(0xff2a2a2a), &settingsViewport,

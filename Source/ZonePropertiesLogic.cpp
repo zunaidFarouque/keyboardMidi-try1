@@ -201,6 +201,17 @@ bool setZonePropertyFromKey(Zone *zone, const juce::String &propertyKey,
                              const juce::var &value) {
   if (!zone)
     return false;
+  if (propertyKey == "zoneColor") {
+    if (!value.isString())
+      return false;
+    juce::String s = value.toString();
+    if (s.isEmpty()) {
+      zone->zoneColor = juce::Colours::transparentBlack;
+      return true;
+    }
+    zone->zoneColor = juce::Colour::fromString(s);
+    return true;
+  }
   if (applySlider(zone, propertyKey, value))
     return true;
   if (applyCombo(zone, propertyKey, value))

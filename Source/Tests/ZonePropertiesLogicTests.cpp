@@ -83,6 +83,14 @@ TEST(ZonePropertiesLogicTest, SetGhostVelocityScale) {
   EXPECT_FLOAT_EQ(z.ghostVelocityScale, 0.5f);
 }
 
+TEST(ZonePropertiesLogicTest, SetZoneColorFromString) {
+  Zone z;
+  z.zoneColor = juce::Colours::transparentBlack;
+  EXPECT_TRUE(ZonePropertiesLogic::setZonePropertyFromKey(
+      &z, "zoneColor", juce::String("#ff112233")));
+  EXPECT_EQ(z.zoneColor.toString(), juce::String("#ff112233"));
+}
+
 TEST(ZonePropertiesLogicTest, UnknownKey_ReturnsFalse) {
   Zone z;
   EXPECT_FALSE(ZonePropertiesLogic::setZonePropertyFromKey(&z, "unknownKey", 1));

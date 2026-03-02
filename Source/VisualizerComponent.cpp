@@ -28,14 +28,6 @@ static constexpr float kTouchpadPanelMargin = 16.0f;
 static constexpr float kTouchpadAspectW = 3.0f;
 static constexpr float kTouchpadAspectH = 2.0f;
 
-// Helper to convert alias name to hash (same as in InputProcessor)
-static uintptr_t aliasNameToHash(const juce::String &aliasName) {
-  if (aliasName.isEmpty() || aliasName == "Any / Master" ||
-      aliasName == "Unassigned")
-    return 0;
-  return static_cast<uintptr_t>(std::hash<juce::String>{}(aliasName));
-}
-
 // Draggable bar to resize the global panel; collapse when dragged too far left
 namespace {
 class GlobalPanelResizerBar : public juce::Component {
@@ -891,8 +883,8 @@ void VisualizerComponent::updateViewSelector() {
 
   // Add all aliases (Phase 39.2: Store full 64-bit hashes)
   auto aliases = deviceManager->getAllAliasNames();
-  for (int i = 0; i < aliases.size(); ++i) {
-    uintptr_t aliasHash = aliasNameToHash(aliases[i]);
+    for (int i = 0; i < aliases.size(); ++i) {
+      uintptr_t aliasHash = DeviceManager::getAliasHash(aliases[i]);
     viewSelector.addItem(aliases[i], i + 2); // Start IDs from 2
     viewHashes.push_back(aliasHash);
   }
@@ -975,7 +967,7 @@ void VisualizerComponent::timerCallback() {
       juce::String aliasName = deviceManager->getAliasForHardware(handle);
       uintptr_t aliasHash =
           (aliasName != "Unassigned" && aliasName.isNotEmpty())
-              ? aliasNameToHash(aliasName)
+              ? DeviceManager::getAliasHash(aliasName)
               : 0;
 
       if (aliasHash != currentViewHash) {

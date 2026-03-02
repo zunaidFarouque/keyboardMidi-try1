@@ -35,6 +35,7 @@ add_library(MIDIQy_Core STATIC
     Source/InputProcessor.cpp
     Source/MappingDefinition.cpp
     Source/KeyboardMappingInspectorLogic.cpp
+    Source/TouchpadEditorLogic.cpp
     Source/PitchPadUtilities.cpp
     Source/PresetManager.cpp
     Source/DeviceManager.cpp
@@ -191,6 +192,8 @@ add_executable(MIDIQy_Tests
     Source/Tests/ChordUtilitiesTests.cpp
     Source/Tests/MidiPerformanceModeTests.cpp
     Source/Tests/ColourContrastTests.cpp
+    Source/Tests/DeviceManagerTests.cpp
+    Source/Tests/TouchpadEditorLogicTests.cpp
     Source/Tests/MappingCompilerTests.cpp
     Source/Tests/PitchPadUtilitiesTests.cpp
     Source/Tests/InputProcessorTests.cpp

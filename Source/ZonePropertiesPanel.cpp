@@ -3,15 +3,8 @@
 #include "ScaleEditorComponent.h"
 #include "ScaleLibrary.h"
 #include "ZoneManager.h"
+#include "ZonePropertiesLogic.h"
 #include <algorithm>
-
-static uintptr_t aliasNameToHash(const juce::String &aliasName) {
-  if (aliasName.isEmpty() || aliasName == "Any / Master" ||
-      aliasName == "Global (All Devices)" || aliasName == "Global" ||
-      aliasName == "Unassigned")
-    return 0;
-  return static_cast<uintptr_t>(std::hash<juce::String>{}(aliasName));
-}
 
 namespace {
 struct LabelEditorRow : juce::Component {
@@ -393,37 +386,18 @@ void ZonePropertiesPanel::createControl(const ZoneControl &def,
     sl->onValueChange = [this, zone, slPtr, def, rebuildIfNeeded]() {
       if (!currentZone || currentZone.get() != zone)
         return;
+
       double v = slPtr->getValue();
-      if (def.propertyKey == "rootNote")
-        zone->rootNote = static_cast<int>(v);
-      else if (def.propertyKey == "chromaticOffset")
-        zone->chromaticOffset = static_cast<int>(v);
-      else if (def.propertyKey == "degreeOffset")
-        zone->degreeOffset = static_cast<int>(v);
-      else if (def.propertyKey == "globalRootOctaveOffset")
-        zone->globalRootOctaveOffset = static_cast<int>(v);
-      else if (def.propertyKey == "baseVelocity")
-        zone->baseVelocity = static_cast<int>(v);
-      else if (def.propertyKey == "velocityRandom")
-        zone->velocityRandom = static_cast<int>(v);
-      else if (def.propertyKey == "ghostVelocityScale")
-        zone->ghostVelocityScale = static_cast<float>(v) / 100.0f;
-      else if (def.propertyKey == "glideTimeMs")
-        zone->glideTimeMs = static_cast<int>(v);
-      else if (def.propertyKey == "maxGlideTimeMs")
-        zone->maxGlideTimeMs = static_cast<int>(v);
-      else if (def.propertyKey == "midiChannel")
-        zone->midiChannel = static_cast<int>(v);
-      else if (def.propertyKey == "guitarFretAnchor")
-        zone->guitarFretAnchor = static_cast<int>(v);
-      else if (def.propertyKey == "strumSpeedMs")
-        zone->strumSpeedMs = static_cast<int>(v);
-      else if (def.propertyKey == "voicingMagnetSemitones")
-        zone->voicingMagnetSemitones = static_cast<int>(v);
-      else if (def.propertyKey == "releaseDurationMs")
-        zone->releaseDurationMs = static_cast<int>(v);
-      else if (def.propertyKey == "gridInterval")
-        zone->gridInterval = static_cast<int>(v);
+      juce::var logicValue;
+      if (def.propertyKey == "ghostVelocityScale") {
+        // UI shows 0–100; logic expects 0.0–1.0
+        logicValue = v / 100.0;
+      } else {
+        logicValue = v;
+      }
+
+      ZonePropertiesLogic::setZonePropertyFromKey(zone, def.propertyKey,
+                                                  logicValue);
       rebuildIfNeeded();
     };
 
@@ -457,16 +431,19 @@ void ZonePropertiesPanel::createControl(const ZoneControl &def,
                                rebuildIfNeeded]() {
       if (!currentZone || currentZone.get() != zone)
         return;
-      zone->strumTimingVariationOn = rowComp->check->getToggleState();
-      rowComp->slider->setEnabled(zone->strumTimingVariationOn);
+      bool on = rowComp->check->getToggleState();
+      ZonePropertiesLogic::setZonePropertyFromKey(
+          zone, "strumTimingVariationOn", juce::var(on));
+      rowComp->slider->setEnabled(on);
       rebuildIfNeeded();
     };
     rowComp->slider->onValueChange = [this, zone, rowComp = rowComp.get(),
                                       rebuildIfNeeded]() {
       if (!currentZone || currentZone.get() != zone)
         return;
-      zone->strumTimingVariationMs =
-          static_cast<int>(rowComp->slider->getValue());
+      int ms = static_cast<int>(rowComp->slider->getValue());
+      ZonePropertiesLogic::setZonePropertyFromKey(
+          zone, "strumTimingVariationMs", juce::var(ms));
       rebuildIfNeeded();
     };
 
@@ -497,15 +474,19 @@ void ZonePropertiesPanel::createControl(const ZoneControl &def,
                                rebuildIfNeeded]() {
       if (!currentZone || currentZone.get() != zone)
         return;
-      zone->addBassNote = rowComp->check->getToggleState();
-      rowComp->slider->setEnabled(zone->addBassNote);
+      bool on = rowComp->check->getToggleState();
+      ZonePropertiesLogic::setZonePropertyFromKey(zone, "addBassNote",
+                                                  juce::var(on));
+      rowComp->slider->setEnabled(on);
       rebuildIfNeeded();
     };
     rowComp->slider->onValueChange = [this, zone, rowComp = rowComp.get(),
                                       rebuildIfNeeded]() {
       if (!currentZone || currentZone.get() != zone)
         return;
-      zone->bassOctaveOffset = static_cast<int>(rowComp->slider->getValue());
+      int octave = static_cast<int>(rowComp->slider->getValue());
+      ZonePropertiesLogic::setZonePropertyFromKey(
+          zone, "bassOctaveOffset", juce::var(octave));
       rebuildIfNeeded();
     };
 
@@ -537,15 +518,19 @@ void ZonePropertiesPanel::createControl(const ZoneControl &def,
                                rebuildIfNeeded]() {
       if (!currentZone || currentZone.get() != zone)
         return;
-      zone->delayReleaseOn = rowComp->check->getToggleState();
-      rowComp->slider->setEnabled(zone->delayReleaseOn);
+      bool on = rowComp->check->getToggleState();
+      ZonePropertiesLogic::setZonePropertyFromKey(zone, "delayReleaseOn",
+                                                  juce::var(on));
+      rowComp->slider->setEnabled(on);
       rebuildIfNeeded();
     };
     rowComp->slider->onValueChange = [this, zone, rowComp = rowComp.get(),
                                       rebuildIfNeeded]() {
       if (!currentZone || currentZone.get() != zone)
         return;
-      zone->releaseDurationMs = static_cast<int>(rowComp->slider->getValue());
+      int ms = static_cast<int>(rowComp->slider->getValue());
+      ZonePropertiesLogic::setZonePropertyFromKey(
+          zone, "releaseDurationMs", juce::var(ms));
       rebuildIfNeeded();
     };
 
@@ -623,44 +608,8 @@ void ZonePropertiesPanel::createControl(const ZoneControl &def,
       if (!currentZone || currentZone.get() != zone)
         return;
       int id = cbPtr->getSelectedId();
-      if (def.propertyKey == "showRomanNumerals") {
-        zone->showRomanNumerals = (id == 2);
-      } else if (def.propertyKey == "polyphonyMode") {
-        zone->polyphonyMode = (id == 1)   ? PolyphonyMode::Poly
-                              : (id == 2) ? PolyphonyMode::Mono
-                                          : PolyphonyMode::Legato;
-      } else if (def.propertyKey == "instrumentMode") {
-        zone->instrumentMode = (id == 1) ? Zone::InstrumentMode::Piano
-                                         : Zone::InstrumentMode::Guitar;
-      } else if (def.propertyKey == "pianoVoicingStyle") {
-        zone->pianoVoicingStyle = (id == 1)   ? Zone::PianoVoicingStyle::Block
-                                  : (id == 2) ? Zone::PianoVoicingStyle::Close
-                                              : Zone::PianoVoicingStyle::Open;
-      } else if (def.propertyKey == "guitarPlayerPosition") {
-        zone->guitarPlayerPosition = (id == 1)
-                                         ? Zone::GuitarPlayerPosition::Campfire
-                                         : Zone::GuitarPlayerPosition::Rhythm;
-      } else if (def.propertyKey == "strumPattern") {
-        zone->strumPattern = (id == 1)   ? Zone::StrumPattern::Down
-                             : (id == 2) ? Zone::StrumPattern::Up
-                                         : Zone::StrumPattern::AutoAlternating;
-      } else if (def.propertyKey == "chordType") {
-        zone->chordType = (id == 1)   ? ChordUtilities::ChordType::None
-                          : (id == 2) ? ChordUtilities::ChordType::Triad
-                          : (id == 3) ? ChordUtilities::ChordType::Seventh
-                          : (id == 4) ? ChordUtilities::ChordType::Ninth
-                                      : ChordUtilities::ChordType::Power5;
-      } else if (def.propertyKey == "playMode") {
-        zone->playMode =
-            (id == 1) ? Zone::PlayMode::Direct : Zone::PlayMode::Strum;
-      } else if (def.propertyKey == "releaseBehavior") {
-        zone->releaseBehavior = (id == 1) ? Zone::ReleaseBehavior::Normal
-                                          : Zone::ReleaseBehavior::Sustain;
-      } else if (def.propertyKey == "layoutStrategy") {
-        zone->layoutStrategy = (id == 1)   ? Zone::LayoutStrategy::Linear
-                               : (id == 2) ? Zone::LayoutStrategy::Grid
-                                           : Zone::LayoutStrategy::Piano;
-      }
+      ZonePropertiesLogic::setZonePropertyFromKey(zone, def.propertyKey,
+                                                  juce::var(id));
       rebuildIfNeeded();
       if (def.requiresRebuildOnChange) {
         juce::MessageManager::callAsync([this]() { rebuildUI(); });
@@ -711,22 +660,8 @@ void ZonePropertiesPanel::createControl(const ZoneControl &def,
       if (!currentZone || currentZone.get() != zone)
         return;
       bool v = tbPtr->getToggleState();
-      if (def.propertyKey == "useGlobalRoot")
-        zone->useGlobalRoot = v;
-      else if (def.propertyKey == "useGlobalScale")
-        zone->useGlobalScale = v;
-      else if (def.propertyKey == "ignoreGlobalTranspose")
-        zone->ignoreGlobalTranspose = v;
-      else if (def.propertyKey == "ignoreGlobalSustain")
-        zone->ignoreGlobalSustain = v;
-      else if (def.propertyKey == "strictGhostHarmony")
-        zone->strictGhostHarmony = v;
-      else if (def.propertyKey == "isAdaptiveGlide")
-        zone->isAdaptiveGlide = v;
-      else if (def.propertyKey == "strumGhostNotes")
-        zone->strumGhostNotes = v;
-      else if (def.propertyKey == "overrideTimer")
-        zone->overrideTimer = v;
+      ZonePropertiesLogic::setZonePropertyFromKey(zone, def.propertyKey,
+                                                  juce::var(v));
       rebuildIfNeeded();
     };
 
@@ -804,7 +739,7 @@ void ZonePropertiesPanel::createAliasRow() {
     int idx = cbPtr->getSelectedItemIndex();
     if (idx >= 0) {
       juce::String name = cbPtr->getItemText(idx);
-      currentZone->targetAliasHash = aliasNameToHash(name);
+      currentZone->targetAliasHash = DeviceManager::getAliasHash(name);
       if (zoneManager) {
         zoneManager->rebuildLookupTable();
         zoneManager->sendChangeMessage();
@@ -1095,7 +1030,9 @@ void ZonePropertiesPanel::createColorRow() {
       void changeListenerCallback(juce::ChangeBroadcaster *source) override {
         auto *selector = dynamic_cast<juce::ColourSelector *>(source);
         if (zone && selector) {
-          zone->zoneColor = selector->getCurrentColour();
+          juce::Colour c = selector->getCurrentColour();
+          ZonePropertiesLogic::setZonePropertyFromKey(zone, "zoneColor",
+                                                      juce::var(c.toString()));
           button->setColour(juce::TextButton::buttonColourId, zone->zoneColor);
           button->repaint();
           if (zoneMgr)

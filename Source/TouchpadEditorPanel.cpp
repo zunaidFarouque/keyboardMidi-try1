@@ -6,6 +6,7 @@
 #include "SettingsManager.h"
 #include "ScaleEditorComponent.h"
 #include "ScaleLibrary.h"
+#include "TouchpadEditorLogic.h"
 #include <functional>
 
 namespace {
@@ -631,244 +632,30 @@ void TouchpadEditorPanel::applyConfigValue(
       return;
     }
     return;
-  } else if (propertyId == "name") {
-    if (isLayout)
-      currentConfig.name = value.toString().toStdString();
-    else if (isMapping)
-      currentMapping.name = value.toString().toStdString();
-  } else if (propertyId == "layerId") {
-    int v = juce::jlimit(0, 8, static_cast<int>(value) - 1); // combo ID 1..9
-    if (isLayout)
-      currentConfig.layerId = v;
-    else if (isMapping)
-      currentMapping.layerId = v;
-  } else if (propertyId == "layoutGroupId") {
-    int v = juce::jmax(0, static_cast<int>(value));
-    if (isLayout)
-      currentConfig.layoutGroupId = v;
-    else if (isMapping)
-      currentMapping.layoutGroupId = v;
-  }
-  else if (propertyId == "numFaders")
-    currentConfig.numFaders = juce::jlimit(1, 32, static_cast<int>(value));
-  else if (propertyId == "ccStart")
-    currentConfig.ccStart = juce::jlimit(0, 127, static_cast<int>(value));
-  else if (propertyId == "midiChannel") {
-    int v = juce::jlimit(1, 16, static_cast<int>(value));
-    if (isLayout)
-      currentConfig.midiChannel = v;
-    else if (isMapping)
-      currentMapping.midiChannel = v;
-  }
-  else if (propertyId == "inputMin")
-    currentConfig.inputMin = static_cast<float>(static_cast<double>(value));
-  else if (propertyId == "inputMax")
-    currentConfig.inputMax = static_cast<float>(static_cast<double>(value));
-  else if (propertyId == "outputMin")
-    currentConfig.outputMin = juce::jlimit(0, 127, static_cast<int>(value));
-  else if (propertyId == "outputMax")
-    currentConfig.outputMax = juce::jlimit(0, 127, static_cast<int>(value));
-  else if (propertyId == "quickPrecision")
-    currentConfig.quickPrecision = (static_cast<int>(value) == 2)
-                                       ? TouchpadMixerQuickPrecision::Precision
-                                       : TouchpadMixerQuickPrecision::Quick;
-  else if (propertyId == "absRel")
-    currentConfig.absRel = (static_cast<int>(value) == 2)
-                               ? TouchpadMixerAbsRel::Relative
-                               : TouchpadMixerAbsRel::Absolute;
-  else if (propertyId == "lockFree")
-    currentConfig.lockFree = (static_cast<int>(value) == 2)
-                                 ? TouchpadMixerLockFree::Free
-                                 : TouchpadMixerLockFree::Lock;
-  else if (propertyId == "muteButtonsEnabled")
-    currentConfig.muteButtonsEnabled = static_cast<bool>(value);
-  else if (propertyId == "drumPadRows")
-    currentConfig.drumPadRows = juce::jlimit(1, 8, static_cast<int>(value));
-  else if (propertyId == "drumPadColumns")
-    currentConfig.drumPadColumns = juce::jlimit(1, 16, static_cast<int>(value));
-  else if (propertyId == "drumPadMidiNoteStart")
-    currentConfig.drumPadMidiNoteStart =
-        juce::jlimit(0, 127, static_cast<int>(value));
-  else if (propertyId == "drumPadBaseVelocity")
-    currentConfig.drumPadBaseVelocity =
-        juce::jlimit(1, 127, static_cast<int>(value));
-  else if (propertyId == "drumPadVelocityRandom")
-    currentConfig.drumPadVelocityRandom =
-        juce::jlimit(0, 127, static_cast<int>(value));
-  else if (propertyId == "drumPadLayoutMode") {
-    int id = static_cast<int>(value);
-    currentConfig.drumPadLayoutMode =
-        (id == 2) ? DrumPadLayoutMode::HarmonicGrid
-                  : DrumPadLayoutMode::Classic;
-  }
-  else if (propertyId == "harmonicRowInterval")
-    currentConfig.harmonicRowInterval =
-        juce::jlimit(-12, 12, static_cast<int>(value));
-  else if (propertyId == "harmonicUseScaleFilter")
-    currentConfig.harmonicUseScaleFilter = static_cast<bool>(value);
-  else if (propertyId == "chordPadPreset")
-    currentConfig.chordPadPreset = juce::jmax(0, static_cast<int>(value));
-  else if (propertyId == "chordPadLatchMode")
-    currentConfig.chordPadLatchMode = static_cast<bool>(value);
-  else if (propertyId == "drumFxSplitSplitRow")
-    currentConfig.drumFxSplitSplitRow =
-        juce::jlimit(0, 8, static_cast<int>(value));
-  else if (propertyId == "fxCcStart")
-    currentConfig.fxCcStart = juce::jlimit(0, 127, static_cast<int>(value));
-  else if (propertyId == "fxOutputMin")
-    currentConfig.fxOutputMin = juce::jlimit(0, 127, static_cast<int>(value));
-  else if (propertyId == "fxOutputMax")
-    currentConfig.fxOutputMax = juce::jlimit(0, 127, static_cast<int>(value));
-  else if (propertyId == "fxToggleMode")
-    currentConfig.fxToggleMode = static_cast<bool>(value);
-  else if (propertyId == "regionLeft" || propertyId == "regionTop" ||
-           propertyId == "regionRight" || propertyId == "regionBottom") {
-    double d = static_cast<double>(value);
-    d = juce::jlimit(0.0, 1.0, d);
-    float f = static_cast<float>(d);
-    if (isLayout) {
-      if (propertyId == "regionLeft")
-        currentConfig.region.left = f;
-      else if (propertyId == "regionTop")
-        currentConfig.region.top = f;
-      else if (propertyId == "regionRight")
-        currentConfig.region.right = f;
-      else if (propertyId == "regionBottom")
-        currentConfig.region.bottom = f;
-    } else if (isMapping) {
-      if (propertyId == "regionLeft")
-        currentMapping.region.left = f;
-      else if (propertyId == "regionTop")
-        currentMapping.region.top = f;
-      else if (propertyId == "regionRight")
-        currentMapping.region.right = f;
-      else if (propertyId == "regionBottom")
-        currentMapping.region.bottom = f;
-    }
-  } else if (propertyId == "zIndex") {
-    int v = juce::jlimit(-100, 100, static_cast<int>(value));
-    if (isLayout)
-      currentConfig.zIndex = v;
-    else if (isMapping)
-      currentMapping.zIndex = v;
-  } else if (propertyId == "regionLock") {
-    bool v = static_cast<bool>(value);
-    if (isLayout)
-      currentConfig.regionLock = v;
-    else if (isMapping)
-      currentMapping.regionLock = v;
-  }
-  else if (propertyId == "pitchPadAxis") {
-    // Touchpad-only: map Axis combo (Horizontal/Vertical) to the underlying
-    // inputTouchpadEvent used by runtime and visualizer.
-    if (isMapping && currentMapping.mapping.isValid()) {
-      int id = juce::jlimit(1, 2, static_cast<int>(value));
-      int eventVal =
-          (id == 2) ? TouchpadEvent::Finger1Y : TouchpadEvent::Finger1X;
-      currentMapping.mapping.setProperty("inputTouchpadEvent", eventVal,
-                                         nullptr);
-      manager->updateTouchpadMapping(selectedMappingIndex, currentMapping);
-    }
-    return;
-  }
-  else {
-    // Mapping-specific properties: write to mapping ValueTree.
-    if (isMapping && currentMapping.mapping.isValid()) {
-      // Convert ComboBox ID to string for string properties
-      juce::var valueToSet = value;
-      if (propertyId == "releaseBehavior") {
-        int id = static_cast<int>(value);
-        if (id == 1)
-          valueToSet = juce::var("Send Note Off");
-        else if (id == 2)
-          valueToSet = juce::var("Sustain until retrigger");
-        else if (id == 3)
-          valueToSet = juce::var("Always Latch");
-      } else if (propertyId == "ccReleaseBehavior") {
-        int id = static_cast<int>(value);
-        if (id == 1)
-          valueToSet = juce::var("Send release (instant)");
-        else if (id == 2)
-          valueToSet = juce::var("Always Latch");
-      } else if (propertyId == "touchpadHoldBehavior") {
-        int id = static_cast<int>(value);
-        if (id == 1)
-          valueToSet = juce::var("Hold to not send note off immediately");
-        else if (id == 2)
-          valueToSet = juce::var("Ignore, send note off immediately");
-      } else if (propertyId == "adsrTarget") {
-        int id = juce::jlimit(1, 3, static_cast<int>(value));
-        if (id == 1)
-          valueToSet = juce::var("CC");
-        else if (id == 2)
-          valueToSet = juce::var("PitchBend");
-        else
-          valueToSet = juce::var("SmartScaleBend");
-      } else if (propertyId == "expressionCCMode") {
-        int id = juce::jlimit(1, 3, static_cast<int>(value));
-        if (id == 1)
-          valueToSet = juce::var("Position");
-        else if (id == 2)
-          valueToSet = juce::var("Slide");
-        else
-          valueToSet = juce::var("Encoder");
-      } else if (propertyId == "encoderAxis") {
-        int id = juce::jlimit(1, 3, static_cast<int>(value));
-        valueToSet = juce::var(id - 1); // 1/2/3 -> 0/1/2
-      } else if (propertyId == "encoderOutputMode") {
-        int id = juce::jlimit(1, 3, static_cast<int>(value));
-        if (id == 1) valueToSet = juce::var("Absolute");
-        else if (id == 2) valueToSet = juce::var("Relative");
-        else valueToSet = juce::var("NRPN");
-      } else if (propertyId == "encoderRelativeEncoding") {
-        int id = juce::jlimit(1, 4, static_cast<int>(value));
-        valueToSet = juce::var(id - 1);
-      } else if (propertyId == "encoderPushOutputType") {
-        int id = juce::jlimit(1, 3, static_cast<int>(value));
-        if (id == 1) valueToSet = juce::var("CC");
-        else if (id == 2) valueToSet = juce::var("Note");
-        else valueToSet = juce::var("ProgramChange");
-      } else if (propertyId == "encoderPushMode") {
-        int id = juce::jlimit(1, 4, static_cast<int>(value));
-        valueToSet = juce::var(id - 1);
-      } else if (propertyId == "encoderPushDetection") {
-        int id = juce::jlimit(1, 3, static_cast<int>(value));
-        valueToSet = juce::var(id - 1);
-      } else if (propertyId == "pitchPadMode") {
-        int id = juce::jlimit(1, 2, static_cast<int>(value));
-        valueToSet = juce::var(id == 1 ? "Absolute" : "Relative");
-      } else if (propertyId == "smartScaleFollowGlobal") {
-        valueToSet = juce::var(static_cast<bool>(value));
-      } else if (propertyId == "smartScaleName") {
-        valueToSet = value;
-      } else if (propertyId == "pitchPadStart") {
-        int id = juce::jlimit(1, 4, static_cast<int>(value));
-        if (id == 1) valueToSet = juce::var("Left");
-        else if (id == 2) valueToSet = juce::var("Center");
-        else if (id == 3) valueToSet = juce::var("Right");
-        else valueToSet = juce::var("Custom");
-      } else if (propertyId == "slideQuickPrecision" || propertyId == "slideAbsRel" || propertyId == "slideLockFree" || propertyId == "slideAxis") {
-        // Convert ComboBox IDs back to stored ints
-        int id = static_cast<int>(value);
-        if (propertyId == "slideAxis") {
-          // 1/2/3 -> 0/1/2
-          valueToSet = juce::var(juce::jlimit(1, 3, id) - 1);
-        } else {
-          // Quick/Precision, Abs/Rel, Lock/Free: 1/2 -> 0/1
-          valueToSet = juce::var(id == 1 ? 0 : 1);
-        }
-      }
-      currentMapping.mapping.setProperty(propertyId, valueToSet, nullptr);
-      manager->updateTouchpadMapping(selectedMappingIndex, currentMapping);
-      return;
-    }
-    return;
   }
 
-  if (isLayout)
-    manager->updateLayout(selectedLayoutIndex, currentConfig);
-  else if (isMapping)
+  // Delegate the rest to Core logic.
+  TouchpadLayoutConfig *layoutPtr = isLayout ? &currentConfig : nullptr;
+  TouchpadMappingConfig *mappingPtr = isMapping ? &currentMapping : nullptr;
+
+  bool cfgChanged =
+      TouchpadEditorLogic::applyConfig(layoutPtr, mappingPtr, propertyId,
+                                       value);
+  bool mappingChanged = false;
+
+  if (isMapping && currentMapping.mapping.isValid()) {
+    mappingChanged = TouchpadEditorLogic::applyMappingValueProperty(
+        currentMapping.mapping, propertyId, value);
+  }
+
+  if (cfgChanged) {
+    if (isLayout)
+      manager->updateLayout(selectedLayoutIndex, currentConfig);
+    else if (isMapping)
+      manager->updateTouchpadMapping(selectedMappingIndex, currentMapping);
+  } else if (mappingChanged) {
     manager->updateTouchpadMapping(selectedMappingIndex, currentMapping);
+  }
 }
 
 void TouchpadEditorPanel::onRelayoutRegionChosen(float x1, float y1,

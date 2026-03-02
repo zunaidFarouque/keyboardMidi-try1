@@ -341,16 +341,7 @@ InputProcessor::lookupActionInGrid(InputID input) const {
   return std::nullopt;
 }
 
-// Helper to convert alias name to hash (used by processEvent for zone lookup)
-static uintptr_t aliasNameToHash(const juce::String &aliasName) {
-  const juce::String trimmed = aliasName.trim();
-  if (trimmed.isEmpty() || trimmed.equalsIgnoreCase("Any / Master") ||
-      trimmed.equalsIgnoreCase("Global (All Devices)") ||
-      trimmed.equalsIgnoreCase("Global") ||
-      trimmed.equalsIgnoreCase("Unassigned"))
-    return 0;
-  return static_cast<uintptr_t>(std::hash<juce::String>{}(trimmed));
-}
+// Helper to convert alias name to hash lives in DeviceManager::getAliasHash.
 
 void InputProcessor::valueTreeChildAdded(
     juce::ValueTree &parentTree, juce::ValueTree &childWhichHasBeenAdded) {
@@ -648,7 +639,7 @@ void InputProcessor::processEvent(InputID input, bool isDown) {
             deviceManager.getAliasForHardware(effectiveDevice);
         uintptr_t aliasHash = 0;
         if (aliasName != "Unassigned" && !aliasName.isEmpty()) {
-          aliasHash = aliasNameToHash(aliasName);
+          aliasHash = DeviceManager::getAliasHash(aliasName);
         }
         zone =
             zoneManager.getZoneForInput(InputID{aliasHash, keyCode}, layerIdx);
