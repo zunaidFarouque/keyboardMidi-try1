@@ -1,11 +1,12 @@
 #include "ZoneListPanel.h"
-
+#include "ZonePresets.h"
+ 
 ZoneListPanel::ZoneListPanel(ZoneManager *zoneMgr)
     : zoneManager(zoneMgr) {
   addAndMakeVisible(listBox);
   listBox.setModel(this);
   listBox.setRowHeight(24);
-
+ 
   addAndMakeVisible(addButton);
   addButton.setButtonText("Add Zone");
   addButton.onClick = [this] {
@@ -17,7 +18,7 @@ ZoneListPanel::ZoneListPanel(ZoneManager *zoneMgr)
       listBox.selectRow(index);
     }
   };
-
+ 
   addAndMakeVisible(removeButton);
   removeButton.setButtonText("Remove");
   removeButton.onClick = [this] {
@@ -33,6 +34,69 @@ ZoneListPanel::ZoneListPanel(ZoneManager *zoneMgr)
     }
   };
 
+  addAndMakeVisible(addPresetButton);
+  addPresetButton.setButtonText("Add Preset...");
+  addPresetButton.onClick = [this] {
+    if (!zoneManager)
+      return;
+
+    juce::PopupMenu menu;
+    enum {
+      kBottomRowChords = 1,
+      kBottomTwoRowsPiano,
+      kQwerNumbersPiano,
+      kJankoFourRows,
+      kIsomorphicFourRows
+    };
+    menu.addItem(kBottomRowChords, "Bottom row - chords");
+    menu.addItem(kBottomTwoRowsPiano, "Bottom 2 rows - piano");
+    menu.addItem(kQwerNumbersPiano, "QWER + 1234 - piano");
+    menu.addItem(kJankoFourRows, "Janko - 4 rows");
+    menu.addItem(kIsomorphicFourRows, "Isomorphic - 4 rows (Grid)");
+
+    menu.showMenuAsync(
+        juce::PopupMenu::Options(),
+        [this](int choice) {
+          if (choice <= 0 || !zoneManager)
+            return;
+
+          ZonePresetId presetId;
+          switch (choice) {
+          case kBottomRowChords:
+            presetId = ZonePresetId::BottomRowChords;
+            break;
+          case kBottomTwoRowsPiano:
+            presetId = ZonePresetId::BottomTwoRowsPiano;
+            break;
+          case kQwerNumbersPiano:
+            presetId = ZonePresetId::QwerNumbersPiano;
+            break;
+          case kJankoFourRows:
+            presetId = ZonePresetId::JankoFourRows;
+            break;
+          case kIsomorphicFourRows:
+            presetId = ZonePresetId::IsomorphicFourRows;
+            break;
+          default:
+            return;
+          }
+
+          auto zones = ZonePresets::createPresetZones(presetId);
+          if (zones.empty())
+            return;
+
+          for (auto &z : zones)
+            zoneManager->addZone(z);
+
+          listBox.updateContent();
+          const auto &allZones = zoneManager->getZones();
+          if (!allZones.empty()) {
+            int index = static_cast<int>(allZones.size()) - 1;
+            listBox.selectRow(index);
+          }
+        });
+  };
+ 
   if (zoneManager) {
     zoneManager->addChangeListener(this);
   }
@@ -53,6 +117,8 @@ void ZoneListPanel::resized() {
   
   auto buttonArea = area.removeFromBottom(30);
   removeButton.setBounds(buttonArea.removeFromRight(80));
+  buttonArea.removeFromRight(4);
+  addPresetButton.setBounds(buttonArea.removeFromRight(110));
   buttonArea.removeFromRight(4);
   addButton.setBounds(buttonArea.removeFromRight(80));
 

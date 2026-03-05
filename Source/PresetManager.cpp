@@ -45,14 +45,23 @@ void PresetManager::migrateToLayerHierarchy() {
 }
 
 void PresetManager::saveToFile(juce::File file) {
-  saveToFile(file, juce::ValueTree());
+  saveToFile(file, juce::ValueTree(), juce::ValueTree());
 }
 
 void PresetManager::saveToFile(juce::File file,
                                const juce::ValueTree &touchpadDataTree) {
+  saveToFile(file, touchpadDataTree, juce::ValueTree());
+}
+
+void PresetManager::saveToFile(juce::File file,
+                               const juce::ValueTree &touchpadDataTree,
+                               const juce::ValueTree &zoneManagerTree) {
   juce::ValueTree copy = rootNode.createCopy();
   if (touchpadDataTree.isValid()) {
     copy.addChild(touchpadDataTree.createCopy(), -1, nullptr);
+  }
+  if (zoneManagerTree.isValid()) {
+    copy.addChild(zoneManagerTree.createCopy(), -1, nullptr);
   }
   if (auto xml = copy.createXml()) {
     xml->writeTo(file);
@@ -61,6 +70,10 @@ void PresetManager::saveToFile(juce::File file,
 
 juce::ValueTree PresetManager::getTouchpadDataNode() const {
   return rootNode.getChildWithName("TouchpadData");
+}
+
+juce::ValueTree PresetManager::getZoneManagerNode() const {
+  return rootNode.getChildWithName("ZoneManager");
 }
 
 namespace {

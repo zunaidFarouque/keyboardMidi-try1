@@ -120,7 +120,7 @@ const std::vector<TouchpadLayoutPreset> &getTouchpadLayoutPresets() {
           makeXYMapping("XY X (CC1)", TouchpadEvent::Finger1X, 1, 0.0f, 1.0f));
       xyMappings.push_back(
           makeXYMapping("XY Y (CC2)", TouchpadEvent::Finger1Y, 2, 0.0f, 1.0f));
-      v.push_back({"xy-pad", "XY Pad (X→CC1, Y→CC2)", {}, xyMappings});
+      v.push_back({"xy-pad", "XY Pad (X->CC1, Y->CC2)", {}, xyMappings});
     }
     {
       std::vector<TouchpadMappingConfig> dualMappings;
@@ -136,14 +136,14 @@ const std::vector<TouchpadLayoutPreset> &getTouchpadLayoutPresets() {
                    dualMappings});
     }
 
-    // --- Pitch Bend: ±2 horizontal ---
+    // --- Pitch Bend: +/-2 horizontal ---
     {
-      v.push_back({"pb-abs", "PB ±2 horizontal (Absolute)", {},
-                   {makePitchBendMapping("Pitch Bend ±2", "Absolute")}});
+      v.push_back({"pb-abs", "PB +/-2 horizontal (Absolute)", {},
+                   {makePitchBendMapping("Pitch Bend +/-2", "Absolute")}});
     }
     {
-      v.push_back({"pb-rel", "PB ±2 horizontal (Relative)", {},
-                   {makePitchBendMapping("Pitch Bend ±2", "Relative")}});
+      v.push_back({"pb-rel", "PB +/-2 horizontal (Relative)", {},
+                   {makePitchBendMapping("Pitch Bend +/-2", "Relative")}});
     }
 
     // --- Combos: Drum Pad + Mixer strip (various splits) ---
@@ -257,13 +257,13 @@ TouchpadListPanel::TouchpadListPanel(TouchpadLayoutManager *mgr)
     menu.addSubMenu("Drum Pads", drumMenu);
 
     juce::PopupMenu controllerMenu;
-    controllerMenu.addItem(nextId++, "XY Pad (X→CC1, Y→CC2)");
+    controllerMenu.addItem(nextId++, "XY Pad (X->CC1, Y->CC2)");
     controllerMenu.addItem(nextId++, "Dual XY Pads (left 50% + right 50%)");
     menu.addSubMenu("Controllers", controllerMenu);
 
     juce::PopupMenu pbMenu;
-    pbMenu.addItem(nextId++, "PB ±2 horizontal (Absolute)");
-    pbMenu.addItem(nextId++, "PB ±2 horizontal (Relative)");
+    pbMenu.addItem(nextId++, "PB +/-2 horizontal (Absolute)");
+    pbMenu.addItem(nextId++, "PB +/-2 horizontal (Relative)");
     menu.addSubMenu("Pitch Bend", pbMenu);
 
     juce::PopupMenu comboMenu;

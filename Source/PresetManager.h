@@ -18,11 +18,18 @@ public:
   /// Save preset and include optional TouchpadData tree (from
   /// TouchpadLayoutManager::toValueTree()).
   void saveToFile(juce::File file, const juce::ValueTree &touchpadDataTree);
+  /// Save preset and include optional TouchpadData and ZoneManager trees
+  /// (from TouchpadLayoutManager::toValueTree() and ZoneManager::toValueTree()).
+  void saveToFile(juce::File file, const juce::ValueTree &touchpadDataTree,
+                  const juce::ValueTree &zoneManagerTree);
   void loadFromFile(juce::File file);
 
   /// After load, returns the TouchpadData child if present (for
   /// TouchpadLayoutManager::restoreFromValueTree).
   juce::ValueTree getTouchpadDataNode() const;
+  /// After load, returns the ZoneManager child if present (for
+  /// ZoneManager::restoreFromValueTree).
+  juce::ValueTree getZoneManagerNode() const;
 
   // Phase 41: Static 9-layer system (0=Base, 1-8=Overlays). No add/remove.
   juce::ValueTree getLayersList(); // Returns "Layers" parent node

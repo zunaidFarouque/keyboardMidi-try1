@@ -60,6 +60,7 @@ add_library(MIDIQy_Core STATIC
     Source/ColourContrast.cpp
     Source/ZoneDefinition.cpp
     Source/ZonePropertiesLogic.cpp
+    Source/ZonePresets.cpp
     Source/TouchpadLayoutManager.cpp
     Source/TouchpadLayoutDefinition.cpp
     Source/CrashLogger.cpp

@@ -201,8 +201,9 @@ MainComponent::MainComponent()
           auto result = chooser.getResult();
           // If the user didn't cancel (file is valid)
           if (result != juce::File()) {
-            presetManager.saveToFile(result,
-                                     touchpadLayoutManager.toValueTree());
+            presetManager.saveToFile(
+                result, touchpadLayoutManager.toValueTree(),
+                inputProcessor.getZoneManager().toValueTree());
             if (logComponent)
               logComponent->addEntry("Saved: " + result.getFileName());
           }
@@ -225,6 +226,10 @@ MainComponent::MainComponent()
             presetManager.loadFromFile(result);
             touchpadLayoutManager.restoreFromValueTree(
                 presetManager.getTouchpadDataNode());
+            auto zoneTree = presetManager.getZoneManagerNode();
+            if (zoneTree.isValid()) {
+              inputProcessor.getZoneManager().restoreFromValueTree(zoneTree);
+            }
             if (logComponent)
               logComponent->addEntry("Loaded: " + result.getFileName());
 

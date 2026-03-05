@@ -44,6 +44,7 @@ private:
   juce::ListBox listBox;
   juce::TextButton addButton;
   juce::TextButton removeButton;
+  juce::TextButton addPresetButton;
   int pendingSelectionRow = -1; // Selection to restore after update
   bool isInitialLoad = true; // Track first load for synchronous updates
 
