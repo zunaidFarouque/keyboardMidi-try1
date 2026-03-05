@@ -58,6 +58,9 @@ static bool gridLayoutOnly(const Zone *z) {
 static bool pianoLayoutOnly(const Zone *z) {
   return z->layoutStrategy == Zone::LayoutStrategy::Piano;
 }
+static bool jankoLayoutOnly(const Zone *z) {
+  return z->layoutStrategy == Zone::LayoutStrategy::Janko;
+}
 static bool strumOnly(const Zone *z) {
   return polyAndChordOn(z) && z->playMode == Zone::PlayMode::Strum;
 }
@@ -464,6 +467,7 @@ ZoneSchema ZoneDefinition::getSchema(const Zone *zone) {
     c.options[1] = "Linear";
     c.options[2] = "Grid";
     c.options[3] = "Piano";
+     c.options[4] = "Janko";
     c.affectsCache = true;
     c.requiresRebuildOnChange = true;
     schema.push_back(c);
@@ -485,6 +489,15 @@ ZoneSchema ZoneDefinition::getSchema(const Zone *zone) {
     c.controlType = ZoneControl::Type::LabelOnly;
     c.label = "Requires 2 rows of keys";
     c.visible = pianoLayoutOnly;
+    schema.push_back(c);
+  }
+  {
+    ZoneControl c;
+    c.controlType = ZoneControl::Type::LabelOnlyWrappable;
+    c.label =
+        "Janko layout: chromatic isomorphic keyboard (whole steps horizontally, "
+        "semitones on adjacent rows/columns).";
+    c.visible = jankoLayoutOnly;
     schema.push_back(c);
   }
   {

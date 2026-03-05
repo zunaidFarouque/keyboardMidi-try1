@@ -595,8 +595,9 @@ void ZonePropertiesPanel::createControl(const ZoneControl &def,
             juce::dontSendNotification);
       else if (def.propertyKey == "layoutStrategy") {
         int id = (zone->layoutStrategy == Zone::LayoutStrategy::Linear) ? 1
-                 : (zone->layoutStrategy == Zone::LayoutStrategy::Grid) ? 2
-                                                                        : 3;
+                 : (zone->layoutStrategy == Zone::LayoutStrategy::Grid)   ? 2
+                 : (zone->layoutStrategy == Zone::LayoutStrategy::Piano)  ? 3
+                                                                          : 4;
         cb->setSelectedId(id, juce::dontSendNotification);
       }
     };

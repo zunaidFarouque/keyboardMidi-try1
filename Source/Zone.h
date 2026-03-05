@@ -9,7 +9,7 @@
 
 class Zone {
 public:
-  enum class LayoutStrategy { Linear, Grid, Piano };
+  enum class LayoutStrategy { Linear, Grid, Piano, Janko };
 
   enum class PlayMode {
     Direct, // Play immediately on key press

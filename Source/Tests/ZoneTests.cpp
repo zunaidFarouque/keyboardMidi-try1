@@ -9,6 +9,26 @@ static const int kKeyQ = 0x51;
 static const int kKeyA = 0x41;
 static const int kKeyW = 0x57;
 
+// Additional keys for Janko layout alignment tests
+static const int kKey1 = 0x31;
+static const int kKey2 = 0x32;
+static const int kKey3 = 0x33;
+static const int kKey4 = 0x34;
+static const int kKey5 = 0x35;
+
+static const int kKeyZ = 0x5A;
+static const int kKeyX = 0x58;
+static const int kKeyC = 0x43;
+static const int kKeyV = 0x56;
+
+static const int kKeyS = 0x53;
+static const int kKeyD = 0x44;
+static const int kKeyF = 0x46;
+
+static const int kKeyE = 0x45;
+static const int kKeyR = 0x52;
+static const int kKeyT = 0x54;
+
 // Zone with Grid layout: grid interval affects degree = deltaCol + (deltaRow *
 // gridInterval)
 TEST(ZoneGridLayout, GridIntervalAffectsCache) {
@@ -416,7 +436,7 @@ TEST(ZoneReleaseBehavior, DefaultIsNormal) {
 }
 
 // --- Layout strategy ---
-TEST(ZoneLayoutStrategy, LinearAndPianoSerializationRoundTrip) {
+TEST(ZoneLayoutStrategy, LinearPianoAndJankoSerializationRoundTrip) {
   auto zone = std::make_shared<Zone>();
   zone->layoutStrategy = Zone::LayoutStrategy::Linear;
   juce::ValueTree vt = zone->toValueTree();
@@ -429,6 +449,80 @@ TEST(ZoneLayoutStrategy, LinearAndPianoSerializationRoundTrip) {
   loaded = Zone::fromValueTree(vt);
   ASSERT_NE(loaded, nullptr);
   EXPECT_EQ(loaded->layoutStrategy, Zone::LayoutStrategy::Piano);
+
+  zone->layoutStrategy = Zone::LayoutStrategy::Janko;
+  vt = zone->toValueTree();
+  loaded = Zone::fromValueTree(vt);
+  ASSERT_NE(loaded, nullptr);
+  EXPECT_EQ(loaded->layoutStrategy, Zone::LayoutStrategy::Janko);
+}
+
+TEST(ZoneJankoLayout, UsesChromaticIntervalsAndIsConsistent) {
+  ScaleLibrary scaleLib;
+  std::vector<int> majorIntervals = scaleLib.getIntervals("Major");
+  ASSERT_FALSE(majorIntervals.empty());
+
+  auto zone = std::make_shared<Zone>();
+  zone->layoutStrategy = Zone::LayoutStrategy::Janko;
+  zone->inputKeyCodes = {kKeyQ, kKeyA};
+  zone->scaleName = "Major";
+  zone->rootNote = 60;
+  zone->degreeOffset = 0;
+  zone->chordType = ChordUtilities::ChordType::None;
+
+  zone->rebuildCache(majorIntervals, 60);
+  ASSERT_GT(zone->keyToChordCache.count(kKeyQ), 0u);
+  ASSERT_GT(zone->keyToChordCache.count(kKeyA), 0u);
+
+  int qNote = 60 + zone->keyToChordCache.at(kKeyQ).front().pitch;
+  int aNote = 60 + zone->keyToChordCache.at(kKeyA).front().pitch;
+  EXPECT_NE(qNote, aNote);
+
+  // Changing the external scale should not change the chromatic relationship
+  std::vector<int> minorIntervals = scaleLib.getIntervals("Minor");
+  ASSERT_FALSE(minorIntervals.empty());
+  zone->rebuildCache(minorIntervals, 60);
+  ASSERT_GT(zone->keyToChordCache.count(kKeyQ), 0u);
+  ASSERT_GT(zone->keyToChordCache.count(kKeyA), 0u);
+
+  int qNoteMinor = 60 + zone->keyToChordCache.at(kKeyQ).front().pitch;
+  int aNoteMinor = 60 + zone->keyToChordCache.at(kKeyA).front().pitch;
+  EXPECT_EQ(aNote - qNote, aNoteMinor - qNoteMinor);
+}
+
+TEST(ZoneJankoLayout, ColumnAlignmentMatchesPhysicalKeyboard) {
+  ScaleLibrary scaleLib;
+  std::vector<int> majorIntervals = scaleLib.getIntervals("Major");
+  ASSERT_FALSE(majorIntervals.empty());
+
+  auto zone = std::make_shared<Zone>();
+  zone->layoutStrategy = Zone::LayoutStrategy::Janko;
+  zone->inputKeyCodes = {kKey2, kKey3, kKey4, kKey5,
+                         kKeyA, kKeyS, kKeyD, kKeyF,
+                         kKeyZ, kKeyX, kKeyC, kKeyV,
+                         kKeyW, kKeyE, kKeyR, kKeyT};
+  zone->scaleName = "Major";
+  zone->rootNote = 60;
+  zone->degreeOffset = 0;
+  zone->chordType = ChordUtilities::ChordType::None;
+
+  zone->rebuildCache(majorIntervals, 60);
+
+  auto noteFor = [&](int key) -> int {
+    return 60 + zone->keyToChordCache.at(key).front().pitch;
+  };
+
+  // Home row vs number row: A,S,D,F align with 2,3,4,5...
+  EXPECT_EQ(noteFor(kKey2), noteFor(kKeyA));
+  EXPECT_EQ(noteFor(kKey3), noteFor(kKeyS));
+  EXPECT_EQ(noteFor(kKey4), noteFor(kKeyD));
+  EXPECT_EQ(noteFor(kKey5), noteFor(kKeyF));
+
+  // Bottom row vs QWERTY row: Z,W; X,E; C,R; V,T...
+  EXPECT_EQ(noteFor(kKeyZ), noteFor(kKeyW));
+  EXPECT_EQ(noteFor(kKeyX), noteFor(kKeyE));
+  EXPECT_EQ(noteFor(kKeyC), noteFor(kKeyR));
+  EXPECT_EQ(noteFor(kKeyV), noteFor(kKeyT));
 }
 
 // --- Chord type ---

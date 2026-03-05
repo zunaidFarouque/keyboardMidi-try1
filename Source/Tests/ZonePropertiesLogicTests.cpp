@@ -70,6 +70,14 @@ TEST(ZonePropertiesLogicTest, SetLayoutStrategy_Piano) {
   EXPECT_EQ(z.layoutStrategy, Zone::LayoutStrategy::Piano);
 }
 
+TEST(ZonePropertiesLogicTest, SetLayoutStrategy_Janko) {
+  Zone z;
+  z.layoutStrategy = Zone::LayoutStrategy::Linear;
+  EXPECT_TRUE(
+      ZonePropertiesLogic::setZonePropertyFromKey(&z, "layoutStrategy", 4));
+  EXPECT_EQ(z.layoutStrategy, Zone::LayoutStrategy::Janko);
+}
+
 TEST(ZonePropertiesLogicTest, SetDelayReleaseOn) {
   Zone z;
   z.delayReleaseOn = false;

@@ -139,7 +139,8 @@ static bool applyCombo(Zone *zone, const juce::String &key, const juce::var &v) 
   if (key == "layoutStrategy") {
     zone->layoutStrategy = (id == 1)   ? Zone::LayoutStrategy::Linear
                            : (id == 2) ? Zone::LayoutStrategy::Grid
-                                       : Zone::LayoutStrategy::Piano;
+                           : (id == 3) ? Zone::LayoutStrategy::Piano
+                                       : Zone::LayoutStrategy::Janko;
     return true;
   }
   return false;

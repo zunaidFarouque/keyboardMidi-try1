@@ -127,6 +127,91 @@ void Zone::rebuildCache(const std::vector<int> &scaleIntervals,
                                                        scaleIntervals, degree);
       processKeyCache(keyCode, degree, baseNote);
     }
+  } else if (layoutStrategy == LayoutStrategy::Janko) {
+    // Janko mode: Chromatic isomorphic layout (whole steps horizontally) with
+    // columns aligned to physical keyboard rows such that, for example:
+    //   2 = A = Z = W, 3 = S = X = E, 4 = D = C = R, ...
+    // Each vertical column shares the same pitch; only column index affects
+    // the semitone offset.
+    const std::vector<int> chromaticIntervals = {0, 1, 2, 3, 4, 5,
+                                                 6, 7, 8, 9, 10, 11};
+    const auto &layout = KeyboardLayoutUtils::getLayout();
+
+    if (inputKeyCodes.empty())
+      return;
+
+    // Compute a discrete Janko column index based on row and physical column.
+    // This matches the desired alignment:
+    //   A=2, S=3, D=4, F=5, ...
+    //   Z=W, X=E, C=R, V=T, ...
+    auto getJankoColumn = [](const KeyGeometry &key) -> int {
+      const float c = key.col;
+      switch (key.row) {
+      case 0: { // Number row: 1,2,3,4,...
+        int idx = static_cast<int>(std::round(c - 1.0f));
+        return idx + 1; // 1 -> col 1, 2 -> col 2, ...
+      }
+      case 1: { // QWERTY row
+        int idx = static_cast<int>(std::round(c - 1.5f));
+        return idx + 1; // Q -> 1, W -> 2, E -> 3, ...
+      }
+      case 2: { // ASDF row
+        int idx = static_cast<int>(std::round(c - 1.8f));
+        return idx + 2; // A -> 2, S -> 3, D -> 4, ...
+      }
+      case 3: { // ZXCV row
+        int idx = static_cast<int>(std::round(c - 2.3f));
+        return idx + 2; // Z -> 2, X -> 3, C -> 4, ...
+      }
+      default:
+        // Fallback: approximate by rounded physical column
+        return static_cast<int>(std::round(c));
+      }
+    };
+
+    // Row offsets to introduce the ±1 semitone relationship between adjacent
+    // rows while preserving the column alignment. Using:
+    //   row 0 (numbers) and row 2 (ASDF): -1
+    //   row 1 (QWERTY) and row 3 (ZXCV):  0
+    // This yields examples like:
+    //   if Z=60, then A=59, S=61; if A=59 then Q=58, W=60; if Q=58 then 1=57, 2=59.
+    auto getRowOffset = [](int row) -> int {
+      if (row == 0 || row == 2)
+        return -1;
+      if (row == 1 || row == 3)
+        return 0;
+      return 0;
+    };
+
+    // Anchor key: first in inputKeyCodes
+    auto anchorKeyIt = layout.find(inputKeyCodes[0]);
+    if (anchorKeyIt == layout.end())
+      return;
+
+    const auto &anchorKey = anchorKeyIt->second;
+    int anchorCol = getJankoColumn(anchorKey);
+    int anchorRowOffset = getRowOffset(anchorKey.row);
+
+    for (int keyCode : inputKeyCodes) {
+      auto currentKeyIt = layout.find(keyCode);
+      if (currentKeyIt == layout.end())
+        continue;
+
+      const auto &currentKey = currentKeyIt->second;
+
+      int currentCol = getJankoColumn(currentKey);
+      int currentRowOffset = getRowOffset(currentKey.row);
+      int deltaCol = currentCol - anchorCol;
+
+      // Whole-step per column horizontally; adjacent rows differ by ±1
+      // semitone according to getRowOffset, so columns still line up while
+      // neighbors like Z/A/S and A/Q/W and Q/1/2 get the desired ±1 patterns.
+      int semitoneOffset = 2 * deltaCol + (currentRowOffset - anchorRowOffset);
+      int degree = semitoneOffset + degreeOffset;
+      int baseNote = ScaleUtilities::calculateMidiNote(effectiveRoot,
+                                                       chromaticIntervals, degree);
+      processKeyCache(keyCode, degree, baseNote);
+    }
   } else if (layoutStrategy == LayoutStrategy::Piano) {
     // Piano mode: Force Chromatic scale (Major scale intervals for white keys)
     // Major scale intervals: {0, 2, 4, 5, 7, 9, 11} = C, D, E, F, G, A, B

@@ -1,7 +1,3 @@
-in Keyboard Zones, Beside layout strategis (Linear, Grid, piano), add a janko keyboard layout.
-Do you know about Janko keyboard? Search online for accurate info and helping info for easier implementation. 
-look at the current implementation and check for the best way to add this feature.
-
 Add the zones preset system (just like the touchpad preset system).
 
 we will have:
@@ -22,3 +18,8 @@ it would be even more useful we can just give it an easy button to add presets i
 ---
 
 if I cancel after pressing "+" in keyboard mapping (when adding new mapping), it crashes instantly. we need to fix it
+
+---
+
+new option needed in
+Keyboard mappings -> Commands -> Layer -> remove overrides (that basically clears any overriding layer whether it is toggled on or pressed on. any overriding groups are also removed. It resets back to base layer. Kind of like keyboard layer system panic button)
