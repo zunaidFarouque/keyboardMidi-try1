@@ -105,6 +105,7 @@ private:
   bool wasMidiModeEnabledBeforeCapture = false;
   void startInputCapture();
   void finishInputCapture(uintptr_t deviceHandle, int keyCode, bool skipped);
+  void cleanupInputCaptureOverlay(bool restoreMidiMode);
 
   // 3. Containers (Must die first)
   juce::Viewport inspectorViewport;

@@ -157,6 +157,7 @@ std::map<int, juce::String> MappingDefinition::getCommandOptions() {
       {static_cast<int>(Cmd::GlobalScaleSet), "Global Scale Set"},
       {static_cast<int>(Cmd::LayerMomentary), "Layer Momentary"},
       {static_cast<int>(Cmd::LayerToggle), "Layer Toggle"},
+      {static_cast<int>(Cmd::LayerRemoveOverrides), "Layer: remove overrides"},
   };
 }
 
@@ -1157,7 +1158,8 @@ InspectorSchema MappingDefinition::getSchema(const juce::ValueTree &mapping,
          cmdId == (int)MIDIQy::CommandID::GlobalScaleSet);
     const bool isLayer =
         (cmdId == (int)MIDIQy::CommandID::LayerMomentary ||
-         cmdId == (int)MIDIQy::CommandID::LayerToggle);
+         cmdId == (int)MIDIQy::CommandID::LayerToggle ||
+         cmdId == (int)MIDIQy::CommandID::LayerRemoveOverrides);
     const bool isKeyboardGroupSolo =
         (cmdId == (int)MIDIQy::CommandID::KeyboardLayoutGroupSoloMomentary ||
          cmdId == (int)MIDIQy::CommandID::KeyboardLayoutGroupSoloToggle ||
@@ -1207,6 +1209,7 @@ InspectorSchema MappingDefinition::getSchema(const juce::ValueTree &mapping,
       styleCtrl.controlType = InspectorControl::Type::ComboBox;
       styleCtrl.options[1] = "Hold to switch";
       styleCtrl.options[2] = "Toggle layer";
+      styleCtrl.options[3] = "Remove overrides";
       styleCtrl.requiresRebuildOnChange = true;
       setControlDefaultFromMap(styleCtrl);
       schema.push_back(styleCtrl);
@@ -1216,7 +1219,9 @@ InspectorSchema MappingDefinition::getSchema(const juce::ValueTree &mapping,
         static_cast<int>(MIDIQy::CommandID::LayerMomentary);
     const int layerToggle = static_cast<int>(MIDIQy::CommandID::LayerToggle);
 
-    if (isLayer || cmdId == layerMomentary || cmdId == layerToggle) {
+    // Only LayerMomentary / LayerToggle need a target layer; remove-overrides
+    // operates on global layer and solo state.
+    if (cmdId == layerMomentary || cmdId == layerToggle) {
       InspectorControl data2;
       data2.propertyId = "data2";
       data2.label = "Target Layer";

@@ -503,9 +503,16 @@ void KeyboardMappingInspector::createControl(const InspectorControl &def,
       int id = (modify >= 0 && modify <= 4) ? (modify + 1) : 1;
       cb->setSelectedId(id, juce::dontSendNotification);
     } else if (def.propertyId == "layerStyle") {
-      // Virtual: data1 10,11 -> combo ids 1,2 (Hold to switch, Toggle layer)
+      // Virtual: LayerMomentary/LayerToggle/LayerRemoveOverrides -> combo ids
+      // 1/2/3 (Hold to switch, Toggle layer, Remove overrides)
       int data1 = static_cast<int>(getCommonValue("data1"));
-      int id = (data1 == 10) ? 1 : (data1 == 11) ? 2 : 1;
+      int id = 1;
+      if (data1 ==
+          static_cast<int>(MIDIQy::CommandID::LayerToggle))
+        id = 2;
+      else if (data1 ==
+               static_cast<int>(MIDIQy::CommandID::LayerRemoveOverrides))
+        id = 3;
       cb->setSelectedId(id, juce::dontSendNotification);
     } else if (def.propertyId == "commandCategory") {
       // Virtual: map underlying CommandID in data1 to high-level categories.
@@ -543,7 +550,9 @@ void KeyboardMappingInspector::createControl(const InspectorControl &def,
       } else if (data1 ==
                      static_cast<int>(MIDIQy::CommandID::LayerMomentary) ||
                  data1 ==
-                     static_cast<int>(MIDIQy::CommandID::LayerToggle)) {
+                     static_cast<int>(MIDIQy::CommandID::LayerToggle) ||
+                 data1 ==
+                     static_cast<int>(MIDIQy::CommandID::LayerRemoveOverrides)) {
         cb->setSelectedId(110, juce::dontSendNotification); // Layer
       } else if (data1 ==
                      static_cast<int>(MIDIQy::CommandID::KeyboardLayoutGroupSoloMomentary) ||

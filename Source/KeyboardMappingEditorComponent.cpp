@@ -299,26 +299,35 @@ void KeyboardMappingEditorComponent::startInputCapture() {
   captureOverlay = std::make_unique<InputCaptureOverlay>();
   captureOverlay->onDismiss = [this](bool skipped) {
     if (skipped) {
-      finishInputCapture(0, 0, true);
+      juce::MessageManager::callAsync([this] {
+        finishInputCapture(0, 0, true);
+      });
     } else {
-      // Cancelled: restore MIDI mode, remove overlay
-      if (!wasMidiModeEnabledBeforeCapture)
-        settingsManager.setMidiModeActive(false);
-      captureOverlay.reset();
-      resized();
+      juce::MessageManager::callAsync([this] {
+        cleanupInputCaptureOverlay(true);
+      });
     }
   };
   addAndMakeVisible(captureOverlay.get());
   resized();
 }
 
+void KeyboardMappingEditorComponent::cleanupInputCaptureOverlay(bool restoreMidiMode) {
+  if (restoreMidiMode && !wasMidiModeEnabledBeforeCapture)
+    settingsManager.setMidiModeActive(false);
+
+  if (captureOverlay != nullptr) {
+    captureOverlay.reset();
+    resized();
+  }
+}
+
 void KeyboardMappingEditorComponent::finishInputCapture(uintptr_t deviceHandle,
                                                 int keyCode, bool skipped) {
-  // 1. Cleanup: remove overlay, restore MIDI mode
-  if (!wasMidiModeEnabledBeforeCapture)
-    settingsManager.setMidiModeActive(false);
-  captureOverlay.reset();
-  resized();
+  // 1. Cleanup: remove overlay, restore MIDI mode (if we were the ones to enable it)
+  if (captureOverlay == nullptr)
+    return;
+  cleanupInputCaptureOverlay(true);
 
   // 2. Create mapping
   int inputKey = 0;

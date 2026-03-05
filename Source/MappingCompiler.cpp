@@ -190,6 +190,8 @@ juce::String getCommandLabel(int cmdId) {
     return "Layer (Hold)";
   case CommandID::LayerToggle:
     return "Layer (Toggle)";
+  case CommandID::LayerRemoveOverrides:
+    return "Layer (Reset overrides)";
   case CommandID::GlobalRootUp:
     return "Root +1";
   case CommandID::GlobalRootDown:
@@ -528,7 +530,8 @@ static bool isLayerCommand(const MidiAction &action) {
     return false;
   const int cmd = action.data1;
   return (cmd == static_cast<int>(MIDIQy::CommandID::LayerMomentary) ||
-          cmd == static_cast<int>(MIDIQy::CommandID::LayerToggle));
+          cmd == static_cast<int>(MIDIQy::CommandID::LayerToggle) ||
+          cmd == static_cast<int>(MIDIQy::CommandID::LayerRemoveOverrides));
 }
 
 static bool isTouchpadEventBoolean(int eventId) {

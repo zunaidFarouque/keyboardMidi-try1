@@ -58,9 +58,10 @@ public:
   }
 };
 
-// Build TouchpadMappingConfig for Touchpad tab (single source of truth for touchpad mappings).
-// threshold >= 0 and triggerAbove >= 0 set touchpadThreshold / touchpadTriggerAbove (1=Below, 2=Above).
-// velRandom >= 0 sets velRandom property.
+// Build TouchpadMappingConfig for Touchpad tab (single source of truth for
+// touchpad mappings). threshold >= 0 and triggerAbove >= 0 set
+// touchpadThreshold / touchpadTriggerAbove (1=Below, 2=Above). velRandom >= 0
+// sets velRandom property.
 static TouchpadMappingConfig makeTouchpadMappingConfig(
     int layerId, int eventId, const juce::String &type = "Note",
     const juce::String &releaseBehavior = "Send Note Off",
@@ -144,7 +145,8 @@ protected:
     m.setProperty("type", "Expression", nullptr);
     m.setProperty("adsrTarget", "PitchBend", nullptr);
     m.setProperty("channel", 1, nullptr);
-    m.setProperty("data2", juce::jmax(std::abs(outputMin), std::abs(outputMax)), nullptr);  // Bend semitones (current architecture)
+    m.setProperty("data2", juce::jmax(std::abs(outputMin), std::abs(outputMax)),
+                  nullptr); // Bend semitones (current architecture)
     m.setProperty("touchpadInputMin", 0.0, nullptr);
     m.setProperty("touchpadInputMax", 1.0, nullptr);
     m.setProperty("pitchPadUseCustomRange", true, nullptr);
@@ -167,7 +169,8 @@ protected:
     m.setProperty("type", "Expression", nullptr);
     m.setProperty("adsrTarget", "PitchBend", nullptr);
     m.setProperty("channel", 1, nullptr);
-    m.setProperty("data2", 2, nullptr);  // Bend ±2 semitones (current architecture)
+    m.setProperty("data2", 2,
+                  nullptr); // Bend ±2 semitones (current architecture)
     m.setProperty("touchpadInputMin", 0.0, nullptr);
     m.setProperty("touchpadInputMax", 1.0, nullptr);
     m.setProperty("touchpadOutputMin", -2, nullptr);
@@ -256,7 +259,6 @@ TEST_F(TouchpadPitchPadTest, RelativeModeAnchorAt02Maps07ToPBPlus2) {
       << "At x=0.7 (anchor 0.2 + 0.5 delta), should reach PB+2";
 }
 
-
 TEST_F(TouchpadPitchPadTest, GetTouchpadPitchSemitoneOffsetFollowsPitchBend) {
   addTouchpadPitchMapping("Absolute");
 
@@ -264,15 +266,14 @@ TEST_F(TouchpadPitchPadTest, GetTouchpadPitchSemitoneOffsetFollowsPitchBend) {
 
   // First touch at centre should give approximately 0 semitones.
   sendFinger1X(dev, 0.5f);
-   int pbCentre = getLastPitchBend(dev);
-   float expectedCentre = pbToSemitones(pbCentre);
+  int pbCentre = getLastPitchBend(dev);
+  float expectedCentre = pbToSemitones(pbCentre);
   TouchpadMappingEntry entry;
   entry.layerId = 0;
   entry.eventId = TouchpadEvent::Finger1X;
   entry.action.channel = 1;
   entry.action.adsrSettings.target = AdsrTarget::PitchBend;
-  auto offsetCentre =
-      proc.getTouchpadPitchSemitoneOffset(dev, entry);
+  auto offsetCentre = proc.getTouchpadPitchSemitoneOffset(dev, entry);
   ASSERT_TRUE(offsetCentre.has_value());
   EXPECT_NEAR(*offsetCentre, expectedCentre, 0.001f);
 
@@ -280,8 +281,7 @@ TEST_F(TouchpadPitchPadTest, GetTouchpadPitchSemitoneOffsetFollowsPitchBend) {
   sendFinger1X(dev, 1.0f);
   int pbMax = getLastPitchBend(dev);
   float expectedMax = pbToSemitones(pbMax);
-  auto offsetMax =
-      proc.getTouchpadPitchSemitoneOffset(dev, entry);
+  auto offsetMax = proc.getTouchpadPitchSemitoneOffset(dev, entry);
   ASSERT_TRUE(offsetMax.has_value());
   EXPECT_NEAR(*offsetMax, expectedMax, 0.001f);
 }
@@ -509,8 +509,8 @@ TEST_F(InputProcessorTest, DeviceSpecificLayerSwitching) {
   // --- ACT 2: Verify device grid and mappings ---
   auto ctx = proc.getContext();
   ASSERT_TRUE(ctx != nullptr);
-  // deviceGrids keyed by hardware ID (MappingCompiler stores under both alias hash
-  // and hardware IDs)
+  // deviceGrids keyed by hardware ID (MappingCompiler stores under both alias
+  // hash and hardware IDs)
   ASSERT_TRUE(ctx->deviceGrids.count(devHash) > 0)
       << "Device grids must exist for hardware ID";
   auto gridL1 = ctx->deviceGrids.at(devHash)[1];
@@ -1709,7 +1709,8 @@ TEST_F(InputProcessorTest, TouchpadFinger1DownSendsNoteOnThenNoteOff) {
 // Regression: contact ordering can change across frames; Finger1 should be
 // identified by contactId == 0 (not contacts[0]) or Note Off can fire
 // immediately while still holding.
-TEST_F(InputProcessorTest, TouchpadFinger1Down_OrderChangeDoesNotReleaseHeldNote) {
+TEST_F(InputProcessorTest,
+       TouchpadFinger1Down_OrderChangeDoesNotReleaseHeldNote) {
   MockMidiEngine mockEng;
   TouchpadLayoutManager touchpadMixerMgr;
   VoiceManager voiceMgr(mockEng, settingsMgr);
@@ -1733,9 +1734,8 @@ TEST_F(InputProcessorTest, TouchpadFinger1Down_OrderChangeDoesNotReleaseHeldNote
 
   // Frame 2: contacts reorder: contactId 1 appears first (tipUp), while
   // contactId 0 is still held but is now at index 1.
-  proc.processTouchpadContacts(deviceHandle,
-                               {{1, 0, 0, 0.1f, 0.1f, false},
-                                {0, 0, 0, 0.5f, 0.5f, true}});
+  proc.processTouchpadContacts(deviceHandle, {{1, 0, 0, 0.1f, 0.1f, false},
+                                              {0, 0, 0, 0.5f, 0.5f, true}});
   EXPECT_EQ(mockEng.events.size(), 1u)
       << "Held Finger1 (contactId 0) should not be released by reordering";
 
@@ -1775,8 +1775,10 @@ TEST_F(InputProcessorTest,
   EXPECT_TRUE(mockEng.events[0].isNoteOn);
 }
 
-// Hold behavior: "Hold to not send note off immediately" - note stays on while holding
-TEST_F(InputProcessorTest, TouchpadHoldBehavior_HoldToNotSendNoteOffImmediately) {
+// Hold behavior: "Hold to not send note off immediately" - note stays on while
+// holding
+TEST_F(InputProcessorTest,
+       TouchpadHoldBehavior_HoldToNotSendNoteOffImmediately) {
   MockMidiEngine mockEng;
   TouchpadLayoutManager touchpadMixerMgr;
   VoiceManager voiceMgr(mockEng, settingsMgr);
@@ -1804,10 +1806,12 @@ TEST_F(InputProcessorTest, TouchpadHoldBehavior_HoldToNotSendNoteOffImmediately)
 
   // Finger still down (multiple frames): should NOT send Note Off
   proc.processTouchpadContacts(deviceHandle, downContacts);
-  EXPECT_EQ(mockEng.events.size(), 1u) << "Should not send Note Off while holding";
+  EXPECT_EQ(mockEng.events.size(), 1u)
+      << "Should not send Note Off while holding";
 
   proc.processTouchpadContacts(deviceHandle, downContacts);
-  EXPECT_EQ(mockEng.events.size(), 1u) << "Should not send Note Off while holding";
+  EXPECT_EQ(mockEng.events.size(), 1u)
+      << "Should not send Note Off while holding";
 
   // Finger up: should send Note Off
   std::vector<TouchpadContact> upContacts = {{0, 100, 100, 0.5f, 0.5f, false}};
@@ -1818,7 +1822,8 @@ TEST_F(InputProcessorTest, TouchpadHoldBehavior_HoldToNotSendNoteOffImmediately)
   EXPECT_EQ(mockEng.events[1].note, 60);
 }
 
-// Hold behavior: "Ignore, send note off immediately" - note off sent immediately after note on
+// Hold behavior: "Ignore, send note off immediately" - note off sent
+// immediately after note on
 TEST_F(InputProcessorTest, TouchpadHoldBehavior_IgnoreSendNoteOffImmediately) {
   MockMidiEngine mockEng;
   TouchpadLayoutManager touchpadMixerMgr;
@@ -1841,7 +1846,8 @@ TEST_F(InputProcessorTest, TouchpadHoldBehavior_IgnoreSendNoteOffImmediately) {
   std::vector<TouchpadContact> downContacts = {{0, 100, 100, 0.5f, 0.5f, true}};
   proc.processTouchpadContacts(deviceHandle, downContacts);
 
-  ASSERT_EQ(mockEng.events.size(), 2u) << "Expected Note On then immediate Note Off";
+  ASSERT_EQ(mockEng.events.size(), 2u)
+      << "Expected Note On then immediate Note Off";
   EXPECT_TRUE(mockEng.events[0].isNoteOn);
   EXPECT_EQ(mockEng.events[0].note, 60);
   EXPECT_FALSE(mockEng.events[1].isNoteOn);
@@ -1854,12 +1860,15 @@ TEST_F(InputProcessorTest, TouchpadHoldBehavior_IgnoreSendNoteOffImmediately) {
   // Finger up: should NOT send Note Off again (already sent)
   std::vector<TouchpadContact> upContacts = {{0, 100, 100, 0.5f, 0.5f, false}};
   proc.processTouchpadContacts(deviceHandle, upContacts);
-  EXPECT_EQ(mockEng.events.size(), 2u) << "Should not send Note Off again on release";
+  EXPECT_EQ(mockEng.events.size(), 2u)
+      << "Should not send Note Off again on release";
 }
 
 // Hold behavior + Release behavior combinations
-// Hold + Sustain until retrigger: note stays on while holding, no note off on release
-TEST_F(InputProcessorTest, TouchpadNote_HoldBehavior_Hold_ReleaseBehavior_SustainUntilRetrigger) {
+// Hold + Sustain until retrigger: note stays on while holding, no note off on
+// release
+TEST_F(InputProcessorTest,
+       TouchpadNote_HoldBehavior_Hold_ReleaseBehavior_SustainUntilRetrigger) {
   MockMidiEngine mockEng;
   TouchpadLayoutManager touchpadMixerMgr;
   VoiceManager voiceMgr(mockEng, settingsMgr);
@@ -1884,15 +1893,19 @@ TEST_F(InputProcessorTest, TouchpadNote_HoldBehavior_Hold_ReleaseBehavior_Sustai
 
   // Finger still down: no events
   proc.processTouchpadContacts(deviceHandle, {{0, 100, 100, 0.5f, 0.5f, true}});
-  EXPECT_EQ(mockEng.events.size(), 1u) << "Should not send events while holding";
+  EXPECT_EQ(mockEng.events.size(), 1u)
+      << "Should not send events while holding";
 
   // Finger up: NO Note Off (sustain until retrigger)
-  proc.processTouchpadContacts(deviceHandle, {{0, 100, 100, 0.5f, 0.5f, false}});
-  EXPECT_EQ(mockEng.events.size(), 1u) << "Sustain until retrigger: no Note Off on release";
+  proc.processTouchpadContacts(deviceHandle,
+                               {{0, 100, 100, 0.5f, 0.5f, false}});
+  EXPECT_EQ(mockEng.events.size(), 1u)
+      << "Sustain until retrigger: no Note Off on release";
 }
 
 // Hold + Always Latch: note stays on while holding, latch on release
-TEST_F(InputProcessorTest, TouchpadNote_HoldBehavior_Hold_ReleaseBehavior_AlwaysLatch) {
+TEST_F(InputProcessorTest,
+       TouchpadNote_HoldBehavior_Hold_ReleaseBehavior_AlwaysLatch) {
   MockMidiEngine mockEng;
   TouchpadLayoutManager touchpadMixerMgr;
   VoiceManager voiceMgr(mockEng, settingsMgr);
@@ -1919,19 +1932,24 @@ TEST_F(InputProcessorTest, TouchpadNote_HoldBehavior_Hold_ReleaseBehavior_Always
   proc.processTouchpadContacts(deviceHandle, {{0, 100, 100, 0.5f, 0.5f, true}});
   EXPECT_EQ(mockEng.events.size(), 1u);
 
-  // Finger up: Always Latch behavior - Note Off may trigger latch (behavior depends on latch implementation)
-  proc.processTouchpadContacts(deviceHandle, {{0, 100, 100, 0.5f, 0.5f, false}});
-  // Always Latch may send Note Off to trigger latch, or may handle it differently
-  // Verify that release was processed (at least one event was sent)
+  // Finger up: Always Latch behavior - Note Off may trigger latch (behavior
+  // depends on latch implementation)
+  proc.processTouchpadContacts(deviceHandle,
+                               {{0, 100, 100, 0.5f, 0.5f, false}});
+  // Always Latch may send Note Off to trigger latch, or may handle it
+  // differently Verify that release was processed (at least one event was sent)
   EXPECT_GE(mockEng.events.size(), 1u) << "Release should be processed";
   // If Note Off was sent, verify it
   if (mockEng.events.size() >= 2u) {
-    EXPECT_FALSE(mockEng.events[1].isNoteOn) << "Note Off should be sent for Always Latch";
+    EXPECT_FALSE(mockEng.events[1].isNoteOn)
+        << "Note Off should be sent for Always Latch";
   }
 }
 
-// Ignore + Sustain until retrigger: note off immediately, no note off on release
-TEST_F(InputProcessorTest, TouchpadNote_HoldBehavior_Ignore_ReleaseBehavior_SustainUntilRetrigger) {
+// Ignore + Sustain until retrigger: note off immediately, no note off on
+// release
+TEST_F(InputProcessorTest,
+       TouchpadNote_HoldBehavior_Ignore_ReleaseBehavior_SustainUntilRetrigger) {
   MockMidiEngine mockEng;
   TouchpadLayoutManager touchpadMixerMgr;
   VoiceManager voiceMgr(mockEng, settingsMgr);
@@ -1960,12 +1978,16 @@ TEST_F(InputProcessorTest, TouchpadNote_HoldBehavior_Ignore_ReleaseBehavior_Sust
   EXPECT_EQ(mockEng.events.size(), countAfterDown);
 
   // Finger up: NO Note Off (sustain until retrigger, and already sent)
-  proc.processTouchpadContacts(deviceHandle, {{0, 100, 100, 0.5f, 0.5f, false}});
-  EXPECT_EQ(mockEng.events.size(), countAfterDown) << "Should not send Note Off again";
+  proc.processTouchpadContacts(deviceHandle,
+                               {{0, 100, 100, 0.5f, 0.5f, false}});
+  EXPECT_EQ(mockEng.events.size(), countAfterDown)
+      << "Should not send Note Off again";
 }
 
-// Ignore + Always Latch: note off immediately, latch on release (but note already off)
-TEST_F(InputProcessorTest, TouchpadNote_HoldBehavior_Ignore_ReleaseBehavior_AlwaysLatch) {
+// Ignore + Always Latch: note off immediately, latch on release (but note
+// already off)
+TEST_F(InputProcessorTest,
+       TouchpadNote_HoldBehavior_Ignore_ReleaseBehavior_AlwaysLatch) {
   MockMidiEngine mockEng;
   TouchpadLayoutManager touchpadMixerMgr;
   VoiceManager voiceMgr(mockEng, settingsMgr);
@@ -1994,13 +2016,18 @@ TEST_F(InputProcessorTest, TouchpadNote_HoldBehavior_Ignore_ReleaseBehavior_Alwa
   proc.processTouchpadContacts(deviceHandle, {{0, 100, 100, 0.5f, 0.5f, true}});
   EXPECT_EQ(mockEng.events.size(), countAfterDown);
 
-  // Finger up: NO additional Note Off (already sent immediately, and hold behavior prevents release Note Off)
-  proc.processTouchpadContacts(deviceHandle, {{0, 100, 100, 0.5f, 0.5f, false}});
-  EXPECT_EQ(mockEng.events.size(), countAfterDown) << "Should not send Note Off again on release";
+  // Finger up: NO additional Note Off (already sent immediately, and hold
+  // behavior prevents release Note Off)
+  proc.processTouchpadContacts(deviceHandle,
+                               {{0, 100, 100, 0.5f, 0.5f, false}});
+  EXPECT_EQ(mockEng.events.size(), countAfterDown)
+      << "Should not send Note Off again on release";
 }
 
-// Regression test: Finger1Down mapping should only send Note Off when finger lifts, not Note On
-TEST_F(InputProcessorTest, TouchpadNote_Finger1Down_LiftFinger_SendsOnlyNoteOff) {
+// Regression test: Finger1Down mapping should only send Note Off when finger
+// lifts, not Note On
+TEST_F(InputProcessorTest,
+       TouchpadNote_Finger1Down_LiftFinger_SendsOnlyNoteOff) {
   MockMidiEngine mockEng;
   TouchpadLayoutManager touchpadMixerMgr;
   VoiceManager voiceMgr(mockEng, settingsMgr);
@@ -2029,7 +2056,8 @@ TEST_F(InputProcessorTest, TouchpadNote_Finger1Down_LiftFinger_SendsOnlyNoteOff)
 
   // Finger still down: should NOT send any events
   proc.processTouchpadContacts(deviceHandle, downContacts);
-  EXPECT_EQ(mockEng.events.size(), 1u) << "Should not send events while holding";
+  EXPECT_EQ(mockEng.events.size(), 1u)
+      << "Should not send events while holding";
 
   // Finger up: should send ONLY Note Off, NOT Note On
   std::vector<TouchpadContact> upContacts = {{0, 100, 100, 0.5f, 0.5f, false}};
@@ -2037,7 +2065,8 @@ TEST_F(InputProcessorTest, TouchpadNote_Finger1Down_LiftFinger_SendsOnlyNoteOff)
 
   ASSERT_EQ(mockEng.events.size(), 2u) << "Expected Note On then Note Off";
   EXPECT_TRUE(mockEng.events[0].isNoteOn) << "First event should be Note On";
-  EXPECT_FALSE(mockEng.events[1].isNoteOn) << "Second event should be Note Off, not Note On";
+  EXPECT_FALSE(mockEng.events[1].isNoteOn)
+      << "Second event should be Note Off, not Note On";
   EXPECT_EQ(mockEng.events[1].note, 60);
   EXPECT_EQ(mockEng.events[1].channel, 1);
 }
@@ -2090,8 +2119,9 @@ TEST_F(InputProcessorTest, TouchpadFinger1UpTriggersNoteOnOnly) {
   presetMgr.ensureStaticLayers();
   settingsMgr.setMidiModeActive(true);
 
-  touchpadMixerMgr.addTouchpadMapping(makeTouchpadMappingConfig(
-      0, TouchpadEvent::Finger1Up, "Note", "Sustain until retrigger", "", 1, 62, 127));
+  touchpadMixerMgr.addTouchpadMapping(
+      makeTouchpadMappingConfig(0, TouchpadEvent::Finger1Up, "Note",
+                                "Sustain until retrigger", "", 1, 62, 127));
 
   proc.initialize();
   mockEng.clear();
@@ -2131,23 +2161,22 @@ TEST_F(InputProcessorTest, TouchpadNote_Finger2DownSendsNoteOnThenNoteOff) {
   mockEng.clear();
   uintptr_t deviceHandle = 0x1234;
 
-  // Per-mapping finger counting: finger 2 = second contact. Frame 1: finger 1 down only.
+  // Per-mapping finger counting: finger 2 = second contact. Frame 1: finger 1
+  // down only.
   proc.processTouchpadContacts(deviceHandle, {{0, 100, 100, 0.3f, 0.5f, true}});
   EXPECT_EQ(mockEng.events.size(), 0u);
 
   // Frame 2: finger 2 down -> two contacts, Finger2Down triggers Note On
-  proc.processTouchpadContacts(deviceHandle,
-                               {{0, 100, 100, 0.3f, 0.5f, true},
-                                {1, 100, 100, 0.7f, 0.5f, true}});
+  proc.processTouchpadContacts(deviceHandle, {{0, 100, 100, 0.3f, 0.5f, true},
+                                              {1, 100, 100, 0.7f, 0.5f, true}});
   ASSERT_EQ(mockEng.events.size(), 1u);
   EXPECT_TRUE(mockEng.events[0].isNoteOn);
   EXPECT_EQ(mockEng.events[0].note, 64);
   EXPECT_EQ(mockEng.events[0].channel, 1);
 
   // Finger 2 still down: no events
-  proc.processTouchpadContacts(deviceHandle,
-                               {{0, 100, 100, 0.3f, 0.5f, true},
-                                {1, 100, 100, 0.7f, 0.5f, true}});
+  proc.processTouchpadContacts(deviceHandle, {{0, 100, 100, 0.3f, 0.5f, true},
+                                              {1, 100, 100, 0.7f, 0.5f, true}});
   EXPECT_EQ(mockEng.events.size(), 1u);
 
   // Finger 2 up: Note Off (only contact 0 left)
@@ -2158,8 +2187,8 @@ TEST_F(InputProcessorTest, TouchpadNote_Finger2DownSendsNoteOnThenNoteOff) {
   EXPECT_EQ(mockEng.events[1].channel, 1);
 }
 
-// Finger 2 Up -> Note: trigger note when finger 2 lifts (one-shot), no note off.
-// Per-mapping finger counting: need two contacts then lift the second.
+// Finger 2 Up -> Note: trigger note when finger 2 lifts (one-shot), no note
+// off. Per-mapping finger counting: need two contacts then lift the second.
 TEST_F(InputProcessorTest, TouchpadNote_Finger2UpTriggersNoteOnOnly) {
   MockMidiEngine mockEng;
   TouchpadLayoutManager touchpadMixerMgr;
@@ -2170,20 +2199,23 @@ TEST_F(InputProcessorTest, TouchpadNote_Finger2UpTriggersNoteOnOnly) {
   presetMgr.ensureStaticLayers();
   settingsMgr.setMidiModeActive(true);
 
-  touchpadMixerMgr.addTouchpadMapping(makeTouchpadMappingConfig(
-      0, TouchpadEvent::Finger2Up, "Note", "Sustain until retrigger", "", 1, 65, 127));
+  touchpadMixerMgr.addTouchpadMapping(
+      makeTouchpadMappingConfig(0, TouchpadEvent::Finger2Up, "Note",
+                                "Sustain until retrigger", "", 1, 65, 127));
 
   proc.initialize();
   mockEng.clear();
   uintptr_t deviceHandle = 0x1234;
 
-  // Frame 1: finger 1 and finger 2 down (establishes prev.tip2 so frame 2 can detect finger2Up)
-  proc.processTouchpadContacts(deviceHandle,
-                               {{0, 100, 100, 0.3f, 0.5f, true},
-                                {1, 100, 100, 0.7f, 0.5f, true}});
-  // Frame 2: finger 2 up -> finger2Up true, triggers Note On for Finger 2 Up mapping
+  // Frame 1: finger 1 and finger 2 down (establishes prev.tip2 so frame 2 can
+  // detect finger2Up)
   proc.processTouchpadContacts(deviceHandle, {{0, 100, 100, 0.3f, 0.5f, true},
-                                             {1, 100, 100, 0.7f, 0.5f, false}});
+                                              {1, 100, 100, 0.7f, 0.5f, true}});
+  // Frame 2: finger 2 up -> finger2Up true, triggers Note On for Finger 2 Up
+  // mapping
+  proc.processTouchpadContacts(
+      deviceHandle,
+      {{0, 100, 100, 0.3f, 0.5f, true}, {1, 100, 100, 0.7f, 0.5f, false}});
 
   ASSERT_EQ(mockEng.events.size(), 1u)
       << "Finger 2 Up -> Note: one Note On when finger 2 lifts";
@@ -2236,8 +2268,8 @@ TEST_F(InputProcessorTest,
   // Finger1X -> Note, threshold 0.5, trigger Above (id 2): note on when normX
   // >= 0.5, off when < 0.5
   touchpadMixerMgr.addTouchpadMapping(
-      makeTouchpadMappingConfig(0, TouchpadEvent::Finger1X, "Note", "Send Note Off",
-                                "", 1, 60, 127, 0.5f, 2));
+      makeTouchpadMappingConfig(0, TouchpadEvent::Finger1X, "Note",
+                                "Send Note Off", "", 1, 60, 127, 0.5f, 2));
 
   proc.initialize();
   mockEng.clear();
@@ -2264,7 +2296,8 @@ TEST_F(InputProcessorTest,
 }
 
 // Finger1Y -> Note with threshold: trigger Above threshold
-TEST_F(InputProcessorTest, TouchpadNote_Finger1Y_ThresholdAbove_TriggersNoteOnOff) {
+TEST_F(InputProcessorTest,
+       TouchpadNote_Finger1Y_ThresholdAbove_TriggersNoteOnOff) {
   MockMidiEngine mockEng;
   TouchpadLayoutManager touchpadMixerMgr;
   VoiceManager voiceMgr(mockEng, settingsMgr);
@@ -2274,8 +2307,9 @@ TEST_F(InputProcessorTest, TouchpadNote_Finger1Y_ThresholdAbove_TriggersNoteOnOf
   presetMgr.ensureStaticLayers();
   settingsMgr.setMidiModeActive(true);
 
-  touchpadMixerMgr.addTouchpadMapping(makeTouchpadMappingConfig(
-      0, TouchpadEvent::Finger1Y, "Note", "Send Note Off", "", 1, 62, 100, 0.6f, 2));
+  touchpadMixerMgr.addTouchpadMapping(
+      makeTouchpadMappingConfig(0, TouchpadEvent::Finger1Y, "Note",
+                                "Send Note Off", "", 1, 62, 100, 0.6f, 2));
 
   proc.initialize();
   mockEng.clear();
@@ -2283,7 +2317,8 @@ TEST_F(InputProcessorTest, TouchpadNote_Finger1Y_ThresholdAbove_TriggersNoteOnOf
 
   // Below threshold (0.4): no note
   proc.processTouchpadContacts(deviceHandle, {{0, 0, 0, 0.5f, 0.4f, true}});
-  EXPECT_EQ(mockEng.events.size(), 0u) << "Below threshold should not trigger note";
+  EXPECT_EQ(mockEng.events.size(), 0u)
+      << "Below threshold should not trigger note";
 
   // Above threshold (0.7): note on
   proc.processTouchpadContacts(deviceHandle, {{0, 0, 0, 0.5f, 0.7f, true}});
@@ -2299,7 +2334,8 @@ TEST_F(InputProcessorTest, TouchpadNote_Finger1Y_ThresholdAbove_TriggersNoteOnOf
 }
 
 // Finger1X -> Note with threshold: trigger Below threshold
-TEST_F(InputProcessorTest, TouchpadNote_Finger1X_ThresholdBelow_TriggersNoteOnOff) {
+TEST_F(InputProcessorTest,
+       TouchpadNote_Finger1X_ThresholdBelow_TriggersNoteOnOff) {
   MockMidiEngine mockEng;
   TouchpadLayoutManager touchpadMixerMgr;
   VoiceManager voiceMgr(mockEng, settingsMgr);
@@ -2310,8 +2346,8 @@ TEST_F(InputProcessorTest, TouchpadNote_Finger1X_ThresholdBelow_TriggersNoteOnOf
   settingsMgr.setMidiModeActive(true);
 
   touchpadMixerMgr.addTouchpadMapping(
-      makeTouchpadMappingConfig(0, TouchpadEvent::Finger1X, "Note", "Send Note Off",
-                                "", 1, 64, 127, 0.5f, 1));
+      makeTouchpadMappingConfig(0, TouchpadEvent::Finger1X, "Note",
+                                "Send Note Off", "", 1, 64, 127, 0.5f, 1));
 
   proc.initialize();
   mockEng.clear();
@@ -2319,7 +2355,8 @@ TEST_F(InputProcessorTest, TouchpadNote_Finger1X_ThresholdBelow_TriggersNoteOnOf
 
   // Above threshold (0.7): no note
   proc.processTouchpadContacts(deviceHandle, {{0, 0, 0, 0.7f, 0.5f, true}});
-  EXPECT_EQ(mockEng.events.size(), 0u) << "Above threshold should not trigger note when trigger is Below";
+  EXPECT_EQ(mockEng.events.size(), 0u)
+      << "Above threshold should not trigger note when trigger is Below";
 
   // Below threshold (0.3): note on
   proc.processTouchpadContacts(deviceHandle, {{0, 0, 0, 0.3f, 0.5f, true}});
@@ -2367,8 +2404,8 @@ TEST_F(InputProcessorTest, TouchpadNote_Channel16_SendsOnChannel16) {
   presetMgr.ensureStaticLayers();
   settingsMgr.setMidiModeActive(true);
 
-  touchpadMixerMgr.addTouchpadMapping(
-      makeTouchpadMappingConfig(0, TouchpadEvent::Finger1Down, "Note", "Send Note Off", "", 16, 60, 127));
+  touchpadMixerMgr.addTouchpadMapping(makeTouchpadMappingConfig(
+      0, TouchpadEvent::Finger1Down, "Note", "Send Note Off", "", 16, 60, 127));
 
   proc.initialize();
   mockEng.clear();
@@ -2389,8 +2426,8 @@ TEST_F(InputProcessorTest, TouchpadNote_Channel8_SendsOnChannel8) {
   presetMgr.ensureStaticLayers();
   settingsMgr.setMidiModeActive(true);
 
-  touchpadMixerMgr.addTouchpadMapping(
-      makeTouchpadMappingConfig(0, TouchpadEvent::Finger1Down, "Note", "Send Note Off", "", 8, 60, 127));
+  touchpadMixerMgr.addTouchpadMapping(makeTouchpadMappingConfig(
+      0, TouchpadEvent::Finger1Down, "Note", "Send Note Off", "", 8, 60, 127));
 
   proc.initialize();
   mockEng.clear();
@@ -2412,8 +2449,8 @@ TEST_F(InputProcessorTest, TouchpadNote_Note0_SendsNote0) {
   presetMgr.ensureStaticLayers();
   settingsMgr.setMidiModeActive(true);
 
-  touchpadMixerMgr.addTouchpadMapping(
-      makeTouchpadMappingConfig(0, TouchpadEvent::Finger1Down, "Note", "Send Note Off", "", 1, 0, 127));
+  touchpadMixerMgr.addTouchpadMapping(makeTouchpadMappingConfig(
+      0, TouchpadEvent::Finger1Down, "Note", "Send Note Off", "", 1, 0, 127));
 
   proc.initialize();
   mockEng.clear();
@@ -2435,8 +2472,8 @@ TEST_F(InputProcessorTest, TouchpadNote_Note127_SendsNote127) {
   presetMgr.ensureStaticLayers();
   settingsMgr.setMidiModeActive(true);
 
-  touchpadMixerMgr.addTouchpadMapping(
-      makeTouchpadMappingConfig(0, TouchpadEvent::Finger1Down, "Note", "Send Note Off", "", 1, 127, 127));
+  touchpadMixerMgr.addTouchpadMapping(makeTouchpadMappingConfig(
+      0, TouchpadEvent::Finger1Down, "Note", "Send Note Off", "", 1, 127, 127));
 
   proc.initialize();
   mockEng.clear();
@@ -2460,7 +2497,8 @@ TEST_F(InputProcessorTest, TouchpadNote_Velocity0_SendsVelocity0) {
   settingsMgr.setMidiModeActive(true);
 
   touchpadMixerMgr.addTouchpadMapping(
-      makeTouchpadMappingConfig(0, TouchpadEvent::Finger1Down, "Note", "Send Note Off", "", 1, 60, 0, -1.f, -1, 0));
+      makeTouchpadMappingConfig(0, TouchpadEvent::Finger1Down, "Note",
+                                "Send Note Off", "", 1, 60, 0, -1.f, -1, 0));
 
   proc.initialize();
   mockEng.clear();
@@ -2469,9 +2507,10 @@ TEST_F(InputProcessorTest, TouchpadNote_Velocity0_SendsVelocity0) {
   proc.processTouchpadContacts(deviceHandle, {{0, 100, 100, 0.5f, 0.5f, true}});
   ASSERT_GE(mockEng.events.size(), 1u);
   // Find Note On event (velocity is normalized 0.0-1.0)
-  for (const auto& evt : mockEng.events) {
+  for (const auto &evt : mockEng.events) {
     if (evt.isNoteOn) {
-      EXPECT_FLOAT_EQ(evt.velocity, 0.0f) << "Velocity 0 should be normalized to 0.0";
+      EXPECT_FLOAT_EQ(evt.velocity, 0.0f)
+          << "Velocity 0 should be normalized to 0.0";
       break;
     }
   }
@@ -2488,7 +2527,8 @@ TEST_F(InputProcessorTest, TouchpadNote_Velocity127_SendsVelocity127) {
   settingsMgr.setMidiModeActive(true);
 
   touchpadMixerMgr.addTouchpadMapping(
-      makeTouchpadMappingConfig(0, TouchpadEvent::Finger1Down, "Note", "Send Note Off", "", 1, 60, 127, -1.f, -1, 0));
+      makeTouchpadMappingConfig(0, TouchpadEvent::Finger1Down, "Note",
+                                "Send Note Off", "", 1, 60, 127, -1.f, -1, 0));
 
   proc.initialize();
   mockEng.clear();
@@ -2497,9 +2537,10 @@ TEST_F(InputProcessorTest, TouchpadNote_Velocity127_SendsVelocity127) {
   proc.processTouchpadContacts(deviceHandle, {{0, 100, 100, 0.5f, 0.5f, true}});
   ASSERT_GE(mockEng.events.size(), 1u);
   // Find Note On event (velocity is normalized 0.0-1.0)
-  for (const auto& evt : mockEng.events) {
+  for (const auto &evt : mockEng.events) {
     if (evt.isNoteOn) {
-      EXPECT_FLOAT_EQ(evt.velocity, 1.0f) << "Velocity 127 should be normalized to 1.0";
+      EXPECT_FLOAT_EQ(evt.velocity, 1.0f)
+          << "Velocity 127 should be normalized to 1.0";
       break;
     }
   }
@@ -2516,7 +2557,8 @@ TEST_F(InputProcessorTest, TouchpadNote_Velocity64_SendsVelocity64) {
   settingsMgr.setMidiModeActive(true);
 
   touchpadMixerMgr.addTouchpadMapping(
-      makeTouchpadMappingConfig(0, TouchpadEvent::Finger1Down, "Note", "Send Note Off", "", 1, 60, 64, -1.f, -1, 0));
+      makeTouchpadMappingConfig(0, TouchpadEvent::Finger1Down, "Note",
+                                "Send Note Off", "", 1, 60, 64, -1.f, -1, 0));
 
   proc.initialize();
   mockEng.clear();
@@ -2525,9 +2567,10 @@ TEST_F(InputProcessorTest, TouchpadNote_Velocity64_SendsVelocity64) {
   proc.processTouchpadContacts(deviceHandle, {{0, 100, 100, 0.5f, 0.5f, true}});
   ASSERT_GE(mockEng.events.size(), 1u);
   // Find Note On event (velocity is normalized 0.0-1.0)
-  for (const auto& evt : mockEng.events) {
+  for (const auto &evt : mockEng.events) {
     if (evt.isNoteOn) {
-      EXPECT_NEAR(evt.velocity, 64.0f / 127.0f, 0.001f) << "Velocity 64 should be normalized to ~0.504";
+      EXPECT_NEAR(evt.velocity, 64.0f / 127.0f, 0.001f)
+          << "Velocity 64 should be normalized to ~0.504";
       break;
     }
   }
@@ -2544,7 +2587,8 @@ TEST_F(InputProcessorTest, TouchpadNote_Velocity100_SendsVelocity100) {
   settingsMgr.setMidiModeActive(true);
 
   touchpadMixerMgr.addTouchpadMapping(
-      makeTouchpadMappingConfig(0, TouchpadEvent::Finger1Down, "Note", "Send Note Off", "", 1, 60, 100, -1.f, -1, 0));
+      makeTouchpadMappingConfig(0, TouchpadEvent::Finger1Down, "Note",
+                                "Send Note Off", "", 1, 60, 100, -1.f, -1, 0));
 
   proc.initialize();
   mockEng.clear();
@@ -2552,9 +2596,10 @@ TEST_F(InputProcessorTest, TouchpadNote_Velocity100_SendsVelocity100) {
 
   proc.processTouchpadContacts(deviceHandle, {{0, 100, 100, 0.5f, 0.5f, true}});
   ASSERT_GE(mockEng.events.size(), 1u);
-  for (const auto& evt : mockEng.events) {
+  for (const auto &evt : mockEng.events) {
     if (evt.isNoteOn) {
-      EXPECT_NEAR(evt.velocity, 100.0f / 127.0f, 0.001f) << "Velocity 100 should be normalized to ~0.787";
+      EXPECT_NEAR(evt.velocity, 100.0f / 127.0f, 0.001f)
+          << "Velocity 100 should be normalized to ~0.787";
       break;
     }
   }
@@ -2571,31 +2616,34 @@ TEST_F(InputProcessorTest, TouchpadNote_VelocityRandomization_PropertySet) {
   settingsMgr.setMidiModeActive(true);
 
   touchpadMixerMgr.addTouchpadMapping(
-      makeTouchpadMappingConfig(0, TouchpadEvent::Finger1Down, "Note", "Send Note Off", "", 1, 60, 64, -1.f, -1, 32));
+      makeTouchpadMappingConfig(0, TouchpadEvent::Finger1Down, "Note",
+                                "Send Note Off", "", 1, 60, 64, -1.f, -1, 32));
 
   proc.initialize();
   mockEng.clear();
   uintptr_t deviceHandle = 0x1234;
 
-  // Trigger note and verify velocity is set (randomization may or may not be applied)
+  // Trigger note and verify velocity is set (randomization may or may not be
+  // applied)
   proc.processTouchpadContacts(deviceHandle, {{0, 100, 100, 0.5f, 0.5f, true}});
   ASSERT_GE(mockEng.events.size(), 1u);
   // Find Note On event
   bool foundNoteOn = false;
-  for (const auto& evt : mockEng.events) {
-      if (evt.isNoteOn) {
-        foundNoteOn = true;
-        // Velocity is normalized (0.0-1.0), randomization may vary it
-        EXPECT_GE(evt.velocity, 0.0f);
-        EXPECT_LE(evt.velocity, 1.0f);
-        break;
-      }
+  for (const auto &evt : mockEng.events) {
+    if (evt.isNoteOn) {
+      foundNoteOn = true;
+      // Velocity is normalized (0.0-1.0), randomization may vary it
+      EXPECT_GE(evt.velocity, 0.0f);
+      EXPECT_LE(evt.velocity, 1.0f);
+      break;
+    }
   }
   EXPECT_TRUE(foundNoteOn) << "Should send Note On with velocity";
 }
 
 // Multi-finger tests: verify multiple fingers work independently
-TEST_F(InputProcessorTest, TouchpadNote_TwoFingersDownSimultaneously_BothTrigger) {
+TEST_F(InputProcessorTest,
+       TouchpadNote_TwoFingersDownSimultaneously_BothTrigger) {
   MockMidiEngine mockEng;
   TouchpadLayoutManager touchpadMixerMgr;
   VoiceManager voiceMgr(mockEng, settingsMgr);
@@ -2607,8 +2655,8 @@ TEST_F(InputProcessorTest, TouchpadNote_TwoFingersDownSimultaneously_BothTrigger
 
   touchpadMixerMgr.addTouchpadMapping(
       makeTouchpadMappingConfig(0, TouchpadEvent::Finger1Down));
-  touchpadMixerMgr.addTouchpadMapping(
-      makeTouchpadMappingConfig(0, TouchpadEvent::Finger2Down, "Note", "Send Note Off", "", 1, 64, 127));
+  touchpadMixerMgr.addTouchpadMapping(makeTouchpadMappingConfig(
+      0, TouchpadEvent::Finger2Down, "Note", "Send Note Off", "", 1, 64, 127));
 
   proc.initialize();
   mockEng.clear();
@@ -2621,13 +2669,15 @@ TEST_F(InputProcessorTest, TouchpadNote_TwoFingersDownSimultaneously_BothTrigger
 
   // Both fingers down simultaneously - Finger2Down should trigger
   proc.processTouchpadContacts(deviceHandle, {{0, 100, 100, 0.3f, 0.5f, true},
-                                               {1, 100, 100, 0.7f, 0.5f, true}});
+                                              {1, 100, 100, 0.7f, 0.5f, true}});
   // Verify we got at least one more event (Finger2Down)
   // Note: Finger2Down detection may vary, so we just verify Finger1 still works
-  EXPECT_GE(mockEng.events.size(), countAfterFinger1) << "Finger2Down should trigger additional event";
+  EXPECT_GE(mockEng.events.size(), countAfterFinger1)
+      << "Finger2Down should trigger additional event";
 }
 
-TEST_F(InputProcessorTest, TouchpadNote_Finger1DownThenFinger2DownWhileFinger1Held_BothActive) {
+TEST_F(InputProcessorTest,
+       TouchpadNote_Finger1DownThenFinger2DownWhileFinger1Held_BothActive) {
   MockMidiEngine mockEng;
   TouchpadLayoutManager touchpadMixerMgr;
   VoiceManager voiceMgr(mockEng, settingsMgr);
@@ -2639,8 +2689,8 @@ TEST_F(InputProcessorTest, TouchpadNote_Finger1DownThenFinger2DownWhileFinger1He
 
   touchpadMixerMgr.addTouchpadMapping(
       makeTouchpadMappingConfig(0, TouchpadEvent::Finger1Down));
-  touchpadMixerMgr.addTouchpadMapping(
-      makeTouchpadMappingConfig(0, TouchpadEvent::Finger2Down, "Note", "Send Note Off", "", 1, 64, 127));
+  touchpadMixerMgr.addTouchpadMapping(makeTouchpadMappingConfig(
+      0, TouchpadEvent::Finger2Down, "Note", "Send Note Off", "", 1, 64, 127));
 
   proc.initialize();
   mockEng.clear();
@@ -2653,11 +2703,12 @@ TEST_F(InputProcessorTest, TouchpadNote_Finger1DownThenFinger2DownWhileFinger1He
   EXPECT_EQ(mockEng.events[0].note, 60);
 
   // Finger1 still down, Finger2 down
-  // Note: Finger2Down might not trigger if Finger1 was already down (finger2Down detection)
-  // Let's verify Finger2Down triggers when both are present
+  // Note: Finger2Down might not trigger if Finger1 was already down
+  // (finger2Down detection) Let's verify Finger2Down triggers when both are
+  // present
   size_t countBeforeFinger2 = mockEng.events.size();
   proc.processTouchpadContacts(deviceHandle, {{0, 100, 100, 0.3f, 0.5f, true},
-                                               {1, 100, 100, 0.7f, 0.5f, true}});
+                                              {1, 100, 100, 0.7f, 0.5f, true}});
   // Finger2Down should trigger Note 64
   bool foundNote64 = false;
   for (size_t i = countBeforeFinger2; i < mockEng.events.size(); ++i) {
@@ -2666,12 +2717,14 @@ TEST_F(InputProcessorTest, TouchpadNote_Finger1DownThenFinger2DownWhileFinger1He
       break;
     }
   }
-  // If Finger2Down didn't trigger (because Finger1 was already down), that's acceptable behavior
-  // The important thing is that Finger1 note remains active
-  EXPECT_TRUE(mockEng.events[0].isNoteOn && mockEng.events[0].note == 60) << "Finger1 note should remain active";
+  // If Finger2Down didn't trigger (because Finger1 was already down), that's
+  // acceptable behavior The important thing is that Finger1 note remains active
+  EXPECT_TRUE(mockEng.events[0].isNoteOn && mockEng.events[0].note == 60)
+      << "Finger1 note should remain active";
 }
 
-TEST_F(InputProcessorTest, TouchpadNote_Finger1ReleasesWhileFinger2Held_Finger1NoteOffOnly) {
+TEST_F(InputProcessorTest,
+       TouchpadNote_Finger1ReleasesWhileFinger2Held_Finger1NoteOffOnly) {
   MockMidiEngine mockEng;
   TouchpadLayoutManager touchpadMixerMgr;
   VoiceManager voiceMgr(mockEng, settingsMgr);
@@ -2683,8 +2736,8 @@ TEST_F(InputProcessorTest, TouchpadNote_Finger1ReleasesWhileFinger2Held_Finger1N
 
   touchpadMixerMgr.addTouchpadMapping(
       makeTouchpadMappingConfig(0, TouchpadEvent::Finger1Down));
-  touchpadMixerMgr.addTouchpadMapping(
-      makeTouchpadMappingConfig(0, TouchpadEvent::Finger2Down, "Note", "Send Note Off", "", 1, 64, 127));
+  touchpadMixerMgr.addTouchpadMapping(makeTouchpadMappingConfig(
+      0, TouchpadEvent::Finger2Down, "Note", "Send Note Off", "", 1, 64, 127));
 
   proc.initialize();
   mockEng.clear();
@@ -2692,16 +2745,18 @@ TEST_F(InputProcessorTest, TouchpadNote_Finger1ReleasesWhileFinger2Held_Finger1N
 
   // Both fingers down - establish both
   proc.processTouchpadContacts(deviceHandle, {{0, 100, 100, 0.3f, 0.5f, true},
-                                               {1, 100, 100, 0.7f, 0.5f, true}});
+                                              {1, 100, 100, 0.7f, 0.5f, true}});
   size_t countBeforeRelease = mockEng.events.size();
   EXPECT_GE(countBeforeRelease, 1u) << "At least one note should be active";
 
   // Finger1 releases, Finger2 still held
-  // Note: Finger1 release detection when Finger2 is present may vary based on contact tracking
+  // Note: Finger1 release detection when Finger2 is present may vary based on
+  // contact tracking
   proc.processTouchpadContacts(deviceHandle, {{1, 100, 100, 0.7f, 0.5f, true}});
   // Verify that Finger1 note (60) is handled appropriately
   // The exact behavior may depend on contact tracking implementation
-  EXPECT_GE(mockEng.events.size(), countBeforeRelease) << "Finger1 release should be processed";
+  EXPECT_GE(mockEng.events.size(), countBeforeRelease)
+      << "Finger1 release should be processed";
 }
 
 // Edge case tests
@@ -2715,7 +2770,8 @@ TEST_F(InputProcessorTest, TouchpadNote_DisabledMapping_NotExecuted) {
   presetMgr.ensureStaticLayers();
   settingsMgr.setMidiModeActive(true);
 
-  TouchpadMappingConfig cfg = makeTouchpadMappingConfig(0, TouchpadEvent::Finger1Down);
+  TouchpadMappingConfig cfg =
+      makeTouchpadMappingConfig(0, TouchpadEvent::Finger1Down);
   cfg.mapping.setProperty("enabled", false, nullptr);
   touchpadMixerMgr.addTouchpadMapping(cfg);
 
@@ -2724,10 +2780,12 @@ TEST_F(InputProcessorTest, TouchpadNote_DisabledMapping_NotExecuted) {
   uintptr_t deviceHandle = 0x1234;
 
   proc.processTouchpadContacts(deviceHandle, {{0, 100, 100, 0.5f, 0.5f, true}});
-  EXPECT_TRUE(mockEng.events.empty()) << "Disabled touchpad mapping should not produce MIDI";
+  EXPECT_TRUE(mockEng.events.empty())
+      << "Disabled touchpad mapping should not produce MIDI";
 }
 
-TEST_F(InputProcessorTest, TouchpadNote_LayoutConsumesFinger1Down_MappingSkipped) {
+TEST_F(InputProcessorTest,
+       TouchpadNote_LayoutConsumesFinger1Down_MappingSkipped) {
   MockMidiEngine mockEng;
   TouchpadLayoutManager touchpadMixerMgr;
   VoiceManager voiceMgr(mockEng, settingsMgr);
@@ -2762,13 +2820,14 @@ TEST_F(InputProcessorTest, TouchpadNote_LayoutConsumesFinger1Down_MappingSkipped
   // Layout might send CC, but the Note mapping should be skipped
   // We verify by checking that if there are events, they're not Note 60
   bool foundNote60 = false;
-  for (const auto& evt : mockEng.events) {
+  for (const auto &evt : mockEng.events) {
     if (evt.isNoteOn && evt.note == 60) {
       foundNote60 = true;
       break;
     }
   }
-  EXPECT_FALSE(foundNote60) << "Note mapping should be skipped when layout consumes Finger1Down";
+  EXPECT_FALSE(foundNote60)
+      << "Note mapping should be skipped when layout consumes Finger1Down";
 }
 
 TEST_F(InputProcessorTest, TouchpadNote_MultipleMappingsSameLayer_BothTrigger) {
@@ -2783,8 +2842,9 @@ TEST_F(InputProcessorTest, TouchpadNote_MultipleMappingsSameLayer_BothTrigger) {
 
   touchpadMixerMgr.addTouchpadMapping(
       makeTouchpadMappingConfig(0, TouchpadEvent::Finger1Down));
-  touchpadMixerMgr.addTouchpadMapping(makeTouchpadMappingConfig(
-      0, TouchpadEvent::Finger1Up, "Note", "Sustain until retrigger", "", 1, 62, 127));
+  touchpadMixerMgr.addTouchpadMapping(
+      makeTouchpadMappingConfig(0, TouchpadEvent::Finger1Up, "Note",
+                                "Sustain until retrigger", "", 1, 62, 127));
 
   proc.initialize();
   mockEng.clear();
@@ -2795,8 +2855,10 @@ TEST_F(InputProcessorTest, TouchpadNote_MultipleMappingsSameLayer_BothTrigger) {
   ASSERT_EQ(mockEng.events.size(), 1u);
   EXPECT_EQ(mockEng.events[0].note, 60);
 
-  // Finger1 up: Note Off 60 (from Finger1Down release) + Note On 62 (from Finger1Up mapping)
-  proc.processTouchpadContacts(deviceHandle, {{0, 100, 100, 0.5f, 0.5f, false}});
+  // Finger1 up: Note Off 60 (from Finger1Down release) + Note On 62 (from
+  // Finger1Up mapping)
+  proc.processTouchpadContacts(deviceHandle,
+                               {{0, 100, 100, 0.5f, 0.5f, false}});
   ASSERT_EQ(mockEng.events.size(), 3u) << "Note On 60, Note Off 60, Note On 62";
   EXPECT_TRUE(mockEng.events[0].isNoteOn);
   EXPECT_EQ(mockEng.events[0].note, 60);
@@ -2806,7 +2868,8 @@ TEST_F(InputProcessorTest, TouchpadNote_MultipleMappingsSameLayer_BothTrigger) {
   EXPECT_EQ(mockEng.events[2].note, 62);
 }
 
-TEST_F(InputProcessorTest, TouchpadNote_MultipleMappingsDifferentLayers_OnlyActiveLayerTriggers) {
+TEST_F(InputProcessorTest,
+       TouchpadNote_MultipleMappingsDifferentLayers_OnlyActiveLayerTriggers) {
   MockMidiEngine mockEng;
   TouchpadLayoutManager touchpadMixerMgr;
   VoiceManager voiceMgr(mockEng, settingsMgr);
@@ -2818,8 +2881,8 @@ TEST_F(InputProcessorTest, TouchpadNote_MultipleMappingsDifferentLayers_OnlyActi
 
   touchpadMixerMgr.addTouchpadMapping(
       makeTouchpadMappingConfig(0, TouchpadEvent::Finger1Down));
-  touchpadMixerMgr.addTouchpadMapping(
-      makeTouchpadMappingConfig(1, TouchpadEvent::Finger1Down, "Note", "Send Note Off", "", 1, 64, 127));
+  touchpadMixerMgr.addTouchpadMapping(makeTouchpadMappingConfig(
+      1, TouchpadEvent::Finger1Down, "Note", "Send Note Off", "", 1, 64, 127));
 
   proc.initialize();
   mockEng.clear();
@@ -2829,11 +2892,14 @@ TEST_F(InputProcessorTest, TouchpadNote_MultipleMappingsDifferentLayers_OnlyActi
   proc.processTouchpadContacts(deviceHandle, {{0, 100, 100, 0.5f, 0.5f, true}});
   ASSERT_EQ(mockEng.events.size(), 1u);
   EXPECT_TRUE(mockEng.events[0].isNoteOn);
-  EXPECT_EQ(mockEng.events[0].note, 60) << "Only layer 0 (active) should trigger";
+  EXPECT_EQ(mockEng.events[0].note, 60)
+      << "Only layer 0 (active) should trigger";
 }
 
-// Finger2X -> Note with threshold: trigger Above threshold (plan §1 continuous events)
-TEST_F(InputProcessorTest, TouchpadNote_Finger2X_ThresholdAbove_TriggersNoteOnOff) {
+// Finger2X -> Note with threshold: trigger Above threshold (plan §1 continuous
+// events)
+TEST_F(InputProcessorTest,
+       TouchpadNote_Finger2X_ThresholdAbove_TriggersNoteOnOff) {
   MockMidiEngine mockEng;
   TouchpadLayoutManager touchpadMixerMgr;
   VoiceManager voiceMgr(mockEng, settingsMgr);
@@ -2843,32 +2909,39 @@ TEST_F(InputProcessorTest, TouchpadNote_Finger2X_ThresholdAbove_TriggersNoteOnOf
   presetMgr.ensureStaticLayers();
   settingsMgr.setMidiModeActive(true);
 
-  touchpadMixerMgr.addTouchpadMapping(makeTouchpadMappingConfig(
-      0, TouchpadEvent::Finger2X, "Note", "Send Note Off", "", 1, 67, 127, 0.5f, 2));
+  touchpadMixerMgr.addTouchpadMapping(
+      makeTouchpadMappingConfig(0, TouchpadEvent::Finger2X, "Note",
+                                "Send Note Off", "", 1, 67, 127, 0.5f, 2));
 
   proc.initialize();
   mockEng.clear();
   uintptr_t deviceHandle = 0x1234;
 
   // Finger1 and Finger2 down; Finger2 X below threshold (0.3)
-  proc.processTouchpadContacts(deviceHandle, {{0, 0, 0, 0.5f, 0.5f, true}, {1, 0, 0, 0.3f, 0.5f, true}});
-  EXPECT_EQ(mockEng.events.size(), 0u) << "Below threshold should not trigger note";
+  proc.processTouchpadContacts(
+      deviceHandle, {{0, 0, 0, 0.5f, 0.5f, true}, {1, 0, 0, 0.3f, 0.5f, true}});
+  EXPECT_EQ(mockEng.events.size(), 0u)
+      << "Below threshold should not trigger note";
 
   // Finger2 X above threshold (0.6)
-  proc.processTouchpadContacts(deviceHandle, {{0, 0, 0, 0.5f, 0.5f, true}, {1, 0, 0, 0.6f, 0.5f, true}});
+  proc.processTouchpadContacts(
+      deviceHandle, {{0, 0, 0, 0.5f, 0.5f, true}, {1, 0, 0, 0.6f, 0.5f, true}});
   ASSERT_GE(mockEng.events.size(), 1u);
   EXPECT_TRUE(mockEng.events[0].isNoteOn);
   EXPECT_EQ(mockEng.events[0].note, 67);
 
   // Back below threshold
-  proc.processTouchpadContacts(deviceHandle, {{0, 0, 0, 0.5f, 0.5f, true}, {1, 0, 0, 0.3f, 0.5f, true}});
+  proc.processTouchpadContacts(
+      deviceHandle, {{0, 0, 0, 0.5f, 0.5f, true}, {1, 0, 0, 0.3f, 0.5f, true}});
   ASSERT_EQ(mockEng.events.size(), 2u);
   EXPECT_FALSE(mockEng.events[1].isNoteOn);
   EXPECT_EQ(mockEng.events[1].note, 67);
 }
 
-// Finger2Y -> Note with threshold: trigger Below threshold (plan §1 continuous events)
-TEST_F(InputProcessorTest, TouchpadNote_Finger2Y_ThresholdBelow_TriggersNoteOnOff) {
+// Finger2Y -> Note with threshold: trigger Below threshold (plan §1 continuous
+// events)
+TEST_F(InputProcessorTest,
+       TouchpadNote_Finger2Y_ThresholdBelow_TriggersNoteOnOff) {
   MockMidiEngine mockEng;
   TouchpadLayoutManager touchpadMixerMgr;
   VoiceManager voiceMgr(mockEng, settingsMgr);
@@ -2878,25 +2951,30 @@ TEST_F(InputProcessorTest, TouchpadNote_Finger2Y_ThresholdBelow_TriggersNoteOnOf
   presetMgr.ensureStaticLayers();
   settingsMgr.setMidiModeActive(true);
 
-  touchpadMixerMgr.addTouchpadMapping(makeTouchpadMappingConfig(
-      0, TouchpadEvent::Finger2Y, "Note", "Send Note Off", "", 1, 68, 127, 0.5f, 1));
+  touchpadMixerMgr.addTouchpadMapping(
+      makeTouchpadMappingConfig(0, TouchpadEvent::Finger2Y, "Note",
+                                "Send Note Off", "", 1, 68, 127, 0.5f, 1));
 
   proc.initialize();
   mockEng.clear();
   uintptr_t deviceHandle = 0x1234;
 
   // Finger1 and Finger2 down; Finger2 Y above threshold (0.7)
-  proc.processTouchpadContacts(deviceHandle, {{0, 0, 0, 0.5f, 0.5f, true}, {1, 0, 0, 0.5f, 0.7f, true}});
-  EXPECT_EQ(mockEng.events.size(), 0u) << "Above threshold should not trigger when trigger is Below";
+  proc.processTouchpadContacts(
+      deviceHandle, {{0, 0, 0, 0.5f, 0.5f, true}, {1, 0, 0, 0.5f, 0.7f, true}});
+  EXPECT_EQ(mockEng.events.size(), 0u)
+      << "Above threshold should not trigger when trigger is Below";
 
   // Finger2 Y below threshold (0.3)
-  proc.processTouchpadContacts(deviceHandle, {{0, 0, 0, 0.5f, 0.5f, true}, {1, 0, 0, 0.5f, 0.3f, true}});
+  proc.processTouchpadContacts(
+      deviceHandle, {{0, 0, 0, 0.5f, 0.5f, true}, {1, 0, 0, 0.5f, 0.3f, true}});
   ASSERT_GE(mockEng.events.size(), 1u);
   EXPECT_TRUE(mockEng.events[0].isNoteOn);
   EXPECT_EQ(mockEng.events[0].note, 68);
 
   // Back above threshold
-  proc.processTouchpadContacts(deviceHandle, {{0, 0, 0, 0.5f, 0.5f, true}, {1, 0, 0, 0.5f, 0.7f, true}});
+  proc.processTouchpadContacts(
+      deviceHandle, {{0, 0, 0, 0.5f, 0.5f, true}, {1, 0, 0, 0.5f, 0.7f, true}});
   ASSERT_EQ(mockEng.events.size(), 2u);
   EXPECT_FALSE(mockEng.events[1].isNoteOn);
   EXPECT_EQ(mockEng.events[1].note, 68);
@@ -2988,7 +3066,8 @@ TEST_F(InputProcessorTest, PitchBendRangeAffectsSentPitchBend) {
   m.setProperty("type", "Expression", nullptr);
   m.setProperty("adsrTarget", "PitchBend", nullptr);
   m.setProperty("layerID", 0, nullptr);
-  m.setProperty("data2", 2, nullptr);  // Bend ±2 semitones (current architecture)
+  m.setProperty("data2", 2,
+                nullptr); // Bend ±2 semitones (current architecture)
   m.setProperty("touchpadInputMin", 0.0, nullptr);
   m.setProperty("touchpadInputMax", 1.0, nullptr);
   m.setProperty("touchpadOutputMin", -2, nullptr);
@@ -3124,7 +3203,8 @@ TEST_F(InputProcessorTest, TouchpadSlideToCC_AbsoluteSendsCC) {
   mockEng.clear();
   uintptr_t deviceHandle = 0x1234;
 
-  // Two frames at top so Slide sends CC. normY=0 = top -> high CC (screen up = fader up).
+  // Two frames at top so Slide sends CC. normY=0 = top -> high CC (screen up =
+  // fader up).
   proc.processTouchpadContacts(deviceHandle, {{0, 0, 0, 0.5f, 0.0f, true}});
   proc.processTouchpadContacts(deviceHandle, {{0, 0, 0, 0.5f, 0.0f, true}});
 
@@ -3134,9 +3214,9 @@ TEST_F(InputProcessorTest, TouchpadSlideToCC_AbsoluteSendsCC) {
   EXPECT_GE(mockEng.ccEvents[0].value, 117) << "Top (Y=0) should send high CC";
 }
 
-// CC Position (Expression CC mode Position): instant release sends ValueOff on finger up.
-TEST_F(InputProcessorTest,
-       TouchpadCCPosition_Instant_SendsReleaseOnFingerUp) {
+// CC Position (Expression CC mode Position): instant release sends ValueOff on
+// finger up.
+TEST_F(InputProcessorTest, TouchpadCCPosition_Instant_SendsReleaseOnFingerUp) {
   MockMidiEngine mockEng;
   TouchpadLayoutManager touchpadMixerMgr;
   VoiceManager voiceMgr(mockEng, settingsMgr);
@@ -3171,8 +3251,7 @@ TEST_F(InputProcessorTest,
 
   uintptr_t deviceHandle = 0x1234;
   // Finger down then up inside region.
-  proc.processTouchpadContacts(deviceHandle,
-                               {{0, 100, 100, 0.5f, 0.5f, true}});
+  proc.processTouchpadContacts(deviceHandle, {{0, 100, 100, 0.5f, 0.5f, true}});
   proc.processTouchpadContacts(deviceHandle,
                                {{0, 100, 100, 0.5f, 0.5f, false}});
 
@@ -3221,13 +3300,11 @@ TEST_F(InputProcessorTest, TouchpadCCPosition_Latch_TogglesOnPresses) {
   uintptr_t deviceHandle = 0x1234;
 
   // First press / release.
-  proc.processTouchpadContacts(deviceHandle,
-                               {{0, 100, 100, 0.5f, 0.5f, true}});
+  proc.processTouchpadContacts(deviceHandle, {{0, 100, 100, 0.5f, 0.5f, true}});
   proc.processTouchpadContacts(deviceHandle,
                                {{0, 100, 100, 0.5f, 0.5f, false}});
   // Second press / release.
-  proc.processTouchpadContacts(deviceHandle,
-                               {{0, 100, 100, 0.5f, 0.5f, true}});
+  proc.processTouchpadContacts(deviceHandle, {{0, 100, 100, 0.5f, 0.5f, true}});
   proc.processTouchpadContacts(deviceHandle,
                                {{0, 100, 100, 0.5f, 0.5f, false}});
 
@@ -3283,11 +3360,9 @@ TEST_F(InputProcessorTest, TouchpadSlideToCC_RestImmediateOnRelease) {
 
   uintptr_t deviceHandle = 0x1234;
   // Finger down inside region to send a non-rest CC value.
-  proc.processTouchpadContacts(deviceHandle,
-                               {{0, 0, 0, 0.5f, 0.0f, true}});
+  proc.processTouchpadContacts(deviceHandle, {{0, 0, 0, 0.5f, 0.0f, true}});
   // Finger up: should send rest value immediately.
-  proc.processTouchpadContacts(deviceHandle,
-                               {{0, 0, 0, 0.5f, 0.0f, false}});
+  proc.processTouchpadContacts(deviceHandle, {{0, 0, 0, 0.5f, 0.0f, false}});
 
   ASSERT_GE(mockEng.ccEvents.size(), 2u)
       << "Expected CC on touch and CC on rest";
@@ -3338,10 +3413,8 @@ TEST_F(InputProcessorTest, TouchpadSlideToCC_XYPad_SharedRanges_SendsTwoCC) {
   uintptr_t deviceHandle = 0x1234;
 
   // Finger inside region; one or more frames should produce CC for both axes.
-  proc.processTouchpadContacts(deviceHandle,
-                               {{0, 0, 0, 0.25f, 0.25f, true}});
-  proc.processTouchpadContacts(deviceHandle,
-                               {{0, 0, 0, 0.75f, 0.75f, true}});
+  proc.processTouchpadContacts(deviceHandle, {{0, 0, 0, 0.25f, 0.25f, true}});
+  proc.processTouchpadContacts(deviceHandle, {{0, 0, 0, 0.75f, 0.75f, true}});
 
   bool sawX = false, sawY = false;
   for (const auto &cc : mockEng.ccEvents) {
@@ -3360,7 +3433,7 @@ TEST_F(InputProcessorTest, TouchpadEncoderCC_AbsoluteMode_SendsCC) {
   TouchpadLayoutManager touchpadMixerMgr;
   VoiceManager voiceMgr(mockEng, settingsMgr);
   InputProcessor proc(voiceMgr, presetMgr, deviceMgr, scaleLib, mockEng,
-                     settingsMgr, touchpadMixerMgr);
+                      settingsMgr, touchpadMixerMgr);
   presetMgr.getLayersList().removeAllChildren(nullptr);
   presetMgr.ensureStaticLayers();
   settingsMgr.setMidiModeActive(true);
@@ -3392,13 +3465,16 @@ TEST_F(InputProcessorTest, TouchpadEncoderCC_AbsoluteMode_SendsCC) {
 
   // Frame 1: finger at Y=0.5 (establishes position)
   proc.processTouchpadContacts(deviceHandle, {{0, 0, 0, 0.5f, 0.5f, true}});
-  // Frame 2: finger moves up (Y 0.5 -> 0.3); in Vertical axis up = positive delta -> CC increases
+  // Frame 2: finger moves up (Y 0.5 -> 0.3); in Vertical axis up = positive
+  // delta -> CC increases
   proc.processTouchpadContacts(deviceHandle, {{0, 0, 0, 0.5f, 0.3f, true}});
 
-  ASSERT_GE(mockEng.ccEvents.size(), 1u) << "Encoder should send CC on movement";
+  ASSERT_GE(mockEng.ccEvents.size(), 1u)
+      << "Encoder should send CC on movement";
   EXPECT_EQ(mockEng.ccEvents[0].channel, 1);
   EXPECT_EQ(mockEng.ccEvents[0].controller, 22);
-  EXPECT_GT(mockEng.ccEvents[0].value, 64) << "Swipe up should increase CC from initial 64";
+  EXPECT_GT(mockEng.ccEvents[0].value, 64)
+      << "Swipe up should increase CC from initial 64";
 }
 
 // EncoderCC: single frame (anchor only) sends no rotation CC.
@@ -3407,7 +3483,7 @@ TEST_F(InputProcessorTest, TouchpadEncoderCC_FirstFrameOnly_NoRotationSent) {
   TouchpadLayoutManager touchpadMixerMgr;
   VoiceManager voiceMgr(mockEng, settingsMgr);
   InputProcessor proc(voiceMgr, presetMgr, deviceMgr, scaleLib, mockEng,
-                     settingsMgr, touchpadMixerMgr);
+                      settingsMgr, touchpadMixerMgr);
   presetMgr.getLayersList().removeAllChildren(nullptr);
   presetMgr.ensureStaticLayers();
   settingsMgr.setMidiModeActive(true);
@@ -3438,16 +3514,19 @@ TEST_F(InputProcessorTest, TouchpadEncoderCC_FirstFrameOnly_NoRotationSent) {
   uintptr_t deviceHandle = 0x1234;
 
   proc.processTouchpadContacts(deviceHandle, {{0, 0, 0, 0.5f, 0.5f, true}});
-  EXPECT_EQ(mockEng.ccEvents.size(), 0u) << "First frame (anchor only) should send no rotation CC";
+  EXPECT_EQ(mockEng.ccEvents.size(), 0u)
+      << "First frame (anchor only) should send no rotation CC";
 }
 
-// EncoderCC: re-anchor on 2->1 finger; releasing second finger must not send spurious rotation CC.
-TEST_F(InputProcessorTest, TouchpadEncoderCC_ReAnchorOnTwoFingerRelease_NoSpuriousCC) {
+// EncoderCC: re-anchor on 2->1 finger; releasing second finger must not send
+// spurious rotation CC.
+TEST_F(InputProcessorTest,
+       TouchpadEncoderCC_ReAnchorOnTwoFingerRelease_NoSpuriousCC) {
   MockMidiEngine mockEng;
   TouchpadLayoutManager touchpadMixerMgr;
   VoiceManager voiceMgr(mockEng, settingsMgr);
   InputProcessor proc(voiceMgr, presetMgr, deviceMgr, scaleLib, mockEng,
-                     settingsMgr, touchpadMixerMgr);
+                      settingsMgr, touchpadMixerMgr);
   presetMgr.getLayersList().removeAllChildren(nullptr);
   presetMgr.ensureStaticLayers();
   settingsMgr.setMidiModeActive(true);
@@ -3478,13 +3557,13 @@ TEST_F(InputProcessorTest, TouchpadEncoderCC_ReAnchorOnTwoFingerRelease_NoSpurio
   uintptr_t deviceHandle = 0x1234;
 
   // Frame 1: two fingers — active[0] is contactId 0 at (0.5, 0.5)
-  proc.processTouchpadContacts(deviceHandle, {
-    {0, 0, 0, 0.5f, 0.5f, true},
-    {1, 0, 0, 0.5f, 0.3f, true}
-  });
-  // Frame 2: release finger 0, keep finger 1 at (0.5, 0.3). Position jumps from (0.5,0.5) to (0.5,0.3).
+  proc.processTouchpadContacts(
+      deviceHandle, {{0, 0, 0, 0.5f, 0.5f, true}, {1, 0, 0, 0.5f, 0.3f, true}});
+  // Frame 2: release finger 0, keep finger 1 at (0.5, 0.3). Position jumps from
+  // (0.5,0.5) to (0.5,0.3).
   proc.processTouchpadContacts(deviceHandle, {{1, 0, 0, 0.5f, 0.3f, true}});
-  EXPECT_EQ(mockEng.ccEvents.size(), 0u) << "Re-anchor on 2->1 should prevent spurious rotation CC";
+  EXPECT_EQ(mockEng.ccEvents.size(), 0u)
+      << "Re-anchor on 2->1 should prevent spurious rotation CC";
 }
 
 // EncoderCC: dead zone — small movement from anchor sends no rotation CC.
@@ -3493,7 +3572,7 @@ TEST_F(InputProcessorTest, TouchpadEncoderCC_DeadZone_SmallMovementSendsNoCC) {
   TouchpadLayoutManager touchpadMixerMgr;
   VoiceManager voiceMgr(mockEng, settingsMgr);
   InputProcessor proc(voiceMgr, presetMgr, deviceMgr, scaleLib, mockEng,
-                     settingsMgr, touchpadMixerMgr);
+                      settingsMgr, touchpadMixerMgr);
   presetMgr.getLayersList().removeAllChildren(nullptr);
   presetMgr.ensureStaticLayers();
   settingsMgr.setMidiModeActive(true);
@@ -3523,14 +3602,17 @@ TEST_F(InputProcessorTest, TouchpadEncoderCC_DeadZone_SmallMovementSendsNoCC) {
   mockEng.clear();
   uintptr_t deviceHandle = 0x1234;
 
-  // Anchor at Y=0.5 -> current = 0.5. Move to Y=0.45 -> distance = 0.05 < 0.15 dead zone.
+  // Anchor at Y=0.5 -> current = 0.5. Move to Y=0.45 -> distance = 0.05 < 0.15
+  // dead zone.
   proc.processTouchpadContacts(deviceHandle, {{0, 0, 0, 0.5f, 0.5f, true}});
   proc.processTouchpadContacts(deviceHandle, {{0, 0, 0, 0.5f, 0.45f, true}});
-  EXPECT_EQ(mockEng.ccEvents.size(), 0u) << "Movement within dead zone should send no rotation CC";
+  EXPECT_EQ(mockEng.ccEvents.size(), 0u)
+      << "Movement within dead zone should send no rotation CC";
 
   // Move beyond dead zone: Y=0.3 -> distance 0.2 > 0.15
   proc.processTouchpadContacts(deviceHandle, {{0, 0, 0, 0.5f, 0.3f, true}});
-  ASSERT_GE(mockEng.ccEvents.size(), 1u) << "Movement beyond dead zone should send CC";
+  ASSERT_GE(mockEng.ccEvents.size(), 1u)
+      << "Movement beyond dead zone should send CC";
   EXPECT_EQ(mockEng.ccEvents[0].controller, 22);
 }
 
@@ -3540,7 +3622,7 @@ TEST_F(InputProcessorTest, TouchpadEncoderCC_PushUsesEncoderPushCCNumber) {
   TouchpadLayoutManager touchpadMixerMgr;
   VoiceManager voiceMgr(mockEng, settingsMgr);
   InputProcessor proc(voiceMgr, presetMgr, deviceMgr, scaleLib, mockEng,
-                     settingsMgr, touchpadMixerMgr);
+                      settingsMgr, touchpadMixerMgr);
   presetMgr.getLayersList().removeAllChildren(nullptr);
   presetMgr.ensureStaticLayers();
   settingsMgr.setMidiModeActive(true);
@@ -3573,7 +3655,8 @@ TEST_F(InputProcessorTest, TouchpadEncoderCC_PushUsesEncoderPushCCNumber) {
   mockEng.clear();
   uintptr_t deviceHandle = 0x1234;
 
-  proc.processTouchpadContacts(deviceHandle, {{0, 0, 0, 0.5f, 0.5f, true}, {1, 0, 0, 0.5f, 0.5f, true}});
+  proc.processTouchpadContacts(
+      deviceHandle, {{0, 0, 0, 0.5f, 0.5f, true}, {1, 0, 0, 0.5f, 0.5f, true}});
   ASSERT_GE(mockEng.ccEvents.size(), 1u);
   EXPECT_EQ(mockEng.ccEvents[0].channel, 1);
   EXPECT_EQ(mockEng.ccEvents[0].controller, 31);
@@ -3585,13 +3668,14 @@ TEST_F(InputProcessorTest, TouchpadEncoderCC_PushUsesEncoderPushCCNumber) {
   EXPECT_EQ(mockEng.ccEvents[0].value, 0);
 }
 
-// EncoderCC push Momentary: two fingers down -> CC value; two fingers up -> CC 0.
+// EncoderCC push Momentary: two fingers down -> CC value; two fingers up -> CC
+// 0.
 TEST_F(InputProcessorTest, TouchpadEncoderCC_PushMomentary_SendOnRelease) {
   MockMidiEngine mockEng;
   TouchpadLayoutManager touchpadMixerMgr;
   VoiceManager voiceMgr(mockEng, settingsMgr);
   InputProcessor proc(voiceMgr, presetMgr, deviceMgr, scaleLib, mockEng,
-                     settingsMgr, touchpadMixerMgr);
+                      settingsMgr, touchpadMixerMgr);
   presetMgr.getLayersList().removeAllChildren(nullptr);
   presetMgr.ensureStaticLayers();
   settingsMgr.setMidiModeActive(true);
@@ -3624,7 +3708,8 @@ TEST_F(InputProcessorTest, TouchpadEncoderCC_PushMomentary_SendOnRelease) {
   mockEng.clear();
   uintptr_t deviceHandle = 0x1234;
 
-  proc.processTouchpadContacts(deviceHandle, {{0, 0, 0, 0.5f, 0.5f, true}, {1, 0, 0, 0.5f, 0.5f, true}});
+  proc.processTouchpadContacts(
+      deviceHandle, {{0, 0, 0, 0.5f, 0.5f, true}, {1, 0, 0, 0.5f, 0.5f, true}});
   ASSERT_GE(mockEng.ccEvents.size(), 1u);
   EXPECT_EQ(mockEng.ccEvents[0].value, 127);
   proc.processTouchpadContacts(deviceHandle, {});
@@ -3632,13 +3717,14 @@ TEST_F(InputProcessorTest, TouchpadEncoderCC_PushMomentary_SendOnRelease) {
   EXPECT_EQ(mockEng.ccEvents[1].value, 0);
 }
 
-// EncoderCC push Toggle: first two-finger tap -> 127, second two-finger tap -> 0.
+// EncoderCC push Toggle: first two-finger tap -> 127, second two-finger tap ->
+// 0.
 TEST_F(InputProcessorTest, TouchpadEncoderCC_PushToggle_TwoPushesFlipValue) {
   MockMidiEngine mockEng;
   TouchpadLayoutManager touchpadMixerMgr;
   VoiceManager voiceMgr(mockEng, settingsMgr);
   InputProcessor proc(voiceMgr, presetMgr, deviceMgr, scaleLib, mockEng,
-                     settingsMgr, touchpadMixerMgr);
+                      settingsMgr, touchpadMixerMgr);
   presetMgr.getLayersList().removeAllChildren(nullptr);
   presetMgr.ensureStaticLayers();
   settingsMgr.setMidiModeActive(true);
@@ -3671,26 +3757,30 @@ TEST_F(InputProcessorTest, TouchpadEncoderCC_PushToggle_TwoPushesFlipValue) {
   mockEng.clear();
   uintptr_t deviceHandle = 0x1234;
 
-  proc.processTouchpadContacts(deviceHandle, {{0, 0, 0, 0.5f, 0.5f, true}, {1, 0, 0, 0.5f, 0.5f, true}});
+  proc.processTouchpadContacts(
+      deviceHandle, {{0, 0, 0, 0.5f, 0.5f, true}, {1, 0, 0, 0.5f, 0.5f, true}});
   proc.processTouchpadContacts(deviceHandle, {});
   ASSERT_GE(mockEng.ccEvents.size(), 1u);
   EXPECT_EQ(mockEng.ccEvents[0].value, 127);
   size_t countAfterFirst = mockEng.ccEvents.size();
-  proc.processTouchpadContacts(deviceHandle, {{0, 0, 0, 0.5f, 0.5f, true}, {1, 0, 0, 0.5f, 0.5f, true}});
+  proc.processTouchpadContacts(
+      deviceHandle, {{0, 0, 0, 0.5f, 0.5f, true}, {1, 0, 0, 0.5f, 0.5f, true}});
   proc.processTouchpadContacts(deviceHandle, {});
   ASSERT_GT(mockEng.ccEvents.size(), countAfterFirst);
   EXPECT_EQ(mockEng.ccEvents.back().value, 0);
 }
 
-// EncoderCC: higher sensitivity = more movement per step -> fewer steps for same gesture.
-TEST_F(InputProcessorTest, TouchpadEncoderCC_Sensitivity_HigherSensitivityFewerSteps) {
+// EncoderCC: higher sensitivity = more movement per step -> fewer steps for
+// same gesture.
+TEST_F(InputProcessorTest,
+       TouchpadEncoderCC_Sensitivity_HigherSensitivityFewerSteps) {
   uintptr_t deviceHandle = 0x1234;
   auto runWithSensitivity = [this, deviceHandle](float sensitivity) {
     MockMidiEngine mockEng;
     TouchpadLayoutManager touchpadMixerMgr;
     VoiceManager voiceMgr(mockEng, settingsMgr);
     InputProcessor proc(voiceMgr, presetMgr, deviceMgr, scaleLib, mockEng,
-                       settingsMgr, touchpadMixerMgr);
+                        settingsMgr, touchpadMixerMgr);
     presetMgr.getLayersList().removeAllChildren(nullptr);
     presetMgr.ensureStaticLayers();
     settingsMgr.setMidiModeActive(true);
@@ -3708,7 +3798,8 @@ TEST_F(InputProcessorTest, TouchpadEncoderCC_Sensitivity_HigherSensitivityFewerS
     m.setProperty("data1", 22, nullptr);
     m.setProperty("encoderAxis", 0, nullptr);
     m.setProperty("encoderOutputMode", "Absolute", nullptr);
-    m.setProperty("encoderSensitivity", static_cast<double>(sensitivity), nullptr);
+    m.setProperty("encoderSensitivity", static_cast<double>(sensitivity),
+                  nullptr);
     m.setProperty("encoderInitialValue", 64, nullptr);
     m.setProperty("touchpadOutputMin", 0, nullptr);
     m.setProperty("touchpadOutputMax", 127, nullptr);
@@ -3723,18 +3814,21 @@ TEST_F(InputProcessorTest, TouchpadEncoderCC_Sensitivity_HigherSensitivityFewerS
   };
   size_t countSens1 = runWithSensitivity(1.0f);
   size_t countSens2 = runWithSensitivity(2.0f);
-  EXPECT_GE(countSens1, countSens2) << "Higher sensitivity (more movement per step) should yield fewer or equal CC events for same gesture";
+  EXPECT_GE(countSens1, countSens2)
+      << "Higher sensitivity (more movement per step) should yield fewer or "
+         "equal CC events for same gesture";
 }
 
 // EncoderCC: same distance from anchor yields same steps (path-independent).
-TEST_F(InputProcessorTest, TouchpadEncoderCC_AnchorBased_SameDistanceSameSteps) {
+TEST_F(InputProcessorTest,
+       TouchpadEncoderCC_AnchorBased_SameDistanceSameSteps) {
   uintptr_t deviceHandle = 0x1234;
   auto runScenario = [this, deviceHandle](bool twoFrames) {
     MockMidiEngine mockEng;
     TouchpadLayoutManager touchpadMixerMgr;
     VoiceManager voiceMgr(mockEng, settingsMgr);
     InputProcessor proc(voiceMgr, presetMgr, deviceMgr, scaleLib, mockEng,
-                       settingsMgr, touchpadMixerMgr);
+                        settingsMgr, touchpadMixerMgr);
     presetMgr.getLayersList().removeAllChildren(nullptr);
     presetMgr.ensureStaticLayers();
     settingsMgr.setMidiModeActive(true);
@@ -3774,16 +3868,18 @@ TEST_F(InputProcessorTest, TouchpadEncoderCC_AnchorBased_SameDistanceSameSteps) 
   };
   int finalA = runScenario(true);
   int finalB = runScenario(false);
-  EXPECT_EQ(finalA, finalB) << "Same end position (distance from anchor) should give same CC value";
+  EXPECT_EQ(finalA, finalB)
+      << "Same end position (distance from anchor) should give same CC value";
 }
 
 // EncoderCC: gesture end clears state; second swipe sends CC again.
-TEST_F(InputProcessorTest, TouchpadEncoderCC_GestureEndClearsState_SecondSwipeSendsAgain) {
+TEST_F(InputProcessorTest,
+       TouchpadEncoderCC_GestureEndClearsState_SecondSwipeSendsAgain) {
   MockMidiEngine mockEng;
   TouchpadLayoutManager touchpadMixerMgr;
   VoiceManager voiceMgr(mockEng, settingsMgr);
   InputProcessor proc(voiceMgr, presetMgr, deviceMgr, scaleLib, mockEng,
-                     settingsMgr, touchpadMixerMgr);
+                      settingsMgr, touchpadMixerMgr);
   presetMgr.getLayersList().removeAllChildren(nullptr);
   presetMgr.ensureStaticLayers();
   settingsMgr.setMidiModeActive(true);
@@ -3821,7 +3917,8 @@ TEST_F(InputProcessorTest, TouchpadEncoderCC_GestureEndClearsState_SecondSwipeSe
   proc.processTouchpadContacts(deviceHandle, {});
   proc.processTouchpadContacts(deviceHandle, {{0, 0, 0, 0.5f, 0.5f, true}});
   proc.processTouchpadContacts(deviceHandle, {{0, 0, 0, 0.5f, 0.35f, true}});
-  ASSERT_GT(mockEng.ccEvents.size(), countAfterFirstSwipe) << "Second swipe after release should send rotation CC again";
+  ASSERT_GT(mockEng.ccEvents.size(), countAfterFirstSwipe)
+      << "Second swipe after release should send rotation CC again";
 }
 
 // SlideToCC deadzone: values outside [inputMin,inputMax] do not emit CC.
@@ -3863,7 +3960,8 @@ TEST_F(InputProcessorTest, TouchpadSlideToCC_InputMinMaxCreatesDeadzone) {
   mockEng.clear();
   uintptr_t deviceHandle = 0x1234;
 
-  // In deadzone: X=0.25 < inputMin=0.5 => should not emit CC even after 2 frames.
+  // In deadzone: X=0.25 < inputMin=0.5 => should not emit CC even after 2
+  // frames.
   proc.processTouchpadContacts(deviceHandle, {{0, 0, 0, 0.25f, 0.5f, true}});
   proc.processTouchpadContacts(deviceHandle, {{0, 0, 0, 0.25f, 0.5f, true}});
   EXPECT_EQ(mockEng.ccEvents.size(), 0u) << "Deadzone should emit no CC";
@@ -3875,7 +3973,8 @@ TEST_F(InputProcessorTest, TouchpadSlideToCC_InputMinMaxCreatesDeadzone) {
   EXPECT_EQ(mockEng.ccEvents.back().controller, 21);
 }
 
-// SlideToCC Relative: second finger down establishes anchor, movement changes CC by delta
+// SlideToCC Relative: second finger down establishes anchor, movement changes
+// CC by delta
 TEST_F(InputProcessorTest, TouchpadSlideToCC_RelativeSendsDeltaCC) {
   MockMidiEngine mockEng;
   TouchpadLayoutManager touchpadMixerMgr;
@@ -3902,7 +4001,8 @@ TEST_F(InputProcessorTest, TouchpadSlideToCC_RelativeSendsDeltaCC) {
   m.setProperty("touchpadInputMax", 1.0, nullptr);
   m.setProperty("touchpadOutputMin", 0, nullptr);
   m.setProperty("touchpadOutputMax", 127, nullptr);
-  m.setProperty("slideQuickPrecision", 1, nullptr); // Precision = need 2 fingers
+  m.setProperty("slideQuickPrecision", 1,
+                nullptr);                   // Precision = need 2 fingers
   m.setProperty("slideAbsRel", 1, nullptr); // Relative
   m.setProperty("slideLockFree", 1, nullptr);
   cfg.mapping = m;
@@ -3915,20 +4015,27 @@ TEST_F(InputProcessorTest, TouchpadSlideToCC_RelativeSendsDeltaCC) {
 
   // Frame 1: one finger at Y=0.5 (applier not down yet, no CC)
   proc.processTouchpadContacts(deviceHandle, {{0, 0, 0, 0.5f, 0.5f, true}});
-  EXPECT_EQ(mockEng.ccEvents.size(), 0u) << "One finger in Precision mode shouldn't send CC yet";
+  EXPECT_EQ(mockEng.ccEvents.size(), 0u)
+      << "One finger in Precision mode shouldn't send CC yet";
 
-  // Frame 2: two fingers down (second finger = applier) at Y=0.5 - establishes anchor
-  proc.processTouchpadContacts(deviceHandle, {{0, 0, 0, 0.5f, 0.5f, true}, {1, 0, 0, 0.5f, 0.5f, true}});
-  EXPECT_EQ(mockEng.ccEvents.size(), 0u) << "Applier down edge establishes anchor, no CC this frame";
+  // Frame 2: two fingers down (second finger = applier) at Y=0.5 - establishes
+  // anchor
+  proc.processTouchpadContacts(
+      deviceHandle, {{0, 0, 0, 0.5f, 0.5f, true}, {1, 0, 0, 0.5f, 0.5f, true}});
+  EXPECT_EQ(mockEng.ccEvents.size(), 0u)
+      << "Applier down edge establishes anchor, no CC this frame";
 
-  // Frame 3: move first finger down (Y=0.7) - in axis space this is towards min,
-  // so CC should decrease from its base value.
-  proc.processTouchpadContacts(deviceHandle, {{0, 0, 0, 0.5f, 0.7f, true}, {1, 0, 0, 0.5f, 0.5f, true}});
-  ASSERT_GE(mockEng.ccEvents.size(), 1u) << "Relative mode: movement should send CC";
+  // Frame 3: move first finger down (Y=0.7) - in axis space this is towards
+  // min, so CC should decrease from its base value.
+  proc.processTouchpadContacts(
+      deviceHandle, {{0, 0, 0, 0.5f, 0.7f, true}, {1, 0, 0, 0.5f, 0.5f, true}});
+  ASSERT_GE(mockEng.ccEvents.size(), 1u)
+      << "Relative mode: movement should send CC";
   EXPECT_EQ(mockEng.ccEvents.back().channel, 1);
   EXPECT_EQ(mockEng.ccEvents.back().controller, 30);
   // Moving down (Y increases) in Relative mode decreases CC from base
-  EXPECT_LT(mockEng.ccEvents.back().value, 64) << "Moving down from anchor should decrease CC";
+  EXPECT_LT(mockEng.ccEvents.back().value, 64)
+      << "Moving down from anchor should decrease CC";
 }
 
 TEST_F(InputProcessorTest, HasTouchpadLayoutsReturnsTrueWhenLayoutsExist) {
@@ -3955,7 +4062,8 @@ TEST_F(InputProcessorTest, HasTouchpadLayoutsReturnsTrueWhenDrumPadOnly) {
   EXPECT_TRUE(proc.hasTouchpadLayouts());
 }
 
-TEST_F(InputProcessorTest, HasTouchpadLayoutsReturnsTrueWhenHarmonicDrumPadOnly) {
+TEST_F(InputProcessorTest,
+       HasTouchpadLayoutsReturnsTrueWhenHarmonicDrumPadOnly) {
   TouchpadLayoutConfig cfg;
   cfg.type = TouchpadType::DrumPad;
   cfg.drumPadRows = 4;
@@ -4847,8 +4955,9 @@ TEST_F(InputProcessorTest, TouchpadDrumPadFinger1UpMappingCoexists) {
   cfg.midiChannel = 1;
   touchpadMixerMgr.addLayout(cfg);
 
-  touchpadMixerMgr.addTouchpadMapping(makeTouchpadMappingConfig(
-      0, TouchpadEvent::Finger1Up, "Note", "Sustain until retrigger", "", 1, 96, 80));
+  touchpadMixerMgr.addTouchpadMapping(
+      makeTouchpadMappingConfig(0, TouchpadEvent::Finger1Up, "Note",
+                                "Sustain until retrigger", "", 1, 96, 80));
 
   proc.initialize();
   proc.forceRebuildMappings();
@@ -5381,8 +5490,10 @@ TEST_F(InputProcessorTest,
   EXPECT_EQ(mockEng.ccEvents[0].controller, 51);
 }
 
-// --- Precision + Relative: finger2-down must not emit CC; first CC only after movement ---
-TEST_F(InputProcessorTest, TouchpadMixerPrecisionRelative_Finger2DownSendsNoCC) {
+// --- Precision + Relative: finger2-down must not emit CC; first CC only after
+// movement ---
+TEST_F(InputProcessorTest,
+       TouchpadMixerPrecisionRelative_Finger2DownSendsNoCC) {
   MockMidiEngine mockEng;
   TouchpadLayoutManager touchpadMixerMgr;
   VoiceManager voiceMgr(mockEng, settingsMgr);
@@ -5413,14 +5524,14 @@ TEST_F(InputProcessorTest, TouchpadMixerPrecisionRelative_Finger2DownSendsNoCC) 
 
   // Finger2 down: no CC.
   mockEng.clear();
-  proc.processTouchpadContacts(deviceHandle, {{0, 0, 0, 0.1f, 0.5f, true},
-                                              {1, 0, 0, 0.1f, 0.5f, true}});
+  proc.processTouchpadContacts(
+      deviceHandle, {{0, 0, 0, 0.1f, 0.5f, true}, {1, 0, 0, 0.1f, 0.5f, true}});
   EXPECT_TRUE(mockEng.ccEvents.empty());
 
   // First movement after finger2 down: must emit CC.
   mockEng.clear();
-  proc.processTouchpadContacts(deviceHandle, {{0, 0, 0, 0.1f, 0.6f, true},
-                                              {1, 0, 0, 0.1f, 0.5f, true}});
+  proc.processTouchpadContacts(
+      deviceHandle, {{0, 0, 0, 0.1f, 0.6f, true}, {1, 0, 0, 0.1f, 0.5f, true}});
   ASSERT_GE(mockEng.ccEvents.size(), 1u);
   EXPECT_EQ(mockEng.ccEvents[0].controller, 50);
 
@@ -5431,8 +5542,8 @@ TEST_F(InputProcessorTest, TouchpadMixerPrecisionRelative_Finger2DownSendsNoCC) 
 
   // Finger2 down again: no CC.
   mockEng.clear();
-  proc.processTouchpadContacts(deviceHandle, {{0, 0, 0, 0.1f, 0.4f, true},
-                                              {1, 0, 0, 0.1f, 0.4f, true}});
+  proc.processTouchpadContacts(
+      deviceHandle, {{0, 0, 0, 0.1f, 0.4f, true}, {1, 0, 0, 0.1f, 0.4f, true}});
   EXPECT_TRUE(mockEng.ccEvents.empty());
 }
 
@@ -5442,7 +5553,7 @@ TEST_F(InputProcessorTest, TouchpadMixerPrecisionRelative_Finger2DownSendsNoCC) 
 
 // Helper: Create a mixer layout with specified group ID
 static TouchpadLayoutConfig makeMixerLayout(int groupId, float left, float top,
-                                           float right, float bottom) {
+                                            float right, float bottom) {
   TouchpadLayoutConfig cfg;
   cfg.type = TouchpadType::Mixer;
   cfg.layoutGroupId = groupId;
@@ -5455,8 +5566,8 @@ static TouchpadLayoutConfig makeMixerLayout(int groupId, float left, float top,
   return cfg;
 }
 
-
-// Test: Layouts with no group (layoutGroupId == 0) are visible when no solo group is active
+// Test: Layouts with no group (layoutGroupId == 0) are visible when no solo
+// group is active
 TEST_F(InputProcessorTest, TouchpadLayoutNoGroupVisibleWhenNoSolo) {
   MockMidiEngine mockEng;
   TouchpadLayoutManager touchpadMixerMgr;
@@ -5466,7 +5577,8 @@ TEST_F(InputProcessorTest, TouchpadLayoutNoGroupVisibleWhenNoSolo) {
   proc.initialize();
 
   // Create a layout with no group (layoutGroupId == 0)
-  TouchpadLayoutConfig layoutNoGroup = makeMixerLayout(0, 0.0f, 0.0f, 0.5f, 1.0f);
+  TouchpadLayoutConfig layoutNoGroup =
+      makeMixerLayout(0, 0.0f, 0.0f, 0.5f, 1.0f);
   layoutNoGroup.name = "No Group Layout";
   touchpadMixerMgr.addLayout(layoutNoGroup);
 
@@ -5475,7 +5587,8 @@ TEST_F(InputProcessorTest, TouchpadLayoutNoGroupVisibleWhenNoSolo) {
   group.id = 1;
   group.name = "Group 1";
   touchpadMixerMgr.addGroup(group);
-  TouchpadLayoutConfig layoutInGroup = makeMixerLayout(1, 0.5f, 0.0f, 1.0f, 1.0f);
+  TouchpadLayoutConfig layoutInGroup =
+      makeMixerLayout(1, 0.5f, 0.0f, 1.0f, 1.0f);
   layoutInGroup.name = "Group 1 Layout";
   touchpadMixerMgr.addLayout(layoutInGroup);
 
@@ -5512,7 +5625,8 @@ TEST_F(InputProcessorTest, TouchpadLayoutNoGroupHiddenWhenSoloActive) {
   proc.initialize();
 
   // Create a layout with no group
-  TouchpadLayoutConfig layoutNoGroup = makeMixerLayout(0, 0.0f, 0.0f, 0.5f, 1.0f);
+  TouchpadLayoutConfig layoutNoGroup =
+      makeMixerLayout(0, 0.0f, 0.0f, 0.5f, 1.0f);
   layoutNoGroup.name = "No Group Layout";
   touchpadMixerMgr.addLayout(layoutNoGroup);
 
@@ -5521,7 +5635,8 @@ TEST_F(InputProcessorTest, TouchpadLayoutNoGroupHiddenWhenSoloActive) {
   group.id = 1;
   group.name = "Group 1";
   touchpadMixerMgr.addGroup(group);
-  TouchpadLayoutConfig layoutInGroup = makeMixerLayout(1, 0.5f, 0.0f, 1.0f, 1.0f);
+  TouchpadLayoutConfig layoutInGroup =
+      makeMixerLayout(1, 0.5f, 0.0f, 1.0f, 1.0f);
   layoutInGroup.name = "Group 1 Layout";
   touchpadMixerMgr.addLayout(layoutInGroup);
 
@@ -5532,13 +5647,13 @@ TEST_F(InputProcessorTest, TouchpadLayoutNoGroupHiddenWhenSoloActive) {
   auto mappings = presetMgr.getMappingsListForLayer(0);
   juce::ValueTree soloMapping("Mapping");
   soloMapping.setProperty("inputKey", 60, nullptr); // Key code 60
-  soloMapping.setProperty("deviceHash",
-                          juce::String::toHexString((juce::int64)0).toUpperCase(),
-                          nullptr);
+  soloMapping.setProperty(
+      "deviceHash", juce::String::toHexString((juce::int64)0).toUpperCase(),
+      nullptr);
   soloMapping.setProperty("type", "Command", nullptr);
-  soloMapping.setProperty("data1",
-                          static_cast<int>(MIDIQy::CommandID::TouchpadLayoutGroupSoloSet),
-                          nullptr);
+  soloMapping.setProperty(
+      "data1", static_cast<int>(MIDIQy::CommandID::TouchpadLayoutGroupSoloSet),
+      nullptr);
   soloMapping.setProperty("touchpadLayoutGroupId", 1, nullptr);
   soloMapping.setProperty("touchpadSoloScope", 0, nullptr); // Global
   soloMapping.setProperty("channel", 1, nullptr);
@@ -5547,7 +5662,7 @@ TEST_F(InputProcessorTest, TouchpadLayoutNoGroupHiddenWhenSoloActive) {
   proc.forceRebuildMappings();
 
   // Process a key press to trigger the solo command
-  InputID inputId{0, 60}; // device handle 0 (global), key code 60
+  InputID inputId{0, 60};           // device handle 0 (global), key code 60
   proc.processEvent(inputId, true); // key down
 
   EXPECT_EQ(proc.getEffectiveSoloLayoutGroupForLayer(0), 1);
@@ -5580,7 +5695,8 @@ TEST_F(InputProcessorTest, TouchpadLayoutInSoloGroupVisible) {
   proc.initialize();
 
   // Create a layout with no group
-  TouchpadLayoutConfig layoutNoGroup = makeMixerLayout(0, 0.0f, 0.0f, 0.33f, 1.0f);
+  TouchpadLayoutConfig layoutNoGroup =
+      makeMixerLayout(0, 0.0f, 0.0f, 0.33f, 1.0f);
   layoutNoGroup.name = "No Group Layout";
   touchpadMixerMgr.addLayout(layoutNoGroup);
 
@@ -5589,7 +5705,8 @@ TEST_F(InputProcessorTest, TouchpadLayoutInSoloGroupVisible) {
   group1.id = 1;
   group1.name = "Group 1";
   touchpadMixerMgr.addGroup(group1);
-  TouchpadLayoutConfig layoutGroup1 = makeMixerLayout(1, 0.33f, 0.0f, 0.66f, 1.0f);
+  TouchpadLayoutConfig layoutGroup1 =
+      makeMixerLayout(1, 0.33f, 0.0f, 0.66f, 1.0f);
   layoutGroup1.name = "Group 1 Layout";
   touchpadMixerMgr.addLayout(layoutGroup1);
 
@@ -5598,7 +5715,8 @@ TEST_F(InputProcessorTest, TouchpadLayoutInSoloGroupVisible) {
   group2.id = 2;
   group2.name = "Group 2";
   touchpadMixerMgr.addGroup(group2);
-  TouchpadLayoutConfig layoutGroup2 = makeMixerLayout(2, 0.66f, 0.0f, 1.0f, 1.0f);
+  TouchpadLayoutConfig layoutGroup2 =
+      makeMixerLayout(2, 0.66f, 0.0f, 1.0f, 1.0f);
   layoutGroup2.name = "Group 2 Layout";
   touchpadMixerMgr.addLayout(layoutGroup2);
 
@@ -5608,13 +5726,13 @@ TEST_F(InputProcessorTest, TouchpadLayoutInSoloGroupVisible) {
   auto mappingsGroup1 = presetMgr.getMappingsListForLayer(0);
   juce::ValueTree soloMappingGroup1("Mapping");
   soloMappingGroup1.setProperty("inputKey", 75, nullptr);
-  soloMappingGroup1.setProperty("deviceHash",
-                                juce::String::toHexString((juce::int64)0).toUpperCase(),
-                                nullptr);
+  soloMappingGroup1.setProperty(
+      "deviceHash", juce::String::toHexString((juce::int64)0).toUpperCase(),
+      nullptr);
   soloMappingGroup1.setProperty("type", "Command", nullptr);
-  soloMappingGroup1.setProperty("data1",
-                                static_cast<int>(MIDIQy::CommandID::TouchpadLayoutGroupSoloSet),
-                                nullptr);
+  soloMappingGroup1.setProperty(
+      "data1", static_cast<int>(MIDIQy::CommandID::TouchpadLayoutGroupSoloSet),
+      nullptr);
   soloMappingGroup1.setProperty("touchpadLayoutGroupId", 1, nullptr);
   soloMappingGroup1.setProperty("touchpadSoloScope", 0, nullptr);
   soloMappingGroup1.setProperty("channel", 1, nullptr);
@@ -5645,7 +5763,8 @@ TEST_F(InputProcessorTest, TouchpadLayoutInSoloGroupVisible) {
   mockEng.clear();
   proc.processTouchpadContacts(deviceHandle, contacts);
   EXPECT_EQ(mockEng.ccEvents.size(), 0u)
-      << "Layout in different group should be hidden when another group is soloed";
+      << "Layout in different group should be hidden when another group is "
+         "soloed";
 }
 
 // Test: When solo group is cleared, only no-group layouts become visible again
@@ -5658,7 +5777,8 @@ TEST_F(InputProcessorTest, TouchpadLayoutAllVisibleWhenSoloCleared) {
   proc.initialize();
 
   // Create layout with no group
-  TouchpadLayoutConfig layoutNoGroup = makeMixerLayout(0, 0.0f, 0.0f, 0.33f, 1.0f);
+  TouchpadLayoutConfig layoutNoGroup =
+      makeMixerLayout(0, 0.0f, 0.0f, 0.33f, 1.0f);
   layoutNoGroup.name = "No Group Layout";
   touchpadMixerMgr.addLayout(layoutNoGroup);
 
@@ -5667,7 +5787,8 @@ TEST_F(InputProcessorTest, TouchpadLayoutAllVisibleWhenSoloCleared) {
   group1.id = 1;
   group1.name = "Group 1";
   touchpadMixerMgr.addGroup(group1);
-  TouchpadLayoutConfig layoutGroup1 = makeMixerLayout(1, 0.33f, 0.0f, 0.66f, 1.0f);
+  TouchpadLayoutConfig layoutGroup1 =
+      makeMixerLayout(1, 0.33f, 0.0f, 0.66f, 1.0f);
   layoutGroup1.name = "Group 1 Layout";
   touchpadMixerMgr.addLayout(layoutGroup1);
 
@@ -5676,7 +5797,8 @@ TEST_F(InputProcessorTest, TouchpadLayoutAllVisibleWhenSoloCleared) {
   group2.id = 2;
   group2.name = "Group 2";
   touchpadMixerMgr.addGroup(group2);
-  TouchpadLayoutConfig layoutGroup2 = makeMixerLayout(2, 0.66f, 0.0f, 1.0f, 1.0f);
+  TouchpadLayoutConfig layoutGroup2 =
+      makeMixerLayout(2, 0.66f, 0.0f, 1.0f, 1.0f);
   layoutGroup2.name = "Group 2 Layout";
   touchpadMixerMgr.addLayout(layoutGroup2);
 
@@ -5686,13 +5808,13 @@ TEST_F(InputProcessorTest, TouchpadLayoutAllVisibleWhenSoloCleared) {
   auto mappingsSetSolo2 = presetMgr.getMappingsListForLayer(0);
   juce::ValueTree soloMappingSet2("Mapping");
   soloMappingSet2.setProperty("inputKey", 74, nullptr);
-  soloMappingSet2.setProperty("deviceHash",
-                               juce::String::toHexString((juce::int64)0).toUpperCase(),
-                               nullptr);
+  soloMappingSet2.setProperty(
+      "deviceHash", juce::String::toHexString((juce::int64)0).toUpperCase(),
+      nullptr);
   soloMappingSet2.setProperty("type", "Command", nullptr);
-  soloMappingSet2.setProperty("data1",
-                               static_cast<int>(MIDIQy::CommandID::TouchpadLayoutGroupSoloSet),
-                               nullptr);
+  soloMappingSet2.setProperty(
+      "data1", static_cast<int>(MIDIQy::CommandID::TouchpadLayoutGroupSoloSet),
+      nullptr);
   soloMappingSet2.setProperty("touchpadLayoutGroupId", 1, nullptr);
   soloMappingSet2.setProperty("touchpadSoloScope", 0, nullptr);
   soloMappingSet2.setProperty("channel", 1, nullptr);
@@ -5714,13 +5836,14 @@ TEST_F(InputProcessorTest, TouchpadLayoutAllVisibleWhenSoloCleared) {
   auto mappingsClear2 = presetMgr.getMappingsListForLayer(0);
   juce::ValueTree clearMapping("Mapping");
   clearMapping.setProperty("inputKey", 62, nullptr);
-  clearMapping.setProperty("deviceHash",
-                           juce::String::toHexString((juce::int64)0).toUpperCase(),
-                           nullptr);
+  clearMapping.setProperty(
+      "deviceHash", juce::String::toHexString((juce::int64)0).toUpperCase(),
+      nullptr);
   clearMapping.setProperty("type", "Command", nullptr);
-  clearMapping.setProperty("data1",
-                           static_cast<int>(MIDIQy::CommandID::TouchpadLayoutGroupSoloClear),
-                           nullptr);
+  clearMapping.setProperty(
+      "data1",
+      static_cast<int>(MIDIQy::CommandID::TouchpadLayoutGroupSoloClear),
+      nullptr);
   clearMapping.setProperty("touchpadSoloScope", 0, nullptr);
   clearMapping.setProperty("channel", 1, nullptr);
   clearMapping.setProperty("data2", 0, nullptr);
@@ -5739,19 +5862,23 @@ TEST_F(InputProcessorTest, TouchpadLayoutAllVisibleWhenSoloCleared) {
   EXPECT_GT(mockEng.ccEvents.size(), 0u)
       << "No-group layout should be visible when solo is cleared";
 
-  // Touch at group 1 layout - should be hidden (grouped layouts hidden when no solo)
+  // Touch at group 1 layout - should be hidden (grouped layouts hidden when no
+  // solo)
   contacts = {{0, 0, 0, 0.5f, 0.5f, true}};
   mockEng.clear();
   proc.processTouchpadContacts(deviceHandle, contacts);
   EXPECT_EQ(mockEng.ccEvents.size(), 0u)
-      << "Group 1 layout should be hidden when solo is cleared (no solo = only no-group visible)";
+      << "Group 1 layout should be hidden when solo is cleared (no solo = only "
+         "no-group visible)";
 
-  // Touch at group 2 layout - should be hidden (grouped layouts hidden when no solo)
+  // Touch at group 2 layout - should be hidden (grouped layouts hidden when no
+  // solo)
   contacts = {{0, 0, 0, 0.83f, 0.5f, true}};
   mockEng.clear();
   proc.processTouchpadContacts(deviceHandle, contacts);
   EXPECT_EQ(mockEng.ccEvents.size(), 0u)
-      << "Group 2 layout should be hidden when solo is cleared (no solo = only no-group visible)";
+      << "Group 2 layout should be hidden when solo is cleared (no solo = only "
+         "no-group visible)";
 }
 
 // Test: Per-layer solo groups work independently
@@ -5775,12 +5902,14 @@ TEST_F(InputProcessorTest, TouchpadLayoutPerLayerSoloIndependent) {
   touchpadMixerMgr.addGroup(group2);
 
   // Create layouts: group 1 on layer 0, group 2 on layer 1
-  TouchpadLayoutConfig layoutGroup1Layer0 = makeMixerLayout(1, 0.0f, 0.0f, 0.5f, 1.0f);
+  TouchpadLayoutConfig layoutGroup1Layer0 =
+      makeMixerLayout(1, 0.0f, 0.0f, 0.5f, 1.0f);
   layoutGroup1Layer0.name = "Group 1 Layer 0";
   layoutGroup1Layer0.layerId = 0;
   touchpadMixerMgr.addLayout(layoutGroup1Layer0);
 
-  TouchpadLayoutConfig layoutGroup2Layer1 = makeMixerLayout(2, 0.5f, 0.0f, 1.0f, 1.0f);
+  TouchpadLayoutConfig layoutGroup2Layer1 =
+      makeMixerLayout(2, 0.5f, 0.0f, 1.0f, 1.0f);
   layoutGroup2Layer1.name = "Group 2 Layer 1";
   layoutGroup2Layer1.layerId = 1;
   touchpadMixerMgr.addLayout(layoutGroup2Layer1);
@@ -5789,44 +5918,43 @@ TEST_F(InputProcessorTest, TouchpadLayoutPerLayerSoloIndependent) {
 
   // Activate layer 1 and set solo group 2 for layer 1
   auto layer0Mappings = presetMgr.getMappingsListForLayer(0);
-  
+
   // Layer toggle mapping
   juce::ValueTree layerToggleMapping("Mapping");
   layerToggleMapping.setProperty("inputKey", 70, nullptr);
-  layerToggleMapping.setProperty("deviceHash",
-                                  juce::String::toHexString((juce::int64)0).toUpperCase(),
-                                  nullptr);
+  layerToggleMapping.setProperty(
+      "deviceHash", juce::String::toHexString((juce::int64)0).toUpperCase(),
+      nullptr);
   layerToggleMapping.setProperty("type", "Command", nullptr);
-  layerToggleMapping.setProperty("data1",
-                                 static_cast<int>(MIDIQy::CommandID::LayerToggle),
-                                 nullptr);
+  layerToggleMapping.setProperty(
+      "data1", static_cast<int>(MIDIQy::CommandID::LayerToggle), nullptr);
   layerToggleMapping.setProperty("data2", 1, nullptr);
   layerToggleMapping.setProperty("channel", 1, nullptr);
   layer0Mappings.appendChild(layerToggleMapping, nullptr);
-  
+
   // Solo group 2 for layer 1 (scope 2 = remember)
   juce::ValueTree soloLayer1Mapping("Mapping");
   soloLayer1Mapping.setProperty("inputKey", 71, nullptr);
-  soloLayer1Mapping.setProperty("deviceHash",
-                                 juce::String::toHexString((juce::int64)0).toUpperCase(),
-                                 nullptr);
+  soloLayer1Mapping.setProperty(
+      "deviceHash", juce::String::toHexString((juce::int64)0).toUpperCase(),
+      nullptr);
   soloLayer1Mapping.setProperty("type", "Command", nullptr);
-  soloLayer1Mapping.setProperty("data1",
-                                 static_cast<int>(MIDIQy::CommandID::TouchpadLayoutGroupSoloSet),
-                                 nullptr);
+  soloLayer1Mapping.setProperty(
+      "data1", static_cast<int>(MIDIQy::CommandID::TouchpadLayoutGroupSoloSet),
+      nullptr);
   soloLayer1Mapping.setProperty("touchpadLayoutGroupId", 2, nullptr);
   soloLayer1Mapping.setProperty("touchpadSoloScope", 2, nullptr);
   soloLayer1Mapping.setProperty("channel", 1, nullptr);
   soloLayer1Mapping.setProperty("data2", 0, nullptr);
   layer0Mappings.appendChild(soloLayer1Mapping, nullptr);
-  
+
   proc.forceRebuildMappings();
-  
+
   // Activate layer 1
   InputID layerInputId{0, 70};
   proc.processEvent(layerInputId, true);
   EXPECT_EQ(proc.getHighestActiveLayerIndex(), 1);
-  
+
   // Set solo for layer 1 (current highest)
   InputID soloLayer1InputId{0, 71};
   proc.processEvent(soloLayer1InputId, true);
@@ -5839,7 +5967,8 @@ TEST_F(InputProcessorTest, TouchpadLayoutPerLayerSoloIndependent) {
   mockEng.clear();
   proc.processTouchpadContacts(deviceHandle, contacts);
   EXPECT_GT(mockEng.ccEvents.size(), 0u)
-      << "Group 2 layout on layer 1 should be visible when layer 1 solo group 2 is active";
+      << "Group 2 layout on layer 1 should be visible when layer 1 solo group "
+         "2 is active";
 }
 
 // Test: Grouped layouts are hidden when no solo is active
@@ -5852,7 +5981,8 @@ TEST_F(InputProcessorTest, TouchpadLayoutGroupedHiddenWhenNoSolo) {
   proc.initialize();
 
   // Create a layout with no group (layoutGroupId == 0)
-  TouchpadLayoutConfig layoutNoGroup = makeMixerLayout(0, 0.0f, 0.0f, 0.5f, 1.0f);
+  TouchpadLayoutConfig layoutNoGroup =
+      makeMixerLayout(0, 0.0f, 0.0f, 0.5f, 1.0f);
   layoutNoGroup.name = "No Group Layout";
   touchpadMixerMgr.addLayout(layoutNoGroup);
 
@@ -5861,7 +5991,8 @@ TEST_F(InputProcessorTest, TouchpadLayoutGroupedHiddenWhenNoSolo) {
   group.id = 1;
   group.name = "Group 1";
   touchpadMixerMgr.addGroup(group);
-  TouchpadLayoutConfig layoutInGroup = makeMixerLayout(1, 0.5f, 0.0f, 1.0f, 1.0f);
+  TouchpadLayoutConfig layoutInGroup =
+      makeMixerLayout(1, 0.5f, 0.0f, 1.0f, 1.0f);
   layoutInGroup.name = "Group 1 Layout";
   touchpadMixerMgr.addLayout(layoutInGroup);
 
@@ -5897,7 +6028,8 @@ TEST_F(InputProcessorTest, TouchpadLayoutMultipleGroupsSoloBehavior) {
   proc.initialize();
 
   // Create layouts: layoutGroupId == 0, 1, 2
-  TouchpadLayoutConfig layoutNoGroup = makeMixerLayout(0, 0.0f, 0.0f, 0.33f, 1.0f);
+  TouchpadLayoutConfig layoutNoGroup =
+      makeMixerLayout(0, 0.0f, 0.0f, 0.33f, 1.0f);
   layoutNoGroup.name = "No Group Layout";
   touchpadMixerMgr.addLayout(layoutNoGroup);
 
@@ -5905,7 +6037,8 @@ TEST_F(InputProcessorTest, TouchpadLayoutMultipleGroupsSoloBehavior) {
   group1.id = 1;
   group1.name = "Group 1";
   touchpadMixerMgr.addGroup(group1);
-  TouchpadLayoutConfig layoutGroup1 = makeMixerLayout(1, 0.33f, 0.0f, 0.66f, 1.0f);
+  TouchpadLayoutConfig layoutGroup1 =
+      makeMixerLayout(1, 0.33f, 0.0f, 0.66f, 1.0f);
   layoutGroup1.name = "Group 1 Layout";
   touchpadMixerMgr.addLayout(layoutGroup1);
 
@@ -5913,7 +6046,8 @@ TEST_F(InputProcessorTest, TouchpadLayoutMultipleGroupsSoloBehavior) {
   group2.id = 2;
   group2.name = "Group 2";
   touchpadMixerMgr.addGroup(group2);
-  TouchpadLayoutConfig layoutGroup2 = makeMixerLayout(2, 0.66f, 0.0f, 1.0f, 1.0f);
+  TouchpadLayoutConfig layoutGroup2 =
+      makeMixerLayout(2, 0.66f, 0.0f, 1.0f, 1.0f);
   layoutGroup2.name = "Group 2 Layout";
   touchpadMixerMgr.addLayout(layoutGroup2);
 
@@ -5949,13 +6083,13 @@ TEST_F(InputProcessorTest, TouchpadLayoutMultipleGroupsSoloBehavior) {
   auto mappings = presetMgr.getMappingsListForLayer(0);
   juce::ValueTree soloMapping("Mapping");
   soloMapping.setProperty("inputKey", 80, nullptr);
-  soloMapping.setProperty("deviceHash",
-                          juce::String::toHexString((juce::int64)0).toUpperCase(),
-                          nullptr);
+  soloMapping.setProperty(
+      "deviceHash", juce::String::toHexString((juce::int64)0).toUpperCase(),
+      nullptr);
   soloMapping.setProperty("type", "Command", nullptr);
-  soloMapping.setProperty("data1",
-                          static_cast<int>(MIDIQy::CommandID::TouchpadLayoutGroupSoloSet),
-                          nullptr);
+  soloMapping.setProperty(
+      "data1", static_cast<int>(MIDIQy::CommandID::TouchpadLayoutGroupSoloSet),
+      nullptr);
   soloMapping.setProperty("touchpadLayoutGroupId", 1, nullptr);
   soloMapping.setProperty("touchpadSoloScope", 0, nullptr);
   soloMapping.setProperty("channel", 1, nullptr);
@@ -5991,13 +6125,13 @@ TEST_F(InputProcessorTest, TouchpadLayoutMultipleGroupsSoloBehavior) {
   // Test 3: When soloGroup == 2, only layoutGroupId == 2 should be visible
   juce::ValueTree soloMapping2("Mapping");
   soloMapping2.setProperty("inputKey", 81, nullptr);
-  soloMapping2.setProperty("deviceHash",
-                           juce::String::toHexString((juce::int64)0).toUpperCase(),
-                           nullptr);
+  soloMapping2.setProperty(
+      "deviceHash", juce::String::toHexString((juce::int64)0).toUpperCase(),
+      nullptr);
   soloMapping2.setProperty("type", "Command", nullptr);
-  soloMapping2.setProperty("data1",
-                           static_cast<int>(MIDIQy::CommandID::TouchpadLayoutGroupSoloSet),
-                           nullptr);
+  soloMapping2.setProperty(
+      "data1", static_cast<int>(MIDIQy::CommandID::TouchpadLayoutGroupSoloSet),
+      nullptr);
   soloMapping2.setProperty("touchpadLayoutGroupId", 2, nullptr);
   soloMapping2.setProperty("touchpadSoloScope", 0, nullptr);
   soloMapping2.setProperty("channel", 1, nullptr);
@@ -6047,23 +6181,27 @@ TEST_F(InputProcessorTest, TouchpadLayoutMixedLayersSoloBehavior) {
   touchpadMixerMgr.addGroup(group1);
 
   // Create layouts on layer 0: one with group, one without group
-  TouchpadLayoutConfig layoutNoGroupLayer0 = makeMixerLayout(0, 0.0f, 0.0f, 0.5f, 1.0f);
+  TouchpadLayoutConfig layoutNoGroupLayer0 =
+      makeMixerLayout(0, 0.0f, 0.0f, 0.5f, 1.0f);
   layoutNoGroupLayer0.name = "No Group Layer 0";
   layoutNoGroupLayer0.layerId = 0;
   touchpadMixerMgr.addLayout(layoutNoGroupLayer0);
 
-  TouchpadLayoutConfig layoutGroup1Layer0 = makeMixerLayout(1, 0.5f, 0.0f, 1.0f, 1.0f);
+  TouchpadLayoutConfig layoutGroup1Layer0 =
+      makeMixerLayout(1, 0.5f, 0.0f, 1.0f, 1.0f);
   layoutGroup1Layer0.name = "Group 1 Layer 0";
   layoutGroup1Layer0.layerId = 0;
   touchpadMixerMgr.addLayout(layoutGroup1Layer0);
 
   // Create layouts on layer 1: one with group, one without group
-  TouchpadLayoutConfig layoutNoGroupLayer1 = makeMixerLayout(0, 0.0f, 0.0f, 0.5f, 1.0f);
+  TouchpadLayoutConfig layoutNoGroupLayer1 =
+      makeMixerLayout(0, 0.0f, 0.0f, 0.5f, 1.0f);
   layoutNoGroupLayer1.name = "No Group Layer 1";
   layoutNoGroupLayer1.layerId = 1;
   touchpadMixerMgr.addLayout(layoutNoGroupLayer1);
 
-  TouchpadLayoutConfig layoutGroup1Layer1 = makeMixerLayout(1, 0.5f, 0.0f, 1.0f, 1.0f);
+  TouchpadLayoutConfig layoutGroup1Layer1 =
+      makeMixerLayout(1, 0.5f, 0.0f, 1.0f, 1.0f);
   layoutGroup1Layer1.name = "Group 1 Layer 1";
   layoutGroup1Layer1.layerId = 1;
   touchpadMixerMgr.addLayout(layoutGroup1Layer1);
@@ -6072,7 +6210,8 @@ TEST_F(InputProcessorTest, TouchpadLayoutMixedLayersSoloBehavior) {
 
   uintptr_t deviceHandle = 0x1234;
 
-  // Test: When soloGroup == 0, only no-group layouts should be visible on both layers
+  // Test: When soloGroup == 0, only no-group layouts should be visible on both
+  // layers
   EXPECT_EQ(proc.getEffectiveSoloLayoutGroupForLayer(0), 0);
   EXPECT_EQ(proc.getEffectiveSoloLayoutGroupForLayer(1), 0);
 
@@ -6080,20 +6219,19 @@ TEST_F(InputProcessorTest, TouchpadLayoutMixedLayersSoloBehavior) {
   auto layer0Mappings = presetMgr.getMappingsListForLayer(0);
   juce::ValueTree layerToggleMapping("Mapping");
   layerToggleMapping.setProperty("inputKey", 82, nullptr);
-  layerToggleMapping.setProperty("deviceHash",
-                                 juce::String::toHexString((juce::int64)0).toUpperCase(),
-                                 nullptr);
+  layerToggleMapping.setProperty(
+      "deviceHash", juce::String::toHexString((juce::int64)0).toUpperCase(),
+      nullptr);
   layerToggleMapping.setProperty("type", "Command", nullptr);
-  layerToggleMapping.setProperty("data1",
-                                 static_cast<int>(MIDIQy::CommandID::LayerToggle),
-                                 nullptr);
+  layerToggleMapping.setProperty(
+      "data1", static_cast<int>(MIDIQy::CommandID::LayerToggle), nullptr);
   layerToggleMapping.setProperty("data2", 1, nullptr);
   layerToggleMapping.setProperty("channel", 1, nullptr);
   layer0Mappings.appendChild(layerToggleMapping, nullptr);
   proc.forceRebuildMappings();
   InputID layerInputId{0, 82};
   proc.processEvent(layerInputId, true); // Toggle layer 1 on
-  
+
   // Verify layer 1 is active
   EXPECT_EQ(proc.getHighestActiveLayerIndex(), 1);
 
@@ -6124,13 +6262,13 @@ TEST_F(InputProcessorTest, TouchpadLayoutMixedLayersSoloBehavior) {
   // Use global solo (scope 0) to test that it applies to all layers
   juce::ValueTree soloMappingGlobal("Mapping");
   soloMappingGlobal.setProperty("inputKey", 84, nullptr);
-  soloMappingGlobal.setProperty("deviceHash",
-                                juce::String::toHexString((juce::int64)0).toUpperCase(),
-                                nullptr);
+  soloMappingGlobal.setProperty(
+      "deviceHash", juce::String::toHexString((juce::int64)0).toUpperCase(),
+      nullptr);
   soloMappingGlobal.setProperty("type", "Command", nullptr);
-  soloMappingGlobal.setProperty("data1",
-                                static_cast<int>(MIDIQy::CommandID::TouchpadLayoutGroupSoloSet),
-                                nullptr);
+  soloMappingGlobal.setProperty(
+      "data1", static_cast<int>(MIDIQy::CommandID::TouchpadLayoutGroupSoloSet),
+      nullptr);
   soloMappingGlobal.setProperty("touchpadLayoutGroupId", 1, nullptr);
   soloMappingGlobal.setProperty("touchpadSoloScope", 0, nullptr); // Global
   soloMappingGlobal.setProperty("channel", 1, nullptr);
@@ -6144,7 +6282,8 @@ TEST_F(InputProcessorTest, TouchpadLayoutMixedLayersSoloBehavior) {
   EXPECT_EQ(proc.getEffectiveSoloLayoutGroupForLayer(0), 1);
   EXPECT_EQ(proc.getEffectiveSoloLayoutGroupForLayer(1), 1);
 
-  // Touch at no-group layout - should be hidden (global solo applies to all layers)
+  // Touch at no-group layout - should be hidden (global solo applies to all
+  // layers)
   contacts = {{0, 0, 0, 0.25f, 0.5f, true}};
   mockEng.clear();
   proc.processTouchpadContacts(deviceHandle, contacts);
@@ -6160,7 +6299,8 @@ TEST_F(InputProcessorTest, TouchpadLayoutMixedLayersSoloBehavior) {
       << "Group layouts should be visible when global solo group 1 is active";
 }
 
-// --- Recompile on dependency change (plan: recompile on every dependency change) ---
+// --- Recompile on dependency change (plan: recompile on every dependency
+// change) ---
 
 // Test: Changing touchpadLayoutGroupId on a mapping triggers grid rebuild and
 // compiled action reflects new value.
@@ -6178,8 +6318,7 @@ TEST_F(InputProcessorTest, RecompileWhenTouchpadLayoutGroupIdChanges) {
   juce::ValueTree soloMapping("Mapping");
   soloMapping.setProperty("inputKey", 60, nullptr);
   soloMapping.setProperty(
-      "deviceHash",
-      juce::String::toHexString((juce::int64)0).toUpperCase(),
+      "deviceHash", juce::String::toHexString((juce::int64)0).toUpperCase(),
       nullptr);
   soloMapping.setProperty("type", "Command", nullptr);
   soloMapping.setProperty(
@@ -6218,8 +6357,7 @@ TEST_F(InputProcessorTest, RecompileWhenTouchpadSoloScopeChanges) {
   juce::ValueTree soloMapping("Mapping");
   soloMapping.setProperty("inputKey", 61, nullptr);
   soloMapping.setProperty(
-      "deviceHash",
-      juce::String::toHexString((juce::int64)0).toUpperCase(),
+      "deviceHash", juce::String::toHexString((juce::int64)0).toUpperCase(),
       nullptr);
   soloMapping.setProperty("type", "Command", nullptr);
   soloMapping.setProperty(
@@ -6248,7 +6386,8 @@ TEST_F(InputProcessorTest, RecompileWhenTouchpadSoloScopeChanges) {
 
 // --- Keyboard group filtering tests ---
 
-// Test: Key mapping with no group (keyboardGroupId == 0) is visible when no solo
+// Test: Key mapping with no group (keyboardGroupId == 0) is visible when no
+// solo
 TEST_F(InputProcessorTest, KeyboardMappingNoGroupVisibleWhenNoSolo) {
   presetMgr.addKeyboardGroup(1, "Group 1");
 
@@ -6279,7 +6418,8 @@ TEST_F(InputProcessorTest, KeyboardMappingNoGroupVisibleWhenNoSolo) {
   EXPECT_EQ(proc.getEffectiveKeyboardSoloGroupForLayer(0), 0);
 
   auto opt60 = proc.getMappingForInput(InputID{0, 60});
-  EXPECT_TRUE(opt60.has_value()) << "No-group mapping should be visible when no solo";
+  EXPECT_TRUE(opt60.has_value())
+      << "No-group mapping should be visible when no solo";
   auto opt61 = proc.getMappingForInput(InputID{0, 61});
   EXPECT_FALSE(opt61.has_value())
       << "Grouped mapping should be hidden when no solo is active";
@@ -6292,13 +6432,12 @@ TEST_F(InputProcessorTest, KeyboardMappingGroupVisibleWhenSoloActive) {
   auto mappings = presetMgr.getMappingsListForLayer(0);
   juce::ValueTree soloMapping("Mapping");
   soloMapping.setProperty("inputKey", 59, nullptr);
-  soloMapping.setProperty("deviceHash",
-                          juce::String::toHexString((juce::int64)0).toUpperCase(),
-                          nullptr);
+  soloMapping.setProperty(
+      "deviceHash", juce::String::toHexString((juce::int64)0).toUpperCase(),
+      nullptr);
   soloMapping.setProperty("type", "Command", nullptr);
   soloMapping.setProperty(
-      "data1",
-      static_cast<int>(MIDIQy::CommandID::KeyboardLayoutGroupSoloSet),
+      "data1", static_cast<int>(MIDIQy::CommandID::KeyboardLayoutGroupSoloSet),
       nullptr);
   soloMapping.setProperty("keyboardLayoutGroupId", 1, nullptr);
   soloMapping.setProperty("keyboardSoloScope", 0, nullptr);
@@ -6433,8 +6572,9 @@ TEST_F(InputProcessorTest,
   EXPECT_TRUE(mockEng.events[0].isNoteOn);
 }
 
-TEST_F(InputProcessorTest,
-       TouchpadTab_SustainUntilRetrigger_ReTrigger_NoNoteOffBeforeSecondNoteOn) {
+TEST_F(
+    InputProcessorTest,
+    TouchpadTab_SustainUntilRetrigger_ReTrigger_NoNoteOffBeforeSecondNoteOn) {
   MockMidiEngine mockEng;
   TouchpadLayoutManager touchpadMixerMgr;
   VoiceManager voiceMgr(mockEng, settingsMgr);
@@ -6617,8 +6757,8 @@ protected:
   TouchpadLayoutManager touchpadMixerMgr;
   VoiceManager voiceMgr{mockEng, settingsMgr};
   MidiEngine midiEng;
-  InputProcessor proc{voiceMgr, presetMgr, deviceMgr, scaleLib, midiEng,
-                      settingsMgr, touchpadMixerMgr};
+  InputProcessor proc{voiceMgr, presetMgr,   deviceMgr,       scaleLib,
+                      midiEng,  settingsMgr, touchpadMixerMgr};
 
   void SetUp() override {
     presetMgr.getLayersList().removeAllChildren(nullptr);
@@ -6637,7 +6777,8 @@ protected:
     m.setProperty("type", "Expression", nullptr);
     m.setProperty("adsrTarget", "PitchBend", nullptr);
     m.setProperty("channel", 1, nullptr);
-    m.setProperty("data2", 2, nullptr);  // Bend ±2 semitones (current architecture)
+    m.setProperty("data2", 2,
+                  nullptr); // Bend ±2 semitones (current architecture)
     m.setProperty("touchpadInputMin", 0.0, nullptr);
     m.setProperty("touchpadInputMax", 1.0, nullptr);
     m.setProperty("touchpadOutputMin", -2, nullptr);
@@ -6649,7 +6790,7 @@ protected:
   }
 
   void addTouchpadTabPitchMappingWithPBRange(juce::String mode, int pbRange,
-                                              int outputMin, int outputMax) {
+                                             int outputMin, int outputMax) {
     settingsMgr.setPitchBendRange(pbRange);
     TouchpadMappingConfig cfg;
     cfg.name = "Pitch Pad";
@@ -6660,7 +6801,8 @@ protected:
     m.setProperty("type", "Expression", nullptr);
     m.setProperty("adsrTarget", "PitchBend", nullptr);
     m.setProperty("channel", 1, nullptr);
-    m.setProperty("data2", juce::jmax(std::abs(outputMin), std::abs(outputMax)), nullptr);  // Bend semitones (current architecture)
+    m.setProperty("data2", juce::jmax(std::abs(outputMin), std::abs(outputMax)),
+                  nullptr); // Bend semitones (current architecture)
     m.setProperty("touchpadInputMin", 0.0, nullptr);
     m.setProperty("touchpadInputMax", 1.0, nullptr);
     m.setProperty("pitchPadUseCustomRange", true, nullptr);
@@ -6694,7 +6836,8 @@ protected:
   }
 };
 
-TEST_F(TouchpadTabPitchPadTest, TouchpadTab_PitchPadAbsoluteModeUsesRangeCenterAsZero) {
+TEST_F(TouchpadTabPitchPadTest,
+       TouchpadTab_PitchPadAbsoluteModeUsesRangeCenterAsZero) {
   addTouchpadTabPitchMapping("Absolute");
 
   uintptr_t dev = 0x2345;
@@ -6705,7 +6848,8 @@ TEST_F(TouchpadTabPitchPadTest, TouchpadTab_PitchPadAbsoluteModeUsesRangeCenterA
   EXPECT_NEAR(semitoneCenter, 0.0f, 0.25f);
 }
 
-TEST_F(TouchpadTabPitchPadTest, TouchpadTab_PitchPadRelativeModeAnchorAtCenterMatchesAbsolute) {
+TEST_F(TouchpadTabPitchPadTest,
+       TouchpadTab_PitchPadRelativeModeAnchorAtCenterMatchesAbsolute) {
   addTouchpadTabPitchMapping("Relative");
 
   uintptr_t dev = 0x3456;
@@ -6723,7 +6867,8 @@ TEST_F(TouchpadTabPitchPadTest, TouchpadTab_PitchPadRelativeModeAnchorAtCenterMa
       << "At x=1.0, should reach PB+2 (max of configured range)";
 }
 
-TEST_F(TouchpadTabPitchPadTest, TouchpadTab_PitchPadRelativeModeAnchorAt02Maps07ToPBPlus2) {
+TEST_F(TouchpadTabPitchPadTest,
+       TouchpadTab_PitchPadRelativeModeAnchorAt02Maps07ToPBPlus2) {
   addTouchpadTabPitchMapping("Relative");
 
   uintptr_t dev = 0x4567;
@@ -6741,7 +6886,8 @@ TEST_F(TouchpadTabPitchPadTest, TouchpadTab_PitchPadRelativeModeAnchorAt02Maps07
       << "At x=0.7 (0.5 delta from anchor 0.2), should map to PB+2";
 }
 
-TEST_F(TouchpadTabPitchPadTest, TouchpadTab_PitchPadRelativeModeExtrapolatesBeyondConfiguredRange) {
+TEST_F(TouchpadTabPitchPadTest,
+       TouchpadTab_PitchPadRelativeModeExtrapolatesBeyondConfiguredRange) {
   addTouchpadTabPitchMappingWithPBRange("Relative", 6, -2, 2);
 
   uintptr_t dev = 0x5678;
@@ -6755,8 +6901,8 @@ TEST_F(TouchpadTabPitchPadTest, TouchpadTab_PitchPadRelativeModeExtrapolatesBeyo
   sendFinger1X(dev, 1.0f);
   int pbAtMax = getLastPitchBend(dev);
   float semitoneAtMax = pbToSemitones(pbAtMax);
-  EXPECT_GT(semitoneAtMax, 2.0f)
-      << "Swipe from 0.0 to 1.0 should exceed configured max (+2) with extrapolation";
+  EXPECT_GT(semitoneAtMax, 2.0f) << "Swipe from 0.0 to 1.0 should exceed "
+                                    "configured max (+2) with extrapolation";
   EXPECT_LE(semitoneAtMax, 6.5f) << "Should not exceed global PB range (+6)";
 }
 
@@ -6780,7 +6926,8 @@ TEST_F(InputProcessorTest, TouchpadTab_PitchBendRangeAffectsSentPitchBend) {
   m.setProperty("type", "Expression", nullptr);
   m.setProperty("adsrTarget", "PitchBend", nullptr);
   m.setProperty("channel", 1, nullptr);
-  m.setProperty("data2", 2, nullptr);  // Bend ±2 semitones (current architecture)
+  m.setProperty("data2", 2,
+                nullptr); // Bend ±2 semitones (current architecture)
   m.setProperty("touchpadInputMin", 0.0, nullptr);
   m.setProperty("touchpadInputMax", 1.0, nullptr);
   m.setProperty("touchpadOutputMin", -2, nullptr);
@@ -6805,7 +6952,8 @@ TEST_F(InputProcessorTest, TouchpadTab_PitchBendRangeAffectsSentPitchBend) {
 }
 
 // --- Touch glide: when disabled (touchGlideMs 0), behavior unchanged ---
-TEST_F(InputProcessorTest, TouchpadTouchGlide_Disabled_ImmediateSendToFingerAndRelease) {
+TEST_F(InputProcessorTest,
+       TouchpadTouchGlide_Disabled_ImmediateSendToFingerAndRelease) {
   MockMidiEngine mockEng;
   TouchpadLayoutManager touchpadMixerMgr;
   VoiceManager voiceMgr(mockEng, settingsMgr);
@@ -6849,11 +6997,13 @@ TEST_F(InputProcessorTest, TouchpadTouchGlide_Disabled_ImmediateSendToFingerAndR
   proc.processTouchpadContacts(dev, {});
   ASSERT_FALSE(mockEng.pitchEvents.empty());
   EXPECT_EQ(mockEng.pitchEvents.back().value, 8192)
-      << "With touch glide off, finger up should send center (8192) immediately";
+      << "With touch glide off, finger up should send center (8192) "
+         "immediately";
 }
 
 // --- Touch glide: finger down at center -> no transition, stay at 8192 ---
-TEST_F(InputProcessorTest, TouchpadTouchGlide_Enabled_FingerDownAtCenter_StaysAt8192) {
+TEST_F(InputProcessorTest,
+       TouchpadTouchGlide_Enabled_FingerDownAtCenter_StaysAt8192) {
   MockMidiEngine mockEng;
   TouchpadLayoutManager touchpadMixerMgr;
   VoiceManager voiceMgr(mockEng, settingsMgr);
@@ -6891,11 +7041,14 @@ TEST_F(InputProcessorTest, TouchpadTouchGlide_Enabled_FingerDownAtCenter_StaysAt
   proc.processTouchpadContacts(dev, {{0, 0, 0, 0.5f, 0.5f, true}});
   ASSERT_FALSE(mockEng.pitchEvents.empty());
   EXPECT_NEAR(mockEng.pitchEvents.back().value, 8192, 100)
-      << "Finger down at center with glide on: value should stay 8192 (no transition)";
+      << "Finger down at center with glide on: value should stay 8192 (no "
+         "transition)";
 }
 
-// --- Touch glide: finger down at max -> first sent value is 8192 (glide start) ---
-TEST_F(InputProcessorTest, TouchpadTouchGlide_Enabled_FingerDownAtMax_StartsFromCenter) {
+// --- Touch glide: finger down at max -> first sent value is 8192 (glide start)
+// ---
+TEST_F(InputProcessorTest,
+       TouchpadTouchGlide_Enabled_FingerDownAtMax_StartsFromCenter) {
   MockMidiEngine mockEng;
   TouchpadLayoutManager touchpadMixerMgr;
   VoiceManager voiceMgr(mockEng, settingsMgr);
@@ -6933,7 +7086,8 @@ TEST_F(InputProcessorTest, TouchpadTouchGlide_Enabled_FingerDownAtMax_StartsFrom
   proc.processTouchpadContacts(dev, {{0, 0, 0, 1.0f, 0.5f, true}});
   ASSERT_FALSE(mockEng.pitchEvents.empty());
   EXPECT_NEAR(mockEng.pitchEvents.front().value, 8192, 100)
-      << "With touch glide on, first send on finger down at max should be 8192 (glide start)";
+      << "With touch glide on, first send on finger down at max should be 8192 "
+         "(glide start)";
 }
 
 TEST_F(InputProcessorTest, TouchpadTab_PitchPadStartLeft_ZeroAtLeftEdge) {
@@ -6956,7 +7110,8 @@ TEST_F(InputProcessorTest, TouchpadTab_PitchPadStartLeft_ZeroAtLeftEdge) {
   m.setProperty("type", "Expression", nullptr);
   m.setProperty("adsrTarget", "PitchBend", nullptr);
   m.setProperty("channel", 1, nullptr);
-  m.setProperty("data2", 2, nullptr);  // Bend ±2 semitones (current architecture)
+  m.setProperty("data2", 2,
+                nullptr); // Bend ±2 semitones (current architecture)
   m.setProperty("touchpadInputMin", 0.0, nullptr);
   m.setProperty("touchpadInputMax", 1.0, nullptr);
   m.setProperty("touchpadOutputMin", -2, nullptr);
@@ -6985,8 +7140,10 @@ TEST_F(InputProcessorTest, TouchpadTab_PitchPadStartLeft_ZeroAtLeftEdge) {
 }
 
 // Layout group list changes: InputProcessor::changeListenerCallback already
-// calls rebuildGrid() when source == &touchpadMixerManager. TouchpadLayoutManager
-// sends change messages on addGroup/removeGroup/renameGroup. No separate test
-// here because sendChangeMessage() is async and test would be flaky; the two
-// tests above (RecompileWhenTouchpadLayoutGroupIdChanges, RecompileWhenTouchpadSoloScopeChanges)
-// prove that mapping property changes trigger rebuild.
+// calls rebuildGrid() when source == &touchpadMixerManager.
+// TouchpadLayoutManager sends change messages on
+// addGroup/removeGroup/renameGroup. No separate test here because
+// sendChangeMessage() is async and test would be flaky; the two tests above
+// (RecompileWhenTouchpadLayoutGroupIdChanges,
+// RecompileWhenTouchpadSoloScopeChanges) prove that mapping property changes
+// trigger rebuild.

@@ -1,5 +1,5 @@
-#include "../MappingDefinition.h"
 #include "../KeyboardMappingInspectorLogic.h"
+#include "../MappingDefinition.h"
 #include "../MappingTypes.h"
 #include <gtest/gtest.h>
 
@@ -42,7 +42,8 @@ static InspectorControl makePitchPadModeControl() {
   return c;
 }
 
-// Option IDs must match MappingDefinition / MappingInspectorLogic (virtual category IDs)
+// Option IDs must match MappingDefinition / MappingInspectorLogic (virtual
+// category IDs)
 static constexpr int kCmdCategorySustain = 100;
 static constexpr int kCmdCategoryLatch = 101;
 static constexpr int kCmdCategoryPanic = 102;
@@ -171,7 +172,8 @@ TEST(MappingInspectorLogicTest, ApplyType_Note) {
   juce::ValueTree mapping("Mapping");
   juce::UndoManager undo;
   auto def = makeTypeControl();
-  KeyboardMappingInspectorLogic::applyComboSelectionToMapping(mapping, def, 1, &undo);
+  KeyboardMappingInspectorLogic::applyComboSelectionToMapping(mapping, def, 1,
+                                                              &undo);
   EXPECT_EQ(mapping.getProperty("type").toString(), "Note");
 }
 
@@ -179,7 +181,8 @@ TEST(MappingInspectorLogicTest, ApplyType_Expression) {
   juce::ValueTree mapping("Mapping");
   juce::UndoManager undo;
   auto def = makeTypeControl();
-  KeyboardMappingInspectorLogic::applyComboSelectionToMapping(mapping, def, 2, &undo);
+  KeyboardMappingInspectorLogic::applyComboSelectionToMapping(mapping, def, 2,
+                                                              &undo);
   EXPECT_EQ(mapping.getProperty("type").toString(), "Expression");
 }
 
@@ -187,7 +190,8 @@ TEST(MappingInspectorLogicTest, ApplyType_Command) {
   juce::ValueTree mapping("Mapping");
   juce::UndoManager undo;
   auto def = makeTypeControl();
-  KeyboardMappingInspectorLogic::applyComboSelectionToMapping(mapping, def, 3, &undo);
+  KeyboardMappingInspectorLogic::applyComboSelectionToMapping(mapping, def, 3,
+                                                              &undo);
   EXPECT_EQ(mapping.getProperty("type").toString(), "Command");
 }
 
@@ -196,7 +200,8 @@ TEST(MappingInspectorLogicTest, ApplyReleaseBehavior_AlwaysLatch) {
   juce::ValueTree mapping("Mapping");
   juce::UndoManager undo;
   auto def = makeReleaseBehaviorControl();
-  KeyboardMappingInspectorLogic::applyComboSelectionToMapping(mapping, def, 3, &undo);
+  KeyboardMappingInspectorLogic::applyComboSelectionToMapping(mapping, def, 3,
+                                                              &undo);
   EXPECT_EQ(mapping.getProperty("releaseBehavior").toString(), "Always Latch");
 }
 
@@ -204,7 +209,8 @@ TEST(MappingInspectorLogicTest, ApplyReleaseBehavior_SustainUntilRetrigger) {
   juce::ValueTree mapping("Mapping");
   juce::UndoManager undo;
   auto def = makeReleaseBehaviorControl();
-  KeyboardMappingInspectorLogic::applyComboSelectionToMapping(mapping, def, 2, &undo);
+  KeyboardMappingInspectorLogic::applyComboSelectionToMapping(mapping, def, 2,
+                                                              &undo);
   EXPECT_EQ(mapping.getProperty("releaseBehavior").toString(),
             "Sustain until retrigger");
 }
@@ -213,7 +219,8 @@ TEST(MappingInspectorLogicTest, ApplyReleaseBehavior_SendNoteOff) {
   juce::ValueTree mapping("Mapping");
   juce::UndoManager undo;
   auto def = makeReleaseBehaviorControl();
-  KeyboardMappingInspectorLogic::applyComboSelectionToMapping(mapping, def, 1, &undo);
+  KeyboardMappingInspectorLogic::applyComboSelectionToMapping(mapping, def, 1,
+                                                              &undo);
   EXPECT_EQ(mapping.getProperty("releaseBehavior").toString(), "Send Note Off");
 }
 
@@ -222,7 +229,8 @@ TEST(MappingInspectorLogicTest, ApplyAdsrTarget_CC) {
   juce::ValueTree mapping("Mapping");
   juce::UndoManager undo;
   auto def = makeAdsrTargetControl();
-  KeyboardMappingInspectorLogic::applyComboSelectionToMapping(mapping, def, 1, &undo);
+  KeyboardMappingInspectorLogic::applyComboSelectionToMapping(mapping, def, 1,
+                                                              &undo);
   EXPECT_EQ(mapping.getProperty("adsrTarget").toString(), "CC");
 }
 
@@ -230,7 +238,8 @@ TEST(MappingInspectorLogicTest, ApplyAdsrTarget_PitchBend) {
   juce::ValueTree mapping("Mapping");
   juce::UndoManager undo;
   auto def = makeAdsrTargetControl();
-  KeyboardMappingInspectorLogic::applyComboSelectionToMapping(mapping, def, 2, &undo);
+  KeyboardMappingInspectorLogic::applyComboSelectionToMapping(mapping, def, 2,
+                                                              &undo);
   EXPECT_EQ(mapping.getProperty("adsrTarget").toString(), "PitchBend");
 }
 
@@ -238,7 +247,8 @@ TEST(MappingInspectorLogicTest, ApplyAdsrTarget_SmartScaleBend) {
   juce::ValueTree mapping("Mapping");
   juce::UndoManager undo;
   auto def = makeAdsrTargetControl();
-  KeyboardMappingInspectorLogic::applyComboSelectionToMapping(mapping, def, 3, &undo);
+  KeyboardMappingInspectorLogic::applyComboSelectionToMapping(mapping, def, 3,
+                                                              &undo);
   EXPECT_EQ(mapping.getProperty("adsrTarget").toString(), "SmartScaleBend");
 }
 
@@ -247,7 +257,8 @@ TEST(MappingInspectorLogicTest, ApplyPitchPadMode_Absolute) {
   juce::ValueTree mapping("Mapping");
   juce::UndoManager undo;
   auto def = makePitchPadModeControl();
-  KeyboardMappingInspectorLogic::applyComboSelectionToMapping(mapping, def, 1, &undo);
+  KeyboardMappingInspectorLogic::applyComboSelectionToMapping(mapping, def, 1,
+                                                              &undo);
   EXPECT_EQ(mapping.getProperty("pitchPadMode").toString(), "Absolute");
 }
 
@@ -255,7 +266,8 @@ TEST(MappingInspectorLogicTest, ApplyPitchPadMode_Relative) {
   juce::ValueTree mapping("Mapping");
   juce::UndoManager undo;
   auto def = makePitchPadModeControl();
-  KeyboardMappingInspectorLogic::applyComboSelectionToMapping(mapping, def, 2, &undo);
+  KeyboardMappingInspectorLogic::applyComboSelectionToMapping(mapping, def, 2,
+                                                              &undo);
   EXPECT_EQ(mapping.getProperty("pitchPadMode").toString(), "Relative");
 }
 
@@ -264,7 +276,8 @@ TEST(MappingInspectorLogicTest, ApplyCommandCategory_Sustain) {
   juce::ValueTree mapping("Mapping");
   juce::UndoManager undo;
   auto def = makeCommandCategoryControl();
-  KeyboardMappingInspectorLogic::applyComboSelectionToMapping(mapping, def, kCmdCategorySustain, &undo);
+  KeyboardMappingInspectorLogic::applyComboSelectionToMapping(
+      mapping, def, kCmdCategorySustain, &undo);
   EXPECT_EQ(static_cast<int>(mapping.getProperty("data1")), 0);
 }
 
@@ -272,7 +285,8 @@ TEST(MappingInspectorLogicTest, ApplyCommandCategory_Layer) {
   juce::ValueTree mapping("Mapping");
   juce::UndoManager undo;
   auto def = makeCommandCategoryControl();
-  KeyboardMappingInspectorLogic::applyComboSelectionToMapping(mapping, def, kCmdCategoryLayer, &undo);
+  KeyboardMappingInspectorLogic::applyComboSelectionToMapping(
+      mapping, def, kCmdCategoryLayer, &undo);
   EXPECT_EQ(static_cast<int>(mapping.getProperty("data1")), 10);
 }
 
@@ -280,7 +294,8 @@ TEST(MappingInspectorLogicTest, ApplyCommandCategory_Panic) {
   juce::ValueTree mapping("Mapping");
   juce::UndoManager undo;
   auto def = makeCommandCategoryControl();
-  KeyboardMappingInspectorLogic::applyComboSelectionToMapping(mapping, def, kCmdCategoryPanic, &undo);
+  KeyboardMappingInspectorLogic::applyComboSelectionToMapping(
+      mapping, def, kCmdCategoryPanic, &undo);
   EXPECT_EQ(static_cast<int>(mapping.getProperty("data1")), 4);
 }
 
@@ -288,20 +303,24 @@ TEST(MappingInspectorLogicTest, ApplyCommandCategory_Transpose) {
   juce::ValueTree mapping("Mapping");
   juce::UndoManager undo;
   auto def = makeCommandCategoryControl();
-  KeyboardMappingInspectorLogic::applyComboSelectionToMapping(mapping, def, kCmdCategoryTranspose, &undo);
+  KeyboardMappingInspectorLogic::applyComboSelectionToMapping(
+      mapping, def, kCmdCategoryTranspose, &undo);
   EXPECT_EQ(static_cast<int>(mapping.getProperty("data1")), 6);
 }
 
 // Applying Touchpad (120) sets data1 to touchpad solo; schema then has touchpad
 // controls (ensures first-select Touchpad UI has correct state for rebuildUI).
-TEST(MappingInspectorLogicTest, DISABLED_ApplyCommandCategory_Touchpad_ThenSchemaHasTouchpadControls) {
+TEST(MappingInspectorLogicTest,
+     DISABLED_ApplyCommandCategory_Touchpad_ThenSchemaHasTouchpadControls) {
   juce::ValueTree mapping("Mapping");
   mapping.setProperty("type", "Command", nullptr);
   juce::UndoManager undo;
   auto def = makeCommandCategoryControl();
-  KeyboardMappingInspectorLogic::applyComboSelectionToMapping(mapping, def, 120, &undo);
-  EXPECT_EQ(static_cast<int>(mapping.getProperty("data1")),
-            static_cast<int>(MIDIQy::CommandID::TouchpadLayoutGroupSoloMomentary));
+  KeyboardMappingInspectorLogic::applyComboSelectionToMapping(mapping, def, 120,
+                                                              &undo);
+  EXPECT_EQ(
+      static_cast<int>(mapping.getProperty("data1")),
+      static_cast<int>(MIDIQy::CommandID::TouchpadLayoutGroupSoloMomentary));
 
   InspectorSchema schema = MappingDefinition::getSchema(mapping);
   bool hasSoloType = false, hasGroup = false, hasScope = false;
@@ -323,7 +342,8 @@ TEST(MappingInspectorLogicTest, ApplySustainStyle_HoldToSustain) {
   juce::ValueTree mapping("Mapping");
   juce::UndoManager undo;
   auto def = makeSustainStyleControl();
-  KeyboardMappingInspectorLogic::applyComboSelectionToMapping(mapping, def, 1, &undo);
+  KeyboardMappingInspectorLogic::applyComboSelectionToMapping(mapping, def, 1,
+                                                              &undo);
   EXPECT_EQ(static_cast<int>(mapping.getProperty("data1")), 0);
 }
 
@@ -331,7 +351,8 @@ TEST(MappingInspectorLogicTest, ApplySustainStyle_ToggleSustain) {
   juce::ValueTree mapping("Mapping");
   juce::UndoManager undo;
   auto def = makeSustainStyleControl();
-  KeyboardMappingInspectorLogic::applyComboSelectionToMapping(mapping, def, 2, &undo);
+  KeyboardMappingInspectorLogic::applyComboSelectionToMapping(mapping, def, 2,
+                                                              &undo);
   EXPECT_EQ(static_cast<int>(mapping.getProperty("data1")), 1);
 }
 
@@ -339,7 +360,8 @@ TEST(MappingInspectorLogicTest, ApplySustainStyle_DefaultOnHoldToNotSustain) {
   juce::ValueTree mapping("Mapping");
   juce::UndoManager undo;
   auto def = makeSustainStyleControl();
-  KeyboardMappingInspectorLogic::applyComboSelectionToMapping(mapping, def, 3, &undo);
+  KeyboardMappingInspectorLogic::applyComboSelectionToMapping(mapping, def, 3,
+                                                              &undo);
   EXPECT_EQ(static_cast<int>(mapping.getProperty("data1")), 2);
 }
 
@@ -348,7 +370,8 @@ TEST(MappingInspectorLogicTest, ApplyLayerStyle_HoldToSwitch) {
   juce::ValueTree mapping("Mapping");
   juce::UndoManager undo;
   auto def = makeLayerStyleControl();
-  KeyboardMappingInspectorLogic::applyComboSelectionToMapping(mapping, def, 1, &undo);
+  KeyboardMappingInspectorLogic::applyComboSelectionToMapping(mapping, def, 1,
+                                                              &undo);
   EXPECT_EQ(static_cast<int>(mapping.getProperty("data1")), 10);
 }
 
@@ -356,7 +379,8 @@ TEST(MappingInspectorLogicTest, ApplyLayerStyle_ToggleLayer) {
   juce::ValueTree mapping("Mapping");
   juce::UndoManager undo;
   auto def = makeLayerStyleControl();
-  KeyboardMappingInspectorLogic::applyComboSelectionToMapping(mapping, def, 2, &undo);
+  KeyboardMappingInspectorLogic::applyComboSelectionToMapping(mapping, def, 2,
+                                                              &undo);
   EXPECT_EQ(static_cast<int>(mapping.getProperty("data1")), 11);
 }
 
@@ -365,7 +389,8 @@ TEST(MappingInspectorLogicTest, ApplyPanicMode_PanicAll) {
   juce::ValueTree mapping("Mapping");
   juce::UndoManager undo;
   auto def = makePanicModeControl();
-  KeyboardMappingInspectorLogic::applyComboSelectionToMapping(mapping, def, 1, &undo);
+  KeyboardMappingInspectorLogic::applyComboSelectionToMapping(mapping, def, 1,
+                                                              &undo);
   EXPECT_EQ(static_cast<int>(mapping.getProperty("data1")), 4);
   EXPECT_EQ(static_cast<int>(mapping.getProperty("data2")), 0);
 }
@@ -374,7 +399,8 @@ TEST(MappingInspectorLogicTest, ApplyPanicMode_PanicLatchedOnly) {
   juce::ValueTree mapping("Mapping");
   juce::UndoManager undo;
   auto def = makePanicModeControl();
-  KeyboardMappingInspectorLogic::applyComboSelectionToMapping(mapping, def, 2, &undo);
+  KeyboardMappingInspectorLogic::applyComboSelectionToMapping(mapping, def, 2,
+                                                              &undo);
   EXPECT_EQ(static_cast<int>(mapping.getProperty("data1")), 4);
   EXPECT_EQ(static_cast<int>(mapping.getProperty("data2")), 1);
 }
@@ -383,7 +409,8 @@ TEST(MappingInspectorLogicTest, ApplyPanicMode_PanicChords) {
   juce::ValueTree mapping("Mapping");
   juce::UndoManager undo;
   auto def = makePanicModeControl();
-  KeyboardMappingInspectorLogic::applyComboSelectionToMapping(mapping, def, 3, &undo);
+  KeyboardMappingInspectorLogic::applyComboSelectionToMapping(mapping, def, 3,
+                                                              &undo);
   EXPECT_EQ(static_cast<int>(mapping.getProperty("data1")), 4);
   EXPECT_EQ(static_cast<int>(mapping.getProperty("data2")), 2);
 }
@@ -393,7 +420,8 @@ TEST(MappingInspectorLogicTest, ApplyTransposeMode_Global) {
   juce::ValueTree mapping("Mapping");
   juce::UndoManager undo;
   auto def = makeTransposeModeControl();
-  KeyboardMappingInspectorLogic::applyComboSelectionToMapping(mapping, def, 1, &undo);
+  KeyboardMappingInspectorLogic::applyComboSelectionToMapping(mapping, def, 1,
+                                                              &undo);
   EXPECT_EQ(mapping.getProperty("transposeMode").toString(), "Global");
 }
 
@@ -401,7 +429,8 @@ TEST(MappingInspectorLogicTest, ApplyTransposeMode_Local) {
   juce::ValueTree mapping("Mapping");
   juce::UndoManager undo;
   auto def = makeTransposeModeControl();
-  KeyboardMappingInspectorLogic::applyComboSelectionToMapping(mapping, def, 2, &undo);
+  KeyboardMappingInspectorLogic::applyComboSelectionToMapping(mapping, def, 2,
+                                                              &undo);
   EXPECT_EQ(mapping.getProperty("transposeMode").toString(), "Local");
 }
 
@@ -410,7 +439,8 @@ TEST(MappingInspectorLogicTest, ApplyTransposeModify_UpOneSemitone) {
   juce::ValueTree mapping("Mapping");
   juce::UndoManager undo;
   auto def = makeTransposeModifyControl();
-  KeyboardMappingInspectorLogic::applyComboSelectionToMapping(mapping, def, 1, &undo);
+  KeyboardMappingInspectorLogic::applyComboSelectionToMapping(mapping, def, 1,
+                                                              &undo);
   EXPECT_EQ(static_cast<int>(mapping.getProperty("transposeModify")), 0);
 }
 
@@ -418,7 +448,8 @@ TEST(MappingInspectorLogicTest, ApplyTransposeModify_SetSpecificSemitones) {
   juce::ValueTree mapping("Mapping");
   juce::UndoManager undo;
   auto def = makeTransposeModifyControl();
-  KeyboardMappingInspectorLogic::applyComboSelectionToMapping(mapping, def, 5, &undo);
+  KeyboardMappingInspectorLogic::applyComboSelectionToMapping(mapping, def, 5,
+                                                              &undo);
   EXPECT_EQ(static_cast<int>(mapping.getProperty("transposeModify")), 4);
 }
 
@@ -427,7 +458,8 @@ TEST(MappingInspectorLogicTest, ApplyData1Command_Sustain) {
   juce::ValueTree mapping("Mapping");
   juce::UndoManager undo;
   auto def = makeData1CommandControl();
-  KeyboardMappingInspectorLogic::applyComboSelectionToMapping(mapping, def, 0, &undo);
+  KeyboardMappingInspectorLogic::applyComboSelectionToMapping(mapping, def, 0,
+                                                              &undo);
   EXPECT_EQ(static_cast<int>(mapping.getProperty("data1")), 0);
 }
 
@@ -435,7 +467,8 @@ TEST(MappingInspectorLogicTest, ApplyData1Command_Layer) {
   juce::ValueTree mapping("Mapping");
   juce::UndoManager undo;
   auto def = makeData1CommandControl();
-  KeyboardMappingInspectorLogic::applyComboSelectionToMapping(mapping, def, 10, &undo);
+  KeyboardMappingInspectorLogic::applyComboSelectionToMapping(mapping, def, 10,
+                                                              &undo);
   EXPECT_EQ(static_cast<int>(mapping.getProperty("data1")), 10);
 }
 
@@ -443,20 +476,25 @@ TEST(MappingInspectorLogicTest, ApplyData1Command_TransposeId) {
   juce::ValueTree mapping("Mapping");
   juce::UndoManager undo;
   auto def = makeData1CommandControl();
-  KeyboardMappingInspectorLogic::applyComboSelectionToMapping(mapping, def, 6, &undo);
+  KeyboardMappingInspectorLogic::applyComboSelectionToMapping(mapping, def, 6,
+                                                              &undo);
   EXPECT_EQ(static_cast<int>(mapping.getProperty("data1")), 6);
 }
 
 // Selecting Touchpad (120) from data1 combo sets data1=18; schema then has
-// Touchpad controls (fixes first-time Touchpad not showing when from Latch Toggle, etc.).
-TEST(MappingInspectorLogicTest, DISABLED_ApplyData1Command_Touchpad_ThenSchemaHasTouchpadControls) {
+// Touchpad controls (fixes first-time Touchpad not showing when from Latch
+// Toggle, etc.).
+TEST(MappingInspectorLogicTest,
+     DISABLED_ApplyData1Command_Touchpad_ThenSchemaHasTouchpadControls) {
   juce::ValueTree mapping("Mapping");
   mapping.setProperty("type", "Command", nullptr);
   juce::UndoManager undo;
   auto def = makeData1CommandControl();
-  KeyboardMappingInspectorLogic::applyComboSelectionToMapping(mapping, def, 120, &undo);
-  EXPECT_EQ(static_cast<int>(mapping.getProperty("data1")),
-            static_cast<int>(MIDIQy::CommandID::TouchpadLayoutGroupSoloMomentary));
+  KeyboardMappingInspectorLogic::applyComboSelectionToMapping(mapping, def, 120,
+                                                              &undo);
+  EXPECT_EQ(
+      static_cast<int>(mapping.getProperty("data1")),
+      static_cast<int>(MIDIQy::CommandID::TouchpadLayoutGroupSoloMomentary));
 
   InspectorSchema schema = MappingDefinition::getSchema(mapping);
   bool hasSoloType = false, hasGroup = false, hasScope = false;
@@ -476,10 +514,13 @@ TEST(MappingInspectorLogicTest, DISABLED_ApplyData1Command_Touchpad_ThenSchemaHa
 // Enforces the fix: when Command uses data1 combo (Latch Toggle, Panic, etc.),
 // selecting Touchpad must set data1=18 so the Touchpad block appears. Before
 // the fix, data1 was incorrectly set to 120, so isTouchpadSolo stayed false.
-TEST(MappingInspectorLogicTest, DISABLED_FirstTimeTouchpadFromLatchToggle_UsesRealSchema_ShowsTouchpadBlock) {
+TEST(
+    MappingInspectorLogicTest,
+    DISABLED_FirstTimeTouchpadFromLatchToggle_UsesRealSchema_ShowsTouchpadBlock) {
   juce::ValueTree mapping("Mapping");
   mapping.setProperty("type", "Command", nullptr);
-  mapping.setProperty("data1", 3, nullptr);  // Latch Toggle -> schema uses propertyId "data1"
+  mapping.setProperty(
+      "data1", 3, nullptr); // Latch Toggle -> schema uses propertyId "data1"
 
   InspectorSchema schemaBefore = MappingDefinition::getSchema(mapping);
   const InspectorControl *cmdCtrl = nullptr;
@@ -500,15 +541,17 @@ TEST(MappingInspectorLogicTest, DISABLED_FirstTimeTouchpadFromLatchToggle_UsesRe
       break;
     }
   }
-  EXPECT_FALSE(hadTouchpadBefore) << "Latch Toggle must not show Touchpad block";
+  EXPECT_FALSE(hadTouchpadBefore)
+      << "Latch Toggle must not show Touchpad block";
 
   // Simulate user selecting Touchpad from the Command dropdown
   juce::UndoManager undo;
-  KeyboardMappingInspectorLogic::applyComboSelectionToMapping(mapping, *cmdCtrl, 120,
-                                                      &undo);
+  KeyboardMappingInspectorLogic::applyComboSelectionToMapping(mapping, *cmdCtrl,
+                                                              120, &undo);
 
-  EXPECT_EQ(static_cast<int>(mapping.getProperty("data1")),
-            static_cast<int>(MIDIQy::CommandID::TouchpadLayoutGroupSoloMomentary))
+  EXPECT_EQ(
+      static_cast<int>(mapping.getProperty("data1")),
+      static_cast<int>(MIDIQy::CommandID::TouchpadLayoutGroupSoloMomentary))
       << "Must set data1=18, not 120; otherwise Touchpad block stays hidden";
 
   InspectorSchema schemaAfter = MappingDefinition::getSchema(mapping);
@@ -521,7 +564,8 @@ TEST(MappingInspectorLogicTest, DISABLED_FirstTimeTouchpadFromLatchToggle_UsesRe
     else if (c.propertyId == "touchpadSoloScope")
       hasScope = true;
   }
-  EXPECT_TRUE(hasSoloType) << "Touchpad block must appear after selecting Touchpad";
+  EXPECT_TRUE(hasSoloType)
+      << "Touchpad block must appear after selecting Touchpad";
   EXPECT_TRUE(hasGroup);
   EXPECT_TRUE(hasScope);
 }
@@ -531,7 +575,8 @@ TEST(MappingInspectorLogicTest, DISABLED_ApplyTouchpadSoloScope_Global) {
   juce::ValueTree mapping("Mapping");
   juce::UndoManager undo;
   auto def = makeTouchpadSoloScopeControl();
-  KeyboardMappingInspectorLogic::applyComboSelectionToMapping(mapping, def, 1, &undo);
+  KeyboardMappingInspectorLogic::applyComboSelectionToMapping(mapping, def, 1,
+                                                              &undo);
   EXPECT_EQ(static_cast<int>(mapping.getProperty("touchpadSoloScope")), 0);
 }
 
@@ -539,7 +584,8 @@ TEST(MappingInspectorLogicTest, DISABLED_ApplyTouchpadSoloScope_LayerForget) {
   juce::ValueTree mapping("Mapping");
   juce::UndoManager undo;
   auto def = makeTouchpadSoloScopeControl();
-  KeyboardMappingInspectorLogic::applyComboSelectionToMapping(mapping, def, 2, &undo);
+  KeyboardMappingInspectorLogic::applyComboSelectionToMapping(mapping, def, 2,
+                                                              &undo);
   EXPECT_EQ(static_cast<int>(mapping.getProperty("touchpadSoloScope")), 1);
 }
 
@@ -547,7 +593,8 @@ TEST(MappingInspectorLogicTest, DISABLED_ApplyTouchpadSoloScope_LayerRemember) {
   juce::ValueTree mapping("Mapping");
   juce::UndoManager undo;
   auto def = makeTouchpadSoloScopeControl();
-  KeyboardMappingInspectorLogic::applyComboSelectionToMapping(mapping, def, 3, &undo);
+  KeyboardMappingInspectorLogic::applyComboSelectionToMapping(mapping, def, 3,
+                                                              &undo);
   EXPECT_EQ(static_cast<int>(mapping.getProperty("touchpadSoloScope")), 2);
 }
 
@@ -556,16 +603,19 @@ TEST(MappingInspectorLogicTest, DISABLED_ApplyTouchpadSoloType_Momentary) {
   juce::ValueTree mapping("Mapping");
   juce::UndoManager undo;
   auto def = makeTouchpadSoloTypeControl();
-  KeyboardMappingInspectorLogic::applyComboSelectionToMapping(mapping, def, 1, &undo);
-  EXPECT_EQ(static_cast<int>(mapping.getProperty("data1")),
-            static_cast<int>(MIDIQy::CommandID::TouchpadLayoutGroupSoloMomentary));
+  KeyboardMappingInspectorLogic::applyComboSelectionToMapping(mapping, def, 1,
+                                                              &undo);
+  EXPECT_EQ(
+      static_cast<int>(mapping.getProperty("data1")),
+      static_cast<int>(MIDIQy::CommandID::TouchpadLayoutGroupSoloMomentary));
 }
 
 TEST(MappingInspectorLogicTest, DISABLED_ApplyTouchpadSoloType_Toggle) {
   juce::ValueTree mapping("Mapping");
   juce::UndoManager undo;
   auto def = makeTouchpadSoloTypeControl();
-  KeyboardMappingInspectorLogic::applyComboSelectionToMapping(mapping, def, 2, &undo);
+  KeyboardMappingInspectorLogic::applyComboSelectionToMapping(mapping, def, 2,
+                                                              &undo);
   EXPECT_EQ(static_cast<int>(mapping.getProperty("data1")),
             static_cast<int>(MIDIQy::CommandID::TouchpadLayoutGroupSoloToggle));
 }
@@ -574,7 +624,8 @@ TEST(MappingInspectorLogicTest, DISABLED_ApplyTouchpadSoloType_Set) {
   juce::ValueTree mapping("Mapping");
   juce::UndoManager undo;
   auto def = makeTouchpadSoloTypeControl();
-  KeyboardMappingInspectorLogic::applyComboSelectionToMapping(mapping, def, 3, &undo);
+  KeyboardMappingInspectorLogic::applyComboSelectionToMapping(mapping, def, 3,
+                                                              &undo);
   EXPECT_EQ(static_cast<int>(mapping.getProperty("data1")),
             static_cast<int>(MIDIQy::CommandID::TouchpadLayoutGroupSoloSet));
 }
@@ -583,41 +634,50 @@ TEST(MappingInspectorLogicTest, DISABLED_ApplyTouchpadSoloType_Clear) {
   juce::ValueTree mapping("Mapping");
   juce::UndoManager undo;
   auto def = makeTouchpadSoloTypeControl();
-  KeyboardMappingInspectorLogic::applyComboSelectionToMapping(mapping, def, 4, &undo);
+  KeyboardMappingInspectorLogic::applyComboSelectionToMapping(mapping, def, 4,
+                                                              &undo);
   EXPECT_EQ(static_cast<int>(mapping.getProperty("data1")),
             static_cast<int>(MIDIQy::CommandID::TouchpadLayoutGroupSoloClear));
 }
 
-// Verify touchpadSoloType round-trip: set data1, change solo type, verify data1 updates
-TEST(MappingInspectorLogicTest, DISABLED_TouchpadSoloTypeRoundTrip_MomentaryToToggle) {
+// Verify touchpadSoloType round-trip: set data1, change solo type, verify data1
+// updates
+TEST(MappingInspectorLogicTest,
+     DISABLED_TouchpadSoloTypeRoundTrip_MomentaryToToggle) {
   juce::ValueTree mapping("Mapping");
   juce::UndoManager undo;
   mapping.setProperty("type", "Command", &undo);
-  mapping.setProperty("data1",
-                      static_cast<int>(MIDIQy::CommandID::TouchpadLayoutGroupSoloMomentary),
-                      &undo);
+  mapping.setProperty(
+      "data1",
+      static_cast<int>(MIDIQy::CommandID::TouchpadLayoutGroupSoloMomentary),
+      &undo);
 
   auto def = makeTouchpadSoloTypeControl();
   // Change from Momentary (1) to Toggle (2)
-  KeyboardMappingInspectorLogic::applyComboSelectionToMapping(mapping, def, 2, &undo);
+  KeyboardMappingInspectorLogic::applyComboSelectionToMapping(mapping, def, 2,
+                                                              &undo);
 
   EXPECT_EQ(static_cast<int>(mapping.getProperty("data1")),
             static_cast<int>(MIDIQy::CommandID::TouchpadLayoutGroupSoloToggle));
-  // Verify touchpadSoloType property doesn't exist (it's virtual, maps to data1)
+  // Verify touchpadSoloType property doesn't exist (it's virtual, maps to
+  // data1)
   EXPECT_TRUE(mapping.getProperty("touchpadSoloType").isVoid());
 }
 
-TEST(MappingInspectorLogicTest, DISABLED_TouchpadSoloTypeRoundTrip_ToggleToSet) {
+TEST(MappingInspectorLogicTest,
+     DISABLED_TouchpadSoloTypeRoundTrip_ToggleToSet) {
   juce::ValueTree mapping("Mapping");
   juce::UndoManager undo;
   mapping.setProperty("type", "Command", &undo);
-  mapping.setProperty("data1",
-                      static_cast<int>(MIDIQy::CommandID::TouchpadLayoutGroupSoloToggle),
-                      &undo);
+  mapping.setProperty(
+      "data1",
+      static_cast<int>(MIDIQy::CommandID::TouchpadLayoutGroupSoloToggle),
+      &undo);
 
   auto def = makeTouchpadSoloTypeControl();
   // Change from Toggle (2) to Set (3)
-  KeyboardMappingInspectorLogic::applyComboSelectionToMapping(mapping, def, 3, &undo);
+  KeyboardMappingInspectorLogic::applyComboSelectionToMapping(mapping, def, 3,
+                                                              &undo);
 
   EXPECT_EQ(static_cast<int>(mapping.getProperty("data1")),
             static_cast<int>(MIDIQy::CommandID::TouchpadLayoutGroupSoloSet));
@@ -627,52 +687,61 @@ TEST(MappingInspectorLogicTest, DISABLED_TouchpadSoloTypeRoundTrip_SetToClear) {
   juce::ValueTree mapping("Mapping");
   juce::UndoManager undo;
   mapping.setProperty("type", "Command", &undo);
-  mapping.setProperty("data1",
-                      static_cast<int>(MIDIQy::CommandID::TouchpadLayoutGroupSoloSet),
-                      &undo);
+  mapping.setProperty(
+      "data1", static_cast<int>(MIDIQy::CommandID::TouchpadLayoutGroupSoloSet),
+      &undo);
 
   auto def = makeTouchpadSoloTypeControl();
   // Change from Set (3) to Clear (4)
-  KeyboardMappingInspectorLogic::applyComboSelectionToMapping(mapping, def, 4, &undo);
+  KeyboardMappingInspectorLogic::applyComboSelectionToMapping(mapping, def, 4,
+                                                              &undo);
 
   EXPECT_EQ(static_cast<int>(mapping.getProperty("data1")),
             static_cast<int>(MIDIQy::CommandID::TouchpadLayoutGroupSoloClear));
 }
 
-TEST(MappingInspectorLogicTest, DISABLED_TouchpadSoloTypeRoundTrip_ClearToMomentary) {
+TEST(MappingInspectorLogicTest,
+     DISABLED_TouchpadSoloTypeRoundTrip_ClearToMomentary) {
   juce::ValueTree mapping("Mapping");
   juce::UndoManager undo;
   mapping.setProperty("type", "Command", &undo);
-  mapping.setProperty("data1",
-                      static_cast<int>(MIDIQy::CommandID::TouchpadLayoutGroupSoloClear),
-                      &undo);
+  mapping.setProperty(
+      "data1",
+      static_cast<int>(MIDIQy::CommandID::TouchpadLayoutGroupSoloClear), &undo);
 
   auto def = makeTouchpadSoloTypeControl();
   // Change from Clear (4) back to Momentary (1)
-  KeyboardMappingInspectorLogic::applyComboSelectionToMapping(mapping, def, 1, &undo);
+  KeyboardMappingInspectorLogic::applyComboSelectionToMapping(mapping, def, 1,
+                                                              &undo);
 
-  EXPECT_EQ(static_cast<int>(mapping.getProperty("data1")),
-            static_cast<int>(MIDIQy::CommandID::TouchpadLayoutGroupSoloMomentary));
+  EXPECT_EQ(
+      static_cast<int>(mapping.getProperty("data1")),
+      static_cast<int>(MIDIQy::CommandID::TouchpadLayoutGroupSoloMomentary));
 }
 
 // --- touchpadLayoutGroupId (combo 1..N -> stored 0..N-1) ---
-TEST(MappingInspectorLogicTest, DISABLED_ApplyTouchpadLayoutGroupId_NoGroupStoresZero) {
+TEST(MappingInspectorLogicTest,
+     DISABLED_ApplyTouchpadLayoutGroupId_NoGroupStoresZero) {
   juce::ValueTree mapping("Mapping");
   juce::UndoManager undo;
   auto def = makeTouchpadLayoutGroupIdControl();
-  KeyboardMappingInspectorLogic::applyComboSelectionToMapping(mapping, def, 1, &undo);
+  KeyboardMappingInspectorLogic::applyComboSelectionToMapping(mapping, def, 1,
+                                                              &undo);
   EXPECT_EQ(static_cast<int>(mapping.getProperty("touchpadLayoutGroupId")), 0);
 }
 
-TEST(MappingInspectorLogicTest, DISABLED_ApplyTouchpadLayoutGroupId_Group1StoresOne) {
+TEST(MappingInspectorLogicTest,
+     DISABLED_ApplyTouchpadLayoutGroupId_Group1StoresOne) {
   juce::ValueTree mapping("Mapping");
   juce::UndoManager undo;
   auto def = makeTouchpadLayoutGroupIdControl();
-  KeyboardMappingInspectorLogic::applyComboSelectionToMapping(mapping, def, 2, &undo);
+  KeyboardMappingInspectorLogic::applyComboSelectionToMapping(mapping, def, 2,
+                                                              &undo);
   EXPECT_EQ(static_cast<int>(mapping.getProperty("touchpadLayoutGroupId")), 1);
 }
 
-// --- keyboard group solo (keyboardSoloType, keyboardLayoutGroupId, keyboardGroupId) ---
+// --- keyboard group solo (keyboardSoloType, keyboardLayoutGroupId,
+// keyboardGroupId) ---
 static InspectorControl makeKeyboardSoloTypeControl() {
   InspectorControl c;
   c.propertyId = "keyboardSoloType";
@@ -706,16 +775,19 @@ TEST(MappingInspectorLogicTest, ApplyKeyboardSoloType_Momentary) {
   juce::ValueTree mapping("Mapping");
   juce::UndoManager undo;
   auto def = makeKeyboardSoloTypeControl();
-  KeyboardMappingInspectorLogic::applyComboSelectionToMapping(mapping, def, 1, &undo);
-  EXPECT_EQ(static_cast<int>(mapping.getProperty("data1")),
-            static_cast<int>(MIDIQy::CommandID::KeyboardLayoutGroupSoloMomentary));
+  KeyboardMappingInspectorLogic::applyComboSelectionToMapping(mapping, def, 1,
+                                                              &undo);
+  EXPECT_EQ(
+      static_cast<int>(mapping.getProperty("data1")),
+      static_cast<int>(MIDIQy::CommandID::KeyboardLayoutGroupSoloMomentary));
 }
 
 TEST(MappingInspectorLogicTest, ApplyKeyboardLayoutGroupId_NoGroupStoresZero) {
   juce::ValueTree mapping("Mapping");
   juce::UndoManager undo;
   auto def = makeKeyboardLayoutGroupIdControl();
-  KeyboardMappingInspectorLogic::applyComboSelectionToMapping(mapping, def, 1, &undo);
+  KeyboardMappingInspectorLogic::applyComboSelectionToMapping(mapping, def, 1,
+                                                              &undo);
   EXPECT_EQ(static_cast<int>(mapping.getProperty("keyboardLayoutGroupId")), 0);
 }
 
@@ -723,7 +795,8 @@ TEST(MappingInspectorLogicTest, ApplyKeyboardLayoutGroupId_Group1StoresOne) {
   juce::ValueTree mapping("Mapping");
   juce::UndoManager undo;
   auto def = makeKeyboardLayoutGroupIdControl();
-  KeyboardMappingInspectorLogic::applyComboSelectionToMapping(mapping, def, 2, &undo);
+  KeyboardMappingInspectorLogic::applyComboSelectionToMapping(mapping, def, 2,
+                                                              &undo);
   EXPECT_EQ(static_cast<int>(mapping.getProperty("keyboardLayoutGroupId")), 1);
 }
 
@@ -731,7 +804,8 @@ TEST(MappingInspectorLogicTest, ApplyKeyboardGroupId_NoGroupStoresZero) {
   juce::ValueTree mapping("Mapping");
   juce::UndoManager undo;
   auto def = makeKeyboardGroupIdControl();
-  KeyboardMappingInspectorLogic::applyComboSelectionToMapping(mapping, def, 1, &undo);
+  KeyboardMappingInspectorLogic::applyComboSelectionToMapping(mapping, def, 1,
+                                                              &undo);
   EXPECT_EQ(static_cast<int>(mapping.getProperty("keyboardGroupId")), 0);
 }
 
@@ -739,7 +813,8 @@ TEST(MappingInspectorLogicTest, ApplyKeyboardGroupId_Group1StoresOne) {
   juce::ValueTree mapping("Mapping");
   juce::UndoManager undo;
   auto def = makeKeyboardGroupIdControl();
-  KeyboardMappingInspectorLogic::applyComboSelectionToMapping(mapping, def, 2, &undo);
+  KeyboardMappingInspectorLogic::applyComboSelectionToMapping(mapping, def, 2,
+                                                              &undo);
   EXPECT_EQ(static_cast<int>(mapping.getProperty("keyboardGroupId")), 1);
 }
 
@@ -748,6 +823,7 @@ TEST(MappingInspectorLogicTest, InvalidMapping_NoOp) {
   juce::ValueTree mapping;
   juce::UndoManager undo;
   auto def = makeTypeControl();
-  KeyboardMappingInspectorLogic::applyComboSelectionToMapping(mapping, def, 1, &undo);
+  KeyboardMappingInspectorLogic::applyComboSelectionToMapping(mapping, def, 1,
+                                                              &undo);
   EXPECT_FALSE(mapping.isValid());
 }

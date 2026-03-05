@@ -792,6 +792,30 @@ void InputProcessor::processEvent(InputID input, bool isDown) {
           }
           return;
         }
+        if (cmd == static_cast<int>(MIDIQy::CommandID::LayerRemoveOverrides)) {
+          if (isDown) {
+            {
+              juce::ScopedLock sl(stateLock);
+              // Reset all layer and solo overrides: only Base layer (0) remains
+              // active via isLayerActive; all higher layers become inactive and
+              // any per-layer/global solos are cleared.
+              for (int i = 0; i < 9; ++i) {
+                layerLatchedState[(size_t)i] = false;
+                layerMomentaryCounts[(size_t)i] = 0;
+                touchpadSoloLayoutGroupPerLayer[(size_t)i] = 0;
+                touchpadSoloScopeForgetPerLayer[(size_t)i] = false;
+                keyboardSoloLayoutGroupPerLayer[(size_t)i] = 0;
+                keyboardSoloScopeForgetPerLayer[(size_t)i] = false;
+              }
+              touchpadSoloLayoutGroupGlobal = 0;
+              keyboardSoloLayoutGroupGlobal = 0;
+              momentaryLayerHolds.clear();
+            }
+            clearForgetScopeSolosForInactiveLayers();
+            sendChangeMessage();
+          }
+          return;
+        }
         if (cmd == static_cast<int>(MIDIQy::CommandID::SustainMomentary))
           voiceManager.setSustain(true);
         else if (cmd == static_cast<int>(MIDIQy::CommandID::SustainToggle))

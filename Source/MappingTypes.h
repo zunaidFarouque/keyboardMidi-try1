@@ -80,7 +80,10 @@ enum class CommandID : int {
   KeyboardLayoutGroupSoloMomentary = 22,
   KeyboardLayoutGroupSoloToggle = 23,
   KeyboardLayoutGroupSoloSet = 24,
-  KeyboardLayoutGroupSoloClear = 25
+  KeyboardLayoutGroupSoloClear = 25,
+
+  // Layer "panic" – clear all overrides and solos, return to Base layer only.
+  LayerRemoveOverrides = 26
 };
 }
 

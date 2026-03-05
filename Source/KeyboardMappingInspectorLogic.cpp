@@ -121,7 +121,15 @@ void applyComboSelectionToMapping(juce::ValueTree &mapping,
                                ? (selectedId - 1)
                                : 0);
   } else if (def.propertyId == "layerStyle") {
-    valueToSet = juce::var((selectedId == 2) ? 11 : 10);
+    // Map Layer style combo back to concrete CommandID in data1.
+    using Cmd = MIDIQy::CommandID;
+    int data1 = static_cast<int>(Cmd::LayerMomentary);
+    if (selectedId == 2)
+      data1 = static_cast<int>(Cmd::LayerToggle);
+    else if (selectedId == 3)
+      data1 = static_cast<int>(Cmd::LayerRemoveOverrides);
+    mapping.setProperty("data1", data1, undoManager);
+    return;
   } else if (def.propertyId == "globalModeDirection") {
     // Virtual: maps to GlobalModeUp / GlobalModeDown
     using Cmd = MIDIQy::CommandID;
